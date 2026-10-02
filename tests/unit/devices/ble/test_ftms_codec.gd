@@ -218,3 +218,29 @@ func test_decode_machine_status() -> void:
 	assert_eq(FtmsCodec.decode_machine_status(_hex("01"))["name"], "reset")
 	assert_eq(FtmsCodec.decode_machine_status(_hex("0E"))["name"], "status_0x0E")
 	assert_false(FtmsCodec.decode_machine_status(PackedByteArray())["ok"])
+
+
+func test_percent_to_resistance_level_caps_to_encodable_25_5() -> void:
+	# Tacx Neo: 2AD6 = 0..100.0; команда 0x04 кодирует максимум 25.5.
+	var neo_01 := FtmsCodec.decode_resistance_range(_hex("00 00 E8 03 01 00"))  # inc 0.1
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(50, neo_01), 12.8, 1e-9, "50 % от 0..25.5 = 12.75 → шаг 0.1 → 12.8, а не 25.5")
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(100, neo_01), 25.5, 1e-9)
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(0, neo_01), 0.0, 1e-9)
+	assert_eq(BleBytes.to_hex(FtmsCodec.encode_set_resistance_level(FtmsCodec.percent_to_resistance_level(50, neo_01))), "04 80")
+	assert_eq(BleBytes.to_hex(FtmsCodec.encode_set_resistance_level(FtmsCodec.percent_to_resistance_level(100, neo_01))), "04 FF")
+	var neo_1 := FtmsCodec.decode_resistance_range(_hex("00 00 E8 03 0A 00"))  # inc 1.0
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(50, neo_1), 13.0, 1e-9, "привязка к шагу 1.0")
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(100, neo_1), 25.5, 1e-9, "кламп к верхней границе после привязки")
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(25, neo_1), 6.0, 1e-9, "6.375 → 6.0")
+
+
+func test_percent_to_resistance_level_negative_min_floors_at_zero() -> void:
+	# −5.0..5.0: отрицательные уровни не кодируются → 0..5.0.
+	var rng := FtmsCodec.decode_resistance_range(_hex("CE FF 32 00 01 00"))
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(0, rng), 0.0, 1e-9)
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(50, rng), 2.5, 1e-9)
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(100, rng), 5.0, 1e-9)
+	# Диапазон целиком вне кодируемого (30..40) → максимум 25.5.
+	var high := FtmsCodec.decode_resistance_range(_hex("2C 01 90 01 0A 00"))
+	assert_almost_eq(FtmsCodec.percent_to_resistance_level(50, high), 25.5, 1e-9)
+	assert_almost_eq(FtmsCodec.CONTROL_POINT_MAX_LEVEL, 25.5, 1e-9)

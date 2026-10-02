@@ -62,6 +62,12 @@ const STATUS_CONTROL_PERMISSION_LOST: int = 0xFF
 const RESISTANCE_UNIT: float = 0.1
 ## Диапазон уровня по умолчанию, если 2AD6 не прочитан (REQ-WRK-04 крит. 2): 0..100 единиц 0.1.
 const DEFAULT_RESISTANCE_MAX_LEVEL: float = 10.0
+## Максимальный уровень, представимый в параметре Set Target Resistance Level
+## (uint8 в единицах 0.1 → 25.5).
+const CONTROL_POINT_MAX_LEVEL: float = 25.5
+
+## Предупреждение о диапазоне 2AD6 шире кодируемого выдаётся один раз.
+static var _range_cap_warned: bool = false
 
 
 # ---------------------------------------------------------------------------
@@ -295,15 +301,28 @@ static func decode_resistance_range(bytes: PackedByteArray) -> Dictionary:
 	return r
 
 
-## Процент 0..100 → уровень сопротивления станка (REQ-WRK-04 крит. 2): линейно
-## в [min; max] диапазона с привязкой к шагу `increment`; без диапазона
-## (`range` пуст или `ok == false`) — линейно в 0..10.0 (0..100 единиц 0.1).
+## Процент 0..100 → уровень сопротивления станка (REQ-WRK-04 крит. 2).
+## Без диапазона (`range` пуст или `ok == false`) — линейно в 0..10.0 (0..100 единиц 0.1).
+## С диапазоном 2AD6 — линейно в **фактически кодируемом** поддиапазоне
+## `[max(min, 0); min(max, 25.5)]` с привязкой к шагу `increment`. Причина:
+## 2AD6 отдаёт sint16 (у Tacx Neo 0..100.0), а параметр команды 0x04 — uint8
+## в единицах 0.1, т.е. максимум 25.5; без этого ограничения все уровни выше
+## 25 % сливались бы в `04 FF`. Если max 2AD6 > 25.5, один раз выдаётся
+## предупреждение.
 static func percent_to_resistance_level(percent: int, range: Dictionary = {}) -> float:
 	var p: float = clampi(percent, 0, 100) / 100.0
 	if range.is_empty() or not range.get("ok", false):
 		return p * DEFAULT_RESISTANCE_MAX_LEVEL
-	var lo: float = range["min_level"]
-	var hi: float = range["max_level"]
+	var raw_lo: float = range["min_level"]
+	var raw_hi: float = range["max_level"]
+	if raw_hi > CONTROL_POINT_MAX_LEVEL and not _range_cap_warned:
+		_range_cap_warned = true
+		push_warning("FtmsCodec: диапазон 2AD6 до %.1f шире кодируемого в Set Target Resistance Level (uint8 ×0.1, макс %.1f); проценты масштабируются на 0..%.1f" % [
+			raw_hi, CONTROL_POINT_MAX_LEVEL, CONTROL_POINT_MAX_LEVEL])
+	var lo: float = maxf(raw_lo, 0.0)
+	var hi: float = minf(raw_hi, CONTROL_POINT_MAX_LEVEL)
+	if hi <= lo:
+		return clampf(lo, 0.0, CONTROL_POINT_MAX_LEVEL)
 	var inc: float = range.get("increment", 0.0)
 	var level: float = lo + (hi - lo) * p
 	if inc > 0.0:
