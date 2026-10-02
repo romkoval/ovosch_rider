@@ -6,7 +6,7 @@
 ## Команды
 - Тесты: `./scripts/test.sh` (нужен Godot 4.7; локально бинарник `/opt/godot/godot`, в CI качается сам).
 - Проверка, что проект открывается: `godot --headless --path . --import`.
-- Один тестовый файл: `./scripts/test.sh -gtest=res://tests/unit/test_x.gd`.
+- Один тестовый файл: `./scripts/test.sh -gselect=test_x` (фильтр по имени файла; `-gtest=` не ограничивает запуск, т.к. каталоги заданы в `.gutconfig.json`).
 
 ## Структура
 - `src/domain/` — модель тренировки, исполнитель интервалов, зоны, расчёты. Без Node, без сцен, чистый GDScript (RefCounted).
