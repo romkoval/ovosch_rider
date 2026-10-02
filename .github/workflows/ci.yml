@@ -15,6 +15,26 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # полная история для проверки сообщений коммитов (REQ-INF-03 крит. 2)
+
+      - name: Secrets scan
+        run: ./scripts/check_secrets.sh
+
+      - name: Commit messages contain REQ-ID
+        env:
+          BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch origin "$BASE_REF" --depth=0 2>/dev/null || true
+            RANGE="origin/$BASE_REF..HEAD"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+            RANGE="$BEFORE..HEAD"
+          else
+            RANGE="HEAD~0..HEAD"
+          fi
+          ./scripts/check_commit_messages.sh "$RANGE"
 
       - name: Cache Godot
         id: cache-godot

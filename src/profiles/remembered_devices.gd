@@ -61,7 +61,15 @@ func trainer_file_path() -> String:
 
 
 func profile_file_path(profile_id: String) -> String:
-	return _dir_path + PROFILE_FILE_PREFIX + profile_id.validate_filename() + ".json"
+	return _dir_path + PROFILE_FILE_PREFIX + sanitize_id(profile_id) + ".json"
+
+
+## Идентификатор в безопасное имя файла: допустимы только `[A-Za-z0-9_-]`, прочее → `_`
+## (никаких разделителей пути и `..`; файл всегда лежит прямо в каталоге устройств).
+static func sanitize_id(profile_id: String) -> String:
+	var re := RegEx.create_from_string("[^A-Za-z0-9_-]")
+	var safe := re.sub(profile_id, "_", true)
+	return safe if not safe.is_empty() else "_"
 
 
 ## Запомнить устройство. Станок (`kind == "trainer"`) становится общим независимо

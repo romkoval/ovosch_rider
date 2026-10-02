@@ -8,6 +8,7 @@ extends Node
 
 const PROFILE_SELECT_SCENE: String = "res://src/ui/profile_select/profile_select.tscn"
 const HOME_SCENE: String = "res://src/ui/home/home.tscn"
+const DEV_SCENE: String = "res://src/ui/dev/dev_screen.tscn"
 
 @export var data_dir: String = "user://"
 
@@ -56,7 +57,10 @@ func _build_screens() -> void:
 	var home: HomeScreen = load(HOME_SCENE).instantiate()
 	home.setup(repo, app_state)
 	_add_screen(AppState.Screen.HOME, home)
-	for screen in [AppState.Screen.WORKOUT, AppState.Screen.HISTORY, AppState.Screen.SETTINGS, AppState.Screen.DEV]:
+	var dev: DevScreen = load(DEV_SCENE).instantiate()
+	dev.setup(app_state)
+	_add_screen(AppState.Screen.DEV, dev)
+	for screen in [AppState.Screen.WORKOUT, AppState.Screen.HISTORY, AppState.Screen.SETTINGS]:
 		_add_screen(screen, _make_placeholder(screen))
 
 
@@ -90,3 +94,6 @@ func _show_screen(screen: int) -> void:
 		(node as HomeScreen).refresh()
 	elif node is ProfileSelectScreen:
 		(node as ProfileSelectScreen).refresh()
+	elif node is DevScreen:
+		var active: Profile = repo.get_active()
+		(node as DevScreen).setup(app_state, active.ftp_w if active != null else DevScreen.DEFAULT_FTP_W)

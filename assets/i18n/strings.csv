@@ -38,3 +38,26 @@ error.profile.name_not_unique,Профиль с таким именем уже �
 error.profile.profile_not_found,Профиль не найден,Profile not found
 error.profile.last_profile,Нельзя удалить последний профиль,The last profile cannot be deleted
 error.profile.storage_write_failed,Не удалось сохранить профили на диск,Could not save profiles to disk
+ui.dev.title,Режим разработки,Developer mode
+ui.dev.play,Проиграть на эмуляторе,Play on emulator
+ui.dev.pause,Пауза,Pause
+ui.dev.resume,Продолжить,Resume
+ui.dev.skip,Пропустить шаг,Skip step
+ui.dev.stop,Стоп,Stop
+ui.dev.erg_on,ERG вкл,ERG on
+ui.dev.erg_off,ERG выкл,ERG off
+ui.dev.back,На главный,Back to home
+ui.dev.no_session,Сессия не запущена — нажмите «Проиграть на эмуляторе»,No session — press “Play on emulator”
+ui.dev.trainer_unavailable,Эмулятор станка недоступен,Trainer emulator unavailable
+ui.dev.status,Состояние: {state} ({connection}) · шаг {step}/{steps} · цель {target} Вт · мощность {power} Вт · каденс {cadence} об/мин · время {time} · сэмплов {samples} · {erg},State: {state} ({connection}) · step {step}/{steps} · target {target} W · power {power} W · cadence {cadence} rpm · time {time} · samples {samples} · {erg}
+ui.dev.commands_title,Последние команды станку (время; тип; значение):,Last trainer commands (time; type; value):
+ui.dev.state.idle,ожидание,idle
+ui.dev.state.running,идёт,running
+ui.dev.state.paused,пауза,paused
+ui.dev.state.finished,завершена,finished
+ui.dev.connection.disconnected,не подключён,disconnected
+ui.dev.connection.scanning,поиск,scanning
+ui.dev.connection.connecting,подключение,connecting
+ui.dev.connection.connected,подключён,connected
+ui.dev.connection.reconnecting,переподключение,reconnecting
+ui.dev.connection.unknown,неизвестно,unknown

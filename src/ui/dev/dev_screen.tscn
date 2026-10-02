@@ -1,0 +1,82 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/dev/dev_screen.gd" id="1_script"]
+
+[node name="DevScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+text = "ui.dev.title"
+horizontal_alignment = 1
+
+[node name="StatusLabel" type="Label" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.dev.no_session"
+autowrap_mode = 3
+
+[node name="CommandsLabel" type="Label" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Buttons" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+alignment = 1
+
+[node name="PlayButton" type="Button" parent="Margin/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.dev.play"
+
+[node name="PauseButton" type="Button" parent="Margin/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "ui.dev.pause"
+
+[node name="SkipButton" type="Button" parent="Margin/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "ui.dev.skip"
+
+[node name="StopButton" type="Button" parent="Margin/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "ui.dev.stop"
+
+[node name="ErgButton" type="Button" parent="Margin/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "ui.dev.erg_off"
+
+[node name="BackButton" type="Button" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.dev.back"
