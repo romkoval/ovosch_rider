@@ -340,7 +340,7 @@ func _scan(regex: RegEx, dir_path: String, offenders: Array[String]) -> void:
 			var source := FileAccess.get_file_as_string(full)
 			# REQ-NFR-05 крит. 1: интеграции, использующие интерфейс SecureStore, допустимы.
 			if full.begins_with("res://src/integrations/") and source.contains("SecureStore"):
-				name = dir.get_next()
+				name = d.get_next()
 				continue
 			var n := 0
 			for line in source.split("\n"):
