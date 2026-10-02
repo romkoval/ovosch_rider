@@ -43,6 +43,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "ui.home.workout"
 
+[node name="EmulatorWorkoutButton" type="Button" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.home.workout_emulator"
+
 [node name="HistoryButton" type="Button" parent="Margin/VBox"]
 unique_name_in_owner = true
 layout_mode = 2

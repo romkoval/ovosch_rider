@@ -203,8 +203,10 @@ func test_main_scene_with_one_profile_shows_home_and_switches_screens() -> void:
 	add_child_autofree(main)
 	assert_eq(main.app_state.current_screen, AppState.Screen.HOME, "REQ-PRF-05 крит. 1")
 	assert_true(main.visible_screen_node() is HomeScreen)
+	assert_true(main.app_state.navigate(AppState.Screen.HISTORY))
+	assert_eq(main.visible_screen_node().name, "Placeholder_history")
 	assert_true(main.app_state.navigate(AppState.Screen.WORKOUT))
-	assert_eq(main.visible_screen_node().name, "Placeholder_workout")
+	assert_true(main.visible_screen_node() is WorkoutScreen, "экран тренировки — отдельная сцена (T-031)")
 	main.app_state.switch_profile()
 	assert_true(main.visible_screen_node() is ProfileSelectScreen)
 

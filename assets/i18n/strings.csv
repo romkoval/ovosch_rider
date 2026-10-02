@@ -90,3 +90,37 @@ ui.devices.status.idle,Поиск не идёт,Not scanning
 ui.devices.status.scanning,Идёт поиск устройств…,Scanning for devices…
 ui.devices.status.auto_connecting,Ждём запомненные устройства: {count},Waiting for remembered devices: {count}
 ui.devices.status.not_found,Устройство не найдено: {names}. Подключите вручную.,Device not found: {names}. Connect manually.
+ui.home.workout_emulator,Тренировка на эмуляторе,Workout on emulator
+ui.hud.connection.disconnected,Станок не подключён,Trainer disconnected
+ui.hud.connection.scanning,Поиск станка…,Scanning for trainer…
+ui.hud.connection.connecting,Подключение к станку…,Connecting to trainer…
+ui.hud.connection.connected,Станок подключён,Trainer connected
+ui.hud.connection.reconnecting,Переподключение…,Reconnecting…
+ui.hud.connection.unknown,Состояние неизвестно,Unknown state
+ui.workout.no_session,Тренировка не выбрана,No workout selected
+ui.workout.target_title,Цель,Target
+ui.workout.target_value,{value} Вт,{value} W
+ui.workout.unit_w,Вт,W
+ui.workout.hr,Пульс,Heart rate
+ui.workout.cadence,Каденс,Cadence
+ui.workout.speed,Скорость,Speed
+ui.workout.elapsed,Время,Elapsed
+ui.workout.countdown,До конца интервала,Interval remaining
+ui.workout.step,Шаг {step},Step {step}
+ui.workout.pause,Пауза,Pause
+ui.workout.resume,Продолжить,Resume
+ui.workout.skip,Пропустить,Skip
+ui.workout.stop,Стоп,Stop
+ui.workout.stop_confirm,Завершить тренировку досрочно? Заезд будет сохранён как завершённый досрочно.,End the workout early? The ride will be saved as ended early.
+ui.workout.erg_on,ERG вкл,ERG on
+ui.workout.erg_off,ERG выкл,ERG off
+ui.workout.resistance,Сопротивление {value} %,Resistance {value} %
+ui.workout.intensity,Интенсивность {value} %,Intensity {value} %
+ui.workout.finished,Тренировка завершена,Workout finished
+ui.workout.summary,{name} · {time} · {distance} км · сэмплов {samples} {early},{name} · {time} · {distance} km · samples {samples} {early}
+ui.workout.stopped_early,(завершена досрочно),(ended early)
+ui.workout.home,На главный,Back to home
+ui.workout.minus_5,−5,−5
+ui.workout.plus_5,+5,+5
+ui.workout.minus_5pct,−5 %,−5 %
+ui.workout.plus_5pct,+5 %,+5 %

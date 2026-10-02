@@ -10,6 +10,7 @@ const PROFILE_SELECT_SCENE: String = "res://src/ui/profile_select/profile_select
 const HOME_SCENE: String = "res://src/ui/home/home.tscn"
 const DEV_SCENE: String = "res://src/ui/dev/dev_screen.tscn"
 const DEVICES_SCENE: String = "res://src/ui/devices/devices_screen.tscn"
+const WORKOUT_SCENE: String = "res://src/ui/workout/workout_screen.tscn"
 
 @export var data_dir: String = "user://"
 ## Implementation of the trainer for `ConnectionManager`: "ble" (default) or "fake" (dev builds).
@@ -21,6 +22,11 @@ var devices: RememberedDevices
 var app_state: AppState
 var bridge: BleBridge
 var connections: ConnectionManager
+
+## Последняя завершённая сессия (сохранение заезда — этап 5).
+var last_finished_session: WorkoutSession = null
+## Эмулятор, созданный для «тренировки на эмуляторе» (временно, до этапа 4).
+var _emulator_trainer: TrainerDevice = null
 
 var _screens: Dictionary = {}
 
@@ -64,14 +70,19 @@ func _build_screens() -> void:
 	_add_screen(AppState.Screen.PROFILE_SELECT, select)
 	var home: HomeScreen = load(HOME_SCENE).instantiate()
 	home.setup(repo, app_state)
+	home.emulator_workout_requested.connect(start_emulator_workout)
 	_add_screen(AppState.Screen.HOME, home)
+	var workout: WorkoutScreen = load(WORKOUT_SCENE).instantiate()
+	workout.session_finished.connect(func(s: WorkoutSession) -> void: last_finished_session = s)
+	workout.profile_updated.connect(func(p: Profile) -> void: repo.save(p))
+	_add_screen(AppState.Screen.WORKOUT, workout)
 	var dev: DevScreen = load(DEV_SCENE).instantiate()
 	dev.setup(app_state)
 	_add_screen(AppState.Screen.DEV, dev)
 	var devices_screen: DevicesScreen = load(DEVICES_SCENE).instantiate()
 	devices_screen.setup(connections, repo, app_state)
 	_add_screen(AppState.Screen.DEVICES, devices_screen)
-	for screen in [AppState.Screen.WORKOUT, AppState.Screen.HISTORY, AppState.Screen.SETTINGS]:
+	for screen in [AppState.Screen.HISTORY, AppState.Screen.SETTINGS]:
 		_add_screen(screen, _make_placeholder(screen))
 
 
@@ -97,7 +108,34 @@ func _make_placeholder(screen: int) -> Control:
 	return panel
 
 
+## Временно (до этапа 4): тренировка с тестовым планом на эмуляторе станка.
+func start_emulator_workout() -> void:
+	var workout := workout_screen()
+	if workout == null:
+		return
+	if _emulator_trainer != null:
+		_emulator_trainer.disconnect_device()
+	_emulator_trainer = TrainerFactory.create(TrainerFactory.KIND_FAKE)
+	if _emulator_trainer == null:
+		return
+	_emulator_trainer.set("connect_delay_sec", 0.0)
+	_emulator_trainer.connect_device("emulator")
+	var profile: Profile = repo.get_active()
+	if profile == null:
+		profile = Profile.create("—")
+	workout.setup(DevScreen.test_workout(), profile, _emulator_trainer, app_state)
+	if app_state.navigate(AppState.Screen.WORKOUT):
+		workout.start()
+
+
+func workout_screen() -> WorkoutScreen:
+	return screen_node(AppState.Screen.WORKOUT) as WorkoutScreen
+
+
 func _show_screen(screen: int) -> void:
+	var previous := visible_screen_node()
+	if previous is WorkoutScreen and screen != AppState.Screen.WORKOUT:
+		(previous as WorkoutScreen).on_screen_exited()
 	for key in _screens:
 		(_screens[key] as Control).visible = key == screen
 	var node := screen_node(screen)
@@ -110,6 +148,8 @@ func _show_screen(screen: int) -> void:
 		(node as DevScreen).setup(app_state, active.ftp_w if active != null else DevScreen.DEFAULT_FTP_W)
 	elif node is DevicesScreen:
 		(node as DevicesScreen).refresh()
+	elif node is WorkoutScreen:
+		(node as WorkoutScreen).on_screen_entered()
 
 
 ## Scanner timeouts, auto-connect timer and device clocks advance with the frame;

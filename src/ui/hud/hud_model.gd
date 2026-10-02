@@ -62,13 +62,15 @@ func _init(workout_session: WorkoutSession, rider_profile: Profile = null) -> vo
 	var ex := session.executor
 	ex.second_elapsed.connect(_on_second_elapsed)
 	ex.step_changed.connect(_on_step_changed)
-	ex.target_changed.connect(func(_w: int) -> void: refresh())
+	# Только связанные методы, не лямбды: лямбда захватывает self сильной ссылкой и
+	# образует цикл модель → сессия → сигнал → лямбда → модель (утечка RefCounted).
+	ex.target_changed.connect(_refresh_int)
 	ex.cue.connect(_on_cue)
-	ex.finished.connect(func() -> void: refresh())
-	session.state_changed.connect(func(_s: int) -> void: refresh())
-	session.erg_changed.connect(func(_e: bool) -> void: refresh())
-	session.intensity_changed.connect(func(_f: float) -> void: refresh())
-	session.trainer.connection_state_changed.connect(func(_s: int) -> void: refresh())
+	ex.finished.connect(refresh)
+	session.state_changed.connect(_refresh_int)
+	session.erg_changed.connect(_refresh_bool)
+	session.intensity_changed.connect(_refresh_float)
+	session.trainer.connection_state_changed.connect(_refresh_int)
 	refresh()
 
 
@@ -106,6 +108,7 @@ func _compute() -> Dictionary:
 	return {
 		"session_state": session.get_state(),
 		"connection_state": session.trainer.get_connection_state(),
+		"connection_text": connection_text(session.trainer.get_connection_state()),
 		"target_w": target if has_target else NO_DATA,
 		"target_text": ("%d" % target) if has_target else NO_DATA_TEXT,
 		"smoothed_power_w": smoothed if has_power else NO_DATA,
@@ -190,6 +193,11 @@ func cursor() -> float:
 # Чистые функции форматирования и правил
 # ---------------------------------------------------------------------------
 
+## Текст состояния подключения станка (REQ-DEV-07 крит. 1, REQ-DEV-08 крит. 5) — ключ `ui.hud.connection.<state>`.
+static func connection_text(state: int) -> String:
+	return TranslationServer.translate("ui.hud.connection." + TrainerDevice.state_name(state))
+
+
 ## Состояние индикации отклонения (HUD-02 крит. 2): «в цели» при |факт − цель| ≤ max(5 % цели, 10 Вт).
 static func deviation_state(actual_w: int, target_w: int) -> String:
 	if target_w <= 0 or actual_w < 0:
@@ -230,6 +238,18 @@ static func truncate_cue(text: String) -> String:
 # ---------------------------------------------------------------------------
 # Внутреннее
 # ---------------------------------------------------------------------------
+
+func _refresh_int(_value: int) -> void:
+	refresh()
+
+
+func _refresh_bool(_value: bool) -> void:
+	refresh()
+
+
+func _refresh_float(_value: float) -> void:
+	refresh()
+
 
 func _power_zone(power_w: int) -> int:
 	if profile != null:

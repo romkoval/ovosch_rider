@@ -1,0 +1,251 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/workout/workout_screen.gd" id="1_script"]
+[ext_resource type="Script" path="res://src/ui/workout/workout_progress_bar.gd" id="2_bar"]
+
+[node name="WorkoutScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="NoSessionLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+text = "ui.workout.no_session"
+horizontal_alignment = 1
+
+[node name="HudRoot" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="HudRoot"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TopRow" type="HBoxContainer" parent="HudRoot/VBox"]
+layout_mode = 2
+
+[node name="StepLabel" type="Label" parent="HudRoot/VBox/TopRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ui.workout.step"
+
+[node name="ConnectionLabel" type="Label" parent="HudRoot/VBox/TopRow"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="TargetTitle" type="Label" parent="HudRoot/VBox"]
+layout_mode = 2
+text = "ui.workout.target_title"
+horizontal_alignment = 1
+
+[node name="TargetLabel" type="Label" parent="HudRoot/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="PowerRow" type="HBoxContainer" parent="HudRoot/VBox"]
+layout_mode = 2
+alignment = 1
+
+[node name="PowerLabel" type="Label" parent="HudRoot/VBox/PowerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="DeviationLabel" type="Label" parent="HudRoot/VBox/PowerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PowerZoneLabel" type="Label" parent="HudRoot/VBox/PowerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Metrics" type="GridContainer" parent="HudRoot/VBox"]
+layout_mode = 2
+columns = 4
+
+[node name="HrTitle" type="Label" parent="HudRoot/VBox/Metrics"]
+layout_mode = 2
+text = "ui.workout.hr"
+
+[node name="CadenceTitle" type="Label" parent="HudRoot/VBox/Metrics"]
+layout_mode = 2
+text = "ui.workout.cadence"
+
+[node name="SpeedTitle" type="Label" parent="HudRoot/VBox/Metrics"]
+layout_mode = 2
+text = "ui.workout.speed"
+
+[node name="ElapsedTitle" type="Label" parent="HudRoot/VBox/Metrics"]
+layout_mode = 2
+text = "ui.workout.elapsed"
+
+[node name="HrBox" type="HBoxContainer" parent="HudRoot/VBox/Metrics"]
+layout_mode = 2
+
+[node name="HrLabel" type="Label" parent="HudRoot/VBox/Metrics/HrBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HrZoneLabel" type="Label" parent="HudRoot/VBox/Metrics/HrBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CadenceLabel" type="Label" parent="HudRoot/VBox/Metrics"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SpeedLabel" type="Label" parent="HudRoot/VBox/Metrics"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ElapsedLabel" type="Label" parent="HudRoot/VBox/Metrics"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CountdownTitle" type="Label" parent="HudRoot/VBox"]
+layout_mode = 2
+text = "ui.workout.countdown"
+horizontal_alignment = 1
+
+[node name="CountdownLabel" type="Label" parent="HudRoot/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="CueLabel" type="Label" parent="HudRoot/VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ProgressBar" type="Control" parent="HudRoot/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+script = ExtResource("2_bar")
+
+[node name="Controls" type="HBoxContainer" parent="HudRoot/VBox"]
+layout_mode = 2
+alignment = 1
+
+[node name="PauseButton" type="Button" parent="HudRoot/VBox/Controls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.pause"
+
+[node name="SkipButton" type="Button" parent="HudRoot/VBox/Controls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.skip"
+
+[node name="StopButton" type="Button" parent="HudRoot/VBox/Controls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.stop"
+
+[node name="ErgButton" type="Button" parent="HudRoot/VBox/Controls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.erg_on"
+
+[node name="Adjust" type="HBoxContainer" parent="HudRoot/VBox"]
+layout_mode = 2
+alignment = 1
+
+[node name="ResistanceRow" type="HBoxContainer" parent="HudRoot/VBox/Adjust"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="ResistanceMinus" type="Button" parent="HudRoot/VBox/Adjust/ResistanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.minus_5"
+
+[node name="ResistanceLabel" type="Label" parent="HudRoot/VBox/Adjust/ResistanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.resistance"
+
+[node name="ResistancePlus" type="Button" parent="HudRoot/VBox/Adjust/ResistanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.plus_5"
+
+[node name="IntensityRow" type="HBoxContainer" parent="HudRoot/VBox/Adjust"]
+layout_mode = 2
+
+[node name="IntensityMinus" type="Button" parent="HudRoot/VBox/Adjust/IntensityRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.minus_5pct"
+
+[node name="IntensityLabel" type="Label" parent="HudRoot/VBox/Adjust/IntensityRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.intensity"
+
+[node name="IntensityPlus" type="Button" parent="HudRoot/VBox/Adjust/IntensityRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.plus_5pct"
+
+[node name="SummaryRoot" type="CenterContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SummaryVBox" type="VBoxContainer" parent="SummaryRoot"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="FinishedTitle" type="Label" parent="SummaryRoot/SummaryVBox"]
+layout_mode = 2
+text = "ui.workout.finished"
+horizontal_alignment = 1
+
+[node name="SummaryLabel" type="Label" parent="SummaryRoot/SummaryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="HomeButton" type="Button" parent="SummaryRoot/SummaryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.workout.home"
+
+[node name="StopDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.workout.stop"
+dialog_text = "ui.workout.stop_confirm"
+ok_button_text = "ui.workout.stop"
+cancel_button_text = "ui.common.cancel"

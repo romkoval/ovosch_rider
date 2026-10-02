@@ -273,9 +273,16 @@ func test_pause_event_has_begin_and_end_times() -> void:
 	assert_eq(pauses.size(), 1)
 	assert_almost_eq(float(pauses[0]["at_sec"]), 3.0, 1e-6)
 	assert_true(pauses[0].has("until_sec"), "REQ-WRK-05 крит. 2: время окончания паузы")
-	assert_almost_eq(float(pauses[0]["until_sec"]), 3.0, 1e-6, "сессионное время на паузе не идёт (В-4)")
+	assert_almost_eq(float(pauses[0]["duration_sec"]), 4.0, 1e-6, "реальная длительность паузы по протиканному времени")
+	assert_almost_eq(float(pauses[0]["until_sec"]), 7.0, 1e-6, "until = at + duration; сессионное время на паузе не идёт (В-4)")
 	assert_eq(_events(WorkoutSession.EVENT_RESUME).size(), 1)
 	assert_eq(_session.samples.size(), 3)
+	_ticks(2)
+	_session.pause()
+	_session.tick(1.5)
+	_session.resume()
+	assert_almost_eq(float(_session.metadata()["paused_total_sec"]), 5.5, 1e-6, "сумма пауз в метаданных (для FIT timer_stopped/started)")
+	assert_eq(_session.metadata()["elapsed_sec"], 5, "активное время паузы не включает")
 
 
 func test_skip_event_records_step_index_and_time() -> void:

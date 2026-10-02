@@ -168,6 +168,10 @@ func tick(delta_sec: float) -> void:
 		push_warning("FakeTrainer.tick: delta %.1f с больше суток, обрезано до %.0f" % [delta_sec, MAX_TICK_SEC])
 		delta_sec = MAX_TICK_SEC
 	var end_sec: float = _time_sec + delta_sec
+	# Накопление float: 50 × 0.2 с ≠ ровно 10.0 — выравниваем на целую секунду, чтобы метки
+	# команд совпадали с границами исполнителя (REQ-NFR-01 крит. 1 при кадрах 0.2 с).
+	if absf(end_sec - roundf(end_sec)) < TIME_EPSILON:
+		end_sec = roundf(end_sec)
 	# Проходим все целые секунды внутри интервала (прошлое, end_sec]: сначала
 	# применяем переходы состояния, наступившие к этой секунде, затем выдаём сэмпл.
 	# Переход, приходящийся ровно на целую секунду, применяется после слота

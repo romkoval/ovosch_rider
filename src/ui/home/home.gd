@@ -3,6 +3,9 @@ extends Control
 ## Главный экран — заглушка этапа 1: имя активного профиля, переходы на будущие
 ## экраны (через `AppState.navigate`) и смена профиля. Строки — через ключи переводов.
 
+## Временная кнопка этапа 1–3: тренировка на эмуляторе (до появления выбора плана, этап 4).
+signal emulator_workout_requested()
+
 var _repo: ProfileRepository
 var _app_state: AppState
 
@@ -12,6 +15,7 @@ var _app_state: AppState
 @onready var _settings_button: Button = %SettingsButton
 @onready var _devices_button: Button = %DevicesButton
 @onready var _dev_button: Button = %DevButton
+@onready var _emulator_button: Button = %EmulatorWorkoutButton
 @onready var _switch_button: Button = %SwitchProfileButton
 
 
@@ -28,6 +32,7 @@ func _ready() -> void:
 	_settings_button.pressed.connect(func() -> void: _navigate(AppState.Screen.SETTINGS))
 	_devices_button.pressed.connect(func() -> void: _navigate(AppState.Screen.DEVICES))
 	_dev_button.pressed.connect(func() -> void: _navigate(AppState.Screen.DEV))
+	_emulator_button.pressed.connect(func() -> void: emulator_workout_requested.emit())
 	_switch_button.pressed.connect(switch_profile)
 	if _repo != null:
 		refresh()

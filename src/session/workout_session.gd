@@ -31,8 +31,13 @@ extends RefCounted
 ## На паузе слоты не пишутся, время паузы не идёт в elapsed.
 ##
 ## Журнал событий `events` (REQ-WRK-05 крит. 2, REQ-WRK-06 крит. 4, LOC-01):
-## `{type, at_sec, value}`; типы — константы `EVENT_*`. У события паузы после
-## возобновления появляется `until_sec`.
+## `{type, at_sec, value}`; типы — константы `EVENT_*`. `at_sec` — активное
+## сессионное время (пауза в него не входит, В-4). У события паузы после
+## возобновления появляются `duration_sec` — реальная длительность паузы по
+## времени, прошедшему через `tick()` (станок тикает и на паузе), — и
+## `until_sec = at_sec + duration_sec` — «конец паузы по часам устройства».
+## Сумма длительностей всех пауз — `metadata()["paused_total_sec"]` (для FIT
+## `timer_stopped/started` и истории).
 
 enum State { IDLE, RUNNING, PAUSED, FINISHED }
 
@@ -91,6 +96,10 @@ var _freeride_suspended: bool = false
 var _speed_model := SpeedModel.new()
 var _last_retry_sec: int = -1
 var _pause_event_index: int = -1
+## Всё протиканное время, включая паузы, с (для длительности пауз).
+var _wall_sec: float = 0.0
+var _pause_started_wall_sec: float = 0.0
+var _paused_total_sec: float = 0.0
 var _power_age: int = -1
 var _cadence_age: int = -1
 var _hr_age: int = -1
@@ -135,6 +144,8 @@ func start() -> void:
 ## телеметрия секунды t попадает в слот t-1, а команда перехода уходит
 ## с меткой ровно на границе (REQ-NFR-02 крит. 2, REQ-NFR-01).
 func tick(delta_sec: float) -> void:
+	if delta_sec > 0.0:
+		_wall_sec += delta_sec
 	var remaining: float = delta_sec
 	while remaining > 0.0:
 		var piece: float = remaining
@@ -154,6 +165,7 @@ func pause() -> void:
 	executor.pause()
 	_set_state(State.PAUSED)
 	_pause_event_index = events.size()
+	_pause_started_wall_sec = _wall_sec
 	_log(EVENT_PAUSE, executor.elapsed_sec())
 
 
@@ -165,7 +177,10 @@ func resume() -> void:
 	_set_state(State.RUNNING)
 	executor.resume()
 	if _pause_event_index >= 0 and _pause_event_index < events.size():
-		events[_pause_event_index]["until_sec"] = session_time_sec()
+		var paused_for: float = maxf(_wall_sec - _pause_started_wall_sec, 0.0)
+		_paused_total_sec += paused_for
+		events[_pause_event_index]["duration_sec"] = paused_for
+		events[_pause_event_index]["until_sec"] = float(events[_pause_event_index]["at_sec"]) + paused_for
 	_pause_event_index = -1
 	_log(EVENT_RESUME, executor.elapsed_sec())
 	_resend(_erg_pending)
@@ -298,6 +313,7 @@ func metadata() -> Dictionary:
 		"speed_source": samples.speed_source,
 		"stopped_early": executor.stopped_early,
 		"elapsed_sec": executor.elapsed_sec(),
+		"paused_total_sec": _paused_total_sec,
 		"planned_sec": executor.workout.total_duration_sec(),
 		"distance_m": samples.total_distance_m(),
 		"sample_count": samples.size(),
