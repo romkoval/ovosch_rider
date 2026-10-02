@@ -673,6 +673,19 @@ func test_req_dev_01_c6_native_ovosch_ble_binds_exactly_the_ble_bridge_contract(
 	assert_eq(String(NativeBleBridge.NATIVE_CLASS), "OvoschBle", "обёртка ищет тот же класс")
 
 
+## Сторонние нативные зависимости (клон/симлинк godot-cpp разработчика): в репозитории их нет
+## (`.gitignore`), в обход не входят — критерий касается только собственного кода.
+const THIRD_PARTY_NATIVE_PREFIXES: Array[String] = ["res://native/godot-cpp/", "res://native/ble/godot-cpp/"]
+
+
+func _is_third_party(path: String) -> bool:
+	var p := path if path.ends_with("/") else path + "/"
+	for prefix in THIRD_PARTY_NATIVE_PREFIXES:
+		if p.begins_with(prefix):
+			return true
+	return false
+
+
 func _collect_files(dir_path: String, exts: Array[String], out: Array[String]) -> void:
 	var dir := DirAccess.open(dir_path)
 	if dir == null:
@@ -683,7 +696,8 @@ func _collect_files(dir_path: String, exts: Array[String], out: Array[String]) -
 	while name != "":
 		var full := dir_path.path_join(name)
 		if dir.current_is_dir():
-			if name != ".git" and name != ".godot":
+			if name != ".git" and name != ".godot" and not _is_third_party(full) \
+					and not dir.is_link(ProjectSettings.globalize_path(full)):
 				_collect_files(full, exts, out)
 		else:
 			for e in exts:
@@ -711,7 +725,8 @@ func test_req_nfr_06_c2_all_native_code_lives_in_native_ble() -> void:
 			"res://native/ble/src/ble_backend.h", "res://native/ble/src/null_backend.cpp",
 			"res://native/ble/SConstruct", "res://native/ble/ovosch_ble.gdextension", "res://native/ble/README.md"]:
 		assert_true(FileAccess.file_exists(required), "есть %s" % required)
-	assert_false(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://native/godot-cpp")),
-		"godot-cpp — сторонняя зависимость, не в репозитории")
+	var gitignore := FileAccess.get_file_as_string("res://.gitignore")
+	assert_true(gitignore.contains("native/godot-cpp") and gitignore.contains("native/ble/godot-cpp"),
+		"godot-cpp — сторонняя зависимость: оба её расположения исключены из репозитория через .gitignore")
 	# Платформенных реализаций (CoreBluetooth и т.п.) в src/ нет; в контейнере класс не зарегистрирован.
 	assert_false(ClassDB.class_exists("OvoschBle"), "в контейнере GDExtension не загружен (native/.gdignore)")
