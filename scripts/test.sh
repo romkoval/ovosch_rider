@@ -3,5 +3,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 GODOT="${GODOT:-$(command -v godot || echo /opt/godot/godot)}"
+mkdir -p tests/reports
 "$GODOT" --headless --path . --import >/dev/null 2>&1 || true
 "$GODOT" --headless --path . -s addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json "$@"
