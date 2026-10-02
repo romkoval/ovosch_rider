@@ -16,7 +16,11 @@ OVOSCH_BLE_HAS_PLATFORM_BACKEND.
 """
 import os
 
-godot_cpp_path = ARGUMENTS.get("godot_cpp_path", os.path.join("..", "godot-cpp"))
+# По умолчанию godot-cpp ищется в native/ble/godot-cpp (относительный путь — так SCons
+# не раздувает командные строки абсолютными путями: при ../godot-cpp линковка
+# libgodot-cpp.a падала с «Argument list too long»), затем в native/godot-cpp.
+_default_godot_cpp = "godot-cpp" if os.path.isdir("godot-cpp") else os.path.join("..", "godot-cpp")
+godot_cpp_path = ARGUMENTS.get("godot_cpp_path", _default_godot_cpp)
 if not os.path.isdir(godot_cpp_path):
     print("godot-cpp не найден: %s. См. native/ble/README.md" % godot_cpp_path)
     Exit(1)
@@ -29,15 +33,18 @@ sources = Glob("src/*.cpp")
 platform = env["platform"]
 has_platform_backend = False
 if platform in ("macos", "ios"):
-    apple_sources = Glob("src/platform/apple/*.mm") + Glob("src/platform/apple/*.cpp")
-    if apple_sources:
+    apple_mm = Glob("src/platform/apple/*.mm")
+    apple_cpp = Glob("src/platform/apple/*.cpp")
+    if apple_mm or apple_cpp:
         has_platform_backend = True
-        sources += apple_sources
+        env.Append(CPPDEFINES=["OVOSCH_BLE_HAS_PLATFORM_BACKEND"])
         env.Append(LINKFLAGS=["-framework", "CoreBluetooth", "-framework", "Foundation"])
-        env.Append(CCFLAGS=["-fobjc-arc"])
-
-if has_platform_backend:
-    env.Append(CPPDEFINES=["OVOSCH_BLE_HAS_PLATFORM_BACKEND"])
+        # ARC — только для Objective-C++ единиц трансляции; чистый C++ собирается без него.
+        objc_env = env.Clone()
+        objc_env.Append(CCFLAGS=["-fobjc-arc"])
+        for f in apple_mm:
+            sources.append(objc_env.SharedObject(f))
+        sources += apple_cpp
 
 if platform == "macos":
     library = env.SharedLibrary(

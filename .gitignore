@@ -6,6 +6,8 @@ tests/reports/
 # Native build
 native/godot-cpp
 native/godot-cpp/
+native/ble/godot-cpp
+native/ble/godot-cpp/
 native/**/bin/
 native/**/.sconsign.dblite
 native/**/*.o
