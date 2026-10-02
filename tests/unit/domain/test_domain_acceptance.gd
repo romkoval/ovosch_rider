@@ -858,3 +858,25 @@ func test_req_hud_09_edge_reset_clears_window() -> void:
 	assert_false(s.has_value())
 	assert_eq(s.sample_count(), 0)
 	assert_eq(s.push(50), 50, "после сброса среднее начинается заново")
+
+
+# ---------------------------------------------------------------------------
+# REQ-INT-03 крит. 7 / REQ-NFR-09 крит. 2 — подсказка копируется независимо (T-056)
+# ---------------------------------------------------------------------------
+
+func test_req_int_03_c7_text_cue_duplicate_is_equal_but_independent() -> void:
+	var original := TextCue.make(45, "Разгон до 90 об/мин")
+	var copy := original.duplicate_cue()
+	assert_true(copy is TextCue)
+	assert_ne(copy, original, "это другой объект")
+	assert_eq(copy.at_sec, 45)
+	assert_eq(copy.text, "Разгон до 90 об/мин")
+	copy.text = "изменено"
+	copy.at_sec = 99
+	assert_eq(original.text, "Разгон до 90 об/мин", "смена текста копии не трогает оригинал")
+	assert_eq(original.at_sec, 45, "смена смещения копии не трогает оригинал")
+	original.text = "снова изменён оригинал"
+	assert_eq(copy.text, "изменено", "и наоборот")
+	var empty := TextCue.make(0, "").duplicate_cue()
+	assert_eq(empty.at_sec, 0)
+	assert_eq(empty.text, "", "пустая подсказка копируется без ошибок")
