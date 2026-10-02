@@ -10,6 +10,12 @@ extends SecureStore
 ## устройству. На магазинных платформах НЕ считается выполнением REQ-NFR-05
 ## крит. 1/3; критерий 2 (секреты не лежат в `user://` открытым текстом) выполняется.
 ##
+## Неверный пароль или повреждённый файл: ядро сообщает ошибку (ERR_FILE_CORRUPT /
+## ERR_FILE_UNRECOGNIZED), хранилище даёт `loaded_ok() == false`, пустой список
+## секретов и БЛОКИРУЕТ запись — иначе один сбой пароля уничтожил бы все токены.
+## Явный сброс — `reset_store()` (для действия «сбросить привязки» в UI).
+## Отсутствие файла — не ошибка: пустое хранилище, `loaded_ok() == true`.
+##
 ## Весь словарь перезаписывается при каждом изменении; чтение — из памяти
 ## после загрузки в конструкторе.
 
@@ -32,12 +38,24 @@ func file_path() -> String:
 
 
 ## false, если файл существовал, но не расшифровался (другой ключ или повреждение).
+## В этом состоянии `set_secret`/`delete_secret` возвращают false и файл не трогают.
 func loaded_ok() -> bool:
 	return _loaded_ok
 
 
+## Стереть файл хранилища и начать с пустого (`loaded_ok()` снова true).
+func reset_store() -> void:
+	_secrets = {}
+	_loaded_ok = true
+	var path := file_path()
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
 func set_secret(key: String, value: String) -> bool:
 	if not SecureStore.is_valid_key(key) or value.is_empty():
+		return false
+	if not _refuse_if_not_loaded():
 		return false
 	_secrets[key] = value
 	return _persist()
@@ -48,7 +66,7 @@ func get_secret(key: String) -> String:
 
 
 func delete_secret(key: String) -> bool:
-	if not _secrets.erase(key):
+	if not _refuse_if_not_loaded() or not _secrets.erase(key):
 		return false
 	_persist()
 	return true
@@ -68,6 +86,14 @@ func list_keys(prefix: String = "") -> Array[String]:
 	return out
 
 
+## true — писать можно; false — файл не расшифрован, запись отклонена (предупреждение).
+func _refuse_if_not_loaded() -> bool:
+	if _loaded_ok:
+		return true
+	push_warning("EncryptedFileSecureStore: secure store not loaded, refusing to overwrite %s (см. reset_store)" % file_path())
+	return false
+
+
 func _load() -> void:
 	_secrets = {}
 	_loaded_ok = true
@@ -77,7 +103,7 @@ func _load() -> void:
 	var file := FileAccess.open_encrypted_with_pass(path, FileAccess.READ, _password)
 	if file == null:
 		_loaded_ok = false
-		push_warning("EncryptedFileSecureStore: не удалось расшифровать %s (%s); хранилище пустое" % [path, error_string(FileAccess.get_open_error())])
+		push_warning("EncryptedFileSecureStore: не удалось расшифровать %s (%s); хранилище пустое, запись заблокирована" % [path, error_string(FileAccess.get_open_error())])
 		return
 	var json := JSON.new()
 	var parse_err := json.parse(file.get_as_text())
@@ -88,7 +114,7 @@ func _load() -> void:
 			_secrets[str(k)] = str(parsed[k])
 	else:
 		_loaded_ok = false
-		push_warning("EncryptedFileSecureStore: содержимое %s не распознано; хранилище пустое" % path)
+		push_warning("EncryptedFileSecureStore: не удалось расшифровать %s (содержимое не распознано); хранилище пустое, запись заблокирована" % path)
 
 
 func _persist() -> bool:

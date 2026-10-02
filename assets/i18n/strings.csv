@@ -1,0 +1,40 @@
+keys,ru,en
+ui.app.title,ovosch-rider,ovosch-rider
+ui.common.coming_soon,Этот экран появится позже,This screen is coming soon
+ui.common.cancel,Отмена,Cancel
+ui.common.delete,Удалить,Delete
+ui.profile_select.title,Выбор профиля,Choose a profile
+ui.profile_select.select,Выбрать,Select
+ui.profile_select.create,Создать,Create
+ui.profile_select.delete,Удалить,Delete
+ui.profile_select.empty_hint,Профилей пока нет — создайте первый,No profiles yet — create the first one
+ui.profile_select.delete_confirm,Удалить профиль «{name}»? Будут удалены его заезды; токены и датчики; общий станок останется.,Delete profile “{name}”? Its rides; tokens and sensors will be removed; the shared trainer stays.
+ui.profile_select.item_ftp,FTP {ftp} Вт,FTP {ftp} W
+ui.profile_create.title,Новый профиль,New profile
+ui.profile_create.name,Имя,Name
+ui.profile_create.ftp,FTP (Вт),FTP (W)
+ui.profile_create.weight,Вес (кг),Weight (kg)
+ui.profile_create.max_hr,Максимальный пульс (0 — не задан),Max heart rate (0 = not set)
+ui.profile_create.save,Сохранить,Save
+ui.profile_create.cancel,Отмена,Cancel
+ui.home.title,Главный экран,Home
+ui.home.active_profile,Профиль: {name},Profile: {name}
+ui.home.workout,Тренировка,Workout
+ui.home.history,История,History
+ui.home.settings,Настройки,Settings
+ui.home.dev,Режим разработки,Developer mode
+ui.home.switch_profile,Сменить профиль,Switch profile
+error.profile.id_empty,Внутренняя ошибка: у профиля нет идентификатора,Internal error: profile has no id
+error.profile.name_empty,Введите имя профиля,Enter a profile name
+error.profile.name_too_long,Имя не длиннее 40 символов,Name must be 40 characters or fewer
+error.profile.ftp_out_of_range,FTP должен быть от 50 до 600 Вт,FTP must be between 50 and 600 W
+error.profile.weight_out_of_range,Вес должен быть от 20 до 250 кг,Weight must be between 20 and 250 kg
+error.profile.max_hr_out_of_range,Максимальный пульс — от 100 до 220 или 0,Max heart rate must be 100–220 or 0
+error.profile.intensity_out_of_range,Интенсивность — от 50 до 150 %,Intensity must be between 50 and 150 %
+error.profile.resistance_out_of_range,Сопротивление — от 0 до 100 %,Resistance must be between 0 and 100 %
+error.profile.power_zones_invalid,Границы зон мощности некорректны,Power zone boundaries are invalid
+error.profile.hr_zones_invalid,Границы зон пульса некорректны,Heart-rate zone boundaries are invalid
+error.profile.name_not_unique,Профиль с таким именем уже есть,A profile with this name already exists
+error.profile.profile_not_found,Профиль не найден,Profile not found
+error.profile.last_profile,Нельзя удалить последний профиль,The last profile cannot be deleted
+error.profile.storage_write_failed,Не удалось сохранить профили на диск,Could not save profiles to disk

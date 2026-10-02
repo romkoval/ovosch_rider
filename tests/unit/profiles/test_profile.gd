@@ -178,6 +178,47 @@ func test_weight_snapped_to_0_1_in_to_dict() -> void:
 	assert_almost_eq(float(p.to_dict()["weight_kg"]), 72.5, 1e-9)
 
 
+func test_weight_is_validated_after_snapping_and_normalize_applies_it() -> void:
+	var p := _valid()
+	p.weight_kg = 19.96
+	assert_eq(p.validate(), [], "19.96 → 20.0 принимается")
+	p.weight_kg = 19.94
+	assert_has(p.validate(), Profile.ERR_WEIGHT_OUT_OF_RANGE, "19.94 → 19.9 отклоняется")
+	p.weight_kg = 19.96
+	p.name = "  Даша "
+	p.normalize()
+	assert_almost_eq(p.weight_kg, 20.0, 1e-9)
+	assert_eq(p.name, "Даша")
+
+
+func test_absolute_hr_zones_work_without_max_hr_and_roundtrip() -> void:
+	var p := _valid()
+	p.hr_zones = HrZones.custom_bpm([108, 126, 144, 162])
+	assert_true(p.has_hr_zones(), "REQ-PRF-02 крит. 4: переопределённые зоны доступны без max_hr")
+	assert_eq(p.hr_zone_of(107), 1)
+	assert_eq(p.hr_zone_of(150), 4)
+	assert_eq(p.validate(), [])
+	var copy := Profile.from_dict(p.to_dict())
+	assert_true(copy.hr_zones.is_absolute())
+	assert_eq(copy.hr_zones.boundaries_bpm, [108, 126, 144, 162])
+	assert_eq(copy.hr_zone_of(150), 4)
+	p.hr_zones = HrZones.custom_bpm([144, 108])
+	assert_has(p.validate(), Profile.ERR_HR_ZONES_INVALID)
+
+
+func test_from_dict_tolerates_garbage_and_null_types() -> void:
+	var p := Profile.from_dict({"id": 7, "name": null, "ftp_w": "abc", "weight_kg": null, "max_hr": null,
+		"power_zone_bounds_pct": "junk", "hr_zone_bounds_pct": {"a": 1}, "created_at": "yesterday"})
+	assert_eq(p.id, "7")
+	assert_eq(p.name, "")
+	assert_eq(p.ftp_w, 0, "мусор → 0, чтобы validate() отклонил")
+	assert_eq(p.weight_kg, 75.0, "null → умолчание")
+	assert_eq(p.max_hr, 0)
+	assert_null(p.power_zones)
+	assert_null(p.hr_zones)
+	assert_has(p.validate(), Profile.ERR_FTP_OUT_OF_RANGE)
+
+
 func test_duplicate_profile_is_independent_copy() -> void:
 	var p := _valid()
 	var copy := p.duplicate_profile()

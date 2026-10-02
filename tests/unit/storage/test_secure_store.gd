@@ -167,9 +167,19 @@ func test_encrypted_store_with_wrong_password_is_empty_and_does_not_crash() -> v
 	s.set_secret(_k(PROFILE_A, "strava", "access_token"), TOKEN_A)
 	var wrong := EncryptedFileSecureStore.new(_dir, "other-password")
 	assert_engine_error("ERR_FILE_CORRUPT", "ядро сообщает о неверном ключе — ожидаемо")
+	assert_push_warning("не удалось расшифровать")
 	assert_false(wrong.loaded_ok())
 	assert_eq(wrong.get_secret(_k(PROFILE_A, "strava", "access_token")), "")
 	assert_eq(wrong.list_keys().size(), 0)
+	assert_false(wrong.set_secret(_k(PROFILE_B, "strava", "access_token"), TOKEN_B), "запись из нерасшифрованного экземпляра отклонена")
+	assert_push_warning("refusing to overwrite")
+	assert_false(wrong.delete_secret(_k(PROFILE_A, "strava", "access_token")))
+	assert_push_warning("refusing to overwrite")
+	assert_eq(EncryptedFileSecureStore.new(_dir, PASSWORD).get_secret(_k(PROFILE_A, "strava", "access_token")), TOKEN_A, "исходные секреты целы")
+	wrong.reset_store()
+	assert_true(wrong.loaded_ok())
+	assert_true(wrong.set_secret(_k(PROFILE_B, "strava", "access_token"), TOKEN_B), "после явного сброса запись возможна")
+	assert_eq(EncryptedFileSecureStore.new(_dir, "other-password").get_secret(_k(PROFILE_B, "strava", "access_token")), TOKEN_B)
 
 
 func test_encrypted_file_does_not_contain_plaintext_secret_or_key() -> void:

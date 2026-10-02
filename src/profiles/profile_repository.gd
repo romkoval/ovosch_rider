@@ -7,6 +7,10 @@ extends RefCounted
 ## идентификатор активного; оба сохраняются между запусками (REQ-PRF-01 крит. 6).
 ##
 ## Правила:
+## - Хранилище хранит снимки: `save()` кладёт копию переданного объекта, а
+##   `get_by_id()/list()/get_active()` возвращают копии. Правка объекта у вызывающего
+##   попадает на диск только через успешный `save()` — отклонённая правка не может
+##   «протечь» в файл при следующей записи другого профиля.
 ## - `save()` валидирует профиль (`Profile.validate()`) и уникальность имени без
 ##   учёта регистра (REQ-PRF-01 крит. 1, 2); при ошибках ничего не пишет.
 ## - `delete()` отказывает удалять последний профиль (REQ-PRF-01 крит. 5).
@@ -62,9 +66,11 @@ func dir_path() -> String:
 	return _dir_path
 
 
-## Профили в порядке создания.
+## Профили в порядке создания (копии).
 func list() -> Array[Profile]:
-	var out: Array[Profile] = _profiles.duplicate()
+	var out: Array[Profile] = []
+	for p in _profiles:
+		out.append(p.duplicate_profile())
 	out.sort_custom(func(a: Profile, b: Profile) -> bool:
 		if a.created_at != b.created_at:
 			return a.created_at < b.created_at
@@ -76,7 +82,13 @@ func count() -> int:
 	return _profiles.size()
 
 
+## Профиль по id (копия) или null.
 func get_by_id(id: String) -> Profile:
+	var stored := _find_stored(id)
+	return stored.duplicate_profile() if stored != null else null
+
+
+func _find_stored(id: String) -> Profile:
 	for p in _profiles:
 		if p.id == id:
 			return p
@@ -99,18 +111,19 @@ func create(profile_name: String) -> Profile:
 ## Сохранить новый или изменённый профиль. Возвращает коды ошибок; пустой — успех.
 ## Первый сохранённый профиль становится активным.
 func save(profile: Profile) -> Array[String]:
+	profile.normalize()
 	var errors: Array[String] = profile.validate()
 	if errors.is_empty() and not _is_name_unique(profile.name, profile.id):
 		errors.append(ERR_NAME_NOT_UNIQUE)
 	if not errors.is_empty():
 		last_errors = errors
 		return errors
-	profile.name = profile.name.strip_edges()
-	var existing := get_by_id(profile.id)
+	var snapshot := profile.duplicate_profile()
+	var existing := _find_stored(profile.id)
 	if existing == null:
-		_profiles.append(profile)
-	elif existing != profile:
-		_profiles[_profiles.find(existing)] = profile
+		_profiles.append(snapshot)
+	else:
+		_profiles[_profiles.find(existing)] = snapshot
 	if _active_id.is_empty():
 		_active_id = profile.id
 		active_profile_changed.emit(_active_id)
@@ -125,7 +138,7 @@ func save(profile: Profile) -> Array[String]:
 ## Удалить профиль. Возвращает "" при успехе или код ошибки
 ## (`profile_not_found`, `last_profile`). Каскад: хуки, затем `profile_deleted`.
 func delete(id: String) -> String:
-	var p := get_by_id(id)
+	var p := _find_stored(id)
 	if p == null:
 		last_errors = [ERR_PROFILE_NOT_FOUND]
 		return ERR_PROFILE_NOT_FOUND
@@ -181,7 +194,7 @@ func load_from_disk() -> void:
 				if not p.id.is_empty():
 					_profiles.append(p)
 	var active: String = str(data.get("active_profile_id", ""))
-	if get_by_id(active) != null:
+	if _find_stored(active) != null:
 		_active_id = active
 	elif not _profiles.is_empty():
 		_active_id = list()[0].id
@@ -190,7 +203,7 @@ func load_from_disk() -> void:
 func _set_active(id: String) -> void:
 	if id == _active_id:
 		return
-	if get_by_id(id) == null:
+	if _find_stored(id) == null:
 		push_error("ProfileRepository: профиль '%s' не найден, активный не изменён" % id)
 		last_errors = [ERR_PROFILE_NOT_FOUND]
 		return
@@ -214,7 +227,7 @@ func _persist() -> bool:
 		return false
 	var items: Array = []
 	for p in list():
-		items.append(p.to_dict())
+		items.append(p.to_dict())  # list() уже отсортирован
 	var data := {
 		"schema": SCHEMA_VERSION,
 		"active_profile_id": _active_id,
