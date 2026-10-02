@@ -1,0 +1,59 @@
+[
+  {
+    "id": 2001,
+    "start_date_local": "2026-10-02T00:00:00",
+    "category": "WORKOUT",
+    "type": "Ride",
+    "name": "Threshold 3x5",
+    "description": "Warmup\n- 10m ramp 50-70%\n\n3x\n- 5m 100%\n- 3m 50%\n\n- 5m 40%",
+    "moving_time": 2340,
+    "icu_training_load": 65,
+    "indoor": true,
+    "workout_doc": {
+      "duration": 2340,
+      "steps": [
+        {"duration": 600, "warmup": true, "ramp": true, "power": {"start": 50, "end": 70, "units": "%ftp"}, "text": "Разминка"},
+        {"reps": 3, "steps": [
+          {"duration": 300, "power": {"value": 100, "units": "%ftp"}, "cadence": 90},
+          {"duration": 180, "power": {"value": 50, "units": "%ftp"}}
+        ]},
+        {"duration": 300, "cooldown": true, "power": {"value": 40, "units": "%ftp"}}
+      ]
+    }
+  },
+  {
+    "id": 2002,
+    "start_date_local": "2026-10-02T00:00:00",
+    "category": "WORKOUT",
+    "type": "VirtualRide",
+    "name": "Endurance text",
+    "description": "- 10m 65%\n- 20m 80%\n- 5m 50%",
+    "moving_time": 2100,
+    "icu_training_load": 40
+  },
+  {
+    "id": 2003,
+    "start_date_local": "2026-10-02T00:00:00",
+    "category": "NOTE",
+    "type": null,
+    "name": "Заметка тренера",
+    "description": "- 10m 65%"
+  },
+  {
+    "id": 2004,
+    "start_date_local": "2026-10-02T00:00:00",
+    "category": "WORKOUT",
+    "type": "Run",
+    "name": "Easy run",
+    "description": "- 30m Z2",
+    "moving_time": 1800
+  },
+  {
+    "id": 2005,
+    "start_date_local": "2026-10-02T00:00:00",
+    "category": "RACE_A",
+    "type": "Ride",
+    "name": "Гонка без плана",
+    "description": ""
+  }
+]

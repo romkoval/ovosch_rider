@@ -1,0 +1,35 @@
+{
+  "_comment": "Синтетическая фикстура по публичной документации Intervals.icu (открытое решение 19 / Б-3): реальных ответов с аккаунта владельца пока нет.",
+  "id": "i12345",
+  "name": "Test Athlete",
+  "firstname": "Test",
+  "lastname": "Athlete",
+  "email": "athlete@example.com",
+  "icu_weight": 68.5,
+  "icu_resting_hr": 48,
+  "sportSettings": [
+    {
+      "id": 101,
+      "types": ["Run", "TrailRun"],
+      "ftp": null,
+      "lthr": 165,
+      "max_hr": 190,
+      "hr_zones": [120, 140, 155, 170, 190],
+      "hr_zone_names": ["Z1", "Z2", "Z3", "Z4", "Z5"]
+    },
+    {
+      "id": 102,
+      "types": ["Ride", "VirtualRide", "GravelRide"],
+      "ftp": 250,
+      "indoor_ftp": 245,
+      "lthr": 168,
+      "max_hr": 192,
+      "power_zones": [55, 75, 90, 105, 120, 150, 999],
+      "power_zone_names": ["Z1", "Z2", "Z3", "Z4", "Z5", "Z6", "Z7"],
+      "hr_zones": [115, 134, 153, 172, 182, 192],
+      "hr_zone_names": ["Z1", "Z2", "Z3", "Z4", "Z5", "Z6"],
+      "warmup_time": 900,
+      "cooldown_time": 600
+    }
+  ]
+}

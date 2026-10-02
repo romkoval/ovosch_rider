@@ -46,6 +46,11 @@ const ERR_INTENSITY_OUT_OF_RANGE: String = "intensity_out_of_range"
 const ERR_RESISTANCE_OUT_OF_RANGE: String = "resistance_out_of_range"
 const ERR_POWER_ZONES_INVALID: String = "power_zones_invalid"
 const ERR_HR_ZONES_INVALID: String = "hr_zones_invalid"
+const ERR_SOURCE_INVALID: String = "source_invalid"
+
+## Источник FTP/зон (REQ-INT-06 крит. 6): `"local"` или `"intervals:<YYYY-MM-DD>"`.
+const SOURCE_LOCAL: String = "local"
+const SOURCE_INTERVALS_PREFIX: String = "intervals"
 
 ## Версия схемы `to_dict()`.
 const SCHEMA_VERSION: int = 1
@@ -67,6 +72,14 @@ var intensity_default: int = 100
 var resistance_level_default: int = 50
 ## Время создания, unix-секунды.
 var created_at: int = 0
+## Откуда FTP: `SOURCE_LOCAL` или `intervals:<дата синхронизации>` (REQ-INT-06).
+var ftp_source: String = SOURCE_LOCAL
+## Откуда зоны мощности/пульса: `SOURCE_LOCAL` или `intervals:<дата>` (REQ-INT-06).
+var zones_source: String = SOURCE_LOCAL
+## Athlete ID Intervals.icu (не секрет; ключ API — только в `SecureStore`, REQ-PRF-03).
+var intervals_athlete_id: String = ""
+## «Переопределить локально»: синхронизация не трогает FTP и зоны (REQ-INT-06 крит. 4).
+var intervals_override_local: bool = false
 
 
 ## Новый профиль с именем, свежим id и временем создания.
@@ -172,7 +185,15 @@ func validate() -> Array[String]:
 				else _boundaries_valid(hr_zones.boundaries_pct)
 		if not hr_ok:
 			errors.append(ERR_HR_ZONES_INVALID)
+	if not is_valid_source(ftp_source) or not is_valid_source(zones_source):
+		errors.append(ERR_SOURCE_INVALID)
 	return errors
+
+
+## Источник значения корректен: `"local"` или `"intervals"`/`"intervals:<дата>"`.
+static func is_valid_source(source: String) -> bool:
+	return source == SOURCE_LOCAL or source == SOURCE_INTERVALS_PREFIX \
+			or source.begins_with(SOURCE_INTERVALS_PREFIX + ":")
 
 
 func is_valid() -> bool:
@@ -194,6 +215,10 @@ func to_dict() -> Dictionary:
 		"intensity_default": intensity_default,
 		"resistance_level_default": resistance_level_default,
 		"created_at": created_at,
+		"ftp_source": ftp_source,
+		"zones_source": zones_source,
+		"intervals_athlete_id": intervals_athlete_id,
+		"intervals_override_local": intervals_override_local,
 	}
 
 
@@ -211,6 +236,14 @@ static func from_dict(data: Dictionary) -> Profile:
 	p.intensity_default = _to_int(data.get("intensity_default", null), p.intensity_default)
 	p.resistance_level_default = _to_int(data.get("resistance_level_default", null), p.resistance_level_default)
 	p.created_at = _to_int(data.get("created_at", null), 0)
+	p.ftp_source = _to_text(data.get("ftp_source", SOURCE_LOCAL))
+	p.zones_source = _to_text(data.get("zones_source", SOURCE_LOCAL))
+	if p.ftp_source.is_empty():
+		p.ftp_source = SOURCE_LOCAL
+	if p.zones_source.is_empty():
+		p.zones_source = SOURCE_LOCAL
+	p.intervals_athlete_id = _to_text(data.get("intervals_athlete_id", ""))
+	p.intervals_override_local = _to_int(data.get("intervals_override_local", null), 0) != 0
 	var pz: Variant = data.get("power_zone_bounds_pct", null)
 	if pz is Array:
 		p.power_zones = PowerZones.custom(p.ftp_w, _array_to_bounds(pz))
