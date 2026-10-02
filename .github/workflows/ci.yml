@@ -94,6 +94,13 @@ jobs:
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
         run: git clone --depth 1 -b "$GODOT_CPP_BRANCH" https://github.com/godotengine/godot-cpp native/godot-cpp
 
+      # godot-cpp собирается в своём каталоге (относительные пути): при сборке
+      # через наш SConstruct список объектов с абсолютными путями превышает
+      # лимит аргументов shell при линковке статической библиотеки.
+      - name: Build godot-cpp
+        working-directory: native/godot-cpp
+        run: scons platform=linux target=template_debug -j4
+
       - name: Build GDExtension skeleton
         working-directory: native/ble
         run: scons platform=linux target=template_debug -j4
