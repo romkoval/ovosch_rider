@@ -277,20 +277,28 @@ func test_req_prf_03_c3_profiles_json_has_no_secret_fields_even_if_profile_edite
 
 
 func test_req_nfr_05_c2_memory_store_writes_nothing_to_user_dir() -> void:
-	var before: Array[String] = []
-	_all_files("user://", before)
+	# Самодостаточно: смотрим только в собственный временный каталог теста.
+	# Профиль сохраняется в <_dir>/profiles/, секреты — только в память; после этого
+	# в каталоге ровно один файл (profiles.json), в нём нет токенов, каталога secure/ нет.
+	var repo := ProfileRepository.new(_dir + "profiles/")
+	var p := repo.create("Mem")
 	var mem := MemorySecureStore.new()
 	for i in 50:
-		mem.set_secret(_k(PID_A, "strava", "t%d" % i), TOKENS[i % 3])
+		assert_true(mem.set_secret(_k(p.id, "strava", "t%d" % i), TOKENS[i % 3]))
 	assert_eq(mem.size(), 50)
-	var after: Array[String] = []
-	_all_files("user://", after)
-	assert_eq(after.size(), before.size(), "файлов в user:// не прибавилось")
-	assert_false(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_dir)))
-	assert_false(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(SecureStore.DEFAULT_DIR)) \
-		and FileAccess.file_exists(SecureStore.DEFAULT_DIR + EncryptedFileSecureStore.FILE_NAME) \
-		and _file_contains(SecureStore.DEFAULT_DIR + EncryptedFileSecureStore.FILE_NAME, TOKENS[0]),
-		"даже если каталог по умолчанию есть — токенов из памяти там нет")
+	p.ftp_w = 210
+	assert_eq(repo.save(p), [])
+	var files: Array[String] = []
+	_all_files(_dir, files)
+	assert_eq(files, [_dir + "profiles/profiles.json"], "в каталоге данных только файл профилей; факт: %s" % str(files))
+	for f in files:
+		for t in TOKENS:
+			assert_false(_file_contains(f, t), "файл %s содержит токен" % f)
+	assert_false(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_dir + "secure/")), "MemorySecureStore не создаёт каталог секретов")
+	var default_file := SecureStore.DEFAULT_DIR + EncryptedFileSecureStore.FILE_NAME
+	if FileAccess.file_exists(default_file):
+		for t in TOKENS:
+			assert_false(_file_contains(default_file, t), "токены из памяти не попали в файл по умолчанию")
 
 
 func test_req_nfr_05_c2_encrypted_file_hides_tokens_keys_and_structure() -> void:
