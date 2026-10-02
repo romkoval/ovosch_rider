@@ -90,3 +90,24 @@ func test_hr_zones_custom_boundaries_and_validate() -> void:
 	assert_eq(z.validate().size(), 0)
 	assert_eq(HrZones.custom(200, [75.0, 50.0] as Array[float]).validate().size(), 1)
 	assert_eq(HrZones.five_zone(0).validate().size(), 1)
+
+
+func test_hr_zones_custom_bpm_matches_five_zone_180_without_max_hr() -> void:
+	var abs_z := HrZones.custom_bpm([108, 126, 144, 162] as Array[int])
+	var rel_z := HrZones.five_zone(180)
+	assert_true(abs_z.is_absolute())
+	assert_eq(abs_z.max_hr, 0, "max_hr не нужен")
+	assert_eq(abs_z.zone_count(), 5)
+	for bpm in range(0, 221):
+		assert_eq(abs_z.zone_of(bpm), rel_z.zone_of(bpm), "bpm=%d" % bpm)
+	assert_eq(abs_z.zone_of(107), 1)
+	assert_eq(abs_z.zone_of(108), 2, "граница → верхняя зона, как и у относительных")
+	assert_eq(abs_z.zone_of(0), 0)
+	assert_eq(abs_z.validate().size(), 0)
+
+
+func test_hr_zones_custom_bpm_validate_monotonic() -> void:
+	assert_eq(HrZones.custom_bpm([126, 108] as Array[int]).validate().size(), 1)
+	assert_eq(HrZones.custom_bpm([108, 108] as Array[int]).validate().size(), 1)
+	assert_eq(HrZones.custom_bpm([0, 120] as Array[int]).validate().size(), 1)
+	assert_eq(HrZones.custom_bpm([120, 140, 160] as Array[int]).zone_count(), 4)

@@ -14,6 +14,11 @@ const DEFAULT_BOUNDARIES_PCT: Array[float] = [60.0, 70.0, 80.0, 90.0]
 
 var max_hr: int = 0
 var boundaries_pct: Array[float] = DEFAULT_BOUNDARIES_PCT.duplicate()
+## Абсолютные границы, уд/мин (REQ-INT-06 крит. 3: зоны Intervals.icu приходят
+## в уд/мин). Если массив не пуст, `zone_of` использует их и не смотрит на
+## `max_hr`/`boundaries_pct`. Правило границы то же: значение, равное границе,
+## относится к верхней зоне.
+var boundaries_bpm: Array[int] = []
 
 
 static func five_zone(max_bpm: int) -> HrZones:
@@ -29,14 +34,36 @@ static func custom(max_bpm: int, boundaries: Array[float]) -> HrZones:
 	return z
 
 
+## Зоны с абсолютными границами в уд/мин; `max_hr` не требуется.
+## Пример: [108, 126, 144, 162] эквивалентно `five_zone(180)`.
+static func custom_bpm(boundaries: Array[int]) -> HrZones:
+	var z := HrZones.new()
+	z.boundaries_bpm = boundaries.duplicate()
+	return z
+
+
+func is_absolute() -> bool:
+	return not boundaries_bpm.is_empty()
+
+
 func zone_count() -> int:
-	return boundaries_pct.size() + 1
+	return (boundaries_bpm.size() if is_absolute() else boundaries_pct.size()) + 1
 
 
-## Номер зоны 1..zone_count() для пульса `bpm`. При `max_hr <= 0` или `bpm <= 0` → 0
-## («нет данных», REQ-HUD-04 крит. 2).
+## Номер зоны 1..zone_count() для пульса `bpm`. При `bpm <= 0` → 0 («нет данных»,
+## REQ-HUD-04 крит. 2); для относительных границ также при `max_hr <= 0` → 0.
 func zone_of(bpm: int) -> int:
-	if max_hr <= 0 or bpm <= 0:
+	if bpm <= 0:
+		return 0
+	if is_absolute():
+		var z: int = 1
+		for b in boundaries_bpm:
+			if bpm >= b:
+				z += 1
+			else:
+				break
+		return z
+	if max_hr <= 0:
 		return 0
 	var zone: int = 1
 	for b in boundaries_pct:
@@ -49,6 +76,13 @@ func zone_of(bpm: int) -> int:
 
 func validate() -> Array[String]:
 	var errors: Array[String] = []
+	if is_absolute():
+		for i in boundaries_bpm.size():
+			if boundaries_bpm[i] <= 0:
+				errors.append("граница %d не положительна: %d" % [i + 1, boundaries_bpm[i]])
+			if i > 0 and boundaries_bpm[i] <= boundaries_bpm[i - 1]:
+				errors.append("границы не возрастают: %d после %d" % [boundaries_bpm[i], boundaries_bpm[i - 1]])
+		return errors
 	if max_hr <= 0:
 		errors.append("максимальный пульс должен быть > 0 (сейчас %d)" % max_hr)
 	if boundaries_pct.is_empty():

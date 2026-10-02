@@ -108,6 +108,45 @@ func power_profile(ftp_w: int, resolution_sec: int = 1, intensity: float = 1.0) 
 	return profile
 
 
+## Ломаная целевой мощности для графика (REQ-INT-05 крит. 1, 2): для каждого
+## шага две точки `(start_sec, start_watts)` и `(end_sec, end_watts)`; у рампы
+## конечная точка равна цели конца, у постоянного шага обе одинаковы,
+## у свободной езды — 0. На стыке шагов две точки с одинаковым t дают
+## вертикальный скачок. Пустой план → пустой массив.
+func power_points(ftp_w: int, intensity: float = 1.0) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var start: int = 0
+	for step in steps:
+		var end: int = start + step.duration_sec
+		points.append(Vector2(float(start), float(step.start_watts(ftp_w, intensity))))
+		points.append(Vector2(float(end), float(step.end_watts(ftp_w, intensity))))
+		start = end
+	return points
+
+
+## Сегменты полосы прогресса (REQ-HUD-07 крит. 1, 2): словари
+## `{index, start_sec, duration_sec, start_watts, end_watts, zone}`.
+## `zone` — зона мощности `start_watts` по Coggan (`Zones.power_zone`);
+## пересчитывается при другом множителе. Сумма `duration_sec` равна
+## `total_duration_sec()`.
+func segments(ftp_w: int, intensity: float = 1.0) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var start: int = 0
+	for i in steps.size():
+		var step: WorkoutStep = steps[i]
+		var start_w: int = step.start_watts(ftp_w, intensity)
+		out.append({
+			"index": i,
+			"start_sec": start,
+			"duration_sec": step.duration_sec,
+			"start_watts": start_w,
+			"end_watts": step.end_watts(ftp_w, intensity),
+			"zone": Zones.power_zone(start_w, ftp_w),
+		})
+		start += step.duration_sec
+	return out
+
+
 ## Список ошибок плана (пустой — план валиден). Проверяются: пустой список
 ## шагов, допустимость `source`, а также каждый шаг (нулевая длительность,
 ## отрицательная цель — см. `WorkoutStep.validate`).

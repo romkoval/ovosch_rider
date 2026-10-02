@@ -153,3 +153,67 @@ func test_validate_unknown_source() -> void:
 	for s in Workout.SOURCES:
 		w.source = s
 		assert_true(w.is_valid(), "источник '%s' допустим" % s)
+
+
+func test_power_points_ramp_ends_at_end_target() -> void:
+	var steps: Array[WorkoutStep] = [WorkoutStep.ramp_watts(60, 100.0, 200.0)]
+	var pts := Workout.make("ramp", steps).power_points(FTP)
+	assert_eq(pts.size(), 2)
+	assert_eq(pts[0], Vector2(0.0, 100.0), "REQ-INT-05 крит. 2: начальная точка = цель начала")
+	assert_eq(pts[1], Vector2(60.0, 200.0), "конечная точка = цель конца")
+
+
+func test_power_points_two_steps_give_four_points_with_vertical_jump() -> void:
+	var steps: Array[WorkoutStep] = [WorkoutStep.percent(600, 50.0), WorkoutStep.percent(300, 100.0)]
+	var pts := Workout.make("two", steps).power_points(FTP)
+	assert_eq(pts.size(), 4)
+	assert_eq(pts[0], Vector2(0.0, 100.0))
+	assert_eq(pts[1], Vector2(600.0, 100.0))
+	assert_eq(pts[2], Vector2(600.0, 200.0), "скачок: та же t, другая мощность")
+	assert_eq(pts[3], Vector2(900.0, 200.0))
+	var pts_110 := Workout.make("two", steps).power_points(FTP, 1.1)
+	assert_eq(pts_110[2], Vector2(600.0, 220.0), "множитель применяется")
+
+
+func test_power_points_free_ride_and_empty() -> void:
+	var steps: Array[WorkoutStep] = [WorkoutStep.free_ride(30)]
+	var pts := Workout.make("free", steps).power_points(FTP)
+	assert_eq(pts[0], Vector2(0.0, 0.0))
+	assert_eq(pts[1], Vector2(30.0, 0.0))
+	assert_eq(Workout.new().power_points(FTP).size(), 0)
+
+
+func test_segments_for_progress_bar() -> void:
+	var steps: Array[WorkoutStep] = [
+		WorkoutStep.percent(60, 50.0),
+		WorkoutStep.ramp_percent(30, 60.0, 100.0),
+		WorkoutStep.percent(90, 110.0),
+	]
+	var w := Workout.make("seg", steps)
+	var segs := w.segments(FTP)
+	assert_eq(segs.size(), 3)
+	assert_eq(segs[0]["index"], 0)
+	assert_eq(segs[0]["start_sec"], 0)
+	assert_eq(segs[0]["duration_sec"], 60)
+	assert_eq(segs[0]["start_watts"], 100)
+	assert_eq(segs[0]["end_watts"], 100)
+	assert_eq(segs[0]["zone"], 1, "100 Вт при FTP 200 → Z1")
+	assert_eq(segs[1]["start_sec"], 60)
+	assert_eq(segs[1]["start_watts"], 120)
+	assert_eq(segs[1]["end_watts"], 200)
+	assert_eq(segs[1]["zone"], 2)
+	assert_eq(segs[2]["start_sec"], 90)
+	assert_eq(segs[2]["zone"], 5, "220 Вт → Z5")
+	var total: int = 0
+	for sg in segs:
+		total += sg["duration_sec"]
+	assert_eq(total, w.total_duration_sec(), "REQ-HUD-07 крит. 1: сумма длительностей = длительность плана")
+
+
+func test_segments_zone_follows_intensity() -> void:
+	var steps: Array[WorkoutStep] = [WorkoutStep.percent(60, 100.0)]
+	var w := Workout.make("z", steps)
+	assert_eq(w.segments(FTP)[0]["zone"], 4, "200 Вт → Z4")
+	assert_eq(w.segments(FTP, 1.1)[0]["zone"], 5, "REQ-HUD-07 крит. 2: 220 Вт → Z5")
+	assert_eq(w.segments(FTP, 0.5)[0]["zone"], 1)
+	assert_eq(Workout.new().segments(FTP).size(), 0)
