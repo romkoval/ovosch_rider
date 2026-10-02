@@ -18,10 +18,17 @@ extends TrainerDevice
 ## - Скорость — по кубическому корню из мощности: 34 км/ч при 200 Вт
 ##   (опорная точка из «Открытых решений», п. 15).
 ##
-## Журнал команд `commands`: каждая команда записывается словарём
+## Журнал команд `commands`: каждый вызов команды записывается словарём
 ## `{type: "target_power"|"erg"|"resistance", value, at_sec}`, где `at_sec` —
-## показание часов эмулятора в момент вызова. По нему тесты проверяют задержку
-## отправки команд (REQ-WRK-02 крит. 2, REQ-WRK-03 крит. 2/3, REQ-WRK-04 крит. 2).
+## показание часов эмулятора в момент вызова. Журнал фиксирует, что послал
+## исполнитель, включая отклонённые команды; отклонение сообщается только
+## сигналом `error`. По `at_sec` тесты проверяют задержку отправки команд
+## (REQ-WRK-02 крит. 2, REQ-WRK-03 крит. 2/3, REQ-WRK-04 крит. 2).
+##
+## Команды принимаются в состояниях CONNECTED и RECONNECTING (во втором случае
+## применяются сразу — так исполнитель может повторно послать цель при
+## переподключении, REQ-DEV-08 крит. 3). В DISCONNECTED/SCANNING/CONNECTING
+## команда отклоняется с `error(NOT_CONNECTED)` и не применяется.
 
 ## Тип команды в журнале.
 const CMD_TARGET_POWER: String = "target_power"
@@ -30,6 +37,10 @@ const CMD_RESISTANCE: String = "resistance"
 
 ## Допуск сравнения времени с целой секундой (защита от накопления ошибки float).
 const TIME_EPSILON: float = 1e-6
+## Максимальная дельта одного тика, с (сутки); большее — ошибка вызывающего, клампится.
+const MAX_TICK_SEC: float = 86400.0
+## Порог защёлкивания мощности на цель, Вт: ближе этого модель считает цель достигнутой.
+const POWER_SNAP_W: float = 1.0
 ## Коэффициент модели скорости: 34 км/ч при 200 Вт → k = 34 / 200^(1/3).
 const SPEED_COEFF: float = 34.0 / 5.848035476
 
@@ -37,10 +48,11 @@ const SPEED_COEFF: float = 34.0 / 5.848035476
 
 ## Задержка CONNECTING → CONNECTED, с.
 var connect_delay_sec: float = 0.5
-## Постоянная времени сходимости мощности к цели, с.
-var power_tau_sec: float = 0.7
+## Постоянная времени сходимости мощности к цели, с. При 0.4 через 3 с от
+## перепада остаётся 0.055 % (2000→100 Вт: ~1 Вт), что укладывается в 5 % цели.
+var power_tau_sec: float = 0.4
 ## Амплитуда равномерного шума мощности, Вт (±).
-var power_noise_w: float = 2.0
+var power_noise_w: float = 1.0
 ## Амплитуда равномерного шума каденса, об/мин (±).
 var cadence_noise_rpm: float = 3.0
 ## Мощность всадника вне ERG / при цели 0, Вт.
@@ -124,27 +136,21 @@ func set_target_power(watts: int) -> void:
 	var value: int = clampi(watts, MIN_TARGET_POWER_W, MAX_TARGET_POWER_W)
 	if watts != value:
 		push_warning("FakeTrainer.set_target_power: %d вне диапазона, обрезано до %d" % [watts, value])
-	_log_command(CMD_TARGET_POWER, value)
-	if _consume_command_failure(CMD_TARGET_POWER):
-		return
-	target_power_w = value
+	if _accept_command(CMD_TARGET_POWER, value):
+		target_power_w = value
 
 
 func set_erg_enabled(enabled: bool) -> void:
-	_log_command(CMD_ERG, enabled)
-	if _consume_command_failure(CMD_ERG):
-		return
-	erg_enabled = enabled
+	if _accept_command(CMD_ERG, enabled):
+		erg_enabled = enabled
 
 
 func set_resistance_level(percent: int) -> void:
 	var value: int = clampi(percent, MIN_RESISTANCE_PERCENT, MAX_RESISTANCE_PERCENT)
 	if percent != value:
 		push_warning("FakeTrainer.set_resistance_level: %d вне диапазона, обрезано до %d" % [percent, value])
-	_log_command(CMD_RESISTANCE, value)
-	if _consume_command_failure(CMD_RESISTANCE):
-		return
-	resistance_percent = value
+	if _accept_command(CMD_RESISTANCE, value):
+		resistance_percent = value
 
 
 func get_connection_state() -> int:
@@ -154,6 +160,9 @@ func get_connection_state() -> int:
 func tick(delta_sec: float) -> void:
 	if delta_sec <= 0.0:
 		return
+	if delta_sec > MAX_TICK_SEC:
+		push_warning("FakeTrainer.tick: delta %.1f с больше суток, обрезано до %.0f" % [delta_sec, MAX_TICK_SEC])
+		delta_sec = MAX_TICK_SEC
 	var end_sec: float = _time_sec + delta_sec
 	# Проходим все целые секунды внутри интервала (прошлое, end_sec]: сначала
 	# применяем переходы состояния, наступившие к этой секунде, затем выдаём сэмпл.
@@ -287,16 +296,25 @@ func _finish_connect() -> void:
 	_set_state(ConnectionState.CONNECTED)
 
 
-func _log_command(type: String, value: Variant) -> void:
+## Записывает вызов в журнал и решает, принимает ли команду станок.
+## Возвращает true, если команду нужно применить к модели; иначе испускает `error`.
+func _accept_command(type: String, value: Variant) -> bool:
+	var accepted: bool = true
+	var code: int = ErrorCode.NONE
+	var message: String = ""
+	if _state != ConnectionState.CONNECTED and _state != ConnectionState.RECONNECTING:
+		accepted = false
+		code = ErrorCode.NOT_CONNECTED
+		message = "FakeTrainer: команда %s в состоянии %s — станок не подключён" % [type, state_name(_state)]
+	elif _fail_next_command:
+		_fail_next_command = false
+		accepted = false
+		code = ErrorCode.CONTROL_POINT_REJECTED
+		message = "FakeTrainer: станок отверг команду %s" % type
 	commands.append({"type": type, "value": value, "at_sec": _time_sec})
-
-
-func _consume_command_failure(type: String) -> bool:
-	if not _fail_next_command:
-		return false
-	_fail_next_command = false
-	error.emit(ErrorCode.CONTROL_POINT_REJECTED, "FakeTrainer: станок отверг команду %s" % type)
-	return true
+	if not accepted:
+		error.emit(code, message)
+	return accepted
 
 
 ## Мощность, к которой стремится всадник в текущем режиме.
@@ -320,6 +338,8 @@ func _emit_sample(sample_sec: int) -> void:
 	var goal: float = float(_rider_goal_power())
 	var alpha: float = 1.0 - exp(-1.0 / maxf(power_tau_sec, 1e-3))
 	_power_w += (goal - _power_w) * alpha
+	if absf(_power_w - goal) < POWER_SNAP_W:
+		_power_w = goal
 	var noise: float = _rng.randf_range(-power_noise_w, power_noise_w) if goal > 0.0 else 0.0
 	var power: int = maxi(int(round(_power_w + noise)), 0)
 
