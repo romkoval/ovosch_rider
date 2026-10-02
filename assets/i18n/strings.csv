@@ -61,3 +61,32 @@ ui.dev.connection.connecting,подключение,connecting
 ui.dev.connection.connected,подключён,connected
 ui.dev.connection.reconnecting,переподключение,reconnecting
 ui.dev.connection.unknown,неизвестно,unknown
+ui.home.devices,Устройства,Devices
+ui.devices.title,Устройства,Devices
+ui.devices.scan,Сканировать,Scan
+ui.devices.stop_scan,Остановить поиск,Stop scanning
+ui.devices.auto_connect,Автоподключение,Auto-connect
+ui.devices.back,На главный,Back to home
+ui.devices.remembered,Запомненные устройства,Remembered devices
+ui.devices.found,Найденные устройства,Discovered devices
+ui.devices.connect,Подключить,Connect
+ui.devices.disconnect,Отключить,Disconnect
+ui.devices.forget,Забыть,Forget
+ui.devices.unnamed,Без имени,Unnamed
+ui.devices.rssi,{rssi} дБм,{rssi} dBm
+ui.devices.unavailable,недоступно,unavailable
+ui.devices.battery,заряд {percent} %,battery {percent} %
+ui.devices.battery_unknown,заряд —,battery —
+ui.devices.kind.trainer,станок,trainer
+ui.devices.kind.hr,пульс,heart rate
+ui.devices.kind.cadence,каденс,cadence
+ui.devices.kind.power,мощность,power meter
+ui.devices.kind.unknown,неизвестно,unknown
+ui.devices.state.disconnected,не подключено,not connected
+ui.devices.state.connecting,подключение,connecting
+ui.devices.state.connected,подключено,connected
+ui.devices.state.reconnecting,переподключение,reconnecting
+ui.devices.status.idle,Поиск не идёт,Not scanning
+ui.devices.status.scanning,Идёт поиск устройств…,Scanning for devices…
+ui.devices.status.auto_connecting,Ждём запомненные устройства: {count},Waiting for remembered devices: {count}
+ui.devices.status.not_found,Устройство не найдено: {names}. Подключите вручную.,Device not found: {names}. Connect manually.

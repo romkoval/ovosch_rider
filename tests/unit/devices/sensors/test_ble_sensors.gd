@@ -5,13 +5,23 @@ extends GutTest
 const ID: String = "sensor-1"
 
 var _bridge: StubBleBridge
+var _created: Array[SensorDevice] = []
 
 
 func before_each() -> void:
 	_bridge = StubBleBridge.new()
+	_created = []
+
+
+func after_each() -> void:
+	for s in _created:
+		if s.has_method("dispose"):
+			s.call("dispose")
+	_created = []
 
 
 func _connect(sensor: SensorDevice) -> void:
+	_created.append(sensor)
 	sensor.connect_device(ID)
 	_bridge.pump()
 
@@ -97,13 +107,14 @@ func test_sensor_link_loss_reconnects_every_5s_and_resubscribes() -> void:
 	for i in 5:
 		s.tick(1.0)
 	assert_eq(_bridge.calls_of("connect_peripheral").size(), 2, "REQ-DEV-08 крит. 1: каждые 5 с")
+	assert_eq(s.reconnect_attempts(), 2)
 	_bridge.auto_connect = true
 	_bridge.clear_calls()
 	s.tick(5.0)
 	_bridge.pump()
 	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED)
 	assert_eq(_bridge.calls_of("subscribe")[0]["char"], "2A63", "подписка заново")
-	assert_eq(s.reconnect_attempts(), 3)
+	assert_eq(s.reconnect_attempts(), 0, "серия завершена — счётчик сброшен")
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +176,19 @@ func test_cadence_sensor_zero_after_3s_without_revolutions() -> void:
 	_bridge.emit_notification(ID, "2A5B", CscCodec.encode_crank_measurement(10, 1024))
 	s.tick(2.0)
 	_bridge.emit_notification(ID, "2A5B", CscCodec.encode_crank_measurement(13, 3072))
-	s.tick(2.9)
-	assert_eq(rpm, [90] as Array[int])
+	var same := CscCodec.encode_crank_measurement(13, 3072)
+	s.tick(1.0)
+	_bridge.emit_notification(ID, "2A5B", same)
+	s.tick(1.9)
+	_bridge.emit_notification(ID, "2A5B", same)
+	assert_eq(rpm, [90, 90, 90] as Array[int], "пакеты без оборотов < 3 с — держим 90")
 	s.tick(0.1)
-	assert_eq(rpm, [90, 0] as Array[int], "REQ-DEV-04 крит. 3")
+	_bridge.emit_notification(ID, "2A5B", same)
+	assert_eq(rpm, [90, 90, 90, 0] as Array[int], "REQ-DEV-04 крит. 3: пакеты идут, обороты стоят 3 с → 0")
+	assert_eq(s.current_cadence(s.get_time_sec()), 0)
 	s.tick(5.0)
-	assert_eq(rpm.size(), 2, "ноль — один раз")
+	assert_eq(rpm.size(), 4, "Н-4: при тишине датчик ничего не испускает")
+	assert_eq(s.current_cadence(s.get_time_sec()), -1, "тишина → нет данных")
 
 
 func test_cadence_sensor_overflow_and_wheel_only_packets() -> void:
@@ -207,7 +225,10 @@ func test_power_meter_power_and_cadence_from_crank_data() -> void:
 	assert_eq(rpm, [90] as Array[int], "REQ-DEV-05 крит. 3")
 	assert_eq(s.last_power_w, 270)
 	s.tick(3.0)
-	assert_eq(rpm, [90, 0] as Array[int], "3 с без оборотов → 0")
+	assert_eq(rpm, [90] as Array[int], "Н-4: тишина — без событий")
+	assert_eq(s.current_cadence(s.get_time_sec()), -1)
+	_bridge.emit_notification(ID, "2A63", CpsCodec.encode_cycling_power_measurement(270, 13, 3072))
+	assert_eq(rpm, [90, 0] as Array[int], "пакет без новых оборотов спустя 3 с → 0")
 
 
 func test_power_meter_ignores_truncated_and_other_chars() -> void:
@@ -219,3 +240,17 @@ func test_power_meter_ignores_truncated_and_other_chars() -> void:
 	_bridge.emit_notification(ID, "2A37", BleBytes.from_hex("00 48"))
 	assert_eq(pw.size(), 0)
 	assert_eq(s.kind(), SensorDevice.KIND_POWER)
+
+
+func test_sensor_dispose_detaches_from_bridge() -> void:
+	var s := BleHeartRateSensor.new(_bridge)
+	var bpm: Array[int] = []
+	s.heart_rate.connect(func(b: int) -> void: bpm.append(b))
+	_connect(s)
+	s.dispose()
+	assert_null(s.bridge)
+	_bridge.emit_notification(ID, "2A37", BleBytes.from_hex("00 48"))
+	assert_eq(bpm.size(), 0, "после dispose измерения не доходят")
+	s.connect_device(ID)
+	s.tick(10.0)
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED)

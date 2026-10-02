@@ -60,7 +60,8 @@ func _on_time(_now_sec: float) -> void:
 # ---------------------------------------------------------------------------
 
 func connect_device(id: String) -> void:
-	if _state == TrainerDevice.ConnectionState.CONNECTED or _state == TrainerDevice.ConnectionState.CONNECTING:
+	if bridge == null or _state == TrainerDevice.ConnectionState.CONNECTED \
+			or _state == TrainerDevice.ConnectionState.CONNECTING:
 		return
 	if _state == TrainerDevice.ConnectionState.RECONNECTING and id == device_id:
 		return
@@ -74,16 +75,32 @@ func connect_device(id: String) -> void:
 func disconnect_device() -> void:
 	_disconnect_requested = true
 	_reconnect.stop()
-	if device_id != "" and _state != TrainerDevice.ConnectionState.DISCONNECTED:
+	if bridge != null and device_id != "" and _state != TrainerDevice.ConnectionState.DISCONNECTED:
 		bridge.disconnect_peripheral(device_id)
 	_set_state(TrainerDevice.ConnectionState.DISCONNECTED)
+
+
+## Отключить обработчики сигналов моста и забыть мост (разрыв цикла мост ↔ датчик).
+func dispose() -> void:
+	if bridge == null:
+		return
+	for pair in [[bridge.connected, _on_connected], [bridge.disconnected, _on_disconnected],
+			[bridge.services_discovered, _on_services_discovered], [bridge.notification, _on_notification],
+			[bridge.characteristic_read, _on_characteristic_read], [bridge.error, _on_bridge_error]]:
+		var sig: Signal = pair[0]
+		var cb: Callable = pair[1]
+		if sig.is_connected(cb):
+			sig.disconnect(cb)
+	_reconnect.stop()
+	_state = TrainerDevice.ConnectionState.DISCONNECTED
+	bridge = null
 
 
 func tick(delta_sec: float) -> void:
 	if delta_sec <= 0.0:
 		return
 	_time_sec += delta_sec
-	if _state == TrainerDevice.ConnectionState.RECONNECTING and _reconnect.due(_time_sec):
+	if bridge != null and _state == TrainerDevice.ConnectionState.RECONNECTING and _reconnect.due(_time_sec):
 		bridge.connect_peripheral(device_id)
 	_on_time(_time_sec)
 
@@ -152,7 +169,7 @@ func _on_disconnected(id: String, reason: int) -> void:
 	if _disconnect_requested or reason == BleBridge.DisconnectReason.REQUESTED:
 		_set_state(TrainerDevice.ConnectionState.DISCONNECTED)
 		return
-	if _state == TrainerDevice.ConnectionState.DISCONNECTED:
+	if _state == TrainerDevice.ConnectionState.DISCONNECTED or _state == TrainerDevice.ConnectionState.RECONNECTING:
 		return
 	_set_state(TrainerDevice.ConnectionState.RECONNECTING)
 	_reconnect.start(_time_sec)

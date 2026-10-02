@@ -1,0 +1,25 @@
+; GDExtension нативного BLE-моста ovosch-rider (контракт — src/devices/ble/ble_bridge.gd).
+; Каталог native/ закрыт от Godot файлом native/.gdignore, пока библиотеки не собраны
+; (иначе движок при открытии проекта сообщал бы об отсутствующих библиотеках).
+; После сборки для целевой платформы удалите native/.gdignore — расширение подхватится.
+
+[configuration]
+entry_symbol = "ovosch_ble_library_init"
+compatibility_minimum = "4.5"
+reloadable = false
+
+[libraries]
+macos.debug = "res://native/ble/bin/libovosch_ble.macos.template_debug.framework"
+macos.release = "res://native/ble/bin/libovosch_ble.macos.template_release.framework"
+ios.debug = "res://native/ble/bin/libovosch_ble.ios.template_debug.xcframework"
+ios.release = "res://native/ble/bin/libovosch_ble.ios.template_release.xcframework"
+linux.debug.x86_64 = "res://native/ble/bin/libovosch_ble.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://native/ble/bin/libovosch_ble.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://native/ble/bin/libovosch_ble.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://native/ble/bin/libovosch_ble.windows.template_release.x86_64.dll"
+android.debug.arm64 = "res://native/ble/bin/libovosch_ble.android.template_debug.arm64.so"
+android.release.arm64 = "res://native/ble/bin/libovosch_ble.android.template_release.arm64.so"
+
+[dependencies]
+ios.debug = {}
+ios.release = {}

@@ -8,17 +8,28 @@ extends RefCounted
 ## `CscCodec.cadence_from_pair`; измерение без нового события → удерживается
 ## последнее значение, пока с последнего нового оборота не пройдёт
 ## `zero_timeout_sec` (3 с по умолчанию) — затем 0 (и если пары ещё не было).
+##
+## Два разных «молчания» (решение Н-4, REQ-DEV-04 крит. 3 / REQ-DEV-05 крит. 3):
+## - пакеты идут, обороты стоят ≥ 3 с → каденс 0 (`current()`, `value()`);
+## - пакетов нет ≥ 3 с → «нет данных» (`is_silent()`, `value()` → -1), чтобы
+##   `SensorHub` сразу уступил следующему источнику без ложного нуля.
+## `current()` намеренно не смотрит на пакеты (чистый расчёт по оборотам);
+## потребителям нужен `value()`.
 
 var zero_timeout_sec: float = 3.0
 
 var _prev: Dictionary = {}
 var _last_rpm: int = -1
+## Время последнего измерения с новыми оборотами.
 var _last_event_at_sec: float = -INF
+## Время последнего пакета с crank data (с новыми оборотами или без).
+var _last_packet_at_sec: float = -INF
 
 
 func push(measurement: Dictionary, now_sec: float) -> int:
 	if not measurement.get("has_crank", false):
 		return current(now_sec)
+	_last_packet_at_sec = now_sec
 	if _prev.is_empty():
 		_prev = measurement.duplicate()
 		_last_event_at_sec = now_sec
@@ -29,6 +40,18 @@ func push(measurement: Dictionary, now_sec: float) -> int:
 		_last_event_at_sec = now_sec
 		_last_rpm = roundi(rpm)
 		return _last_rpm
+	return current(now_sec)
+
+
+## Пакеты с crank data не приходили ≥ `zero_timeout_sec` (или их не было вовсе).
+func is_silent(now_sec: float) -> bool:
+	return now_sec - _last_packet_at_sec >= zero_timeout_sec
+
+
+## Значение для потребителя: -1 при молчании датчика (нет пакетов ≥ 3 с), иначе `current()`.
+func value(now_sec: float) -> int:
+	if is_silent(now_sec):
+		return -1
 	return current(now_sec)
 
 
@@ -49,3 +72,4 @@ func reset() -> void:
 	_prev = {}
 	_last_rpm = -1
 	_last_event_at_sec = -INF
+	_last_packet_at_sec = -INF

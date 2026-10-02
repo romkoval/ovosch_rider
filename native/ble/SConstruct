@@ -1,0 +1,58 @@
+#!/usr/bin/env python
+"""Сборка GDExtension ovosch_ble (REQ-DEV-01 крит. 6, REQ-NFR-06 крит. 2).
+
+Использование (из native/ble):
+    scons platform=linux   target=template_debug -j4
+    scons platform=macos   target=template_debug
+    scons platform=ios     target=template_release
+godot-cpp ожидается в native/godot-cpp (см. README.md); другой путь —
+`scons godot_cpp_path=/path/to/godot-cpp ...`.
+
+Платформенный backend подключается через интерфейс BleBackend (src/ble_backend.h).
+Пока реализован только null_backend (is_available() == false) — он собирается на любой
+платформе, что и проверяет CI. CoreBluetooth-backend (macOS/iOS) — задача T-022: его
+файлы кладутся в src/platform/apple/*.mm и включаются ниже с макросом
+OVOSCH_BLE_HAS_PLATFORM_BACKEND.
+"""
+import os
+
+godot_cpp_path = ARGUMENTS.get("godot_cpp_path", os.path.join("..", "godot-cpp"))
+if not os.path.isdir(godot_cpp_path):
+    print("godot-cpp не найден: %s. См. native/ble/README.md" % godot_cpp_path)
+    Exit(1)
+
+env = SConscript(os.path.join(godot_cpp_path, "SConstruct"))
+env.Append(CPPPATH=["src/"])
+
+sources = Glob("src/*.cpp")
+
+platform = env["platform"]
+has_platform_backend = False
+if platform in ("macos", "ios"):
+    apple_sources = Glob("src/platform/apple/*.mm") + Glob("src/platform/apple/*.cpp")
+    if apple_sources:
+        has_platform_backend = True
+        sources += apple_sources
+        env.Append(LINKFLAGS=["-framework", "CoreBluetooth", "-framework", "Foundation"])
+        env.Append(CCFLAGS=["-fobjc-arc"])
+
+if has_platform_backend:
+    env.Append(CPPDEFINES=["OVOSCH_BLE_HAS_PLATFORM_BACKEND"])
+
+if platform == "macos":
+    library = env.SharedLibrary(
+        "bin/libovosch_ble.{0}.{1}.framework/libovosch_ble.{0}.{1}".format(platform, env["target"]),
+        source=sources,
+    )
+elif platform == "ios":
+    library = env.StaticLibrary(
+        "bin/libovosch_ble.{}.{}.a".format(platform, env["target"]),
+        source=sources,
+    )
+else:
+    library = env.SharedLibrary(
+        "bin/libovosch_ble{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+        source=sources,
+    )
+
+Default(library)

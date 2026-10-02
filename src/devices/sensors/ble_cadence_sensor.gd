@@ -4,8 +4,9 @@ extends BleSensorBase
 ## Каденс считает `CscCadenceCalculator` по двум измерениям. `cadence` испускается
 ## на каждое измерение с валидным значением — даже если оно не изменилось
 ## (потребителю важно, что датчик жив: `SensorHub` считает источник свежим по
-## последнему событию). Через 3 с без новых оборотов (по часам `tick`) один раз
-## испускается `cadence(0)`.
+## последнему событию). Пакеты идут, а обороты стоят ≥ 3 с → `cadence(0)` с каждым
+## пакетом (REQ-DEV-04 крит. 3). При тишине (пакетов нет) ничего не испускается —
+## свежесть источника отмеряет `SensorHub` (решение Н-4).
 
 signal cadence(rpm: int)
 
@@ -35,7 +36,6 @@ func _on_measurement(bytes: PackedByteArray) -> void:
 		cadence.emit(rpm)
 
 
-func _on_time(now_sec: float) -> void:
-	if last_rpm != 0 and calculator.current(now_sec) == 0:
-		last_rpm = 0
-		cadence.emit(0)
+## Текущее значение с учётом молчания датчика: -1 — нет данных.
+func current_cadence(now_sec: float) -> int:
+	return calculator.value(now_sec)

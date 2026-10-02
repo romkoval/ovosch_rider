@@ -10,6 +10,7 @@ var _app_state: AppState
 @onready var _workout_button: Button = %WorkoutButton
 @onready var _history_button: Button = %HistoryButton
 @onready var _settings_button: Button = %SettingsButton
+@onready var _devices_button: Button = %DevicesButton
 @onready var _dev_button: Button = %DevButton
 @onready var _switch_button: Button = %SwitchProfileButton
 
@@ -25,6 +26,7 @@ func _ready() -> void:
 	_workout_button.pressed.connect(func() -> void: _navigate(AppState.Screen.WORKOUT))
 	_history_button.pressed.connect(func() -> void: _navigate(AppState.Screen.HISTORY))
 	_settings_button.pressed.connect(func() -> void: _navigate(AppState.Screen.SETTINGS))
+	_devices_button.pressed.connect(func() -> void: _navigate(AppState.Screen.DEVICES))
 	_dev_button.pressed.connect(func() -> void: _navigate(AppState.Screen.DEV))
 	_switch_button.pressed.connect(switch_profile)
 	if _repo != null:

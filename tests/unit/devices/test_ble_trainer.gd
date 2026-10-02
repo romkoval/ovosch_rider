@@ -25,6 +25,11 @@ func before_each() -> void:
 	_t.heart_rate.connect(func(b: int) -> void: _hr.append(b))
 
 
+func after_each() -> void:
+	if _t != null:
+		_t.dispose()
+
+
 ## Подключает до CONNECTED (connect → discover → subscribe → Request Control → 80 00 01).
 func _connect() -> void:
 	_t.connect_device(DEV)
@@ -46,7 +51,7 @@ func test_connect_sequence_req_dev_02_c1() -> void:
 	_bridge.set_read_value("2AD6", BleBytes.from_hex("00 00 C8 00 0A 00"))
 	_t.connect_device(DEV)
 	assert_eq(_t.get_connection_state(), TrainerDevice.ConnectionState.CONNECTING)
-	assert_eq(_bridge.pump(), 5, "connected → services → write_done + индикация CP + characteristic_read")
+	assert_eq(_bridge.pump(), 6, "connected → services → write_done + индикация CP + 2AD6 + ошибка чтения 2A19")
 	var m := _methods()
 	assert_eq(m[0], "connect_peripheral")
 	assert_eq(m[1], "discover_services")
@@ -59,6 +64,10 @@ func test_connect_sequence_req_dev_02_c1() -> void:
 	assert_true(_bridge.calls[5]["with_response"])
 	assert_eq(m[6], "read_characteristic", "2AD6 читается при неизвестном списке сервисов")
 	assert_eq(_bridge.calls[6]["char"], "2AD6")
+	assert_eq(m[7], "read_characteristic", "батарея читается при неизвестном списке сервисов")
+	assert_eq(_bridge.calls[7]["char"], "2A19")
+	assert_eq(m[8], "subscribe")
+	assert_eq(_bridge.calls[8]["char"], "2A19")
 	assert_eq(_t.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED)
 	assert_true(_t.control_granted)
 	assert_eq(_states, [TrainerDevice.ConnectionState.CONNECTING, TrainerDevice.ConnectionState.CONNECTED] as Array[int])
@@ -368,3 +377,84 @@ func test_ble_trainer_overrides_every_interface_method() -> void:
 	for name in ["connect_device", "disconnect_device", "set_target_power", "set_erg_enabled",
 			"set_resistance_level", "get_connection_state", "tick"]:
 		assert_true(own.has(name), "BleTrainer переопределяет %s" % name)
+
+
+func test_battery_read_and_notification_when_service_present() -> void:
+	_bridge.set_device_services(DEV, {"1826": ["2AD2", "2AD9", "2ADA"], "180F": ["2A19"]})
+	_bridge.set_read_value("2A19", BatteryCodec.encode_level(55))
+	var levels: Array[int] = []
+	_t.battery_level.connect(func(p: int) -> void: levels.append(p))
+	_connect()
+	assert_eq(levels, [55] as Array[int], "REQ-DEV-07 крит. 2: read_characteristic(180F, 2A19)")
+	assert_eq(_t.battery_percent, 55)
+	assert_true(_bridge.is_subscribed(DEV, "180F", "2A19"))
+	_bridge.emit_notification(DEV, "2A19", BatteryCodec.encode_level(54))
+	assert_eq(_t.battery_percent, 54)
+
+
+func test_battery_skipped_without_service() -> void:
+	_bridge.set_device_services(DEV, {"1826": ["2AD2", "2AD9", "2ADA", "2AD6"]})
+	_connect()
+	assert_eq(_t.battery_percent, -1, "REQ-DEV-07 крит. 3")
+	for c in _bridge.calls:
+		assert_ne(str(c.get("char", "")), "2A19", "2A19 не трогаем без 180F")
+	assert_eq(_errors.size(), 0)
+
+
+func test_bridge_error_write_failed_also_retries_once() -> void:
+	_connect()
+	_bridge.clear_calls()
+	_bridge.auto_control_point_response = false
+	_t.set_target_power(250)
+	_bridge.pending.clear()
+	_bridge.emit_error(DEV, BleBridge.ErrorCode.WRITE_FAILED, "write failed")
+	assert_eq(_bridge.writes_to("2AD9").size(), 2, "REQ-NFR-01 крит. 2: error(WRITE_FAILED) → один повтор")
+	assert_eq(_errors.size(), 0)
+	_bridge.pending.clear()
+	_bridge.emit_error(DEV, BleBridge.ErrorCode.WRITE_FAILED, "write failed again")
+	assert_eq(_bridge.writes_to("2AD9").size(), 2)
+	assert_eq(_errors.size(), 1)
+	assert_eq(_errors[0]["code"], TrainerDevice.ErrorCode.WRITE_FAILED)
+	_bridge.emit_error(DEV, BleBridge.ErrorCode.WRITE_FAILED, "no pending write")
+	assert_eq(_errors.size(), 2, "без ожидающей записи — сразу ошибка")
+
+
+func test_set_erg_enabled_same_value_is_noop_dedup_after_reconnect() -> void:
+	_connect()
+	_t.set_target_power(130)
+	_bridge.pump()
+	_bridge.clear_calls()
+	_t.set_erg_enabled(true)
+	assert_eq(_bridge.writes_to("2AD9").size(), 0, "ERG уже включён — цель не дублируется")
+	_t.set_target_power(130)
+	assert_eq(_bridge.writes_to("2AD9").size(), 1, "явная цель — пишется")
+	_t.set_erg_enabled(false)
+	assert_eq(_bridge.writes_to("2AD9").size(), 2, "выключение — уровень")
+	_t.set_erg_enabled(false)
+	assert_eq(_bridge.writes_to("2AD9").size(), 2, "повтор выключения — no-op")
+
+
+func test_repeated_link_loss_does_not_restart_reconnect_series() -> void:
+	_connect()
+	_bridge.auto_connect = false
+	_bridge.emit_disconnected(DEV, BleBridge.DisconnectReason.LINK_LOSS)
+	_t.tick(4.0)
+	_bridge.emit_disconnected(DEV, BleBridge.DisconnectReason.LINK_LOSS)
+	assert_eq(_bridge.calls_of("connect_peripheral").size(), 2, "повторный обрыв не даёт немедленной попытки")
+	_t.tick(1.0)
+	assert_eq(_bridge.calls_of("connect_peripheral").size(), 3, "серия идёт по старому расписанию: 5 с от первой попытки")
+	assert_eq(_t.reconnect_attempts(), 2)
+
+
+func test_dispose_detaches_from_bridge() -> void:
+	_connect()
+	_t.dispose()
+	assert_null(_t.bridge)
+	assert_eq(_t.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED)
+	_bridge.emit_notification(DEV, "2AD2", FtmsCodec.encode_indoor_bike_data(30.0, 90.0, 200))
+	assert_eq(_samples.size(), 0, "после dispose события моста не доходят")
+	_t.set_target_power(100)
+	_t.tick(10.0)
+	_t.connect_device(DEV)
+	_t.dispose()
+	assert_eq(_bridge.calls_of("connect_peripheral").size(), 1, "методы после dispose — no-op")

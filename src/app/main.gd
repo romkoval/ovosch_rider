@@ -9,13 +9,18 @@ extends Node
 const PROFILE_SELECT_SCENE: String = "res://src/ui/profile_select/profile_select.tscn"
 const HOME_SCENE: String = "res://src/ui/home/home.tscn"
 const DEV_SCENE: String = "res://src/ui/dev/dev_screen.tscn"
+const DEVICES_SCENE: String = "res://src/ui/devices/devices_screen.tscn"
 
 @export var data_dir: String = "user://"
+## Implementation of the trainer for `ConnectionManager`: "ble" (default) or "fake" (dev builds).
+@export var trainer_kind: String = TrainerFactory.KIND_BLE
 
 var repo: ProfileRepository
 var secure_store: SecureStore
 var devices: RememberedDevices
 var app_state: AppState
+var bridge: BleBridge
+var connections: ConnectionManager
 
 var _screens: Dictionary = {}
 
@@ -30,8 +35,11 @@ func _ready() -> void:
 	devices = RememberedDevices.new(root + "devices/")
 	secure_store.attach_to_profiles(repo)
 	devices.attach_to_profiles(repo)
+	bridge = BleBridge.create_default()
+	connections = ConnectionManager.new(bridge, devices, trainer_kind)
 	app_state = AppState.new(repo)
 	app_state.screen_changed.connect(_show_screen)
+	app_state.profile_selected.connect(func(id: String) -> void: connections.auto_connect(id))
 	_build_screens()
 	app_state.start()
 	_show_screen(app_state.current_screen)
@@ -60,6 +68,9 @@ func _build_screens() -> void:
 	var dev: DevScreen = load(DEV_SCENE).instantiate()
 	dev.setup(app_state)
 	_add_screen(AppState.Screen.DEV, dev)
+	var devices_screen: DevicesScreen = load(DEVICES_SCENE).instantiate()
+	devices_screen.setup(connections, repo, app_state)
+	_add_screen(AppState.Screen.DEVICES, devices_screen)
 	for screen in [AppState.Screen.WORKOUT, AppState.Screen.HISTORY, AppState.Screen.SETTINGS]:
 		_add_screen(screen, _make_placeholder(screen))
 
@@ -97,3 +108,18 @@ func _show_screen(screen: int) -> void:
 	elif node is DevScreen:
 		var active: Profile = repo.get_active()
 		(node as DevScreen).setup(app_state, active.ftp_w if active != null else DevScreen.DEFAULT_FTP_W)
+	elif node is DevicesScreen:
+		(node as DevicesScreen).refresh()
+
+
+## Scanner timeouts, auto-connect timer and device clocks advance with the frame;
+## a workout session later takes over device ticking via `SessionTicker`
+## (`connections.ticks_devices = false`).
+func _process(delta: float) -> void:
+	if connections != null:
+		connections.tick(delta)
+
+
+func _exit_tree() -> void:
+	if connections != null:
+		connections.dispose()

@@ -65,3 +65,38 @@ jobs:
           name: gut-junit
           path: tests/reports/results.xml
           if-no-files-found: ignore
+
+  native-linux:
+    name: Native BLE skeleton builds (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: false
+    env:
+      GODOT_CPP_BRANCH: "4.5"  # ветки 4.7 в godot-cpp пока нет; см. native/ble/README.md
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install SCons
+        run: pip install scons
+
+      - name: Cache godot-cpp (sources + built objects)
+        id: cache-godot-cpp
+        uses: actions/cache@v4
+        with:
+          path: native/godot-cpp
+          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-linux-${{ hashFiles('native/ble/SConstruct') }}
+
+      - name: Clone godot-cpp
+        if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
+        run: git clone --depth 1 -b "$GODOT_CPP_BRANCH" https://github.com/godotengine/godot-cpp native/godot-cpp
+
+      - name: Build GDExtension skeleton
+        working-directory: native/ble
+        run: scons platform=linux target=template_debug -j4
+
+      - name: Library produced
+        run: ls -l native/ble/bin/ && test -f native/ble/bin/libovosch_ble.linux.template_debug.x86_64.so

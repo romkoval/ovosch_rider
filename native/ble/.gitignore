@@ -1,0 +1,7 @@
+bin/
+.sconsign.dblite
+*.o
+*.os
+*.obj
+*.dblite
+__pycache__/

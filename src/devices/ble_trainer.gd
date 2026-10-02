@@ -18,13 +18,25 @@ extends TrainerDevice
 ## `write_done(ok = false)` → один немедленный повтор той же команды
 ## (REQ-NFR-01 крит. 2, решение 24); второй отказ → `error(WRITE_FAILED)`.
 ##
+## Батарея (REQ-DEV-07 крит. 2 для станка): если в сервисах есть 180F (или список
+## неизвестен), после Request Control читается 2A19 и оформляется подписка;
+## значение — сигналом `battery_level(percent)`, `battery_percent == -1` — нет данных.
+##
 ## Обрыв не по запросу → RECONNECTING, `connect_peripheral` сразу и далее каждые
 ## 5 с через `tick(delta)` без лимита попыток (REQ-DEV-08 крит. 1, решение 12);
 ## после `connected` — заново discover/subscribe/Request Control → CONNECTED.
 ## `disconnect_device()` → DISCONNECTED, переподключение не выполняется.
+##
+## `set_erg_enabled` с текущим значением — no-op: при повторной отправке режима
+## сессией (возобновление, реконнект: `erg=true` + цель) цель не дублируется.
+## `dispose()` отключает обработчики сигналов моста и обнуляет ссылку на него —
+## разрывает цикл мост ↔ станок (иначе объекты не освобождаются).
 
 const RECONNECT_INTERVAL_SEC: float = 5.0
 const FTMS: String = BleUuids.FTMS_SERVICE
+
+## Заряд батареи станка 0..100 % (если есть Battery Service).
+signal battery_level(percent: int)
 
 var bridge: BleBridge
 var device_id: String = ""
@@ -38,6 +50,8 @@ var resistance_range: Dictionary = {}
 var services: Dictionary = {}
 ## Станок подтвердил Request Control.
 var control_granted: bool = false
+## Последний известный заряд, %; -1 — неизвестен / сервиса нет.
+var battery_percent: int = -1
 
 var _state: int = ConnectionState.DISCONNECTED
 var _time_sec: float = 0.0
@@ -67,10 +81,12 @@ func get_time_sec() -> float:
 # ---------------------------------------------------------------------------
 
 func connect_device(id: String) -> void:
-	if _state == ConnectionState.CONNECTED or _state == ConnectionState.CONNECTING:
+	if bridge == null or _state == ConnectionState.CONNECTED or _state == ConnectionState.CONNECTING:
 		return
 	if _state == ConnectionState.RECONNECTING and id == device_id:
 		return
+	if id != device_id:
+		battery_percent = -1
 	device_id = id
 	_disconnect_requested = false
 	control_granted = false
@@ -84,9 +100,28 @@ func disconnect_device() -> void:
 	_reconnect.stop()
 	_pending_writes.clear()
 	control_granted = false
-	if device_id != "" and _state != ConnectionState.DISCONNECTED:
+	if bridge != null and device_id != "" and _state != ConnectionState.DISCONNECTED:
 		bridge.disconnect_peripheral(device_id)
 	_set_state(ConnectionState.DISCONNECTED)
+
+
+## Отключить обработчики сигналов моста и забыть мост. После вызова объект
+## неработоспособен; состояние — DISCONNECTED без сигнала.
+func dispose() -> void:
+	if bridge == null:
+		return
+	for pair in [[bridge.connected, _on_connected], [bridge.disconnected, _on_disconnected],
+			[bridge.services_discovered, _on_services_discovered], [bridge.notification, _on_notification],
+			[bridge.characteristic_read, _on_characteristic_read], [bridge.write_done, _on_write_done],
+			[bridge.error, _on_bridge_error]]:
+		var sig: Signal = pair[0]
+		var cb: Callable = pair[1]
+		if sig.is_connected(cb):
+			sig.disconnect(cb)
+	_reconnect.stop()
+	_pending_writes.clear()
+	_state = ConnectionState.DISCONNECTED
+	bridge = null
 
 
 func set_target_power(watts: int) -> void:
@@ -101,6 +136,8 @@ func set_target_power(watts: int) -> void:
 
 
 func set_erg_enabled(enabled: bool) -> void:
+	if enabled == erg_enabled:
+		return
 	erg_enabled = enabled
 	if _state != ConnectionState.CONNECTED:
 		return
@@ -128,7 +165,7 @@ func tick(delta_sec: float) -> void:
 	if delta_sec <= 0.0:
 		return
 	_time_sec += delta_sec
-	if _state == ConnectionState.RECONNECTING and _reconnect.due(_time_sec):
+	if bridge != null and _state == ConnectionState.RECONNECTING and _reconnect.due(_time_sec):
 		bridge.connect_peripheral(device_id)
 
 
@@ -157,6 +194,9 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 	_write_control_point(FtmsCodec.encode_request_control())
 	if _has_characteristic(FTMS, BleUuids.SUPPORTED_RESISTANCE_RANGE):
 		bridge.read_characteristic(id, FTMS, BleUuids.SUPPORTED_RESISTANCE_RANGE)
+	if services.is_empty() or services.has(BleUuids.BATTERY_SERVICE):
+		bridge.read_characteristic(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
+		bridge.subscribe(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
 
 
 func _on_notification(id: String, char_uuid: String, bytes: PackedByteArray) -> void:
@@ -169,6 +209,8 @@ func _on_notification(id: String, char_uuid: String, bytes: PackedByteArray) -> 
 			_on_indoor_bike_data(bytes)
 		BleUuids.FTMS_STATUS:
 			_on_machine_status(bytes)
+		BleUuids.BATTERY_LEVEL:
+			_on_battery(bytes)
 
 
 func _on_control_point_response(bytes: PackedByteArray) -> void:
@@ -222,10 +264,20 @@ func _on_machine_status(bytes: PackedByteArray) -> void:
 func _on_characteristic_read(id: String, char_uuid: String, bytes: PackedByteArray) -> void:
 	if id != device_id:
 		return
-	if BleUuids.normalize(char_uuid) == BleUuids.SUPPORTED_RESISTANCE_RANGE:
-		var r := FtmsCodec.decode_resistance_range(bytes)
-		if r["ok"]:
-			resistance_range = r
+	match BleUuids.normalize(char_uuid):
+		BleUuids.SUPPORTED_RESISTANCE_RANGE:
+			var r := FtmsCodec.decode_resistance_range(bytes)
+			if r["ok"]:
+				resistance_range = r
+		BleUuids.BATTERY_LEVEL:
+			_on_battery(bytes)
+
+
+func _on_battery(bytes: PackedByteArray) -> void:
+	var b := BatteryCodec.decode_level(bytes)
+	if b["ok"]:
+		battery_percent = b["level_pct"]
+		battery_level.emit(battery_percent)
 
 
 func _on_write_done(id: String, char_uuid: String, ok: bool) -> void:
@@ -235,12 +287,18 @@ func _on_write_done(id: String, char_uuid: String, ok: bool) -> void:
 	if ok:
 		_pending_writes.erase(ch)
 		return
+	_handle_write_failure(ch, "write_done(ok = false)")
+
+
+## Неудача записи (`write_done(false)` или `error(WRITE_FAILED)`): один немедленный
+## повтор тех же байт, при повторной неудаче — `error(WRITE_FAILED)` (REQ-NFR-01 крит. 2).
+func _handle_write_failure(ch: String, reason: String) -> void:
 	if _pending_writes.has(ch) and not _pending_writes[ch]["retried"]:
 		_pending_writes[ch]["retried"] = true
 		bridge.write(device_id, FTMS, ch, _pending_writes[ch]["bytes"], true)
 		return
 	_pending_writes.erase(ch)
-	error.emit(ErrorCode.WRITE_FAILED, "Запись %s не удалась дважды" % ch)
+	error.emit(ErrorCode.WRITE_FAILED, "Запись %s не удалась дважды (%s)" % [ch, reason])
 
 
 func _on_disconnected(id: String, reason: int) -> void:
@@ -251,8 +309,8 @@ func _on_disconnected(id: String, reason: int) -> void:
 	if _disconnect_requested or reason == BleBridge.DisconnectReason.REQUESTED:
 		_set_state(ConnectionState.DISCONNECTED)
 		return
-	if _state == ConnectionState.DISCONNECTED:
-		return
+	if _state == ConnectionState.DISCONNECTED or _state == ConnectionState.RECONNECTING:
+		return  # повторный обрыв во время переподключения серию не перезапускает
 	_set_state(ConnectionState.RECONNECTING)
 	_reconnect.start(_time_sec)
 	if _reconnect.due(_time_sec):
@@ -272,7 +330,11 @@ func _on_bridge_error(id: String, code: int, message: String) -> void:
 		BleBridge.ErrorCode.READ_FAILED, BleBridge.ErrorCode.CHARACTERISTIC_NOT_FOUND:
 			push_warning("BleTrainer: необязательное чтение не удалось: %s" % message)
 		BleBridge.ErrorCode.WRITE_FAILED:
-			error.emit(ErrorCode.WRITE_FAILED, message)
+			# Мост не сказал, какая характеристика; ожидающая запись у станка одна — Control Point.
+			if _pending_writes.has(BleUuids.FTMS_CONTROL_POINT):
+				_handle_write_failure(BleUuids.FTMS_CONTROL_POINT, message)
+			else:
+				error.emit(ErrorCode.WRITE_FAILED, message)
 		BleBridge.ErrorCode.SUBSCRIBE_FAILED, BleBridge.ErrorCode.SERVICE_NOT_FOUND:
 			error.emit(ErrorCode.CONNECTION_FAILED, message)
 		_:

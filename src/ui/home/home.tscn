@@ -53,6 +53,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "ui.home.settings"
 
+[node name="DevicesButton" type="Button" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.home.devices"
+
 [node name="DevButton" type="Button" parent="Margin/VBox"]
 unique_name_in_owner = true
 layout_mode = 2

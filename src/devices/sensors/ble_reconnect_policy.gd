@@ -33,8 +33,10 @@ func due(now_sec: float) -> bool:
 	return true
 
 
+## Остановить серию; счётчик попыток сбрасывается.
 func stop() -> void:
 	active = false
+	attempts = 0
 
 
 func next_attempt_sec() -> float:

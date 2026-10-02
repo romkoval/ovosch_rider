@@ -7,6 +7,7 @@ var _bridge: StubBleBridge
 var _hub: SensorHub
 var _samples: Array[TrainerSample] = []
 var _hr: Array[int] = []
+var _disposables: Array = []
 
 
 func before_each() -> void:
@@ -21,10 +22,20 @@ func before_each() -> void:
 	_hub = SensorHub.new(_trainer)
 	_hub.telemetry.connect(func(s: TrainerSample) -> void: _samples.append(s))
 	_hub.heart_rate.connect(func(b: int) -> void: _hr.append(b))
+	_disposables = []
+
+
+func after_each() -> void:
+	for d in _disposables:
+		(d as Object).call("dispose")
+	_disposables = []
+	if _hub != null:
+		_hub.dispose()
 
 
 func _hrs() -> BleHeartRateSensor:
 	var s := BleHeartRateSensor.new(_bridge)
+	_disposables.append(s)
 	s.connect_device("hrs")
 	_bridge.pump()
 	_hub.set_heart_rate_sensor(s)
@@ -33,6 +44,7 @@ func _hrs() -> BleHeartRateSensor:
 
 func _csc() -> BleCadenceSensor:
 	var s := BleCadenceSensor.new(_bridge)
+	_disposables.append(s)
 	s.connect_device("csc")
 	_bridge.pump()
 	_hub.set_cadence_sensor(s)
@@ -41,6 +53,7 @@ func _csc() -> BleCadenceSensor:
 
 func _pm() -> BlePowerMeter:
 	var s := BlePowerMeter.new(_bridge)
+	_disposables.append(s)
 	s.connect_device("pm")
 	_bridge.pump()
 	_hub.set_power_meter(s)
@@ -189,33 +202,43 @@ func test_csc_silent_yields_to_power_meter_cadence_then_trainer() -> void:
 	_bridge.emit_notification("pm", "2A63", CpsCodec.encode_cycling_power_measurement(300, 22, 3072))
 	_tick_n(1)
 	assert_eq(_samples.back().cadence_rpm, 90)
-	# CSC замолкает; измеритель продолжает слать crank data каждую секунду (60 rpm).
+	# CSC замолкает (пакетов нет); измеритель шлёт crank data каждую секунду (60 rpm).
 	var revs: int = 22
 	var t: int = 3072
-	for i in 5:
+	for i in 1:
 		revs += 1
 		t += 1024
 		_bridge.emit_notification("pm", "2A63", CpsCodec.encode_cycling_power_measurement(300, revs, t))
 		_tick_n(1)
-	# Через 3 с без оборотов датчик CSC сам сообщил 0 — это данные, он ещё свеж (< 5 с).
-	assert_eq(_samples.back().cadence_rpm, 0, "CSC: 3 с без оборотов → 0 (REQ-DEV-04 крит. 3)")
-	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_CADENCE_SENSOR)
-	for i in 2:
-		revs += 1
-		t += 1024
-		_bridge.emit_notification("pm", "2A63", CpsCodec.encode_cycling_power_measurement(300, revs, t))
-		_tick_n(1)
-	assert_eq(_samples.back().cadence_rpm, 60, "CSC молчит 5 с → каденс измерителя")
+	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_CADENCE_SENSOR, "2 с тишины — CSC ещё свеж")
+	assert_eq(_samples.back().cadence_rpm, 90)
+	revs += 1
+	t += 1024
+	_bridge.emit_notification("pm", "2A63", CpsCodec.encode_cycling_power_measurement(300, revs, t))
+	_tick_n(1)
+	assert_eq(_samples.back().cadence_rpm, 60, "Н-4: CSC молчит 3 с → сразу каденс измерителя, без ложного нуля")
 	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_POWER_METER)
-	# Измеритель замолкает: через 3 с его калькулятор даёт 0 (это данные, источник ещё свеж)…
-	_tick_n(5)
-	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_POWER_METER)
-	assert_eq(_samples.back().cadence_rpm, 0, "измеритель: 3 с без оборотов → 0")
-	# …и лишь через 5 с после этого уступает станку.
-	_tick_n(2)
-	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_TRAINER, "измеритель молчит 5 с → станок")
+	# Измеритель тоже замолкает → через 3 с каденс станка.
+	_tick_n(3)
+	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_TRAINER, "измеритель молчит 3 с → станок")
 	assert_true(_samples.back().has_cadence)
 	assert_gt(_samples.back().cadence_rpm, 0)
+	assert_true(_samples.back().has_power, "мощность станка при этом свежа (порог 5 с)")
+
+
+func test_csc_stopped_pedals_with_packets_gives_zero_not_fallback() -> void:
+	_csc()
+	_bridge.emit_notification("csc", "2A5B", CscCodec.encode_crank_measurement(10, 1024))
+	_tick_n(2)
+	var same := CscCodec.encode_crank_measurement(13, 3072)
+	_bridge.emit_notification("csc", "2A5B", same)
+	_tick_n(1)
+	assert_eq(_samples.back().cadence_rpm, 90)
+	for i in 3:
+		_bridge.emit_notification("csc", "2A5B", same)
+		_tick_n(1)
+	assert_eq(_samples.back().cadence_rpm, 0, "REQ-DEV-04 крит. 3: пакеты идут, обороты стоят → 0 от датчика")
+	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_CADENCE_SENSOR, "0 — это данные CSC, не станок")
 
 
 func test_power_source_selection_power_meter() -> void:
@@ -257,6 +280,7 @@ func test_set_power_source_rejects_unknown() -> void:
 func test_replacing_sensor_disconnects_old_handlers() -> void:
 	var old := _hrs()
 	var fresh := BleHeartRateSensor.new(_bridge)
+	_disposables.append(fresh)
 	fresh.connect_device("hrs2")
 	_bridge.pump()
 	_hub.set_heart_rate_sensor(fresh)
@@ -272,16 +296,21 @@ func test_replacing_sensor_disconnects_old_handlers() -> void:
 	assert_eq(_hr.size(), 1)
 
 
-func test_hub_ticks_sensors_so_cadence_timeout_works() -> void:
+func test_cadence_timeout_is_3s_while_power_timeout_is_5s() -> void:
 	_csc()
 	_bridge.emit_notification("csc", "2A5B", CscCodec.encode_crank_measurement(10, 1024))
 	_tick_n(2)
 	_bridge.emit_notification("csc", "2A5B", CscCodec.encode_crank_measurement(13, 3072))
 	_tick_n(1)
 	assert_eq(_samples.back().cadence_rpm, 90)
+	_tick_n(2)
+	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_TRAINER, "3 с тишины CSC → каденс станка")
+	_trainer.inject_dropout(30.0)
 	_tick_n(3)
-	assert_eq(_samples.back().cadence_rpm, 0, "датчик получил tick от хаба и выдал 0 через 3 с")
-	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_CADENCE_SENSOR, "0 — это данные, не молчание")
+	assert_false(_samples.back().has_cadence, "каденс станка тоже стареет за 3 с")
+	assert_true(_samples.back().has_power, "мощность станка — порог 5 с")
+	_tick_n(2)
+	assert_false(_samples.back().has_power)
 
 
 func test_hub_works_inside_workout_session() -> void:
@@ -299,3 +328,18 @@ func test_hub_works_inside_workout_session() -> void:
 	assert_eq(session.samples.heart_rate_bpm[10], 160, "пульс в поток — с HRS через хаб")
 	assert_eq(_trainer.commands[1]["value"], 200, "команды дошли до станка через хаб")
 	assert_almost_eq(float(_trainer.commands[1]["at_sec"]), 10.0, 1e-6)
+
+
+func test_dispose_detaches_hub_from_trainer_and_sensors() -> void:
+	_hrs()
+	_tick_n(1)
+	assert_eq(_samples.size(), 1)
+	_hub.dispose()
+	assert_null(_hub.trainer)
+	assert_null(_hub.heart_rate_sensor)
+	_trainer.tick(1.0)
+	_hub.tick(1.0)
+	assert_eq(_samples.size(), 2, "хаб тикает свои часы, но телеметрии станка уже не получает")
+	assert_false(_samples[1].has_power)
+	_hub.set_target_power(100)
+	assert_eq(_hub.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED)

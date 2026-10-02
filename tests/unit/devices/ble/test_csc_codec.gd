@@ -88,7 +88,10 @@ func test_calculator_holds_then_zero_after_3s_without_revolutions() -> void:
 	assert_eq(calc.push(same, 3.0), 90, "нет нового события — удерживаем")
 	assert_eq(calc.push(same, 4.9), 90)
 	assert_eq(calc.push(same, 5.0), 0, "REQ-DEV-04 крит. 3: 3 с без оборотов → 0")
-	assert_eq(calc.current(10.0), 0)
+	assert_eq(calc.current(10.0), 0, "current(): чистый расчёт по оборотам")
+	assert_true(calc.is_silent(10.0))
+	assert_eq(calc.value(10.0), -1, "Н-4: пакетов нет 5 с → «нет данных», не 0")
+	assert_eq(calc.value(7.9), 0, "пакет был 2.9 с назад — ещё 0")
 	# Новые обороты — снова считаем.
 	assert_eq(calc.push(CscCodec.decode_csc_measurement(_hex("02 0F 00 00 14")), 10.0), 60, "2 оборота за 2048 тиков → 60")
 
@@ -110,3 +113,24 @@ func test_calculator_custom_timeout() -> void:
 	calc.push(CscCodec.decode_csc_measurement(_hex("02 0D 00 00 0C")), 1.0)
 	assert_eq(calc.current(1.9), 90)
 	assert_eq(calc.current(2.0), 0)
+	assert_eq(calc.value(2.0), -1, "таймаут молчания тот же: 1 с без пакетов → нет данных")
+	assert_eq(calc.push(CscCodec.decode_csc_measurement(_hex("02 0D 00 00 0C")), 2.0), 0, "пакет без оборотов → 0")
+	assert_eq(calc.value(2.5), 0)
+
+
+func test_calculator_value_distinguishes_silence_from_stopped_pedals() -> void:
+	var calc := CscCadenceCalculator.new()
+	assert_eq(calc.value(0.0), -1, "до первого пакета — нет данных")
+	assert_true(calc.is_silent(0.0))
+	var m := CscCodec.decode_csc_measurement(_hex("02 0A 00 00 04"))
+	calc.push(m, 0.0)
+	assert_false(calc.is_silent(0.0))
+	calc.push(m, 1.0)
+	calc.push(m, 2.0)
+	assert_eq(calc.push(m, 3.0), 0, "пакеты идут, обороты стоят 3 с → 0")
+	assert_eq(calc.value(3.0), 0)
+	assert_eq(calc.value(5.9), 0, "последний пакет 2.9 с назад")
+	assert_eq(calc.value(6.0), -1, "3 с без пакетов → нет данных")
+	assert_eq(calc.current(6.0), 0, "current() при этом по-прежнему 0")
+	calc.reset()
+	assert_true(calc.is_silent(100.0))

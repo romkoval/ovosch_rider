@@ -3,7 +3,8 @@ extends BleSensorBase
 ## Измеритель мощности по CPS 1818 / 2A63 (REQ-DEV-05 крит. 1, 3).
 ## `power(watts)` на каждое измерение; при наличии crank data — `cadence(rpm)`
 ## через `CscCadenceCalculator` (как у CSC) на каждое измерение с валидным
-## значением (и неизменным тоже — признак живого источника), 3 с без оборотов → `cadence(0)`.
+## значением (и неизменным тоже — признак живого источника); пакеты без новых
+## оборотов ≥ 3 с → `cadence(0)`; при тишине ничего не испускается (решение Н-4).
 
 signal power(watts: int)
 signal cadence(rpm: int)
@@ -38,7 +39,6 @@ func _on_measurement(bytes: PackedByteArray) -> void:
 			cadence.emit(rpm)
 
 
-func _on_time(now_sec: float) -> void:
-	if last_rpm != 0 and calculator.current(now_sec) == 0:
-		last_rpm = 0
-		cadence.emit(0)
+## Текущий каденс с учётом молчания: -1 — нет данных.
+func current_cadence(now_sec: float) -> int:
+	return calculator.value(now_sec)

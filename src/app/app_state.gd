@@ -15,6 +15,7 @@ enum Screen {
 	HISTORY,
 	SETTINGS,
 	DEV,
+	DEVICES,
 }
 
 ## Экран сменился.

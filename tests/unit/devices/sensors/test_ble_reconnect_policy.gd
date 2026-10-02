@@ -26,6 +26,7 @@ func test_stop_and_restart_resets_attempts() -> void:
 	p.start(0.0)
 	p.due(0.0)
 	p.stop()
+	assert_eq(p.attempts, 0, "stop() сбрасывает счётчик")
 	assert_false(p.due(10.0))
 	p.start(10.0)
 	assert_eq(p.attempts, 0)

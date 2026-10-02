@@ -10,7 +10,9 @@ extends TrainerDevice
 ## - мощность: `power_source` ("trainer" по умолчанию | "power_meter"), затем другой;
 ## - скорость: только станок.
 ## Источник, молчавший `SOURCE_TIMEOUT_SEC` (5 с), считается «нет данных» и уступает
-## следующему по приоритету; если никого — `has_* == false`.
+## следующему по приоритету; если никого — `has_* == false`. Для каденса порог
+## короче — `CADENCE_TIMEOUT_SEC` (3 с, решение Н-4): датчик каденса, переставший
+## слать пакеты, уступает сразу, без ложного нуля; каденс станка подчиняется тому же порогу.
 ##
 ## Хаб выдаёт ровно один объединённый `TrainerSample` на каждую целую секунду
 ## собственных часов (`tick`), независимо от того, жив ли станок — так при обрыве
@@ -19,6 +21,8 @@ extends TrainerDevice
 ## Датчики подключает владелец (`connect_device` у каждого); хаб только тикает их.
 
 const SOURCE_TIMEOUT_SEC: float = 5.0
+## Порог свежести источников каденса (REQ-DEV-04 крит. 3, решение Н-4).
+const CADENCE_TIMEOUT_SEC: float = 3.0
 const TIME_EPSILON: float = 1e-6
 
 const SOURCE_TRAINER: String = "trainer"
@@ -59,8 +63,33 @@ func _init(trainer_device: TrainerDevice) -> void:
 	trainer = trainer_device
 	trainer.telemetry.connect(_on_trainer_telemetry)
 	trainer.heart_rate.connect(_on_trainer_heart_rate)
-	trainer.connection_state_changed.connect(func(state: int) -> void: connection_state_changed.emit(state))
-	trainer.error.connect(func(code: int, message: String) -> void: error.emit(code, message))
+	trainer.connection_state_changed.connect(_forward_state)
+	trainer.error.connect(_forward_error)
+
+
+## Отключить обработчики сигналов станка и датчиков и забыть их (разрыв циклов
+## хаб ↔ станок/датчики). Сами устройства не освобождаются — это дело владельца.
+func dispose() -> void:
+	if trainer != null:
+		for pair in [[trainer.telemetry, _on_trainer_telemetry], [trainer.heart_rate, _on_trainer_heart_rate],
+				[trainer.connection_state_changed, _forward_state], [trainer.error, _forward_error]]:
+			var sig: Signal = pair[0]
+			var cb: Callable = pair[1]
+			if sig.is_connected(cb):
+				sig.disconnect(cb)
+		trainer = null
+	set_heart_rate_sensor(null)
+	set_cadence_sensor(null)
+	set_power_meter(null)
+	_trainer_sample = null
+
+
+func _forward_state(state: int) -> void:
+	connection_state_changed.emit(state)
+
+
+func _forward_error(code: int, message: String) -> void:
+	error.emit(code, message)
 
 
 # ---------------------------------------------------------------------------
@@ -107,27 +136,32 @@ func heart_rate_source_in_use() -> String:
 # ---------------------------------------------------------------------------
 
 func connect_device(id: String) -> void:
-	trainer.connect_device(id)
+	if trainer != null:
+		trainer.connect_device(id)
 
 
 func disconnect_device() -> void:
-	trainer.disconnect_device()
+	if trainer != null:
+		trainer.disconnect_device()
 
 
 func set_target_power(watts: int) -> void:
-	trainer.set_target_power(watts)
+	if trainer != null:
+		trainer.set_target_power(watts)
 
 
 func set_erg_enabled(enabled: bool) -> void:
-	trainer.set_erg_enabled(enabled)
+	if trainer != null:
+		trainer.set_erg_enabled(enabled)
 
 
 func set_resistance_level(percent: int) -> void:
-	trainer.set_resistance_level(percent)
+	if trainer != null:
+		trainer.set_resistance_level(percent)
 
 
 func get_connection_state() -> int:
-	return trainer.get_connection_state()
+	return trainer.get_connection_state() if trainer != null else ConnectionState.DISCONNECTED
 
 
 func tick(delta_sec: float) -> void:
@@ -136,7 +170,8 @@ func tick(delta_sec: float) -> void:
 	var end_sec: float = _time_sec + delta_sec
 	# Сначала продвигаем часы: приём от станка/датчиков внутри их tick штампуется end_sec.
 	_time_sec = end_sec
-	trainer.tick(delta_sec)
+	if trainer != null:
+		trainer.tick(delta_sec)
 	for s in [heart_rate_sensor, cadence_sensor, power_meter]:
 		if s != null:
 			(s as SensorDevice).tick(delta_sec)
@@ -187,6 +222,10 @@ func _fresh(at_sec: float) -> bool:
 	return _time_sec - at_sec < SOURCE_TIMEOUT_SEC
 
 
+func _fresh_cadence(at_sec: float) -> bool:
+	return _time_sec - at_sec < CADENCE_TIMEOUT_SEC
+
+
 func _trainer_fresh() -> bool:
 	return _trainer_sample != null and _fresh(_trainer_sample_at)
 
@@ -209,17 +248,17 @@ func _emit_merged(ts_sec: float) -> void:
 			s.power_w = _pm_power
 			_power_source_in_use = SOURCE_POWER_METER
 			break
-	# Каденс: CSC > CPS > станок.
+	# Каденс: CSC > CPS > станок; порог свежести 3 с.
 	_cadence_source_in_use = SOURCE_NONE
-	if cadence_sensor != null and _fresh(_csc_at):
+	if cadence_sensor != null and _fresh_cadence(_csc_at):
 		s.has_cadence = true
 		s.cadence_rpm = _csc_rpm
 		_cadence_source_in_use = SOURCE_CADENCE_SENSOR
-	elif power_meter != null and _fresh(_pm_rpm_at):
+	elif power_meter != null and _fresh_cadence(_pm_rpm_at):
 		s.has_cadence = true
 		s.cadence_rpm = _pm_rpm
 		_cadence_source_in_use = SOURCE_POWER_METER
-	elif _trainer_fresh() and _trainer_sample.has_cadence:
+	elif _trainer_sample != null and _fresh_cadence(_trainer_sample_at) and _trainer_sample.has_cadence:
 		s.has_cadence = true
 		s.cadence_rpm = _trainer_sample.cadence_rpm
 		_cadence_source_in_use = SOURCE_TRAINER
