@@ -59,6 +59,9 @@ var cadence_noise_rpm: float = 3.0
 var rider_power_w: int = 150
 ## Каденс всадника, об/мин. 0 — всадник не педалирует.
 var rider_cadence_rpm: int = 85
+## Передавать ли поле скорости в телеметрии (false — станок без поля скорости,
+## сессия берёт скорость из модели, REQ-WRK-08 крит. 5).
+var emit_speed: bool = true
 
 # --- Журнал и состояние, доступные тестам на чтение ---
 
@@ -87,6 +90,7 @@ var _silence_until_sec: float = -1.0
 var _packet_loss_ratio: float = 0.0
 var _fail_next_connect: bool = false
 var _fail_next_command: bool = false
+var _fail_next_code: int = ErrorCode.CONTROL_POINT_REJECTED
 var _heart_rate_sequence: Array[int] = []
 var _heart_rate_index: int = 0
 var _cadence_sequence: Array[int] = []
@@ -225,9 +229,11 @@ func inject_silence(duration_sec: float) -> void:
 
 
 ## Следующая команда (target_power/erg/resistance) будет отвергнута станком:
-## попадёт в журнал, но не применится, и придёт `error(CONTROL_POINT_REJECTED)`.
-func fail_next_command() -> void:
+## попадёт в журнал, но не применится, и придёт `error(code)` — по умолчанию
+## CONTROL_POINT_REJECTED; `WRITE_FAILED` эмулирует двойной отказ записи (REQ-NFR-01 крит. 2).
+func fail_next_command(code: int = ErrorCode.CONTROL_POINT_REJECTED) -> void:
 	_fail_next_command = true
+	_fail_next_code = code
 
 
 ## Следующий `connect_device` завершится ошибкой: `error(CONNECTION_FAILED)` и DISCONNECTED.
@@ -309,8 +315,9 @@ func _accept_command(type: String, value: Variant) -> bool:
 	elif _fail_next_command:
 		_fail_next_command = false
 		accepted = false
-		code = ErrorCode.CONTROL_POINT_REJECTED
-		message = "FakeTrainer: станок отверг команду %s" % type
+		code = _fail_next_code
+		_fail_next_code = ErrorCode.CONTROL_POINT_REJECTED
+		message = "FakeTrainer: станок отверг команду %s (%s)" % [type, "write failed" if code == ErrorCode.WRITE_FAILED else "control point"]
 	commands.append({"type": type, "value": value, "at_sec": _time_sec})
 	if not accepted:
 		error.emit(code, message)
@@ -362,7 +369,11 @@ func _emit_sample(sample_sec: int) -> void:
 
 	if not (lost or silent):
 		samples_emitted += 1
-		telemetry.emit(TrainerSample.full(float(sample_sec), power, cadence, speed))
+		var out := TrainerSample.full(float(sample_sec), power, cadence, speed)
+		if not emit_speed:
+			out.has_speed = false
+			out.speed_kmh = 0.0
+		telemetry.emit(out)
 
 	if not _heart_rate_sequence.is_empty():
 		var idx: int = mini(_heart_rate_index, _heart_rate_sequence.size() - 1)

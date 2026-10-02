@@ -298,14 +298,28 @@ func test_start_with_erg_disabled_sends_resistance_not_target() -> void:
 
 
 func test_free_ride_step_sends_no_target_power() -> void:
+	# REQ-WRK-02 крит. 5 в редакции В-10: на FreeRide при включённом ERG станок
+	# переводится в сопротивление (erg=false + уровень), Set Target Power не уходит;
+	# на следующем шаге с целью — erg=true + цель в ту же секунду.
 	var steps: Array[WorkoutStep] = [WorkoutStep.free_ride(10), WorkoutStep.percent(10, 80.0)]
 	_session = _make(Workout.make("free", steps))
+	_session.resistance_level = 50
 	_session.start()
-	assert_eq(_trainer.commands.size(), 0, "REQ-WRK-02 крит. 5")
+	assert_eq(_commands(FakeTrainer.CMD_TARGET_POWER).size(), 0, "REQ-WRK-02 крит. 5: на FreeRide цели нет")
+	assert_eq(_trainer.commands.size(), 2, "ровно erg=false + resistance")
+	assert_eq(_trainer.commands[0]["type"], FakeTrainer.CMD_ERG)
+	assert_eq(_trainer.commands[0]["value"], false)
+	assert_eq(_trainer.commands[1]["type"], FakeTrainer.CMD_RESISTANCE)
+	assert_eq(_trainer.commands[1]["value"], 50)
+	assert_true(_session.erg_enabled, "переключатель пользователя остаётся «вкл» (В-10)")
 	assert_eq(_session.current_target_watts(), 0)
 	_tick_n(_session, 10)
 	assert_eq(_commands(FakeTrainer.CMD_TARGET_POWER).size(), 1)
 	assert_eq(_trainer.commands.back()["value"], 160)
+	var erg_cmds := _commands(FakeTrainer.CMD_ERG)
+	assert_eq(erg_cmds.size(), 2)
+	assert_eq(erg_cmds[1]["value"], true, "на шаге с целью ERG возвращается")
+	assert_almost_eq(float(erg_cmds[1]["at_sec"]), float(_trainer.commands.back()["at_sec"]), 1e-6, "в ту же секунду, что и цель")
 	assert_eq(_session.samples.target_w[5], 0)
 
 

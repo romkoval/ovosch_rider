@@ -159,10 +159,12 @@ func refresh() -> void:
 	var ex := _session.executor
 	var last_row: Dictionary = _session.samples.row(_session.samples.size() - 1) if _session.samples.size() > 0 else {}
 	var total_steps: int = ex.workout.steps.size()
+	# После финиша исполнитель вне плана (-1) — показываем последний шаг.
+	var step_no: int = total_steps if ex.is_finished() else clampi(ex.current_step_index() + 1, 0, total_steps)
 	_status_label.text = tr("ui.dev.status").format({
 		"state": tr("ui.dev.state." + _state_key(_session.get_state())),
 		"connection": tr("ui.dev.connection." + TrainerDevice.state_name(_trainer.get_connection_state())),
-		"step": mini(ex.current_step_index() + 1, total_steps),
+		"step": step_no,
 		"steps": total_steps,
 		"target": _session.current_target_watts(),
 		"power": str(last_row["power_w"]) if bool(last_row.get("has_power", false)) else "—",

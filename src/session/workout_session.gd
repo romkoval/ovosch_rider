@@ -1,71 +1,129 @@
 class_name WorkoutSession
 extends RefCounted
 ## Сессия тренировки: связывает `IntervalExecutor` и `TrainerDevice`
-## (REQ-WRK-01 крит. 5, REQ-WRK-02, REQ-WRK-05, REQ-WRK-06, REQ-WRK-08, REQ-DEV-08 крит. 3, REQ-DEV-09 крит. 6).
+## (REQ-WRK-01 крит. 5, REQ-WRK-02..08, REQ-NFR-01, REQ-DEV-08 крит. 3, REQ-DEV-09 крит. 6).
 ##
 ## Связующий слой: знает только интерфейс `TrainerDevice`, не реализацию.
 ## Подключением устройства не управляет — ему передают уже подключаемое/
-## подключённое устройство; при любом переходе станка в CONNECTED во время
-## RUNNING повторно отправляются состояние ERG и текущая цель/уровень
-## (покрывает и первое подключение, и переподключение, REQ-DEV-08 крит. 3).
+## подключённое устройство; при переходе станка в CONNECTED во время RUNNING
+## повторно отправляются режим ERG и текущая цель/уровень (первое подключение и
+## переподключение, REQ-DEV-08 крит. 3). На паузе после CONNECTED ничего не шлётся —
+## цель уйдёт при `resume()` (уточнение DEV-08.3, приоритет В-4).
 ##
-## Команды на станок:
-## - `target_changed(w)` исполнителя в ERG при w > 0 → `set_target_power(w)`
-##   в ту же секунду; w == 0 (свободная езда) — ничего не шлётся (REQ-WRK-02 крит. 5);
-## - `set_erg_enabled(false)` → `set_erg_enabled(false)` + `set_resistance_level(level)`;
-##   `set_erg_enabled(true)` → `set_erg_enabled(true)` + текущая цель;
-## - на паузе не шлётся ничего (решение В-4, REQ-WRK-05 крит. 5); переключение
-##   ERG и смена цели на паузе откладываются и уходят при `resume()`.
+## Команды на станок (все — в ту же секунду, что и событие, REQ-NFR-01):
+## - `target_changed(w)` исполнителя при действующем ERG и w > 0 → `set_target_power(w)`;
+## - шаг FreeRide при включённом пользователем ERG (решение В-10, REQ-WRK-02 крит. 5):
+##   ERG на станке приостанавливается — `set_erg_enabled(false)` + `set_resistance_level(level)`;
+##   на следующем шаге с целью — `set_erg_enabled(true)` + цель. Флаг пользователя
+##   `erg_enabled` при этом не меняется (это режим шага, не выбор пользователя);
+## - `set_erg_enabled(false)` пользователем → `erg=false` + уровень; `true` → `erg=true` + цель
+##   (REQ-WRK-03 крит. 2, 3); уровень при включённом ERG только запоминается (REQ-WRK-04 крит. 3);
+## - на паузе не шлётся ничего (В-4, REQ-WRK-05 крит. 5); переключения ERG, смена цели,
+##   интенсивности и уровня на паузе откладываются и уходят при `resume()`;
+## - `error(WRITE_FAILED)` от устройства → один повтор текущей цели/уровня, не чаще
+##   раза в секунду (REQ-NFR-01 крит. 2; BLE-реализация устройства сама повторяет
+##   запись один раз, сессия страхует второй отказ). `CONTROL_POINT_REJECTED` не повторяется.
 ##
-## Поток 1 Гц (`samples`): слот секунды t-1 закрывается на событии
-## `second_elapsed(t)` исполнителя последней телеметрией, пришедшей с момента
-## предыдущего слота; без телеметрии — «нет данных». На паузе слоты не пишутся.
+## Поток 1 Гц (`samples`): слот секунды t-1 закрывается на `second_elapsed(t)`
+## последней телеметрией за секунду; без телеметрии — «нет данных» плюс возраст
+## данных по источникам для HUD. Скорость — станка, если первый сэмпл нёс поле
+## скорости, иначе `SpeedModel` по мощности и весу (`speed_source`, решение В-8).
+## На паузе слоты не пишутся, время паузы не идёт в elapsed.
 ##
-## `tick(delta)` всегда продвигает станок (его часы идут и на паузе), а
-## исполнитель — только в RUNNING.
+## Журнал событий `events` (REQ-WRK-05 крит. 2, REQ-WRK-06 крит. 4, LOC-01):
+## `{type, at_sec, value}`; типы — константы `EVENT_*`. У события паузы после
+## возобновления появляется `until_sec`.
 
 enum State { IDLE, RUNNING, PAUSED, FINISHED }
 
+const EVENT_START: String = "start"
+const EVENT_PAUSE: String = "pause"
+const EVENT_RESUME: String = "resume"
+const EVENT_SKIP: String = "skip"
+const EVENT_STOP: String = "stop"
+const EVENT_FINISH: String = "finish"
+const EVENT_ERG_ON: String = "erg_on"
+const EVENT_ERG_OFF: String = "erg_off"
+const EVENT_RESISTANCE: String = "resistance"
+const EVENT_INTENSITY: String = "intensity"
+const EVENT_DISCONNECT: String = "disconnect"
+const EVENT_RECONNECT: String = "reconnect"
+const EVENT_RETRY: String = "retry"
+
+## Шаг уровня сопротивления, % (REQ-WRK-04 крит. 1).
+const RESISTANCE_STEP_PCT: int = 5
+const DEFAULT_WEIGHT_KG: float = 75.0
+
 signal state_changed(state: int)
 signal session_finished()
+## Пользовательский режим ERG изменился (для HUD, REQ-WRK-03 крит. 1).
+signal erg_changed(enabled: bool)
+## Уровень сопротивления изменился (владелец сохраняет в профиль, REQ-WRK-04 крит. 1).
+signal resistance_level_changed(percent: int)
+## Множитель интенсивности изменился (REQ-WRK-07).
+signal intensity_changed(factor: float)
+## Добавлено событие в журнал.
+signal event_logged(event: Dictionary)
 
 var executor: IntervalExecutor
 var trainer: TrainerDevice
 var samples := SampleStream.new()
-## Режим ERG (REQ-WRK-03). По умолчанию включён.
+## Журнал событий заезда.
+var events: Array[Dictionary] = []
+## Режим ERG, выбранный пользователем (REQ-WRK-03). По умолчанию включён.
 var erg_enabled: bool = true
 ## Уровень сопротивления вне ERG, % (REQ-WRK-04). По умолчанию 50.
 var resistance_level: int = 50
+## Вес всадника для модели скорости, кг.
+var weight_kg: float = DEFAULT_WEIGHT_KG
+## Время старта, unix-секунды (0 — не стартовала).
+var started_at_unix: int = 0
 
 var _state: State = State.IDLE
 var _current_target_w: int = 0
 var _latest_sample: TrainerSample = null
 var _latest_hr_bpm: int = -1
+## На паузе изменился режим ERG (пользователь или шаг FreeRide): при `resume()`
+## заново уходит и состояние ERG, иначе — только цель/уровень (ровно одна команда).
 var _erg_pending: bool = false
+## ERG приостановлен режимом шага FreeRide (В-10).
+var _freeride_suspended: bool = false
+var _speed_model := SpeedModel.new()
+var _last_retry_sec: int = -1
+var _pause_event_index: int = -1
+var _power_age: int = -1
+var _cadence_age: int = -1
+var _hr_age: int = -1
 
 
-func _init(workout: Workout, device: TrainerDevice, ftp_w: int, intensity: float = 1.0) -> void:
+func _init(workout: Workout, device: TrainerDevice, ftp_w: int, intensity: float = 1.0,
+		rider_weight_kg: float = DEFAULT_WEIGHT_KG) -> void:
 	trainer = device
+	weight_kg = rider_weight_kg
 	executor = IntervalExecutor.new(workout, ftp_w, intensity)
+	executor.step_changed.connect(_on_step_changed)
 	executor.target_changed.connect(_on_target_changed)
 	executor.second_elapsed.connect(_on_second_elapsed)
 	executor.finished.connect(_on_executor_finished)
 	trainer.telemetry.connect(_on_telemetry)
 	trainer.heart_rate.connect(_on_heart_rate)
 	trainer.connection_state_changed.connect(_on_connection_state_changed)
+	trainer.error.connect(_on_trainer_error)
 
 
 # ---------------------------------------------------------------------------
 # Управление
 # ---------------------------------------------------------------------------
 
-## Старт: если ERG выключен — на станок уходят `erg=false` и уровень;
-## затем стартует исполнитель (первая цель уходит из его `target_changed`).
+## Старт: если ERG выключен пользователем — на станок уходят `erg=false` и уровень;
+## затем стартует исполнитель (первая цель/режим шага уходит из его событий).
 func start() -> void:
 	if _state != State.IDLE:
 		push_warning("WorkoutSession.start: сессия уже запущена")
 		return
+	started_at_unix = int(Time.get_unix_time_from_system())
 	_set_state(State.RUNNING)
+	_log(EVENT_START, 0)
 	if not erg_enabled:
 		trainer.set_erg_enabled(false)
 		trainer.set_resistance_level(resistance_level)
@@ -95,38 +153,66 @@ func pause() -> void:
 		return
 	executor.pause()
 	_set_state(State.PAUSED)
+	_pause_event_index = events.size()
+	_log(EVENT_PAUSE, executor.elapsed_sec())
 
 
 ## Возобновление: текущая цель (ERG) или уровень (не ERG) уходит немедленно
-## (REQ-WRK-05 крит. 3), вместе с отложенным на паузе переключением ERG.
+## (REQ-WRK-05 крит. 3), вместе с отложенными на паузе изменениями режима.
 func resume() -> void:
 	if _state != State.PAUSED:
 		return
 	_set_state(State.RUNNING)
 	executor.resume()
+	if _pause_event_index >= 0 and _pause_event_index < events.size():
+		events[_pause_event_index]["until_sec"] = session_time_sec()
+	_pause_event_index = -1
+	_log(EVENT_RESUME, executor.elapsed_sec())
 	_resend(_erg_pending)
 	_erg_pending = false
 
 
+## Пропуск текущего шага (REQ-WRK-06): переход немедленно, цель — в ту же секунду.
 func skip_step() -> void:
+	if _state != State.RUNNING and _state != State.PAUSED:
+		return
+	var skipped: int = executor.current_step_index()
+	_log(EVENT_SKIP, skipped)
 	executor.skip_step()
 
 
+## Досрочное завершение (REQ-WRK-05 крит. 4): подтверждение — на стороне UI.
 func stop() -> void:
 	if _state != State.RUNNING and _state != State.PAUSED:
 		return
+	_log(EVENT_STOP, executor.elapsed_sec())
 	executor.stop()
 
 
+## Множитель интенсивности 0.5..1.5 с шагом 0.05 (REQ-WRK-07). В ERG новая цель
+## уходит в ту же секунду через `target_changed` исполнителя; на паузе — при `resume()`.
 func set_intensity(value: float) -> void:
-	executor.set_intensity(value)
+	var snapped: float = IntervalExecutor.snap_intensity(value)
+	if is_equal_approx(snapped, executor.intensity):
+		return
+	executor.set_intensity(snapped)
+	_log(EVENT_INTENSITY, executor.intensity)
+	intensity_changed.emit(executor.intensity)
 
 
-## Переключение ERG (REQ-WRK-03/04). На паузе — откладывается до `resume()`.
+func intensity() -> float:
+	return executor.intensity
+
+
+## Переключение ERG пользователем (REQ-WRK-03). Одно действие — `toggle_erg()`.
+## На паузе — откладывается до `resume()`.
 func set_erg_enabled(enabled: bool) -> void:
 	if enabled == erg_enabled:
 		return
 	erg_enabled = enabled
+	_freeride_suspended = enabled and _current_step_is_free_ride()
+	_log(EVENT_ERG_ON if enabled else EVENT_ERG_OFF, executor.elapsed_sec())
+	erg_changed.emit(enabled)
 	match _state:
 		State.RUNNING:
 			_resend(true)
@@ -136,11 +222,28 @@ func set_erg_enabled(enabled: bool) -> void:
 			pass
 
 
-## Уровень сопротивления 0..100 %; вне ERG в RUNNING уходит сразу.
+func toggle_erg() -> void:
+	set_erg_enabled(not erg_enabled)
+
+
+## Уровень сопротивления 0..100 % с шагом 5 (REQ-WRK-04 крит. 1); вне действующего
+## ERG в RUNNING уходит сразу, при включённом ERG — только запоминается (крит. 3).
 func set_resistance_level(percent: int) -> void:
-	resistance_level = clampi(percent, TrainerDevice.MIN_RESISTANCE_PERCENT, TrainerDevice.MAX_RESISTANCE_PERCENT)
-	if _state == State.RUNNING and not erg_enabled:
+	var snapped: int = snap_resistance(percent)
+	if snapped == resistance_level:
+		return
+	resistance_level = snapped
+	_log(EVENT_RESISTANCE, snapped)
+	resistance_level_changed.emit(snapped)
+	if _state == State.RUNNING and not _effective_erg():
 		trainer.set_resistance_level(resistance_level)
+	# На паузе уровень уйдёт при resume() через _resend (REQ-WRK-05 крит. 3).
+
+
+## Приведение уровня к 0..100 с шагом 5.
+static func snap_resistance(percent: int) -> int:
+	var clamped: int = clampi(percent, TrainerDevice.MIN_RESISTANCE_PERCENT, TrainerDevice.MAX_RESISTANCE_PERCENT)
+	return roundi(float(clamped) / RESISTANCE_STEP_PCT) * RESISTANCE_STEP_PCT
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +258,53 @@ func current_target_watts() -> int:
 	return _current_target_w
 
 
+## Действует ли ERG на станке сейчас: выбор пользователя минус режим шага FreeRide (В-10).
+func is_erg_active_on_trainer() -> bool:
+	return _effective_erg()
+
+
+func is_freeride_suspended() -> bool:
+	return _freeride_suspended
+
+
+## Сессионное время с дробной частью, с.
+func session_time_sec() -> float:
+	return float(executor.elapsed_sec()) + executor.pending_fraction_sec()
+
+
+## Возраст данных источника (`"power"|"cadence"|"heart_rate"`) на момент последнего слота, с; -1 — не было.
+func data_age_sec(source: String) -> int:
+	match source:
+		"power":
+			return _power_age
+		"cadence":
+			return _cadence_age
+		"heart_rate":
+			return _hr_age
+	return -1
+
+
+## Метаданные заезда (LOC-01 крит. 1): FTP, вес, множитель, источник скорости, досрочность.
+func metadata() -> Dictionary:
+	return {
+		"workout_name": executor.workout.name,
+		"workout_source": executor.workout.source,
+		"started_at_unix": started_at_unix,
+		"ftp_w": executor.ftp_w,
+		"weight_kg": weight_kg,
+		"intensity": executor.intensity,
+		"erg_enabled": erg_enabled,
+		"resistance_level": resistance_level,
+		"speed_source": samples.speed_source,
+		"stopped_early": executor.stopped_early,
+		"elapsed_sec": executor.elapsed_sec(),
+		"planned_sec": executor.workout.total_duration_sec(),
+		"distance_m": samples.total_distance_m(),
+		"sample_count": samples.size(),
+		"event_count": events.size(),
+	}
+
+
 # ---------------------------------------------------------------------------
 # Внутреннее
 # ---------------------------------------------------------------------------
@@ -166,33 +316,84 @@ func _set_state(state: State) -> void:
 	state_changed.emit(state)
 
 
+func _log(type: String, value: Variant) -> void:
+	var event := {"type": type, "at_sec": session_time_sec(), "value": value}
+	events.append(event)
+	event_logged.emit(event)
+
+
+func _effective_erg() -> bool:
+	return erg_enabled and not _freeride_suspended
+
+
+func _current_step_is_free_ride() -> bool:
+	var step := executor.current_step()
+	return step != null and step.is_free_ride()
+
+
 ## Повторная отправка текущего режима на станок: при `with_erg` — сначала
-## состояние ERG; затем цель (ERG, если > 0) или уровень (не ERG).
+## действующее состояние ERG; затем цель (ERG, если > 0) или уровень (не ERG).
 func _resend(with_erg: bool) -> void:
+	var erg_now: bool = _effective_erg()
 	if with_erg:
-		trainer.set_erg_enabled(erg_enabled)
-	if erg_enabled:
+		trainer.set_erg_enabled(erg_now)
+	if erg_now:
 		if _current_target_w > 0:
 			trainer.set_target_power(_current_target_w)
 	else:
 		trainer.set_resistance_level(resistance_level)
 
 
+## Смена шага: режим FreeRide по В-10 — приостановить/вернуть ERG на станке.
+func _on_step_changed(_index: int, step: WorkoutStep) -> void:
+	var want_suspended: bool = erg_enabled and step.is_free_ride()
+	if want_suspended == _freeride_suspended:
+		return
+	_freeride_suspended = want_suspended
+	match _state:
+		State.RUNNING:
+			if want_suspended:
+				trainer.set_erg_enabled(false)
+				trainer.set_resistance_level(resistance_level)
+			else:
+				trainer.set_erg_enabled(true)
+				# Цель уйдёт следом из target_changed той же секунды.
+		State.PAUSED:
+			_erg_pending = true
+		_:
+			pass
+
+
 func _on_target_changed(watts: int) -> void:
 	_current_target_w = watts
 	# На паузе ничего не шлём; цель уйдёт при resume() (REQ-WRK-05 крит. 5).
-	if _state == State.RUNNING and erg_enabled and watts > 0:
+	if _state == State.RUNNING and _effective_erg() and watts > 0:
 		trainer.set_target_power(watts)
 
 
 func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec: int) -> void:
-	samples.append(elapsed_sec - 1, _latest_sample, _latest_hr_bpm, _current_target_w,
-		executor.current_step_index(), erg_enabled)
+	var sample := _latest_sample
+	if samples.speed_source.is_empty() and sample != null:
+		samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER if sample.has_speed else SampleStream.SPEED_SOURCE_MODEL
+	_power_age = 0 if sample != null and sample.has_power else (_power_age + 1 if _power_age >= 0 else -1)
+	_cadence_age = 0 if sample != null and sample.has_cadence else (_cadence_age + 1 if _cadence_age >= 0 else -1)
+	_hr_age = 0 if _latest_hr_bpm >= 0 else (_hr_age + 1 if _hr_age >= 0 else -1)
+	# Пока станок не показал поле скорости (или его нет) — скорость из модели.
+	var model_speed: float = -1.0
+	if samples.speed_source != SampleStream.SPEED_SOURCE_TRAINER:
+		var power: float = float(sample.power_w) if sample != null and sample.has_power else 0.0
+		model_speed = _speed_model.step(power, weight_kg, 1.0)
+	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, _current_target_w,
+		executor.current_step_index(), erg_enabled, model_speed,
+		{"power": _power_age, "cadence": _cadence_age, "heart_rate": _hr_age})
 	_latest_sample = null
 	_latest_hr_bpm = -1
 
 
 func _on_executor_finished() -> void:
+	if samples.speed_source.is_empty():
+		samples.speed_source = SampleStream.SPEED_SOURCE_MODEL
+	_log(EVENT_FINISH, executor.elapsed_sec())
 	_set_state(State.FINISHED)
 	session_finished.emit()
 
@@ -206,5 +407,25 @@ func _on_heart_rate(bpm: int) -> void:
 
 
 func _on_connection_state_changed(state: int) -> void:
-	if state == TrainerDevice.ConnectionState.CONNECTED and _state == State.RUNNING:
-		_resend(true)
+	if _state != State.RUNNING and _state != State.PAUSED:
+		return
+	match state:
+		TrainerDevice.ConnectionState.RECONNECTING, TrainerDevice.ConnectionState.DISCONNECTED:
+			_log(EVENT_DISCONNECT, TrainerDevice.state_name(state))
+		TrainerDevice.ConnectionState.CONNECTED:
+			_log(EVENT_RECONNECT, TrainerDevice.state_name(state))
+			# На паузе — ничего: цель уйдёт при resume() (уточнение DEV-08.3, приоритет В-4).
+			if _state == State.RUNNING:
+				_resend(true)
+
+
+## Ошибка записи на станок: один повтор текущей цели/уровня, не чаще раза в секунду (REQ-NFR-01 крит. 2).
+func _on_trainer_error(code: int, _message: String) -> void:
+	if code != TrainerDevice.ErrorCode.WRITE_FAILED or _state != State.RUNNING:
+		return
+	var now_sec: int = executor.elapsed_sec()
+	if now_sec == _last_retry_sec:
+		return
+	_last_retry_sec = now_sec
+	_log(EVENT_RETRY, now_sec)
+	_resend(false)
