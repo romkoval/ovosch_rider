@@ -43,20 +43,20 @@
 | T-002 | `[game]` | 1 | Интерфейс `TrainerDevice`, `TrainerSample`, `TrainerFactory` | REQ-DEV-09 (п.1), REQ-NFR-06 (п.3) | T-001 | `done` (коммиты 26ef1b4, 68e7064) |
 | T-003 | `[game]` | 1 | `FakeTrainer`: ядро, ERG-сходимость, сценарии «постоянная», «рывки», «нулевой каденс» | REQ-DEV-09 (п.1, 2, 3 частично, 4) | T-002 | `done` (коммиты 26ef1b4, 68e7064) |
 | T-004 | `[game]` | 1 | `FakeTrainer`: сценарии сбоев (пропуск пакетов, обрыв/восстановление, ошибка Control Point) и эмуляция пульса/каденса | REQ-DEV-09 (п.3, 5) | T-003 | `done` (коммиты 26ef1b4, 68e7064) |
-| T-005 | `[game]` | 1 | Доменная модель тренировки: `Workout`, `WorkoutStep`, `TextCue`, `PowerSmoother` | REQ-WRK-01 (входная модель), REQ-NFR-09 (п.1 — модель), REQ-HUD-09 (п.1–3 — `PowerSmoother`) | T-001 | `review` (коммит 0ca2af5; дефект D-1) |
-| T-006 | `[game]` | 1 | Исполнитель интервалов `IntervalExecutor` (тики 1 Гц, события переходов, завершение) | REQ-WRK-01 (п.1–4), REQ-NFR-02 (п.1 — исполнитель), REQ-NFR-09 (п.1, 4) | T-005 | `in-progress` (developer A) |
-| T-007 | `[game]` | 1 | `WorkoutSession`: связка исполнителя и `TrainerDevice`, прогон плана на `FakeTrainer` | REQ-WRK-01 (п.5), REQ-DEV-09 (п.6) | T-003, T-006 | `in-progress` (developer A) |
-| T-008 | `[game]` | 1 | Зоны мощности (7, Coggan) и пульса (5), функция определения зоны | REQ-PRF-02 (п.2, 3, 5) | T-001 | `review` (коммит 0ca2af5; риск `HrZones.custom_bpm`) |
-| T-009 | `[game]` | 1 | Модель профиля, валидация, `ProfileRepository` (JSON в `user://`) | REQ-PRF-01 (п.1, 2, 5, 6), REQ-PRF-02 (п.1, 4) | T-008 | `in-progress` (developer B) |
-| T-010 | `[game]` | 1 | `SecureStore`: интерфейс, in-memory реализация, ключи с идентификатором профиля | REQ-NFR-05 (п.1, 2), REQ-PRF-03 (п.1, 2, 3) | T-009 | `in-progress` (developer B) |
-| T-011 | `[game]` | 1 | Реестр запомненных устройств: датчики в профиле, общий станок; каскадное удаление профиля | REQ-PRF-04 (п.2, 3, 4), REQ-PRF-01 (п.3, 4), REQ-DEV-06 (п.1 — хранение) | T-009, T-010 | `todo` |
-| T-012 | `[game]` | 1 | Оболочка приложения: состояние навигации, экран выбора профиля, создание первого профиля, каркас переводов | REQ-PRF-05 (п.1–3), REQ-NFR-08 (п.1 — заделка) | T-009 | `todo` |
-| T-013 | `[game]` | 1 | `SessionTicker` (1 Гц от системных часов, не от кадров) и экран разработчика «Проиграть на FakeTrainer» | REQ-DEV-09 (п.6), REQ-WRK-01 (п.5), REQ-NFR-02 (п.1) | T-007, T-012 | `todo` |
-| T-014 | `[game]` | 1 | Архитектурные и инфраструктурные проверки: скрипты поиска секретов/осиротевших `.gd`, инвентаризация публичных методов домена | REQ-INF-03, REQ-INF-04, REQ-NFR-06 (п.1–3), REQ-NFR-09 (п.2, 4) | T-013 | `todo` |
-| T-015 | `[game]` | 2 | Контракт нативного моста `BleBridge` в GDScript и скриптуемая заглушка `StubBleBridge` | REQ-DEV-01..08 (контракт), REQ-NFR-06 (п.1) | T-002 | `todo` |
-| T-016 | `[game]` | 2 | Кодеки BLE-характеристик: FTMS (Indoor Bike Data, Control Point, Status), HRS, CSC, CPS, Battery | REQ-DEV-02 (п.2–5), REQ-DEV-03 (п.1), REQ-DEV-04 (п.1–3), REQ-DEV-05 (п.1), REQ-DEV-07 (п.2) | T-015 | `todo` |
-| T-017 | `[game]` | 2 | `BleTrainer`: `TrainerDevice` поверх `BleBridge` — последовательность подключения, телеметрия, команды, ошибки Control Point | REQ-DEV-02 (п.1, 3) | T-016 | `todo` |
-| T-018 | `[game]` | 2 | BLE-датчики (`BleHeartRateSensor`, `BleCadenceSensor`, `BlePowerMeter`) и `SensorHub` с приоритетами источников | REQ-DEV-03 (п.2, 3), REQ-DEV-04 (п.4), REQ-DEV-05 (п.2, 3) | T-017 | `todo` |
+| T-005 | `[game]` | 1 | Доменная модель тренировки: `Workout`, `WorkoutStep`, `TextCue`, `PowerSmoother` | REQ-WRK-01 (входная модель), REQ-NFR-09 (п.1 — модель), REQ-HUD-09 (п.1–3 — `PowerSmoother`), REQ-INT-05 (п.1, 2 — `power_points`), REQ-HUD-07 (п.1 — `segments`) | T-001 | `done` (коммиты 0ca2af5, 1e19252) |
+| T-006 | `[game]` | 1 | Исполнитель интервалов `IntervalExecutor` (тики 1 Гц, события переходов, завершение) | REQ-WRK-01 (п.1–4), REQ-NFR-02 (п.1 — исполнитель), REQ-NFR-09 (п.1, 4) | T-005 | `done` (коммит 1e19252) |
+| T-007 | `[game]` | 1 | `WorkoutSession`: связка исполнителя и `TrainerDevice`, прогон плана на `FakeTrainer` | REQ-WRK-01 (п.5), REQ-DEV-09 (п.6) | T-003, T-006 | `done` (коммит 1e19252) |
+| T-008 | `[game]` | 1 | Зоны мощности (7, Coggan) и пульса (5), функция определения зоны | REQ-PRF-02 (п.2, 3, 5) | T-001 | `done` (коммиты 0ca2af5, 1e19252) |
+| T-009 | `[game]` | 1 | Модель профиля, валидация, `ProfileRepository` (JSON в `user://`) | REQ-PRF-01 (п.1, 2, 5, 6), REQ-PRF-02 (п.1, 4) | T-008 | `done` (коммиты f06193f, f3a8f0f) |
+| T-010 | `[game]` | 1 | `SecureStore`: интерфейс, in-memory реализация, ключи с идентификатором профиля | REQ-NFR-05 (п.1, 2), REQ-PRF-03 (п.1, 2, 3) | T-009 | `done` (коммиты f06193f, f3a8f0f) |
+| T-011 | `[game]` | 1 | Реестр запомненных устройств: датчики в профиле, общий станок; каскадное удаление профиля | REQ-PRF-04 (п.2, 3, 4), REQ-PRF-01 (п.3, 4), REQ-DEV-06 (п.1 — хранение) | T-009, T-010 | `review` (коммит f3a8f0f) |
+| T-012 | `[game]` | 1 | Оболочка приложения: состояние навигации, экран выбора профиля, создание первого профиля, каркас переводов | REQ-PRF-05 (п.1–3), REQ-NFR-08 (п.1 — заделка) | T-009 | `review` (коммит f3a8f0f) |
+| T-013 | `[game]` | 1 | `SessionTicker` (1 Гц от системных часов, не от кадров) и экран разработчика «Проиграть на FakeTrainer» | REQ-DEV-09 (п.6), REQ-WRK-01 (п.5), REQ-NFR-02 (п.1) | T-007, T-012 | `in-progress` (developer B) |
+| T-014 | `[game]` | 1 | Архитектурные и инфраструктурные проверки: скрипты поиска секретов/осиротевших `.gd`, инвентаризация публичных методов домена | REQ-INF-03, REQ-INF-04, REQ-NFR-06 (п.1–3), REQ-NFR-09 (п.2, 4) | T-013 | `in-progress` (developer B) |
+| T-015 | `[game]` | 2 | Контракт нативного моста `BleBridge` в GDScript, `StubBleBridge`, `NativeBleBridge`, `BleUuids` | REQ-DEV-01..08 (контракт), REQ-NFR-06 (п.1) | T-002 | `review` (коммит 03cce42) |
+| T-016 | `[game]` | 2 | Кодеки BLE-характеристик: FTMS (Indoor Bike Data, Control Point, Status), HRS, CSC, CPS, Battery | REQ-DEV-02 (п.2–5), REQ-DEV-03 (п.1), REQ-DEV-04 (п.1–3), REQ-DEV-05 (п.1), REQ-DEV-07 (п.2) | T-015 | `review` (коммит 03cce42; дефект D-2 в работе) |
+| T-017 | `[game]` | 2 | `BleTrainer`: `TrainerDevice` поверх `BleBridge` — последовательность подключения, телеметрия, команды, ошибки Control Point | REQ-DEV-02 (п.1, 3) | T-016 | `in-progress` (developer A) |
+| T-018 | `[game]` | 2 | BLE-датчики (`BleHeartRateSensor`, `BleCadenceSensor`, `BlePowerMeter`) и `SensorHub` с приоритетами источников | REQ-DEV-03 (п.2, 3), REQ-DEV-04 (п.4), REQ-DEV-05 (п.2, 3) | T-017 | `in-progress` (developer A) |
 | T-019 | `[game]` | 2 | Сканер и модель списка устройств | REQ-DEV-01 (п.1–4) | T-015 | `todo` |
 | T-020 | `[game]` | 2 | Состояния подключения, заряд, запоминание, автоподключение, «забыть» | REQ-DEV-06 (п.1–4), REQ-DEV-07 (п.1–3) | T-011, T-018, T-019 | `todo` |
 | T-021 | `[native-ble]` | 2 | Каркас GDExtension: godot-cpp, сборка, `.gdextension`, класс `BleBridgeNative` с контрактом, платформонезависимая заглушка | REQ-DEV-01 (п.6), REQ-NFR-06 (п.2) | T-015 | `todo` → `blocked: нужен macOS` после написания |
@@ -146,7 +146,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-DEV-09 п.3 (пропуск пакетов, обрыв/восстановление, ошибка Control Point), п.5.
 Критерии авто: все. Ручных нет.
 
-#### T-005 — Доменная модель тренировки `[game]` — `review`
+#### T-005 — Доменная модель тренировки `[game]` — `done`
+Приёмка tester — коммит 1e19252: D-1 закрыт через `Workout.power_points()` (ломаная с начальной и конечной точками рамп — REQ-INT-05 п.1, 2) и `Workout.segments()` (сегменты для полосы прогресса — REQ-HUD-07 п.1). T-030 строится на этих методах.
 Факт. Коммит 0ca2af5 (вместе с T-008). Файлы: `src/domain/text_cue.gd` (`TextCue`), `src/domain/workout_step.gd` (`WorkoutStep` с `TargetKind`/`StepKind`, конструкторы `percent/watts/ramp_percent/ramp_watts/free_ride`, `target_watts_at(offset, ftp, intensity)`), `src/domain/workout.gd` (`Workout.make`, `expand_repeat`, `total_duration_sec`, `step_index_at`, `target_watts_at`, `power_profile`, `validate`), `src/domain/power_smoother.gd` (`PowerSmoother` — сглаживание 3 с, относится к REQ-HUD-09 п.1–3; учтено в T-028 и трассируемости). Отдельного класса `WorkoutTarget` нет — цель хранится в `WorkoutStep`.
 Приёмка tester (`tests/unit/domain/test_domain_acceptance.gd`): дефект **D-1** — REQ-INT-05 п.2: `Workout.power_profile()` возвращает поминутные/посекундные значения без конечной точки рампы, поэтому ломаная для графика не содержит точку «конец рампы». Решение: добавить `Workout.power_points()` (ломаная (t, Вт) для графика предпросмотра, с начальной и конечной точками каждой рампы) и `Workout.segments()` (сегменты для полосы прогресса HUD-07). Исправление — у developer A в одном заходе с T-006/T-007; после фикса T-005 возвращается на приёмку. T-030 при этом сокращается: «профиль плана» строится на `Workout.power_points()`/`segments()`.
 
@@ -160,8 +161,9 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: входная модель для REQ-WRK-01 и всех парсеров; REQ-NFR-09 п.1 в части «модель тренировки».
 Критерии авто: `total_duration_s`, `watts_at` для % FTP/ватт/рампы, `is_valid`. Ручных нет.
 
-#### T-006 — Исполнитель интервалов `IntervalExecutor` `[game]` — `in-progress`
-Статус. У developer A (вместе с T-007 и фиксом D-1). В рабочем дереве уже есть `src/domain/interval_executor.gd` (`IntervalExecutor.new(plan, ftp, intensity)`, `tick(delta_sec)`, сигналы `step_changed`, `target_changed`, `second_elapsed`, `cue`, `finished`, методы `pause/resume/skip_step/stop/set_intensity`) и `tests/unit/domain/test_interval_executor.gd`. Время — через `tick(delta_sec)`, а не через `Clock` (согласовано с T-002). На приёмку — после сдачи developer.
+#### T-006 — Исполнитель интервалов `IntervalExecutor` `[game]` — `done`
+Приёмка tester — коммит 1e19252 (`tests/unit/session/test_session_acceptance.gd`): подтверждены REQ-WRK-01 п.1–4, REQ-NFR-02 п.1, REQ-NFR-09 п.1, 4; попутно сторона исполнителя для WRK-05/06/07 (пауза, пропуск, множитель) — окончательное закрытие этих REQ остаётся за T-025..T-027.
+Факт. `src/domain/interval_executor.gd` (`IntervalExecutor.new(plan, ftp, intensity)`, `tick(delta_sec)`, сигналы `step_changed`, `target_changed`, `second_elapsed`, `cue`, `finished`, методы `pause/resume/skip_step/stop/set_intensity`) и `tests/unit/domain/test_interval_executor.gd`. Время — через `tick(delta_sec)`, а не через `Clock` (согласовано с T-002). На приёмку — после сдачи developer.
 
 Исходный план. `src/domain/interval_executor.gd` — `IntervalExecutor extends RefCounted`.
 - Конструктор `(workout: Workout, clock: Clock)`; `start()`, `tick()` — вызывается внешним источником 1 Гц; исполнитель сам считает `elapsed_s` по `clock.now_ms()` (не по числу вызовов), так что пропущенные тики догоняются.
@@ -174,8 +176,9 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-WRK-01 п.1–4; REQ-NFR-02 п.1 (часть «исполнитель»); REQ-NFR-09 п.1 (исполнитель), п.4.
 Критерии авто: все. Ручных нет.
 
-#### T-007 — `WorkoutSession`: прогон плана на `FakeTrainer` `[game]` — `in-progress`
-Статус. У developer A. В рабочем дереве: `src/session/workout_session.gd` (`WorkoutSession.new(workout, device, ftp, intensity)`, `start/tick/pause/resume/skip_step/stop`, `set_intensity`, `set_erg_enabled`, `set_resistance_level`, повторная отправка цели при возобновлении) и `src/session/sample_stream.gd` (`SampleStream.append(t, sample, hr, target, step, erg)`, `is_monotonic`, `count_with_power`), тесты `tests/unit/session/test_workout_session.gd`. Замечания менеджера для приёмки: (а) каталог `src/session/` отсутствует в структуре CLAUDE.md — либо вернуть в `src/domain/`, либо дополнить CLAUDE.md (вопрос Н-2 в разделе 5); (б) сессия уже содержит заделы этапа 3 (ERG вкл/выкл, сопротивление, пауза, `SampleStream`) — задачи T-023, T-025..T-027 переформулируются как «довести до критериев», а не «создать»; закрытие их REQ остаётся за соответствующими задачами. Критерий REQ-DEV-09 п.6 закрывается здесь.
+#### T-007 — `WorkoutSession`: прогон плана на `FakeTrainer` `[game]` — `done`
+Приёмка tester — коммит 1e19252: подтверждены REQ-WRK-01 п.5, REQ-DEV-09 п.6 (результат этапа 1 — тренировка проигрывается без железа), а также стороны сессии для REQ-WRK-02, WRK-05, WRK-06, WRK-07, WRK-08, REQ-DEV-08 п.2, 3, REQ-NFR-01 п.1, REQ-NFR-02 п.1, 2. Эти REQ окончательно закрываются в T-023..T-027 (HUD-привязка, рампы, FreeRide по В-10, сопротивление по `0x2AD6`, журнал событий). Открытый при приёмке вопрос WRK-02 п.5 (FreeRide в ERG) решён как В-10: на FreeRide станок переводится в режим сопротивления, на следующем шаге с целью ERG возвращается — реализация в T-025/T-026.
+Факт. `src/session/workout_session.gd` (`WorkoutSession.new(workout, device, ftp, intensity)`, `start/tick/pause/resume/skip_step/stop`, `set_intensity`, `set_erg_enabled`, `set_resistance_level`, повторная отправка цели при возобновлении) и `src/session/sample_stream.gd` (`SampleStream.append(t, sample, hr, target, step, erg)`, `is_monotonic`, `count_with_power`), тесты `tests/unit/session/test_workout_session.gd`. Замечания менеджера для приёмки: (а) каталог `src/session/` отсутствует в структуре CLAUDE.md — либо вернуть в `src/domain/`, либо дополнить CLAUDE.md (вопрос Н-2 в разделе 5); (б) сессия уже содержит заделы этапа 3 (ERG вкл/выкл, сопротивление, пауза, `SampleStream`) — задачи T-023, T-025..T-027 переформулируются как «довести до критериев», а не «создать»; закрытие их REQ остаётся за соответствующими задачами. Критерий REQ-DEV-09 п.6 закрывается здесь.
 
 Исходный план. `src/domain/workout_session.gd` — `WorkoutSession extends RefCounted`: собирает `IntervalExecutor`, `TrainerDevice`, `Clock`, FTP профиля.
 - `start()` подключает устройство (`connect_device`, `request_control`), стартует исполнитель; `tick()` продвигает исполнитель и симулятор (если устройство — `FakeTrainer`, вызывает его `advance_to(now_ms)`; иначе ничего).
@@ -187,7 +190,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-WRK-01 п.5, REQ-DEV-09 п.6 (запуск сессии с `FakeTrainer` в тесте).
 Критерии авто: план из 3 шагов проигрывается до `session_finished` на `FakeTrainer` с `ManualClock`; в журнале команд станка есть `0x05` на каждом переходе. Ручных нет.
 
-#### T-008 — Зоны мощности и пульса `[game]` — `review`
+#### T-008 — Зоны мощности и пульса `[game]` — `done`
+Приёмка tester — коммит 1e19252: риск закрыт добавлением `HrZones.custom_bpm(boundaries_bpm)` (абсолютные границы в уд/мин для зон из Intervals.icu по В-5). Подтверждены REQ-PRF-02 п.2, 3, 5.
 Факт. Коммит 0ca2af5 (вместе с T-005). Файлы: `src/domain/power_zones.gd` (`PowerZones.coggan(ftp)`, `PowerZones.custom(ftp, boundaries)`, `zone_of`, `zone_lower_watts`, `validate`), `src/domain/hr_zones.gd` (`HrZones.five_zone(max_bpm)`, `HrZones.custom(max_bpm, boundaries)`, `zone_of`), `src/domain/zones.gd` (фасад `Zones.power_zone(power, ftp)`, `Zones.hr_zone(bpm, max_hr)`); тесты `tests/unit/domain/test_zones.gd`. Токены цвета зон (`zone_color_token`) не реализованы — переносятся в T-028/T-031.
 Риск по приёмке: `HrZones` задаёт границы только в % от `max_hr`, а по решению В-5 зоны пульса могут приходить из Intervals.icu в абсолютных уд/мин — добавить `HrZones.custom_bpm(boundaries_bpm)`. В работе у developer A вместе с D-1; после фикса — повторная приёмка.
 
@@ -201,9 +205,10 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-PRF-02 п.2, 3, 5 (п.1, 4 — в T-009). Основа для HUD-03/04, INT-05.3, LOC-04.5.
 Критерии авто: все. Ручных нет.
 
-#### T-009 — Модель профиля, валидация, `ProfileRepository` `[game]` — `in-progress`
-Статус. У developer B (вместе с T-010). Учесть решение В-1: `max_hr` валидируется 100–220, по умолчанию пусто (зоны пульса недоступны, HUD-04 показывает «—»); зоны — объекты `PowerZones`/`HrZones` из T-008, а не сырые массивы границ.
-Что сделать.
+#### T-009 — Модель профиля, валидация, `ProfileRepository` `[game]` — `done`
+Факт. Коммиты f06193f (код + юнит-тесты) и f3a8f0f (фиксы по приёмке + приёмочные тесты `tests/unit/profiles/test_profiles_acceptance.gd`). Файлы: `src/profiles/profile.gd` (`Profile.validate()` возвращает коды `ERR_*` — ключи для переводов, не тексты; `max_hr` 100–220, по умолчанию не задан — В-1), `src/profiles/profile_repository.gd` (value-семантика: `get`/`list` возвращают копии, изменения применяются только через `update(profile)` после успешной валидации). Приёмка tester нашла 4 дефекта, все исправлены в f3a8f0f: (1) отклонённые валидацией правки утекали на диск; (2) `from_dict(null)` падал; (3) HR-зоны хранились в абсолютных уд/мин вместо объектов зон с `max_hr`; (4) см. T-010. Подтверждены REQ-PRF-01 п.1, 2, 5, 6; REQ-PRF-02 п.1, 4.
+
+Исходный план.
 - `src/profiles/profile.gd` — `Profile extends RefCounted`: `id: String` (UUID-подобный, генерируется один раз), `name`, `ftp: int` (50–600), `weight_kg: float` (20.0–250.0, шаг 0.1), `max_hr: int` (100–220, по умолчанию не задан — решение В-1), `power_zone_bounds`, `hr_zone_bounds`, `ftp_override_local: bool`, `ftp_source: String` («local» / «intervals:<дата>»), `resistance_level_pct: float` (для WRK-04, по умолчанию 50), `to_dict()/from_dict()`.
 - `src/profiles/profile_validator.gd` — функции валидации, возвращающие `ValidationResult {ok: bool, message_key: StringName}`: имя 1–40 символов после `strip_edges()`, уникальность без учёта регистра, диапазоны FTP/веса. Сообщения — ключи переводов, не русские литералы.
 - `src/profiles/profile_repository.gd` — `ProfileRepository extends RefCounted`: `list()`, `create(name) -> Profile`, `update(profile)`, `delete(id)` (отказ, если профиль последний), `set_active(id)`, `get_active() -> Profile`, `load()/save()` в `user://profiles.json` (путь инъецируется для тестов). Удаление каскадно чистит данные профиля через колбэки, регистрируемые T-010/T-011/T-041 (`add_on_delete_hook(callable)`), чтобы `src/profiles/` не зависел от хранилищ.
@@ -211,32 +216,37 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-PRF-01 п.1, 2, 5, 6 (п.3, 4 — после T-011); REQ-PRF-02 п.1, 4.
 Критерии авто: все перечисленные. Ручных нет.
 
-#### T-010 — `SecureStore` `[game]` — `in-progress`
-Статус. У developer B (вместе с T-009).
-Что сделать. `src/storage/secure_store.gd` — интерфейс `SecureStore extends RefCounted`: `put(key: String, value: String)`, `get_value(key) -> String` (пусто, если нет), `delete(key)`, `delete_prefix(prefix)`, `has(key)`. Ключи формируются хелпером `SecureStore.key_for(profile_id, service, item)` → `"<profile_id>/<service>/<item>"` (`service` ∈ `intervals`, `strava`; `item` ∈ `api_key`, `access_token`, `refresh_token`, `expires_at`). `src/storage/in_memory_secure_store.gd` — реализация в памяти (тесты и dev-режим в контейнере). `src/storage/secure_store_factory.gd` — выбирает реализацию; в контейнере всегда in-memory; платформенные реализации описываются в `docs/secure_store.md` (T-053) и будут добавлены вне контейнера. Единственный модуль в `src/`, где допустимы проверки платформы помимо `src/devices/ble_*`. Регистрирует хук удаления профиля (`delete_prefix(profile_id + "/")`).
+#### T-010 — `SecureStore` `[game]` — `done`
+Факт. Коммиты f06193f, f3a8f0f. Файлы: `src/storage/secure_store.gd` (интерфейс: `set_secret(key, value)`, `get_secret(key)`, `delete_secret(key)`, `has_secret(key)`; `create_default()` — выбор реализации; `attach_to_profiles(repository)` — регистрация хука каскадного удаления секретов профиля), `src/storage/memory_secure_store.gd` (`MemorySecureStore` — тесты), `src/storage/encrypted_file_secure_store.gd` (`EncryptedFileSecureStore` — `user://secrets.bin`, шифрование ключом устройства; **временная** реализация для dev-сборок в контейнере: не закрывает REQ-NFR-05 п.1/п.3 на магазинных платформах — Keychain/Keystore остаются `[вне контейнера]`, см. T-053 и раздел «Ручные проверки»). Дефект приёмки (4): при неверном ключе шифрования `secrets.bin` перезаписывался пустым — исправлено (файл не трогается, возвращается ошибка). Подтверждены REQ-NFR-05 п.1, 2 (контейнерная часть); REQ-PRF-03 п.1, 2, 3.
+
+Исходный план. `src/storage/secure_store.gd` — интерфейс `SecureStore extends RefCounted`: `put(key: String, value: String)`, `get_value(key) -> String` (пусто, если нет), `delete(key)`, `delete_prefix(prefix)`, `has(key)`. Ключи формируются хелпером `SecureStore.key_for(profile_id, service, item)` → `"<profile_id>/<service>/<item>"` (`service` ∈ `intervals`, `strava`; `item` ∈ `api_key`, `access_token`, `refresh_token`, `expires_at`). `src/storage/in_memory_secure_store.gd` — реализация в памяти (тесты и dev-режим в контейнере). `src/storage/secure_store_factory.gd` — выбирает реализацию; в контейнере всегда in-memory; платформенные реализации описываются в `docs/secure_store.md` (T-053) и будут добавлены вне контейнера. Единственный модуль в `src/`, где допустимы проверки платформы помимо `src/devices/ble_*`. Регистрирует хук удаления профиля (`delete_prefix(profile_id + "/")`).
 Файлы: три файла выше.
 Закрывает: REQ-NFR-05 п.1, 2; REQ-PRF-03 п.1, 2, 3 (окончательно подтверждаются вместе с T-046, когда появляются реальные записи токенов).
 Критерии авто: изоляция ключей по профилю, удаление только своего сервиса, отсутствие значений в файлах `user://`. Ручные: REQ-PRF-03 п.4, REQ-NFR-05 п.4.
 
-#### T-011 — Реестр запомненных устройств `[game]`
+#### T-011 — Реестр запомненных устройств `[game]` — `review`
+Статус. Сдано developer B в коммите f3a8f0f (вместе с T-012), ждёт приёмки tester. Факт: `src/profiles/remembered_devices.gd` (`RememberedDevices`), хук каскадного удаления подключён к `ProfileRepository`.
 Что сделать. `src/profiles/remembered_devices.gd` — `RememberedDevices extends RefCounted`: `remember_trainer(id, name)` (общий для устройства, хранится в `user://devices.json`), `remember_sensor(profile_id, id, name, kind)` (в данных профиля), `forget(profile_id_or_null, id)`, `trainer() -> Dictionary`, `sensors_for(profile_id) -> Array`. Хук удаления профиля удаляет только его датчики. В `ProfileRepository.delete` подключить хуки T-010 и T-011 — тем самым закрыть REQ-PRF-01 п.3, 4.
 Файлы: `src/profiles/remembered_devices.gd`, правка `profile_repository.gd` (подтверждение удаления — флаг `confirmed: bool` в `delete(id, confirmed)`).
 Закрывает: REQ-PRF-04 п.2, 3, 4; REQ-PRF-01 п.3, 4; REQ-DEV-06 п.1 (часть «хранение»).
 Критерии авто: все. Ручных нет.
 
-#### T-012 — Оболочка приложения и экран выбора профиля `[game]`
+#### T-012 — Оболочка приложения и экран выбора профиля `[game]` — `review`
+Статус. Сдано developer B в коммите f3a8f0f (вместе с T-011), ждёт приёмки tester. Факт (имена отличаются от плана): `src/app/main.tscn` + `src/app/main.gd` (корневая сцена; `run/main_scene` задан в `project.godot`), `src/app/app_state.gd` (`AppState` — модель навигации, проверяется headless), `src/app/locale.gd` (выбор языка — задел NFR-08 п.3), `src/ui/profile_select/profile_select.tscn/.gd`, `src/ui/home/home.tscn/.gd`, `assets/i18n/strings.csv` (+ сгенерированные `strings.ru.translation`, `strings.en.translation`). Каталог `src/app/` — ещё один вне структуры CLAUDE.md (см. Н-2: предложить признать `src/app/` и `src/session/`).
 Что сделать. `src/ui/app_shell.gd` + `src/ui/app_shell.tscn` — корневая сцена, `src/ui/navigation_state.gd` — чистая модель навигации (`enum Screen { CREATE_FIRST_PROFILE, SELECT_PROFILE, MAIN, DEV_WORKOUT, ... }`, `initial_screen(profile_count) -> Screen`, `can_open_main() -> bool`), проверяемая headless без сцены. Сцены `src/ui/profile_select.tscn` (+`.gd`) и `src/ui/profile_create.tscn` (+`.gd`), минимальная вёрстка `Control`. Все строки через `tr()`; завести `assets/i18n/translations.csv` (ключи, `ru`, `en`) и подключить в `project.godot` — задел для NFR-08. `project.godot`: главная сцена `app_shell.tscn`.
 Файлы: перечисленные выше, `assets/i18n/translations.csv`, правка `project.godot`.
 Закрывает: REQ-PRF-05 п.1, 2, 3; REQ-NFR-08 п.1 (заделка; закрытие — T-054).
 Критерии авто: `initial_screen` для 0/1/2 профилей; главный экран недоступен без выбора. Ручные: REQ-PRF-05 п.4.
 
-#### T-013 — `SessionTicker` и экран разработчика `[game]`
+#### T-013 — `SessionTicker` и экран разработчика `[game]` — `in-progress`
+Статус. У developer B (вместе с T-014). Корневая сцена и `AppState` — из T-012 (`src/app/`), экран разработчика добавляется как `src/ui/dev_workout/`; сессия — `WorkoutSession` из `src/session/`; устройство — `TrainerFactory`.
 Что сделать. `src/ui/session_ticker.gd` — `Node`, который на каждом кадре (или по `Timer`) сравнивает `Time.get_ticks_msec()` с последней отметкой и вызывает `tick()` сессии столько раз, сколько полных секунд прошло (догон после заморозки кадра — основа REQ-NFR-02.2). `src/devices/system_clock.gd` — `Clock` на `Time.get_ticks_msec()`. `src/ui/dev_workout_screen.tscn` (+`.gd`) — кнопка «Старт», текстовые метки: шаг, цель, мощность, каденс, осталось; план — встроенный тестовый (3 шага) или из `tests/fixtures/`; устройство — `DeviceFactory.create_trainer(&"fake")` со сценарием «постоянная». Доступ с главного экрана при включённом `OS.is_debug_build()` или настройке `ovosch/dev_mode`.
 Файлы: `src/ui/session_ticker.gd`, `src/devices/system_clock.gd`, `src/ui/dev_workout_screen.tscn/.gd`.
 Закрывает: REQ-DEV-09 п.6, REQ-WRK-01 п.5 (в приложении), REQ-NFR-02 п.1.
 Критерии авто: 60 вызовов `tick()` без `_process` дают корректные переходы; сцена инстанцируется headless. Ручных нет.
 
-#### T-014 — Архитектурные и инфраструктурные проверки `[game]`
+#### T-014 — Архитектурные и инфраструктурные проверки `[game]` — `in-progress`
+Статус. У developer B (вместе с T-013). До решения Н-2 скрипт `check_arch.sh` считает допустимыми каталоги `src/session/` и `src/app/` (они могут зависеть от `src/devices/`; `src/domain/` — нет).
 Что сделать (developer — скрипты, tester — тесты поверх них). `scripts/check_secrets.sh` — grep по шаблонам `client_secret`, `api_key=`, `Bearer `, `refresh_token` в `src/`, `tests/fixtures/`, `project.godot` с белым списком плейсхолдеров; `scripts/check_uids.sh` — осиротевшие `.gd` без `.gd.uid`; `scripts/check_arch.sh` — `OS.get_name()`/`OS.has_feature()` только в `src/devices/ble_*` и `src/storage/secure_store*`, в `src/domain/` нет `preload`/`load` на `src/devices|ui|scene3d`, C++/ObjC только в `native/ble/`. Для REQ-NFR-09.2 — `src/domain/` экспортирует список публичных методов через `ClassDB`/рефлексию скрипта, тест-инвентаризация (tester) сверяет с вызовами в тестах. Для REQ-INF-03.1 — `fetch-depth: 0` в `actions/checkout` (решение В-9, теперь критерий; правка `ci.yml` входит в задачу). Архитектурная проверка учитывает решение по Н-2 (`src/session/`).
 Файлы: `scripts/check_secrets.sh`, `scripts/check_uids.sh`, `scripts/check_arch.sh`, правка `.github/workflows/ci.yml`.
 Закрывает: REQ-INF-03 п.1–4, REQ-INF-04 п.1–3, REQ-NFR-06 п.1–3, REQ-NFR-09 п.2, 4.
@@ -244,13 +254,22 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 
 ### Этап 2 — BLE для iOS и macOS. Результат: реальное подключение к Tacx Neo
 
-#### T-015 — Контракт `BleBridge` и `StubBleBridge` `[game]`
-Что сделать. `src/devices/ble_bridge.gd` — `BleBridge extends RefCounted`, контракт из requirements.md (раздел DEV): методы `start_scan(service_uuids: PackedStringArray)`, `stop_scan()`, `connect_device(device_id)`, `disconnect_device(device_id)`, `subscribe(device_id, char_uuid)`, `write(device_id, char_uuid, bytes: PackedByteArray, with_response: bool)`, `read_characteristic(device_id, service_uuid, char_uuid)` (решение В-2); сигналы `device_found(id, name, rssi, service_uuids)`, `connected(id)`, `disconnected(id, reason)`, `value(id, char_uuid, bytes)`, `write_result(id, char_uuid, ok)`, `characteristic_read(device_id, char_uuid, bytes)`. `src/devices/stub_ble_bridge.gd` — скриптуемая заглушка: `emit_device_found(...)`, `emit_value(...)`, журнал вызовов `calls: Array[Dictionary]`, настраиваемые ответы на `write` (ok/fail) и автоматический ответ Control Point. `src/devices/ble_bridge_factory.gd` — выбирает `BleBridgeNative` (если `ClassDB.class_exists("BleBridgeNative")`) или заглушку; единственное место платформенной проверки в `src/devices/`.
+#### T-015 — Контракт `BleBridge` и `StubBleBridge` `[game]` — `review`
+Статус. Сдано developer A в коммите 03cce42 (вместе с T-016), приёмка tester идёт. Факт — каталог `src/devices/ble/`:
+- `ble_bridge.gd` — `BleBridge`: методы `is_available()`, `start_scan(service_uuids)`, `stop_scan()`, `connect_peripheral(id)`, `disconnect_peripheral(id)`, `discover_services(id)`, `subscribe(id, service_uuid, char_uuid)`, `unsubscribe(...)`, `write(id, service_uuid, char_uuid, bytes, with_response)`, `read_characteristic(id, service_uuid, char_uuid)`, `get_adapter_state()`, `static create_default()`; сигналы `adapter_state_changed(state)`, `device_found(id, name, rssi, service_uuids)`, `connected(id)`, `disconnected(id, reason)`, `services_discovered(id, services)`, `notification(id, char_uuid, bytes)`, `characteristic_read(id, char_uuid, bytes)`, `write_done(id, char_uuid, ok)`, `error(id, code, message)`.
+- `stub_ble_bridge.gd` — `StubBleBridge`: журнал вызовов (`calls_of`, `writes_to`), `emit_*` для всех событий, `set_device_services`, `set_read_value`, `fail_next_write/connect/read/control_point`, `pump()`.
+- `native_ble_bridge.gd` — `NativeBleBridge`: обёртка над нативным классом `OvoschBle` (`ClassDB.class_exists(&"OvoschBle")`), пробрасывает сигналы 1:1.
+- `ble_uuids.gd` — `BleUuids`: константы сервисов/характеристик, `SCAN_SERVICES`, `normalize/to_full/equals`, `device_kind(service_uuids)`.
+Имена отличаются от вводного абзаца раздела DEV в requirements.md (`connect`/`value`/`write_result`) — вопрос Н-3. Карточки T-017..T-022 читать с этими именами; нативный класс в T-021 — `OvoschBle`, а не `BleBridgeNative`.
+
+Исходный план. `src/devices/ble_bridge.gd` — `BleBridge extends RefCounted`, контракт из requirements.md (раздел DEV): методы `start_scan(service_uuids: PackedStringArray)`, `stop_scan()`, `connect_device(device_id)`, `disconnect_device(device_id)`, `subscribe(device_id, char_uuid)`, `write(device_id, char_uuid, bytes: PackedByteArray, with_response: bool)`, `read_characteristic(device_id, service_uuid, char_uuid)` (решение В-2); сигналы `device_found(id, name, rssi, service_uuids)`, `connected(id)`, `disconnected(id, reason)`, `value(id, char_uuid, bytes)`, `write_result(id, char_uuid, ok)`, `characteristic_read(device_id, char_uuid, bytes)`. `src/devices/stub_ble_bridge.gd` — скриптуемая заглушка: `emit_device_found(...)`, `emit_value(...)`, журнал вызовов `calls: Array[Dictionary]`, настраиваемые ответы на `write` (ok/fail) и автоматический ответ Control Point. `src/devices/ble_bridge_factory.gd` — выбирает `BleBridgeNative` (если `ClassDB.class_exists("BleBridgeNative")`) или заглушку; единственное место платформенной проверки в `src/devices/`.
 Закрывает: контракт для REQ-DEV-01..08; REQ-NFR-06 п.1.
 Критерии авто: заглушка реализует весь контракт; журнал вызовов. Ручных нет.
 
-#### T-016 — Кодеки BLE-характеристик `[game]`
-Что сделать. Чистые функции без состояния (кроме CSC, которому нужны предыдущие значения).
+#### T-016 — Кодеки BLE-характеристик `[game]` — `review`
+Статус. Сдано developer A в коммите 03cce42 (вместе с T-015). Факт — `src/devices/ble/codecs/`: `ftms_codec.gd` (`FtmsCodec.decode_indoor_bike_data`, `encode_request_control/set_target_power/set_resistance_level/start/stop/pause`, `decode_control_point_response`, `decode_resistance_range`, `percent_to_resistance_level(percent, range)`, `decode_machine_status`, плюс `encode_*` для тестов), `hrs_codec.gd` (`HrsCodec`), `csc_codec.gd` + `csc_cadence_calculator.gd` (`CscCadenceCalculator.push/current/reset`), `cps_codec.gd` (`CpsCodec`), `battery_codec.gd` (`BatteryCodec`), `ble_bytes.gd` (`BleBytes` — чтение/запись LE). Приёмка tester нашла дефект **D-2** (в работе у developer A): (а) `CscCadenceCalculator` не выдаёт 0 после 3 с без оборотов (REQ-DEV-04 п.3); (б) `percent_to_resistance_level` без диапазона `0x2AD6` насыщается на 25.5 (переполнение uint8 в единицах 0.1 — 100 % должно давать уровень по `DEFAULT_RESISTANCE_MAX_LEVEL`, не 255×0.1; REQ-WRK-04 п.2). После фикса — повторная приёмка.
+
+Исходный план. Чистые функции без состояния (кроме CSC, которому нужны предыдущие значения).
 - `src/devices/ftms_codec.gd`: `parse_indoor_bike_data(bytes) -> Dictionary` по флагам (мощность sint16, каденс uint16×0.5, скорость uint16×0.01, пульс uint8), `parse_control_point_response(bytes) -> {opcode, result}`, `encode_request_control() -> [0x00]`, `encode_set_target_power(w) -> [0x05, lo, hi]` (250 → `05 FA 00`), `encode_set_resistance_level(level) -> [0x04, uint8 ×0.1]` (5.0 → `04 32`), `parse_resistance_range(bytes)` для `0x2AD6`, `parse_machine_status(bytes)`. UUID-константы `0x1826`, `0x2AD2`, `0x2AD9`, `0x2ADA`, `0x2AD6`.
 - `src/devices/hrs_codec.gd`: `parse_heart_rate_measurement(bytes) -> {bpm, sensor_contact: int}` (`00 48` → 72; `01 48 00` → 72).
 - `src/devices/csc_codec.gd`: `CscCadenceCalculator` с переполнением uint16/uint32, Δоборотов 3 при Δвремени 2048 → 90 rpm, 3 с без оборотов → 0.
@@ -258,12 +277,14 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - `src/devices/battery_codec.gd`: `parse_level(bytes)`.
 Закрывает: REQ-DEV-02 п.2–5; REQ-DEV-03 п.1; REQ-DEV-04 п.1–3; REQ-DEV-05 п.1; REQ-DEV-07 п.2 (разбор). Критерии авто: все. Ручных нет.
 
-#### T-017 — `BleTrainer` `[game]`
-Что сделать. `src/devices/ble_trainer.gd` — `BleTrainer extends TrainerDevice` поверх `BleBridge`: на `connected` подписывается на `0x2AD2`, `0x2ADA`, `0x2AD9`, затем `write` Request Control; телеметрия из Indoor Bike Data → `telemetry_received`; `set_target_power`/`set_resistance_level` → `write` с кодеками; ответ CP с `result != 0x01` → `command_result(opcode, false, result)` и сообщение пользователю (ключ перевода); `write_result=false` → `command_result(..., false, -1)`. `device_factory.gd` возвращает `BleTrainer` для `&"ble"`.
+#### T-017 — `BleTrainer` `[game]` — `in-progress`
+Статус. У developer A (вместе с T-018).
+Что сделать. `src/devices/ble/ble_trainer.gd` — `BleTrainer extends TrainerDevice` поверх `BleBridge`: `connect_device(id)` → `connect_peripheral` → на `connected` — `discover_services`, затем `subscribe` на `BleUuids.INDOOR_BIKE_DATA`, `FTMS_STATUS`, `FTMS_CONTROL_POINT`, затем `write` Request Control; `read_characteristic(SUPPORTED_RESISTANCE_RANGE)` → диапазон для `percent_to_resistance_level`; `notification` Indoor Bike Data → сигнал `telemetry(TrainerSample)`, пульс из IBD → `heart_rate`; `set_target_power`/`set_erg_enabled`/`set_resistance_level` → `write` с `FtmsCodec`; ответ CP с `result != 0x01` → `error(CONTROL_POINT_REJECTED, …)`; `write_done(ok=false)` → `error(WRITE_FAILED, …)`; `disconnected` во время работы → `RECONNECTING` (логика повторов — T-024). `TrainerFactory` возвращает `BleTrainer` для BLE. Уточнение DEV-08.3 (requirements.md): после `connected` на паузе — только Request Control, цель уходит при `resume`.
 Закрывает: REQ-DEV-02 п.1, 3. Критерии авто: последовательность подписок и Request Control на `StubBleBridge`, маппинг ошибок. Ручные: REQ-DEV-02 п.6, 7.
 
-#### T-018 — BLE-датчики и `SensorHub` `[game]`
-Что сделать. `src/devices/ble_heart_rate_sensor.gd`, `src/devices/ble_cadence_sensor.gd`, `src/devices/ble_power_meter.gd` (реализуют `SensorDevice` из T-004; подписки `0x2A37`, `0x2A5B`, `0x2A63`; пульс без контакта → недостоверный, не эмитится). `src/devices/sensor_hub.gd` — объединяет источники в одну «текущую телеметрию»: пульс HRS > станок; каденс CSC > CPS > станок; мощность — `set_power_source(&"trainer" | &"power_meter")`, по умолчанию станок; выбор сохраняется в профиле. Выход — сигнал `merged_telemetry(sample)` для сэмплера T-023 и HUD.
+#### T-018 — BLE-датчики и `SensorHub` `[game]` — `in-progress`
+Статус. У developer A (вместе с T-017). `SensorDevice` в T-004 не создавался — вводится здесь.
+Что сделать. `src/devices/sensor_device.gd` (интерфейс датчика: сигналы `connection_state_changed`, `value_received(value, timestamp_sec)`, `battery_level_changed(percent)`; `connect_device/disconnect_device/tick`), `src/devices/ble/ble_heart_rate_sensor.gd`, `src/devices/ble/ble_cadence_sensor.gd`, `src/devices/ble/ble_power_meter.gd` (подписки `HEART_RATE_MEASUREMENT`, `CSC_MEASUREMENT`, `CYCLING_POWER_MEASUREMENT` через `subscribe(id, service, char)`; пульс без контакта → недостоверный, не эмитится). `src/devices/sensor_hub.gd` — объединяет источники в одну «текущую телеметрию»: пульс HRS > станок; каденс CSC > CPS > станок; мощность — `set_power_source(&"trainer" | &"power_meter")`, по умолчанию станок; выбор сохраняется в профиле. Выход — сигнал `merged_telemetry(sample)` для сэмплера T-023 и HUD.
 Закрывает: REQ-DEV-03 п.2, 3; REQ-DEV-04 п.4; REQ-DEV-05 п.2, 3. Критерии авто: все. Ручные: REQ-DEV-03 п.4, REQ-DEV-04 п.5, REQ-DEV-05 п.4.
 
 #### T-019 — Сканер и список устройств `[game]`
@@ -275,11 +296,11 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-DEV-06 п.1–4; REQ-DEV-07 п.1–3. Критерии авто: все. Ручные: REQ-DEV-06 п.5, REQ-DEV-07 п.4.
 
 #### T-021 — Каркас GDExtension `[native-ble]`
-Что сделать. `native/ble/SConstruct` (или `CMakeLists.txt`) с godot-cpp как git submodule или задокументированной зависимостью; `native/ble/ble_bridge.gdextension` с `entry_symbol` и путями библиотек для `macos`, `ios`; `native/ble/src/register_types.cpp`, `native/ble/src/ble_bridge_native.h/.cpp` — класс `BleBridgeNative : public RefCounted` с методами и сигналами контракта (имена и сигнатуры 1:1 с `src/devices/ble_bridge.gd`); платформонезависимая реализация-заглушка (все методы — no-op с `UtilityFunctions::push_warning`), чтобы код компилировался на любой платформе; `native/ble/README.md` — как собрать на macOS (`scons platform=macos target=template_debug`), куда кладётся `.framework`/`.dylib`. В контейнере проверяется только статически: соответствие сигнатур контракту, наличие файлов. После написания — `blocked: нужен macOS`.
+Что сделать. `native/ble/SConstruct` (или `CMakeLists.txt`) с godot-cpp как git submodule или задокументированной зависимостью; `native/ble/ble_bridge.gdextension` с `entry_symbol` и путями библиотек для `macos`, `ios`; `native/ble/src/register_types.cpp`, `native/ble/src/ovosch_ble.h/.cpp` — класс `OvoschBle : public RefCounted` (имя ожидает `NativeBleBridge.NATIVE_CLASS`) с методами `start_scan`, `stop_scan`, `connect_peripheral`, `disconnect_peripheral`, `discover_services`, `subscribe`, `unsubscribe`, `write`, `read_characteristic`, `get_adapter_state` и сигналами `adapter_state_changed`, `device_found`, `connected`, `disconnected`, `services_discovered`, `notification`, `characteristic_read`, `write_done`, `error` — сигнатуры 1:1 с `src/devices/ble/ble_bridge.gd`; платформонезависимая реализация-заглушка (все методы — no-op с `UtilityFunctions::push_warning`), чтобы код компилировался на любой платформе; `native/ble/README.md` — как собрать на macOS (`scons platform=macos target=template_debug`), куда кладётся `.framework`/`.dylib`. В контейнере проверяется только статически: соответствие сигнатур контракту, наличие файлов. После написания — `blocked: нужен macOS`.
 Закрывает: REQ-DEV-01 п.6 (`[вне контейнера]`), REQ-NFR-06 п.2. Критерии авто: нет. Вне контейнера: сборка для macOS и iOS.
 
 #### T-022 — CoreBluetooth-реализация `[native-ble]`
-Что сделать. `native/ble/src/platform/apple/ble_bridge_apple.mm` (+ `.h`): `CBCentralManager` + делегаты; `start_scan` с `CBUUID` из `service_uuids`; `connect` → discover services/characteristics → событие `connected`; `subscribe` → `setNotifyValue`; `write` → `writeValue:type:` с `withResponse`/`withoutResponse`, `write_result` из `didWriteValueForCharacteristic`; `read_characteristic` → `readValueForCharacteristic`, ответ — `characteristic_read` (отличать от нотификаций `value` по признаку `isNotifying`/ожидающему запросу чтения); `value` из `didUpdateValueForCharacteristic`; `disconnected(id, reason)` из `didDisconnectPeripheral`. Все события маршалятся в главный поток Godot через `call_deferred`. Описание разрешений (`NSBluetoothAlwaysUsageDescription`) — в T-053. После написания — `blocked: нужен macOS`.
+Что сделать. `native/ble/src/platform/apple/ble_bridge_apple.mm` (+ `.h`): `CBCentralManager` + делегаты; `adapter_state_changed` из `centralManagerDidUpdateState`; `start_scan` с `CBUUID` из `service_uuids`; `connect_peripheral` → `connected`; `discover_services` → discover services/characteristics → `services_discovered(id, {service: [chars]})`; `subscribe` → `setNotifyValue`; `write` → `writeValue:type:` с `withResponse`/`withoutResponse`, `write_done` из `didWriteValueForCharacteristic`; `read_characteristic` → `readValueForCharacteristic`, ответ — `characteristic_read` (отличать от нотификаций `notification` по ожидающему запросу чтения); `notification` из `didUpdateValueForCharacteristic`; `disconnected(id, reason)` из `didDisconnectPeripheral`; ошибки CoreBluetooth → `error(id, code, message)`. Все события маршалятся в главный поток Godot через `call_deferred`. Описание разрешений (`NSBluetoothAlwaysUsageDescription`) — в T-053. После написания — `blocked: нужен macOS`.
 Закрывает: REQ-DEV-01 п.5, 6; REQ-DEV-02 п.6, 7 — все ручные/вне контейнера. Критерии авто: нет.
 
 ### Этап 3 — Тренировка и ERG. Результат: можно тренироваться
@@ -293,11 +314,11 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-DEV-08 п.1–4. Критерии авто: все. Ручные: REQ-DEV-08 п.5, 6.
 
 #### T-025 — `ErgController`: цели, рампы, множитель, задержка ≤ 1 с `[game]`
-Что сделать. `src/domain/erg_controller.gd`: подписан на `step_started` и `tick_processed` сессии; цель = `target.watts_at(progress, ftp) × multiplier`, округление до целого; на границе шага отправка немедленно (≤ 1 с по журналу `FakeTrainer`); рампа — пересчёт каждую секунду, отправка при изменении ≥ 1 Вт и не чаще 1 раза в секунду; шаг без цели — не отправлять Set Target Power; `write_result=false`/`command_result(ok=false)` → один повтор в пределах той же секунды. Множитель: `set_intensity(pct)` 50–150 с шагом 5, по умолчанию 100; изменение в ERG → новая цель ≤ 1 с; значение сохраняется в сессии для заезда. Проверка на 20-интервальном плане и при «нагрузке на кадр» 200 мс (эмулируется задержкой тика).
+Что сделать. `src/domain/erg_controller.gd`: подписан на `step_started` и `tick_processed` сессии; цель = `target.watts_at(progress, ftp) × multiplier`, округление до целого; на границе шага отправка немедленно (≤ 1 с по журналу `FakeTrainer`); рампа — пересчёт каждую секунду, отправка при изменении ≥ 1 Вт и не чаще 1 раза в секунду; шаг без цели (FreeRide) — по решению В-10: `set_erg_enabled(false)` + `set_resistance_level(уровень пользователя)` не позже 1 с после начала шага, на следующем шаге с целью — `set_erg_enabled(true)` + цель в ту же секунду, переключатель ERG на HUD остаётся «вкл» (режим шага, не выбор пользователя); `error(WRITE_FAILED)`/`error(CONTROL_POINT_REJECTED)` → один повтор в пределах той же секунды. База — `WorkoutSession` из T-007 (довести, не создавать). Множитель: `set_intensity(pct)` 50–150 с шагом 5, по умолчанию 100; изменение в ERG → новая цель ≤ 1 с; значение сохраняется в сессии для заезда. Проверка на 20-интервальном плане и при «нагрузке на кадр» 200 мс (эмулируется задержкой тика).
 Закрывает: REQ-WRK-02 п.1–5; REQ-WRK-07 п.1, 2, 3, 5; REQ-NFR-01 п.1, 2. Критерии авто: все. Ручные: REQ-WRK-02 п.6, REQ-NFR-01 п.3.
 
 #### T-026 — Режим сопротивления и переключатель ERG `[game]`
-Что сделать. В `erg_controller.gd` (или `src/domain/load_mode.gd`): `erg_enabled` (по умолчанию `true`); `toggle_erg()` — одно действие; выключение → Set Target Resistance Level текущего уровня ≤ 1 с; включение → Set Target Power цели ≤ 1 с (с множителем); таймер и сэмплы не прерываются; уровень 0–100 % шаг 5, хранится в профиле; перевод % в единицы станка по `0x2AD6` (если есть, через `get_capabilities()`) или линейно в 0–100 единиц 0.1; при включённом ERG изменение уровня сохраняется, но не отправляется. Переключения ERG записываются в журнал событий сессии (для LOC-01.4).
+Что сделать. В `erg_controller.gd` (или `src/domain/load_mode.gd`): `erg_enabled` (по умолчанию `true`); `toggle_erg()` — одно действие; выключение → Set Target Resistance Level текущего уровня ≤ 1 с; включение → Set Target Power цели ≤ 1 с (с множителем); таймер и сэмплы не прерываются; уровень 0–100 % шаг 5, хранится в профиле; перевод % в единицы станка — `FtmsCodec.percent_to_resistance_level(percent, range)` с диапазоном из `0x2AD6` (читается `BleTrainer` в T-017) или `DEFAULT_RESISTANCE_MAX_LEVEL` без него (после фикса D-2); при включённом ERG изменение уровня сохраняется, но не отправляется. Различать пользовательское «ERG выкл» и режим FreeRide по В-10 (второе не меняет состояние переключателя). Переключения ERG записываются в журнал событий сессии (для LOC-01.4).
 Закрывает: REQ-WRK-04 п.1–3; REQ-WRK-03 п.1 (состояние), 2–5. Критерии авто: все. Ручные: REQ-WRK-03 п.1 (отображение), REQ-WRK-04 п.4.
 
 #### T-027 — Управление сессией: пауза, завершение, пропуск, события, экран `[game]`
@@ -445,6 +466,20 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - REQ-NFR-02 п.3 — при принудительном FPS 15 поток 1 Гц без пропусков.
 - Сверка модели эмулятора с реальным Neo: время выхода на целевую мощность после Set Target Power (в `FakeTrainer` — ≤ 3 с до ±5 %); если у Neo заметно иначе — скорректировать константы эмулятора, чтобы приёмочные тесты NFR-01/WRK-02 отражали реальность.
 
+### Из приёмки T-009/T-010 (коммит f3a8f0f) — защищённое хранилище
+- REQ-PRF-03 п.4 — на macOS/iOS реализация Keychain хранит и возвращает ключ Intervals.icu и токены Strava после перезапуска приложения (в контейнере — только `EncryptedFileSecureStore`, временная реализация).
+- REQ-NFR-05 п.3 — платформенные реализации (Keychain, Android Keystore, libsecret/Credential Manager) существуют и описаны в `docs/secure_store.md`; `EncryptedFileSecureStore` не считается выполнением этого критерия для магазинных сборок.
+- REQ-NFR-05 п.4 — на macOS значение видно в Keychain Access после привязки и исчезает после отвязки.
+
+### Из приёмки T-015/T-016 (коммит 03cce42) — после сборки GDExtension, на реальных устройствах
+- REQ-DEV-01 п.5 — Tacx Neo появляется в списке сканирования в течение 5 с; п.6 — GDExtension (`OvoschBle`) собирается для macOS и iOS и подхватывается `NativeBleBridge`.
+- REQ-DEV-02 п.6 — мощность, каденс, скорость из Indoor Bike Data реального Neo соответствуют педалированию (проверить разбор флагов `FtmsCodec.decode_indoor_bike_data` на реальных пакетах, снять дамп в `tests/fixtures/ble/`); п.7 — сопротивление меняется после Set Target Power.
+- REQ-DEV-03 п.4 — реальный нагрудный датчик: формат uint8/uint16 и флаг контакта.
+- REQ-DEV-04 п.5 — реальный датчик каденса: переполнение счётчиков, каденс 0 при остановке (после фикса D-2).
+- REQ-DEV-05 п.4 — реальный измеритель мощности (crank data при наличии).
+- REQ-DEV-07 п.4 — заряд батареи датчиков через `read_characteristic` Battery Level на экране устройств.
+- REQ-WRK-04 п.4 — уровень сопротивления ощущается при педалировании. Замечание: прочитать у реального Neo `0x2AD6` (Supported Resistance Level Range) и сверить с `DEFAULT_RESISTANCE_MAX_LEVEL`; если Neo не отдаёт `0x2AD6` или даёт иной диапазон — скорректировать константу/маппинг в `FtmsCodec`.
+
 ### На Tacx Neo и датчиках (этапы 2–3)
 - REQ-DEV-01 п.5 — Tacx Neo в списке в течение 5 с после начала сканирования.
 - REQ-DEV-02 п.6 — мощность, каденс, скорость меняются при педалировании; п.7 — сопротивление меняется после Set Target Power.
@@ -500,7 +535,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 
 Открытые вопросы агенту requirements:
 - Н-1. REQ-INF-01 п.2 и CLAUDE.md говорят `./scripts/test.sh -gtest=res://tests/unit/<файл>.gd`, а фактически (коммит dd23677) одиночный файл запускается `-gselect=<имя файла>`. Просьба привести формулировку критерия (и CLAUDE.md) к факту или вернуть `-gtest`.
-- Н-2. Developer A разместил `WorkoutSession` и `SampleStream` в `src/session/` — такого каталога нет в структуре CLAUDE.md (домен — `src/domain/`). Нужно решение: признать `src/session/` слоем «состояние сессии» (дополнить CLAUDE.md и REQ-NFR-06 п.3: `src/session/` может зависеть от `src/devices/`, домен — нет) или перенести в `src/domain/` с портом устройства. Влияет на архитектурную проверку T-014.
+- Н-2. В коде появились каталоги вне структуры CLAUDE.md: `src/session/` (`WorkoutSession`, `SampleStream` — developer A) и `src/app/` (`main.tscn`, `AppState`, `Locale` — developer B). Предложение: признать оба слоя (дополнить CLAUDE.md и REQ-NFR-06 п.3: `src/session/` и `src/app/` могут зависеть от `src/devices/`, `src/domain/` — нет) вместо переноса. Влияет на архитектурную проверку T-014 (пока скрипт считает их допустимыми).
+- Н-3. Вводный абзац раздела DEV в requirements.md описывает контракт моста именами `connect(device_id)`, `disconnect(device_id)`, `value(id, char_uuid, bytes)`, `write_result(id, char_uuid, ok)`, а реализация (коммит 03cce42, `src/devices/ble/ble_bridge.gd`) использует `connect_peripheral`, `disconnect_peripheral`, `notification`, `write_done`, плюс добавлены `discover_services`/`services_discovered`, `unsubscribe`, `get_adapter_state`/`adapter_state_changed`, `error`, а `subscribe`/`write` принимают ещё `service_uuid`. Предлагаю согласовать документ с кодом (код — источник имён для `[native-ble]` задач T-021/T-022 и для приёмочных тестов), а не переименовывать код.
 
 ### Решено (агент requirements, коммит a023c87; внесено в requirements.md с пометкой «решение менеджера, подтвердить владельцу»)
 - В-1 (PRF-02, HUD-04) — поле профиля `max_hr`, валидация 100–220, по умолчанию пусто → зоны пульса недоступны, HUD-04 показывает «—»; по умолчанию 5 зон от max HR (60/70/80/90 %), переопределяются вручную или из Intervals.icu. Учтено в T-009, T-028.
@@ -512,6 +548,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - В-7 (D3D-05) — замер draw calls переведён в `[ручная проверка]`; в `[авто]` — бюджет узлов/материалов сцены и статическая проверка отсутствия аллокаций в per-frame коде. Учтено в T-052.
 - В-8 (WRK-08, LOC-01, LOC-05, STR-02) — источник скорости: FTMS Indoor Bike Data, если станок её даёт, иначе расчёт по модели D3D-02; `speed_source` фиксируется в метаданных заезда. Учтено в T-023, T-041, T-050.
 - В-9 (INF-03) — `fetch-depth: 0` в `actions/checkout` добавлен как критерий. Учтено в T-014.
+- В-10 (WRK-02 п.5, IMP-01 п.2; по наблюдению tester при приёмке T-007) — на шаге FreeRide при включённом ERG станок переводится в режим сопротивления (`set_erg_enabled(false)` + `set_resistance_level(уровень пользователя)`) не позже 1 с после начала шага; на следующем шаге с целью ERG возвращается (`set_erg_enabled(true)` + цель) в ту же секунду; переключатель ERG на HUD остаётся «вкл» — это режим шага, не выбор пользователя. Учтено в T-025, T-026.
+- Уточнение DEV-08 п.3 (наблюдение tester, приоритет В-4) — при обрыве и восстановлении на паузе цель уходит при `resume`, а не ≤ 1 с после `connected`; после `connected` на паузе — только Request Control. Учтено в T-017, T-024.
 
 ## 6. Трассируемость REQ → задачи
 
@@ -572,7 +610,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | NFR-02 | T-006, T-013, T-023 |
 | NFR-03 | T-032, T-036, T-048 |
 | NFR-04 | T-027 |
-| NFR-05 | T-010, T-046, T-053 |
+| NFR-05 | T-010 (п.1, 2 — контейнер; `EncryptedFileSecureStore` временная), T-046, T-053 (п.3 — платформенные реализации, вне контейнера) |
 | NFR-06 | T-002, T-014, T-015, T-021, T-055 |
 | NFR-07 | T-053, T-055 |
 | NFR-08 | T-012, T-054 |

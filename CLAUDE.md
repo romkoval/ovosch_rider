@@ -13,6 +13,7 @@
 - `src/devices/` — `TrainerDevice` (интерфейс), `FakeTrainer`, `BleTrainer`, датчики, `ble/` (контракт моста `BleBridge`, заглушка, кодеки). Только здесь известно, какая реализация подключена.
 - `src/session/` — `WorkoutSession`, `SampleStream`: связка исполнителя с `TrainerDevice`, поток 1 Гц. Единственный слой, который знает и домен, и интерфейс устройства (не реализацию).
 - `src/integrations/` — Intervals.icu, Strava, парсеры ZWO/.erg/.mrc, FIT.
+- `src/app/` — оболочка: `AppState` (навигация, правило старта), `main.tscn` (корневая сцена), `locale.gd`.
 - `src/profiles/`, `src/storage/`, `src/ui/`, `src/scene3d/`.
 - `native/ble/` — GDExtension (C++/Objective-C++). Только задачи `[native-ble]`.
 - `tests/unit/`, `tests/integration/`, `tests/fixtures/` — GUT. Файлы `test_*.gd`, `extends GutTest`.
