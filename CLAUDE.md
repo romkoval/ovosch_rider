@@ -10,7 +10,8 @@
 
 ## Структура
 - `src/domain/` — модель тренировки, исполнитель интервалов, зоны, расчёты. Без Node, без сцен, чистый GDScript (RefCounted).
-- `src/devices/` — `TrainerDevice` (интерфейс), `FakeTrainer`, `BleTrainer`, датчики. Только здесь известно, какая реализация подключена.
+- `src/devices/` — `TrainerDevice` (интерфейс), `FakeTrainer`, `BleTrainer`, датчики, `ble/` (контракт моста `BleBridge`, заглушка, кодеки). Только здесь известно, какая реализация подключена.
+- `src/session/` — `WorkoutSession`, `SampleStream`: связка исполнителя с `TrainerDevice`, поток 1 Гц. Единственный слой, который знает и домен, и интерфейс устройства (не реализацию).
 - `src/integrations/` — Intervals.icu, Strava, парсеры ZWO/.erg/.mrc, FIT.
 - `src/profiles/`, `src/storage/`, `src/ui/`, `src/scene3d/`.
 - `native/ble/` — GDExtension (C++/Objective-C++). Только задачи `[native-ble]`.
