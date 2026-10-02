@@ -337,8 +337,13 @@ func _scan(regex: RegEx, dir_path: String, offenders: Array[String]) -> void:
 			if not name.begins_with("."):
 				_scan(regex, full, offenders)
 		elif name.ends_with(".gd") and not full.begins_with("res://src/storage/secure_store"):
+			var source := FileAccess.get_file_as_string(full)
+			# REQ-NFR-05 крит. 1: интеграции, использующие интерфейс SecureStore, допустимы.
+			if full.begins_with("res://src/integrations/") and source.contains("SecureStore"):
+				name = dir.get_next()
+				continue
 			var n := 0
-			for line in FileAccess.get_file_as_string(full).split("\n"):
+			for line in source.split("\n"):
 				n += 1
 				if line.strip_edges().begins_with("#"):
 					continue

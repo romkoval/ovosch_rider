@@ -676,12 +676,15 @@ func test_req_nfr_08_c1_every_ui_key_in_sources_and_scenes_exists_in_csv() -> vo
 func test_req_nfr_08_c1_scene_text_properties_are_keys_not_literals() -> void:
 	var table := _load_csv()
 	var re := RegEx.create_from_string('(?m)^(?:text|dialog_text|ok_button_text|cancel_button_text|placeholder_text|tooltip_text) = "([^"]*)"')
+	var letters := RegEx.create_from_string("\\p{L}")
 	var literals: Array[String] = []
 	for path in _files_recursive("res://src/ui", [".tscn"]) + _files_recursive("res://src/app", [".tscn"]):
 		for m in re.search_all(FileAccess.get_file_as_string(path)):
 			var value := m.get_string(1)
 			if value.is_empty():
 				continue
+			if letters.search(value) == null:
+				continue # надписи без букв («+5 %», «−5», «—») не требуют перевода
 			if not table.has(value):
 				literals.append("%s: %s" % [path, value])
 	assert_eq(literals, [], "текстовые свойства сцен без ключа перевода: %s" % str(literals))

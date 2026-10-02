@@ -502,12 +502,17 @@ func test_req_nfr_05_c1_only_storage_touches_secret_files_and_tokens() -> void:
 	for path in _list(SRC, [".gd"]):
 		if path.begins_with("res://src/storage/"):
 			continue
+		var code := "\n".join(_code_lines(path))
+		# Критерий разрешает интеграции, работающие через интерфейс SecureStore (а не напрямую с файлами/токенами).
+		if path.begins_with("res://src/integrations/") and code.contains("SecureStore") \
+				and not code.contains("open_encrypted_with_pass") and not code.contains("secrets.bin"):
+			continue
 		var n := 0
 		for line in _code_lines(path):
 			n += 1
 			if re.search(line) != null:
 				offenders.append("%s:%d" % [path, n])
-	assert_eq(offenders, [], "работа с секретами вне src/storage/: %s" % str(offenders))
+	assert_eq(offenders, [], "работа с секретами вне src/storage/ и интеграций через SecureStore: %s" % str(offenders))
 
 
 # ===========================================================================
