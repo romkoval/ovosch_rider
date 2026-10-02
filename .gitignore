@@ -1,0 +1,13 @@
+# Godot
+.godot/
+*.import.tmp
+export_presets.cfg
+tests/reports/
+# Native build
+native/**/bin/
+native/**/.sconsign.dblite
+native/**/*.o
+native/**/*.os
+# Local secrets / config
+*.local.cfg
+.env

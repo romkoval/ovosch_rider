@@ -1,0 +1,18 @@
+; Engine configuration file.
+; It's actually a TOML-like file. Godot parses and rewrites it on save.
+
+config_version=5
+
+[application]
+
+config/name="ovosch-rider"
+config/description="Тренировки на умном велостанке: план из Intervals.icu, ERG, 3D-визуал, выгрузка в Strava."
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
