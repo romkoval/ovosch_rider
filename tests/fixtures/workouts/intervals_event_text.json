@@ -1,0 +1,9 @@
+{
+  "id": 1002,
+  "start_date_local": "2026-10-02T00:00:00",
+  "category": "WORKOUT",
+  "type": "VirtualRide",
+  "name": "Threshold text only",
+  "duration": 3360,
+  "description": "Warmup\n- 10m 65%\n- 5m 250w\n\n3x (4m 105%, 2m 50%)\n\n- 8m ramp 50-75%\n- 10m 85-95% 90rpm\n\nCooldown\n- 5m 40%"
+}

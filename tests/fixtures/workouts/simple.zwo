@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <author>ovosch-rider tests</author>
+    <name>Simple Endurance</name>
+    <description>Разминка, ровный блок, заминка.</description>
+    <sportType>bike</sportType>
+    <tags>
+        <tag name="endurance"/>
+    </tags>
+    <workout>
+        <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.65"/>
+        <SteadyState Duration="1200" Power="0.65" Cadence="90"/>
+        <FreeRide Duration="120" FlatRoad="1"/>
+        <Cooldown Duration="180" PowerLow="0.55" PowerHigh="0.35"/>
+    </workout>
+</workout_file>

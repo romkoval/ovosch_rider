@@ -1,0 +1,23 @@
+[COURSE HEADER]
+VERSION = 2
+UNITS = ENGLISH
+DESCRIPTION = Sweet spot with text
+FILE NAME = sweet_spot_text.mrc
+MINUTES PERCENT
+[END COURSE HEADER]
+[COURSE DATA]
+0	50
+5	50
+5	90
+15	90
+15	100
+20	100
+20	40
+25	40
+[END COURSE DATA]
+[COURSE TEXT]
+0	Разминка	10
+300	Свит-спот начинается	10
+900	Последний блок: 100 %	10
+1200	Заминка	10
+[END COURSE TEXT]

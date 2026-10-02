@@ -1,0 +1,8 @@
+{
+  "id": 1003,
+  "category": "WORKOUT",
+  "type": "Ride",
+  "name": "Heart rate based",
+  "duration": 1800,
+  "description": "- 10m 65%\n- 20m 140-150bpm"
+}

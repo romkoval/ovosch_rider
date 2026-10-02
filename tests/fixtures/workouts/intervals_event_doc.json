@@ -1,0 +1,21 @@
+{
+  "id": 1001,
+  "start_date_local": "2026-10-02T00:00:00",
+  "category": "WORKOUT",
+  "type": "Ride",
+  "name": "Sweet Spot 3x10",
+  "description": "Warmup\n- 10m 50-70%\n\n3x\n- 10m 88-94%\n- 5m 55%\n\n- 10m 50%",
+  "duration": 3900,
+  "workout_doc": {
+    "duration": 3900,
+    "steps": [
+      {"duration": 600, "warmup": true, "ramp": true, "power": {"start": 50, "end": 70, "units": "%ftp"}, "text": "Разминка"},
+      {"reps": 3, "steps": [
+        {"duration": 600, "power": {"start": 88, "end": 94, "units": "%ftp"}, "cadence": 90, "text": "Свит-спот"},
+        {"duration": 300, "power": {"value": 55, "units": "%ftp"}}
+      ]},
+      {"duration": 300, "power": {"value": 180, "units": "w"}, "cadence": {"start": 85, "end": 95}},
+      {"duration": 300, "cooldown": true, "power": {"low": 40, "high": 60}}
+    ]
+  }
+}
