@@ -78,6 +78,7 @@ func after_all() -> void:
 
 func _make(track: Track) -> RideScene:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	s.environment_set = (load(DEFAULT_ENV) as EnvironmentSet).duplicate() as EnvironmentSet
 	if track != null:
 		s.set_track(track)
