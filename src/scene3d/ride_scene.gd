@@ -43,8 +43,6 @@ const LEAN_GAIN: float = 1.6
 const LEAN_MAX_RAD: float = 0.45
 const LEAN_TAU_SEC: float = 0.35
 const GRAVITY: float = 9.81
-## Потолок сигнальных столбиков на сторону (четверть бюджета MultiMesh на обе стороны).
-const MAX_PROPS_PER_SIDE: int = PerfBudget.MAX_MULTIMESH_INSTANCES / 8
 
 @export var environment_set: EnvironmentSet = null
 ## Seed процедурной трассы по умолчанию.
@@ -112,7 +110,6 @@ func set_track(new_track: Track) -> void:
 	_road.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_environment_root.add_child(_road)
 	_build_world()
-	_props = _build_props()
 	if _props != null:
 		_environment_root.add_child(_props)
 	distance_m = 0.0
@@ -346,7 +343,9 @@ func _material_or(material: Material, fallback_path: String) -> Material:
 	return material if material != null else load(fallback_path) as Material
 
 
-## Обочина, полоса травы, рельеф и растительность — по трассе, один раз.
+## Обочина, полоса травы, рельеф, столбики и растительность — по трассе, один раз.
+## Столбики строятся первыми: растительности остаётся бюджет видимых экземпляров
+## MultiMesh за вычетом видимых столбиков (REQ-D3D-08 п.6, `PerfBudget`).
 func _build_world() -> void:
 	var e: EnvironmentSet = environment_set
 	var world_mat: Material = _material_or(e.world_material, DEFAULT_WORLD_MATERIAL)
@@ -359,8 +358,14 @@ func _build_world() -> void:
 	if e.terrain_enabled:
 		_terrain = TerrainField.build(track, e.rolling_height_m, e.hills_height_m, e.scenery_seed)
 		_add_world_node(_no_shadow(_terrain.build_mesh(grass_mat)))
-	var props_count: int = _props_count()
-	for node in SceneryBuilder.build(track, e, _terrain, world_mat, PerfBudget.MAX_MULTIMESH_INSTANCES - props_count):
+	_props = _build_props()
+	var posts_visible: int = 0
+	var posts_total: int = 0
+	if _props != null:
+		posts_visible = PerfBudget.max_visible_along([_props], track)
+		posts_total = int(PerfBudget.count(_props)["multimesh_instances"])
+	for node in SceneryBuilder.build(track, e, _terrain, world_mat, PerfBudget.MAX_VISIBLE_MULTIMESH_INSTANCES - posts_visible,
+			PerfBudget.MAX_MULTIMESH_INSTANCES - posts_total):
 		_add_world_node(node)
 
 
@@ -376,41 +381,11 @@ func _add_world_node(node: Node) -> void:
 	_environment_root.add_child(node)
 
 
-## Столбиков на сторону: с шагом `prop_spacing_m`, но не больше `MAX_PROPS_PER_SIDE` —
-## на длинном маршруте шаг растёт, и бюджет MultiMesh остаётся растительности.
-func _props_per_side() -> int:
-	if environment_set == null or environment_set.prop_spacing_m <= 0.0:
-		return 0
-	return mini(int(track.length_m() / environment_set.prop_spacing_m), MAX_PROPS_PER_SIDE)
-
-
-func _props_count() -> int:
-	return _props_per_side() * 2
-
-
+## Сигнальные столбики (`RoadsideBuilder.build_posts`): шаг `prop_spacing_m` по всей
+## трассе, на длинной — куски с дальностью видимости.
 func _build_props() -> MultiMeshInstance3D:
 	if environment_set == null or environment_set.prop_spacing_m <= 0.0:
 		return null
-	var count: int = _props_count()
-	if count <= 0:
-		return null
 	var e: EnvironmentSet = environment_set
 	var mesh := SceneryBuilder.delineator_mesh(e.prop_size, _material_or(e.prop_material, DEFAULT_WORLD_MATERIAL))
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = count
-	var sample := TrackSample.new()
-	var ground: float = RoadsideBuilder.verge_height(e.prop_offset_m, e.road_width_m) - 0.05
-	var spacing: float = maxf(e.prop_spacing_m, track.length_m() / float(maxi(_props_per_side(), 1)))
-	for i in count:
-		var s: float = float(i / 2) * spacing
-		track.sample_into(s, sample)
-		var side: float = -1.0 if i % 2 == 0 else 1.0
-		var right: Vector3 = sample.right()
-		var pos: Vector3 = sample.position + right * (e.road_center_offset_m + side * e.prop_offset_m) + sample.up * ground
-		mm.set_instance_transform(i, Transform3D(Basis.looking_at(sample.forward, sample.up), pos))
-	var node := MultiMeshInstance3D.new()
-	node.name = "Props"
-	node.multimesh = mm
-	return node
+	return RoadsideBuilder.build_posts(track, e, mesh)

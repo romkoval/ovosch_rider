@@ -5,9 +5,14 @@ extends RefCounted
 ## с разбросом масштаба, поворота и оттенка (цвет экземпляра). Деревья стоят рощами
 ## (маска шума) и не ближе `TREE_MIN_ROAD_M` к оси трассы. Меши — из `MeshKit`, один
 ## тун-материал мира. Всё строится один раз в `set_track()`, детерминированно по seed.
+## На длинной трассе каждый тип разбит на куски вдоль трассы с дальностью видимости
+## (REQ-D3D-08 п.6, T-066): плотность — на километр, в кадре столько же, сколько на петле.
 
 const TREE_MIN_ROAD_M: float = 9.0
 const TREE_MAX_OFFSET_M: float = 200.0
+## Длина трассы, на которую рассчитаны числа объектов `EnvironmentSet` (петля по умолчанию
+## ~2.1 км); на трассе длиннее — пропорционально длине (плотность на километр).
+const DENSITY_REFERENCE_M: float = 2200.0
 
 static var _meshes: Dictionary = {}
 
@@ -98,11 +103,40 @@ static func _cached(key: String, material: Material, build: Callable) -> ArrayMe
 	return mesh
 
 
-## Построить узлы растительности. `budget` — сколько экземпляров MultiMesh осталось на всё.
-## `field` может быть null (рельеф выключен) — тогда высота берётся у дороги.
-static func build(track: Track, env: EnvironmentSet, field: TerrainField, material: Material, budget: int) -> Array[MultiMeshInstance3D]:
-	var wanted: int = maxi(env.tree_count, 0) + maxi(env.bush_count, 0) + maxi(env.tuft_count, 0)
-	var scale: float = 1.0 if wanted <= budget else float(maxi(budget, 0)) / float(maxi(wanted, 1))
+## Построить узлы растительности: по узлу на тип (лиственные, ели, кусты, трава). На
+## длинной трассе (не компактной, `PerfBudget.chunk_length_m`) каждый тип разбит на куски
+## вдоль трассы с `visibility_range_end`; кусок 0 — узел типа, остальные — его дети.
+## Числа `EnvironmentSet` заданы на петлю длиной до `DENSITY_REFERENCE_M`; на длинной
+## трассе — пропорционально длине (плотность на километр), но не больше `total_budget`
+## всего. `budget` — сколько экземпляров MultiMesh осталось на видимое из любой точки
+## трассы: если видно больше, каждый кусок прореживается одинаково. `field` может быть
+## null (рельеф выключен) — тогда высота берётся у дороги.
+static func build(track: Track, env: EnvironmentSet, field: TerrainField, material: Material, budget: int,
+		total_budget: int = PerfBudget.MAX_MULTIMESH_INSTANCES) -> Array[MultiMeshInstance3D]:
+	var out: Array[MultiMeshInstance3D] = []
+	for layer in place(track, env, field, material, budget, total_budget):
+		out.append(chunked_multimesh(layer.name, layer.mesh, layer.xf, layer.col, layer.chunk, layer.chunks,
+			layer.range_m if layer.chunks > 1 else 0.0, layer.keep))
+	return out
+
+
+## Расстановка без узлов (данные `build`): слои — лиственные, ели, кусты, трава; у слоя
+## трансформы и цвета экземпляров, кусок каждого и доля `keep`, которая останется в каждом
+## куске. Позиции экземпляров готовых MultiMesh на headless-сервере недоступны — тесты
+## проверяют расстановку здесь.
+static func place(track: Track, env: EnvironmentSet, field: TerrainField, material: Material, budget: int,
+		total_budget: int = PerfBudget.MAX_MULTIMESH_INSTANCES) -> Array[Layer]:
+	var chunk_m: float = PerfBudget.chunk_length_m(track)
+	var chunks: int = PerfBudget.chunk_count(track, chunk_m)
+	var length: float = track.length_m()
+	var per_length: float = maxf(1.0, length / DENSITY_REFERENCE_M)
+	var wanted: int = int((maxi(env.tree_count, 0) + maxi(env.bush_count, 0) + maxi(env.tuft_count, 0)) * per_length)
+	var cap: int = maxi(total_budget, 0)
+	# Компактный мир виден целиком — урезается заранее; на длинной трассе видимое
+	# считается после расстановки по кускам.
+	if chunks == 1:
+		cap = mini(cap, maxi(budget, 0))
+	var scale: float = per_length if wanted <= cap else per_length * float(cap) / float(maxi(wanted, 1))
 	var n_trees: int = int(env.tree_count * scale)
 	var n_bushes: int = int(env.bush_count * scale)
 	var n_tufts: int = int(env.tuft_count * scale)
@@ -112,19 +146,16 @@ static func build(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	forest.seed = env.scenery_seed + 7
 	forest.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	forest.frequency = 1.0 / 140.0
-	var length: float = track.length_m()
-	var half: float = env.road_width_m * 0.5
 	var curb_out: float = RoadsideBuilder.curb_outer_m(env.road_width_m)
 	var verge_w: float = RoadsideBuilder.verge_width_m(env.road_width_m)
 	var sample := TrackSample.new()
-	var out: Array[MultiMeshInstance3D] = []
+	var trees := Layer.new("Trees", tree_mesh(material), PerfBudget.RANGE_TREES_M, chunks)
+	var pines := Layer.new("Conifers", conifer_mesh(material), PerfBudget.RANGE_TREES_M, chunks)
+	var bushes := Layer.new("Bushes", bush_mesh(material), PerfBudget.RANGE_BUSHES_M, chunks)
+	var tufts := Layer.new("Tufts", tuft_mesh(material), PerfBudget.RANGE_TUFTS_M, chunks)
 	# Деревья: лиственные и ели — рощами по маске шума.
-	var round_xf: Array[Transform3D] = []
-	var round_col: Array[Color] = []
-	var pine_xf: Array[Transform3D] = []
-	var pine_col: Array[Color] = []
 	var attempts: int = n_trees * 8
-	while attempts > 0 and round_xf.size() + pine_xf.size() < n_trees:
+	while attempts > 0 and trees.xf.size() + pines.xf.size() < n_trees:
 		attempts -= 1
 		var s: float = rng.randf() * length
 		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
@@ -145,19 +176,14 @@ static func build(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var xf := Transform3D(basis, Vector3(p.x, y - 0.1, p.z))
 		var conifer: bool = forest.get_noise_2d(p.x + 913.0, p.z - 377.0) > 0.15
 		var shade: float = rng.randf_range(0.85, 1.12)
+		var chunk: int = PerfBudget.chunk_of(s, chunk_m, chunks)
 		if conifer:
-			pine_xf.append(xf)
-			pine_col.append(Color(shade, shade, shade * rng.randf_range(0.95, 1.05), 1.0))
+			pines.add(xf, Color(shade, shade, shade * rng.randf_range(0.95, 1.05), 1.0), chunk)
 		else:
-			round_xf.append(xf)
-			round_col.append(Color(shade * rng.randf_range(0.95, 1.12), shade, shade * 0.9, 1.0))
-	out.append(_multimesh("Trees", tree_mesh(material), round_xf, round_col))
-	out.append(_multimesh("Conifers", conifer_mesh(material), pine_xf, pine_col))
+			trees.add(xf, Color(shade * rng.randf_range(0.95, 1.12), shade, shade * 0.9, 1.0), chunk)
 	# Кусты: у кювета и в поле.
-	var bush_xf: Array[Transform3D] = []
-	var bush_col: Array[Color] = []
 	attempts = n_bushes * 6
-	while attempts > 0 and bush_xf.size() < n_bushes:
+	while attempts > 0 and bushes.xf.size() < n_bushes:
 		attempts -= 1
 		var s: float = rng.randf() * length
 		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
@@ -170,13 +196,10 @@ static func build(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
 		var sc: float = rng.randf_range(0.6, 1.3)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.1), sc))
-		bush_xf.append(Transform3D(basis, Vector3(p.x, y - 0.08, p.z)))
 		var shade: float = rng.randf_range(0.85, 1.15)
-		bush_col.append(Color(shade, shade, shade * 0.95, 1.0))
-	out.append(_multimesh("Bushes", bush_mesh(material), bush_xf, bush_col))
+		bushes.add(Transform3D(basis, Vector3(p.x, y - 0.08, p.z)), Color(shade, shade, shade * 0.95, 1.0),
+			PerfBudget.chunk_of(s, chunk_m, chunks))
 	# Пучки травы: 85 % — вдоль бордюра (мелькают у края кадра), остальное — по обочине.
-	var tuft_xf: Array[Transform3D] = []
-	var tuft_col: Array[Color] = []
 	for i in n_tufts:
 		var s: float = rng.randf() * length
 		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
@@ -187,11 +210,16 @@ static func build(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var y: float = sample.position.y + RoadsideBuilder.verge_height(w, env.road_width_m)
 		var sc: float = rng.randf_range(0.7, 1.6)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.3), sc))
-		tuft_xf.append(Transform3D(basis, Vector3(p.x, y - 0.02, p.z)))
 		var dry: float = rng.randf()
-		tuft_col.append(Color(1.0 + dry * 0.15, 1.0, 1.0 - dry * 0.2, 1.0))
-	out.append(_multimesh("Tufts", tuft_mesh(material), tuft_xf, tuft_col))
-	return out
+		tufts.add(Transform3D(basis, Vector3(p.x, y - 0.02, p.z)), Color(1.0 + dry * 0.15, 1.0, 1.0 - dry * 0.2, 1.0),
+			PerfBudget.chunk_of(s, chunk_m, chunks))
+	var layers: Array[Layer] = [trees, pines, bushes, tufts]
+	if chunks > 1:
+		var seen: int = _max_visible(layers, chunks, track)
+		if seen > budget:
+			for layer in layers:
+				layer.keep = float(maxi(budget, 0)) / float(seen)
+	return layers
 
 
 static func _ground_y(p: Vector3, w: float, road_y: float, road_width: float, verge_w: float, field: TerrainField) -> float:
@@ -200,16 +228,136 @@ static func _ground_y(p: Vector3, w: float, road_y: float, road_width: float, ve
 	return field.height_at(p.x, p.z)
 
 
-static func _multimesh(node_name: String, mesh: Mesh, xforms: Array[Transform3D], cols: Array[Color]) -> MultiMeshInstance3D:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = mesh
-	mm.instance_count = xforms.size()
+## Экземпляры одного типа объектов до разбиения на куски: `chunk[i]` — кусок экземпляра i
+## из `chunks`; в каждом куске останется доля `keep` (первые по порядку расстановки).
+class Layer:
+	var name: String
+	var mesh: Mesh
+	var range_m: float
+	var chunks: int
+	var keep: float = 1.0
+	var xf: Array[Transform3D] = []
+	var col: Array[Color] = []
+	var chunk := PackedInt32Array()
+
+	func _init(node_name: String, layer_mesh: Mesh, visible_m: float, chunk_total: int) -> void:
+		name = node_name
+		mesh = layer_mesh
+		range_m = visible_m
+		chunks = chunk_total
+
+	func add(t: Transform3D, c: Color, chunk_index: int) -> void:
+		xf.append(t)
+		col.append(c)
+		chunk.append(chunk_index)
+
+	## Индексы экземпляров, которые попадут в узлы (с учётом `keep`).
+	func kept() -> PackedInt32Array:
+		var out := PackedInt32Array()
+		var per_chunk := PackedInt32Array()
+		per_chunk.resize(maxi(chunks, 1))
+		for i in xf.size():
+			per_chunk[chunk[i] if chunks > 1 else 0] += 1
+		var limit := PackedInt32Array()
+		limit.resize(per_chunk.size())
+		for k in per_chunk.size():
+			limit[k] = per_chunk[k] if keep >= 1.0 else int(float(per_chunk[k]) * maxf(keep, 0.0))
+		var used := PackedInt32Array()
+		used.resize(per_chunk.size())
+		for i in xf.size():
+			var k: int = chunk[i] if chunks > 1 else 0
+			if used[k] < limit[k]:
+				used[k] += 1
+				out.append(i)
+		return out
+
+
+## Максимум видимых экземпляров по точкам трассы (шаг `PerfBudget.CHECK_STEP_M`) — по
+## центрам кусков, как `PerfBudget.visible_multimesh_instances` по готовым узлам.
+static func _max_visible(layers: Array[Layer], chunks: int, track: Track) -> int:
+	var centers := PackedVector3Array()
+	var counts := PackedInt32Array()
+	var ranges := PackedFloat32Array()
+	for layer in layers:
+		var lo := PackedVector3Array()
+		var hi := PackedVector3Array()
+		var n := PackedInt32Array()
+		lo.resize(chunks)
+		hi.resize(chunks)
+		n.resize(chunks)
+		lo.fill(Vector3(INF, INF, INF))
+		hi.fill(Vector3(-INF, -INF, -INF))
+		for i in layer.xf.size():
+			var k: int = layer.chunk[i]
+			var p: Vector3 = layer.xf[i].origin
+			lo[k] = lo[k].min(p)
+			hi[k] = hi[k].max(p)
+			n[k] += 1
+		for k in chunks:
+			if n[k] > 0:
+				centers.append((lo[k] + hi[k]) * 0.5)
+				counts.append(n[k])
+				ranges.append(layer.range_m + PerfBudget.RANGE_MARGIN_M + PerfBudget.EYE_SLACK_M)
+	var length: float = track.length_m()
+	var steps: int = maxi(int(ceil(length / PerfBudget.CHECK_STEP_M)), 1)
+	var sample := TrackSample.new()
+	var best: int = 0
+	for i in steps:
+		track.sample_into(minf(float(i) * PerfBudget.CHECK_STEP_M, length), sample)
+		var seen: int = 0
+		for j in centers.size():
+			if sample.position.distance_to(centers[j]) <= ranges[j]:
+				seen += counts[j]
+		best = maxi(best, seen)
+	return best
+
+
+## Узел типа объектов, разбитый на `chunks` кусков: кусок 0 — сам узел (имя `node_name`),
+## остальные — его дети (`<имя>_<k>`; пустые не создаются). У каждого куска `custom_aabb`
+## по позициям экземпляров (центр AABB — точка отсчёта дальности видимости); `range_m` > 0 —
+## дальность видимости куска. `keep` < 1 — в каждом куске остаётся эта доля экземпляров
+## (первые по порядку расстановки; порядок случайный — прореживание равномерное).
+## `cols` пустой — без цвета экземпляра.
+static func chunked_multimesh(node_name: String, mesh: Mesh, xforms: Array[Transform3D], cols: Array[Color],
+		chunk: PackedInt32Array, chunks: int, range_m: float, keep: float = 1.0) -> MultiMeshInstance3D:
+	var buckets: Array[PackedInt32Array] = []
+	buckets.resize(maxi(chunks, 1))
 	for i in xforms.size():
-		mm.set_instance_transform(i, xforms[i])
-		mm.set_instance_color(i, MeshKit.lin(cols[i]))
-	var node := MultiMeshInstance3D.new()
-	node.name = node_name
-	node.multimesh = mm
-	return node
+		var k: int = chunk[i] if chunks > 1 else 0
+		buckets[k].append(i)
+	var pad: float = mesh.get_aabb().size.length() if mesh != null else 1.0
+	var root: MultiMeshInstance3D = null
+	for k in buckets.size():
+		var idx: PackedInt32Array = buckets[k]
+		var n: int = idx.size() if keep >= 1.0 else int(float(idx.size()) * maxf(keep, 0.0))
+		if k > 0 and n == 0:
+			continue
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = not cols.is_empty()
+		mm.mesh = mesh
+		mm.instance_count = n
+		var lo := Vector3(INF, INF, INF)
+		var hi := Vector3(-INF, -INF, -INF)
+		for j in n:
+			var t: Transform3D = xforms[idx[j]]
+			mm.set_instance_transform(j, t)
+			if mm.use_colors:
+				mm.set_instance_color(j, MeshKit.lin(cols[idx[j]]))
+			lo = lo.min(t.origin)
+			hi = hi.max(t.origin)
+		var node := MultiMeshInstance3D.new()
+		node.multimesh = mm
+		if n > 0:
+			var half := Vector3.ONE * pad
+			mm.custom_aabb = AABB(lo - half, (hi - lo) + half * 2.0)
+			if range_m > 0.0:
+				node.visibility_range_end = range_m
+				node.visibility_range_end_margin = PerfBudget.RANGE_MARGIN_M
+		if k == 0:
+			node.name = node_name
+			root = node
+		else:
+			node.name = "%s_%02d" % [node_name, k]
+			root.add_child(node)
+	return root

@@ -130,6 +130,54 @@ static func build(track: Track, road_width_m: float, center_offset_m: float, wor
 	return {"roadside": roadside, "verge": verge_node}
 
 
+## Столбиков на сторону: с шагом `spacing_m` по всей трассе (плотность на километр,
+## T-066); потолок — восьмая часть общего потолка MultiMesh на сторону.
+static func posts_per_side(track: Track, spacing_m: float) -> int:
+	if spacing_m <= 0.0:
+		return 0
+	return mini(int(track.length_m() / spacing_m), PerfBudget.MAX_MULTIMESH_INSTANCES / 8)
+
+
+## Сигнальные столбики по обеим сторонам дороги с шагом `prop_spacing_m` (REQ-D3D-03,
+## D3D-07): один `MultiMeshInstance3D` «Props»; на длинной трассе — куски вдоль трассы с
+## дальностью видимости `PerfBudget.RANGE_POSTS_M` (кусок 0 — сам узел, остальные — его
+## дети). null — столбики выключены.
+static func build_posts(track: Track, env: EnvironmentSet, mesh: Mesh) -> MultiMeshInstance3D:
+	var placed: Dictionary = place_posts(track, env)
+	var xforms: Array[Transform3D] = placed["xf"]
+	if xforms.is_empty():
+		return null
+	var chunks: int = placed["chunks"]
+	var no_colors: Array[Color] = []
+	return SceneryBuilder.chunked_multimesh("Props", mesh, xforms, no_colors, placed["chunk"], chunks,
+		PerfBudget.RANGE_POSTS_M if chunks > 1 else 0.0)
+
+
+## Расстановка столбиков без узлов: `{xf: Array[Transform3D], chunk: PackedInt32Array, chunks: int}`
+## (позиции экземпляров готовых MultiMesh на headless-сервере недоступны — тесты смотрят сюда).
+static func place_posts(track: Track, env: EnvironmentSet) -> Dictionary:
+	var xforms: Array[Transform3D] = []
+	var chunk := PackedInt32Array()
+	var per_side: int = posts_per_side(track, env.prop_spacing_m)
+	if per_side <= 0:
+		return {"xf": xforms, "chunk": chunk, "chunks": 1}
+	var count: int = per_side * 2
+	var chunk_m: float = PerfBudget.chunk_length_m(track)
+	var chunks: int = PerfBudget.chunk_count(track, chunk_m)
+	var sample := TrackSample.new()
+	var ground: float = verge_height(env.prop_offset_m, env.road_width_m) - 0.05
+	var spacing: float = maxf(env.prop_spacing_m, track.length_m() / float(per_side))
+	for i in count:
+		var s: float = float(i / 2) * spacing
+		track.sample_into(s, sample)
+		var side: float = -1.0 if i % 2 == 0 else 1.0
+		var right: Vector3 = sample.right()
+		var pos: Vector3 = sample.position + right * (env.road_center_offset_m + side * env.prop_offset_m) + sample.up * ground
+		xforms.append(Transform3D(Basis.looking_at(sample.forward, sample.up), pos))
+		chunk.append(PerfBudget.chunk_of(s, chunk_m, chunks))
+	return {"xf": xforms, "chunk": chunk, "chunks": chunks}
+
+
 static func _add_verge_side(kit: MeshKit, centers: PackedVector3Array, rights: PackedVector3Array,
 		ups: PackedVector3Array, limits: PackedFloat32Array, sgn: float, curb_out: float) -> void:
 	var cols: int = VERGE_PROFILE.size()
