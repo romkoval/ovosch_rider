@@ -5,8 +5,11 @@
 унаследованные из Feather (`check`, `chevron-*`, `clock`, `plus`, `square`, `trash-2`,
 `upload`, `x` и др.), — MIT; полный текст обеих лицензий — `LICENSE` рядом.
 
-Состав — только иконки из `docs/game/ui.md` п. 7 и шевроны `chevron-up`/`chevron-down`
-для `SpinBox`/`OptionButton` (п. 9.1).
+Состав — только иконки из `docs/game/ui.md` п. 7, шевроны `chevron-up`/`chevron-down`
+для `SpinBox`/`OptionButton` (п. 9.1) и иконки баннера (п. 6, T-093): `info` — сведения,
+`triangle-alert` — предупреждение, `circle-alert` — ошибка (все три — из Feather, MIT).
+
+Загружать иконки из кода — через `UiIcons.icon("имя")` (`src/ui/theme/ui_icons.gd`, с кэшем).
 
 Изменения относительно оригинала:
 

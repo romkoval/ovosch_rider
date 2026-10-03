@@ -1,0 +1,11 @@
+[gd_resource type="FontVariation" format=3]
+
+[ext_resource type="FontFile" path="res://assets/fonts/inter/Inter-Variable.res" id="1_nf7ki"]
+
+[resource]
+base_font = ExtResource("1_nf7ki")
+variation_opentype = {
+1869640570: 16,
+2003265652: 700
+}
+spacing_glyph = 1

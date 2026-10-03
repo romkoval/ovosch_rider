@@ -24,6 +24,10 @@ const ON_ACCENT: Color = Color("#0B0E13")
 const SIM: Color = Color("#F0B45A")
 const WARN: Color = Color("#FFC24D")
 const DANGER: Color = Color("#C23A36")
+## Наведение и нажатие опасной кнопки (`ui.md` п. 4, 13): `danger` темнее на 8 % и 16 % —
+## светлый текст на светлеющем красном терял бы контраст (≥ 4.5:1 с `text`).
+const DANGER_HOVER: Color = Color("#B23532")
+const DANGER_PRESSED: Color = Color("#A3312D")
 const DANGER_TEXT: Color = Color("#FF6B6B")
 const SCRIM: Color = Color(0.0, 0.0, 0.0, 0.55)
 ## Тень диалогов и всплывающих меню (`ui.md` п. 3): 24 lp, альфа 0.5, смещение (0, 8).
@@ -43,6 +47,8 @@ const BANNER_ALPHA: float = 0.12
 const CARD_HOVER_BORDER_ALPHA: float = 0.6
 ## Альфа выделения текста в полях (`ui.md` п. 9.1).
 const SELECTION_ALPHA: float = 0.35
+## Разрядка надзаголовка Overline (`ui.md` п. 5): +6 % кегля.
+const OVERLINE_TRACKING: float = 0.06
 
 # --- HUD (`hud.md` п. 11) ---------------------------------------------------------------
 const HUD_INK: Color = Color("#0B0E13")
@@ -52,6 +58,10 @@ const HUD_PLATE: Color = Color(HUD_INK, HUD_PLATE_ALPHA)
 const HUD_CARD: Color = Color(HUD_INK, 0.55)
 ## Вуаль паузы (`hud.md` п. 10.2, 11).
 const HUD_PAUSE_VEIL: Color = Color(HUD_INK, 0.35)
+## Карточка паузы (`hud.md` п. 10.2): `surface1` (#171B22) с альфой 0.94, радиус 18·s.
+const HUD_PAUSE_CARD_ALPHA: float = 0.94
+const HUD_PAUSE_CARD: Color = Color(SURFACE1, HUD_PAUSE_CARD_ALPHA)
+const HUD_PAUSE_CARD_RADIUS: int = 18
 const HUD_TEXT: Color = Color("#F5F7FA")
 const HUD_TEXT2: Color = Color("#B9C1CD")
 const HUD_POWER_LINE: Color = Color("#F5F7FA")

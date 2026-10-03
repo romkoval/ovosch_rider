@@ -23,14 +23,20 @@ const FONT_DIR: String = "res://src/ui/theme/fonts/"
 const THEME_PATH: String = "res://src/ui/theme/app_theme.tres"
 const LUCIDE_DIR: String = "res://assets/icons/lucide/"
 
-## Начертания: имя файла → [вес, оптический размер, моноширинные цифры].
-## Оптический размер 32 — у крупных начертаний (Display, H1, цель и герой HUD), 16 — у текста.
+## Начертания: имя файла → [вес, оптический размер, моноширинные цифры, разрядка в px
+## (необязательно)]. Оптический размер 32 — у крупных начертаний (Display, H1, цель и герой
+## HUD), 16 — у текста.
+##
+## Разрядка Overline (`ui.md` п. 5: +6 %) — `FontVariation.spacing_glyph`. В Godot 4.7 это
+## целое число пикселей кегля (не доля em), поэтому +6 % от 12 lp (0.72) округляется до 1 px
+## (+8.3 %): ближайшее выразимое значение, дробную разрядку тема задать не может.
 const FONT_SPECS: Dictionary = {
 	"inter_400": [400, 16, false],
 	"inter_500": [500, 16, false],
 	"inter_600": [600, 16, false],
 	"inter_650": [650, 16, false],
 	"inter_700": [700, 16, false],
+	"inter_700_overline": [700, 16, false, OVERLINE_SPACING_PX],
 	"inter_750": [750, 32, false],
 	"inter_num_600": [600, 16, true],
 	"inter_num_650": [650, 16, true],
@@ -40,6 +46,14 @@ const FONT_SPECS: Dictionary = {
 }
 const DEFAULT_FONT: String = "inter_400"
 const DEFAULT_FONT_SIZE: int = 16
+## Кегль Overline и его разрядка в целых px (см. `FONT_SPECS`): round(12 × 0.06) = 1.
+const OVERLINE_FONT_SIZE: int = 12
+const OVERLINE_SPACING_PX: int = 1
+## Внутреннее поле `SpinBox` в Godot 4.7 — `LineEdit` с вариацией `SpinBoxInnerLineEdit`:
+## через неё полю задаётся шрифт цифр (`ui.md` п. 9.1), стили остаются от `LineEdit`.
+const SPINBOX_FIELD: String = "SpinBoxInnerLineEdit"
+## Шаги вертикальных (`StackN`) и горизонтальных (`RowN`) контейнеров, lp.
+const STACK_GAPS: Array[int] = [0, 8, 12, 16, 24]
 
 ## Радиусы и поля (`ui.md` п. 3, 6, 9).
 const RADIUS_CHIP: int = 6
@@ -49,6 +63,8 @@ const RADIUS_LARGE: int = 20
 const BUTTON_MARGIN: Vector2 = Vector2(24, 14)
 const FIELD_MARGIN: Vector2 = Vector2(14, 12)
 const FOCUS_RING: int = 2
+## Поля карточки паузы — как у `PauseOverlay.CARD_MARGIN` (T-074).
+const HUD_PAUSE_CARD_MARGIN: Vector2 = Vector2(24, 20)
 
 ## Вариации типов (`ui.md` п. 9.2): имя → базовый тип.
 const VARIATIONS: Dictionary = {
@@ -64,7 +80,10 @@ const VARIATIONS: Dictionary = {
 	"HudHeroLabel": "Label", "HudTargetLabel": "Label", "HudValueLabel": "Label",
 	"HudStripLabel": "Label", "HudUnitLabel": "Label", "HudCaptionLabel": "Label",
 	"HudZoneChipLabel": "Label", "HudButton": "Button",
-	"Stack8": "VBoxContainer", "Stack12": "VBoxContainer", "Stack16": "VBoxContainer", "Stack24": "VBoxContainer",
+	"HudPauseCard": "PanelContainer", "HudChipLabel": "Label", "HudPauseTitle": "Label",
+	"NumLabel": "Label", SPINBOX_FIELD: "LineEdit",
+	"Stack0": "VBoxContainer", "Stack8": "VBoxContainer", "Stack12": "VBoxContainer", "Stack16": "VBoxContainer", "Stack24": "VBoxContainer",
+	"Row0": "HBoxContainer", "Row8": "HBoxContainer", "Row12": "HBoxContainer", "Row16": "HBoxContainer", "Row24": "HBoxContainer",
 	"ScreenMargin": "MarginContainer", "ScreenMarginCompact": "MarginContainer", "CardMargin": "MarginContainer",
 }
 
@@ -93,6 +112,8 @@ static func make_font(name: String, base: FontFile) -> FontVariation:
 	fv.variation_opentype = {tag("wght"): int(spec[0]), tag("opsz"): int(spec[1])}
 	if bool(spec[2]):
 		fv.opentype_features = {tag("tnum"): 1}
+	if spec.size() > 3:
+		fv.spacing_glyph = int(spec[3])
 	return fv
 
 
@@ -173,6 +194,8 @@ static func _base_types(t: Theme, fonts: Dictionary) -> void:
 		t.set_color(prefix + "_disabled_icon_modulate", "SpinBox", UiTokens.TEXT_DISABLED)
 	t.set_stylebox("field_and_buttons_separator", "SpinBox", StyleBoxEmpty.new())
 	t.set_stylebox("up_down_buttons_separator", "SpinBox", StyleBoxEmpty.new())
+	t.set_font("font", SPINBOX_FIELD, fonts["inter_num_600"])
+	t.set_font_size("font_size", SPINBOX_FIELD, 16)
 
 	# OptionButton — как поле + шеврон.
 	var option_hover := _box(UiTokens.INSET, RADIUS_CONTROL, FIELD_MARGIN, 1, Color(UiTokens.ACCENT, UiTokens.CARD_HOVER_BORDER_ALPHA))
@@ -321,7 +344,9 @@ static func _label_variations(t: Theme, fonts: Dictionary) -> void:
 	_label(t, "BodyStrongLabel", fonts["inter_600"], 16)
 	_label(t, "SecondaryLabel", fonts["inter_500"], 14, UiTokens.TEXT2)
 	_label(t, "CaptionLabel", fonts["inter_500"], 13, UiTokens.TEXT2)
-	_label(t, "OverlineLabel", fonts["inter_700"], 12, UiTokens.TEXT2)
+	_label(t, "OverlineLabel", fonts["inter_700_overline"], OVERLINE_FONT_SIZE, UiTokens.TEXT2)
+	# Цифры в колонках списков (U4, `ui.md` п. 11): Body 16 с `tnum`.
+	_label(t, "NumLabel", fonts["inter_num_600"], 16)
 	_label(t, "StatLabel", fonts["inter_num_700"], 22)
 	_label(t, "StatLargeLabel", fonts["inter_num_750"], 32)
 	_label(t, "ErrorLabel", fonts["inter_500"], 13, UiTokens.DANGER_TEXT)
@@ -344,15 +369,16 @@ static func _button_variations(t: Theme, fonts: Dictionary) -> void:
 	_set_margin(ghost_empty, ghost_margin)
 	_button_styles(t, "GhostButton", ghost_empty,
 		_box(UiTokens.SURFACE2, RADIUS_CONTROL, ghost_margin),
-		_box(UiTokens.SURFACE2, RADIUS_CONTROL, ghost_margin),
+		_box(UiTokens.SURFACE3, RADIUS_CONTROL, ghost_margin),
 		null, ghost_empty)
 	_button_colors(t, "GhostButton", UiTokens.TEXT2, UiTokens.TEXT, UiTokens.TEXT_DISABLED)
 
-	# Опасная.
+	# Опасная: наведение и нажатие темнее (`ui.md` п. 4, 9.2, 13); нажатие без рамки —
+	# белая рамка читалась бы как фокус.
 	_button_styles(t, "DangerButton",
 		_box(UiTokens.DANGER, RADIUS_CONTROL, BUTTON_MARGIN),
-		_box(UiTokens.DANGER.lightened(UiTokens.ACCENT_HOVER_LIGHTEN), RADIUS_CONTROL, BUTTON_MARGIN),
-		_box(UiTokens.DANGER, RADIUS_CONTROL, BUTTON_MARGIN, 1, UiTokens.TEXT),
+		_box(UiTokens.DANGER_HOVER, RADIUS_CONTROL, BUTTON_MARGIN),
+		_box(UiTokens.DANGER_PRESSED, RADIUS_CONTROL, BUTTON_MARGIN),
 		null,
 		_box(Color(UiTokens.DANGER, 0.4), RADIUS_CONTROL, BUTTON_MARGIN))
 	_button_colors(t, "DangerButton", UiTokens.TEXT, UiTokens.TEXT, Color(UiTokens.TEXT, 0.4))
@@ -414,6 +440,12 @@ static func _hud_variations(t: Theme, fonts: Dictionary) -> void:
 	_label(t, "HudCaptionLabel", fonts["inter_650"], 12, UiTokens.HUD_TEXT2)
 	# Фишка зоны (`hud.md` п. 11): заливка — цвет зоны (данные), текст `hud.ink`.
 	_label(t, "HudZoneChipLabel", fonts["inter_750"], UiTokens.HUD_ZONE_CHIP_FONT_SIZE, UiTokens.HUD_ZONE_CHIP_TEXT)
+	# Фишка «ДАЛЕЕ» (`hud.md` п. 10.1): строка и секунды 18·s / 750 `tnum`; цвет секунд
+	# (`hud.warn`) — состояние, задаётся в компоненте.
+	_label(t, "HudChipLabel", fonts["inter_num_750"], 18, UiTokens.HUD_TEXT)
+	# Карточка паузы (`hud.md` п. 10.2): `surface1` с альфой 0.94, радиус 18·s; «Пауза» — 30·s / 750.
+	t.set_stylebox("panel", "HudPauseCard", _box(UiTokens.HUD_PAUSE_CARD, UiTokens.HUD_PAUSE_CARD_RADIUS, HUD_PAUSE_CARD_MARGIN))
+	_label(t, "HudPauseTitle", fonts["inter_750"], 30, UiTokens.HUD_TEXT)
 	# Кнопка HUD 56×56: иконка 24 + поля 16.
 	var hud_margin := Vector2(16, 16)
 	_button_styles(t, "HudButton",
@@ -429,8 +461,9 @@ static func _hud_variations(t: Theme, fonts: Dictionary) -> void:
 
 
 static func _container_variations(t: Theme) -> void:
-	for gap in [8, 12, 16, 24]:
+	for gap in STACK_GAPS:
 		t.set_constant("separation", "Stack%d" % gap, gap)
+		t.set_constant("separation", "Row%d" % gap, gap)
 	_margins(t, "ScreenMargin", 32, 24)
 	_margins(t, "ScreenMarginCompact", 24, 16)
 	_margins(t, "CardMargin", 16, 16)
