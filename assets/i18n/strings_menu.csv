@@ -27,3 +27,32 @@ ui.menu.stand.empty_action,На главный,Go home
 ui.menu.stand.row_connect,Подключить,Connect
 ui.menu.stand.mode_plan,ПЛАН,PLAN
 ui.menu.stand.mode_sim,SIM,SIM
+ui.home.plan.overline,Тренировка по плану · ERG,Planned workout · ERG
+ui.home.plan.overline_short,По плану · ERG,Plan · ERG
+ui.home.plan.source_today,Intervals.icu · сегодня,Intervals.icu · today
+ui.home.plan.source_library,Библиотека,Library
+ui.home.plan.start,Начать,Start
+ui.home.plan.other,Другая тренировка,Another workout
+ui.home.plan.from_library,Из библиотеки,From library
+ui.home.plan.import,Импорт файла,Import file
+ui.home.plan.empty_title,Выберите тренировку,Choose a workout
+ui.home.plan.empty_text,"Intervals.icu, библиотека или файл .zwo/.erg/.mrc","Intervals.icu, library or a .zwo/.erg/.mrc file"
+ui.home.stat.duration,длительность,duration
+ui.home.stat.max_target,макс. цель,max target
+ui.home.stat.steps,шагов,steps
+ui.home.ride.overline,Свободная езда · SIM,Free ride · SIM
+ui.home.ride.go,Поехать,Ride
+ui.home.ride.change,Сменить трассу,Change route
+ui.home.chip.trainer,Станок,Trainer
+ui.home.chip.hr,Пульс,Heart rate
+ui.home.chip.cadence,Каденс,Cadence
+ui.home.chip.power,Мощность,Power
+ui.home.chip.not_found,не найден,not found
+ui.home.tile.history.empty,Заездов пока нет,No rides yet
+ui.home.tile.history.today,сегодня,today
+ui.home.tile.history.yesterday,вчера,yesterday
+ui.home.tile.devices.connected,станок подключён,trainer connected
+ui.home.tile.devices.disconnected,станок не подключён,trainer not connected
+ui.home.tile.devices.ble_off,Bluetooth недоступен,Bluetooth unavailable
+ui.home.tile.settings,FTP {ftp} · {weight} кг,FTP {ftp} · {weight} kg
+ui.home.dev_menu,Отладка,Debug

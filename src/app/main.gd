@@ -111,8 +111,12 @@ func _build_screens() -> void:
 	select.setup(repo, app_state)
 	_add_screen(AppState.Screen.PROFILE_SELECT, select)
 	var home: HomeScreen = load(HOME_SCENE).instantiate()
-	home.setup(repo, app_state)
+	home.setup(repo, app_state, connections, plan_cache, workout_library, ride_repository)
+	home.dev_tools_enabled = is_debug_build()
 	home.emulator_workout_requested.connect(start_emulator_workout)
+	home.workout_start_requested.connect(_on_home_workout_start)
+	home.import_requested.connect(_on_home_import)
+	home.free_ride_requested.connect(_on_home_free_ride)
 	_add_screen(AppState.Screen.HOME, home)
 	var workout: WorkoutScreen = load(WORKOUT_SCENE).instantiate()
 	workout.session_created.connect(_on_session_created)
@@ -127,7 +131,7 @@ func _build_screens() -> void:
 	_add_screen(AppState.Screen.DEVICES, devices_screen)
 	var plan: PlanScreen = load(PLAN_SCENE).instantiate()
 	plan.setup(app_state, repo, secure_store, transport, plan_cache, workout_library)
-	plan.workout_chosen.connect(func(w: Workout, _source: String) -> void: start_workout(w))
+	plan.workout_chosen.connect(_on_plan_workout_chosen)
 	plan.emulator_chosen.connect(func() -> void:
 		if _pending_workout != null:
 			start_workout_on_emulator(_pending_workout))
@@ -169,6 +173,51 @@ func _make_placeholder(screen: int) -> Control:
 	vbox.add_child(back)
 	panel.add_child(vbox)
 	return panel
+
+
+## Отладочная сборка (редактор, отладочный экспорт): `assert` выполняется только в ней, поэтому
+## флаг ставится без обращения к `OS` (REQ-NFR-06 крит. 1). Включает кнопки разработки на главном.
+static func is_debug_build() -> bool:
+	var probe: Array[bool] = [false]
+	assert(_mark_debug(probe))
+	return probe[0]
+
+
+static func _mark_debug(probe: Array[bool]) -> bool:
+	probe[0] = true
+	return true
+
+
+func home_screen() -> HomeScreen:
+	return screen_node(AppState.Screen.HOME) as HomeScreen
+
+
+## План выбран на экране выбора: он же — «последний выбранный» карточки главного экрана.
+func _on_plan_workout_chosen(workout: Workout, source: String) -> void:
+	var home := home_screen()
+	if home != null:
+		home.remember_workout(workout, source)
+	start_workout(workout)
+
+
+## «Начать» в карточке плана (REQ-UIX-02 крит. 1): то же правило станка, что у экрана выбора;
+## без станка выбор «эмулятор / устройства» показывает экран выбора тренировки.
+func _on_home_workout_start(workout: Workout) -> void:
+	if not is_trainer_ready():
+		app_state.navigate(AppState.Screen.PLAN)
+	start_workout(workout)
+
+
+## «Импорт файла» в пустой карточке плана: экран выбора тренировки и диалог файла.
+func _on_home_import() -> void:
+	if app_state.navigate(AppState.Screen.PLAN) and plan_screen() != null:
+		plan_screen().open_import_dialog()
+
+
+## «Поехать» в карточке свободной езды (FRD-01 крит. 1). Сессию по трассе запускает T-084
+## (`start_free_ride`); до неё — переход на экран свободной езды.
+func _on_home_free_ride(_route_id: String) -> void:
+	app_state.navigate(AppState.Screen.FREE_RIDE)
 
 
 ## Кнопка Home «Тренировка на эмуляторе» (временно): тестовый план на эмуляторе.

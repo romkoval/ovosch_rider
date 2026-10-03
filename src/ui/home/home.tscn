@@ -1,6 +1,9 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://src/ui/home/home.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://src/ui/common/stat_view.tscn" id="2_stat"]
+[ext_resource type="Script" path="res://src/ui/common/plan_preview.gd" id="3_plan_preview"]
+[ext_resource type="Script" path="res://src/ui/tracks/route_preview.gd" id="4_route_preview"]
 
 [node name="Home" type="Control"]
 layout_mode = 3
@@ -11,64 +14,424 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Column" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = -32.0
+offset_bottom = -24.0
+grow_horizontal = 2
+theme_type_variation = &"Stack24"
+
+[node name="Bar" type="HBoxContainer" parent="Column"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="Logo" type="HBoxContainer" parent="Column/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"Row0"
+
+[node name="LogoMain" type="Label" parent="Column/Bar/Logo"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H1Label"
+auto_translate_mode = 2
+
+[node name="LogoAccent" type="Label" parent="Column/Bar/Logo"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H1Label"
+auto_translate_mode = 2
+
+[node name="BarSpacer" type="Control" parent="Column/Bar"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="NavIcons" type="HBoxContainer" parent="Column/Bar"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"Row8"
+
+[node name="HistoryIconButton" type="Button" parent="Column/Bar/NavIcons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "ui.home.history"
+theme_type_variation = &"IconButton"
+icon_alignment = 1
+
+[node name="DevicesIconButton" type="Button" parent="Column/Bar/NavIcons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "ui.home.devices"
+theme_type_variation = &"IconButton"
+icon_alignment = 1
+
+[node name="SettingsIconButton" type="Button" parent="Column/Bar/NavIcons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "ui.home.settings"
+theme_type_variation = &"IconButton"
+icon_alignment = 1
+
+[node name="DeviceChips" type="HBoxContainer" parent="Column/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"Row8"
+
+[node name="SwitchProfileButton" type="Button" parent="Column/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"ChipButton"
+auto_translate_mode = 2
+text = "—"
+alignment = 0
+
+[node name="DevMenuButton" type="Button" parent="Column/Bar"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "ui.home.dev_menu"
+theme_type_variation = &"IconButton"
+icon_alignment = 1
+
+[node name="Cards" type="HBoxContainer" parent="Column"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 400)
+layout_mode = 2
+theme_type_variation = &"Row24"
+
+[node name="PlanCard" type="Button" parent="Column/Cards"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+mouse_filter = 2
+theme_type_variation = &"ScenarioCard"
+
+[node name="PlanContent" type="VBoxContainer" parent="Column/Cards/PlanCard"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = -24.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 32
+mouse_filter = 2
+theme_type_variation = &"Stack8"
 
-[node name="VBox" type="VBoxContainer" parent="Margin"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="Margin/VBox"]
-layout_mode = 2
-text = "ui.home.title"
-horizontal_alignment = 1
-
-[node name="ProfileLabel" type="Label" parent="Margin/VBox"]
+[node name="PlanHeader" type="HBoxContainer" parent="Column/Cards/PlanCard/PlanContent"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.home.active_profile"
-horizontal_alignment = 1
+mouse_filter = 2
+theme_type_variation = &"Row8"
 
-[node name="WorkoutButton" type="Button" parent="Margin/VBox"]
+[node name="PlanOverline" type="Label" parent="Column/Cards/PlanCard/PlanContent/PlanHeader"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.home.workout"
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"OverlineLabel"
+text = "ui.home.plan.overline"
+uppercase = true
+text_overrun_behavior = 3
 
-[node name="EmulatorWorkoutButton" type="Button" parent="Margin/VBox"]
+[node name="PlanBody" type="VBoxContainer" parent="Column/Cards/PlanCard/PlanContent"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_type_variation = &"Stack8"
+
+[node name="PlanTitle" type="Label" parent="Column/Cards/PlanCard/PlanContent/PlanBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H1Label"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="PlanSource" type="Label" parent="Column/Cards/PlanCard/PlanContent/PlanBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="PlanPreview" type="Control" parent="Column/Cards/PlanCard/PlanContent/PlanBody"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+script = ExtResource("3_plan_preview")
+
+[node name="PlanStats" type="HBoxContainer" parent="Column/Cards/PlanCard/PlanContent/PlanBody"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"Row24"
+
+[node name="PlanDuration" parent="Column/Cards/PlanCard/PlanContent/PlanBody/PlanStats" instance=ExtResource("2_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+caption = "ui.home.stat.duration"
+
+[node name="PlanMaxTarget" parent="Column/Cards/PlanCard/PlanContent/PlanBody/PlanStats" instance=ExtResource("2_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+unit = "ui.menu.unit.w"
+caption = "ui.home.stat.max_target"
+
+[node name="PlanSteps" parent="Column/Cards/PlanCard/PlanContent/PlanBody/PlanStats" instance=ExtResource("2_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+caption = "ui.home.stat.steps"
+
+[node name="PlanEmpty" type="VBoxContainer" parent="Column/Cards/PlanCard/PlanContent"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_type_variation = &"Stack8"
+alignment = 1
+
+[node name="EmptyIcon" type="TextureRect" parent="Column/Cards/PlanCard/PlanContent/PlanEmpty"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="EmptyTitle" type="Label" parent="Column/Cards/PlanCard/PlanContent/PlanEmpty"]
+layout_mode = 2
+theme_type_variation = &"H2Label"
+text = "ui.home.plan.empty_title"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="EmptyText" type="Label" parent="Column/Cards/PlanCard/PlanContent/PlanEmpty"]
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+text = "ui.home.plan.empty_text"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="PlanButtons" type="HBoxContainer" parent="Column/Cards/PlanCard/PlanContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="StartWorkoutButton" type="Button" parent="Column/Cards/PlanCard/PlanContent/PlanButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "ui.home.plan.start"
+
+[node name="WorkoutButton" type="Button" parent="Column/Cards/PlanCard/PlanContent/PlanButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.home.plan.other"
+
+[node name="ImportButton" type="Button" parent="Column/Cards/PlanCard/PlanContent/PlanButtons"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "ui.home.plan.import"
+
+[node name="RideCard" type="Button" parent="Column/Cards"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+mouse_filter = 2
+theme_type_variation = &"ScenarioCard"
+
+[node name="RideContent" type="VBoxContainer" parent="Column/Cards/RideCard"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_type_variation = &"Stack8"
+
+[node name="RideHeader" type="HBoxContainer" parent="Column/Cards/RideCard/RideContent"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"Row8"
+
+[node name="RideOverline" type="Label" parent="Column/Cards/RideCard/RideContent/RideHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"OverlineLabel"
+text = "ui.home.ride.overline"
+uppercase = true
+text_overrun_behavior = 3
+
+[node name="RideBody" type="VBoxContainer" parent="Column/Cards/RideCard/RideContent"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_type_variation = &"Stack8"
+
+[node name="RideTitle" type="Label" parent="Column/Cards/RideCard/RideContent/RideBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H1Label"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="RideKind" type="Label" parent="Column/Cards/RideCard/RideContent/RideBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="RoutePreview" type="Control" parent="Column/Cards/RideCard/RideContent/RideBody"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 1
+script = ExtResource("4_route_preview")
+
+[node name="RideStats" type="HBoxContainer" parent="Column/Cards/RideCard/RideContent/RideBody"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"Row24"
+
+[node name="RideLength" parent="Column/Cards/RideCard/RideContent/RideBody/RideStats" instance=ExtResource("2_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="RideAscent" parent="Column/Cards/RideCard/RideContent/RideBody/RideStats" instance=ExtResource("2_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="RideMaxGrade" parent="Column/Cards/RideCard/RideContent/RideBody/RideStats" instance=ExtResource("2_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="RideButtons" type="HBoxContainer" parent="Column/Cards/RideCard/RideContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="RideButton" type="Button" parent="Column/Cards/RideCard/RideContent/RideButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "ui.home.ride.go"
+
+[node name="RouteButton" type="Button" parent="Column/Cards/RideCard/RideContent/RideButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.home.ride.change"
+
+[node name="Tiles" type="HBoxContainer" parent="Column"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row24"
+
+[node name="HistoryButton" type="Button" parent="Column/Tiles"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"CardButton"
+text = "ui.home.history"
+alignment = 0
+clip_text = true
+
+[node name="DevicesButton" type="Button" parent="Column/Tiles"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"CardButton"
+text = "ui.home.devices"
+alignment = 0
+clip_text = true
+
+[node name="SettingsButton" type="Button" parent="Column/Tiles"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"CardButton"
+text = "ui.home.settings"
+alignment = 0
+clip_text = true
+
+[node name="DevRow" type="HBoxContainer" parent="Column"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="EmulatorWorkoutButton" type="Button" parent="Column/DevRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"GhostButton"
 text = "ui.home.workout_emulator"
 
-[node name="HistoryButton" type="Button" parent="Margin/VBox"]
+[node name="DevButton" type="Button" parent="Column/DevRow"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.home.history"
-
-[node name="SettingsButton" type="Button" parent="Margin/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.home.settings"
-
-[node name="DevicesButton" type="Button" parent="Margin/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.home.devices"
-
-[node name="DevButton" type="Button" parent="Margin/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
+theme_type_variation = &"GhostButton"
 text = "ui.home.dev"
 
-[node name="SwitchProfileButton" type="Button" parent="Margin/VBox"]
+[node name="ProfileMenu" type="PopupMenu" parent="."]
 unique_name_in_owner = true
-layout_mode = 2
-text = "ui.home.switch_profile"
+
+[node name="DevMenu" type="PopupMenu" parent="."]
+unique_name_in_owner = true
