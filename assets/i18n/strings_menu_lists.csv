@@ -82,3 +82,4 @@ ui.history.section.strava,Strava,Strava
 ui.history.detail.target,Средняя цель плана: {target} Вт,Average plan target: {target} W
 ui.history.detail.track,Трасса «{track}» · крутизна SIM {pct} %,Track “{track}” · SIM steepness {pct}%
 ui.history.menu.more,Действия с заездом,Ride actions
+ui.plan.card.load,нагрузка {load},load {load}

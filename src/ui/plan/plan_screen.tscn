@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/ui/plan/plan_screen.gd" id="1_script"]
-[ext_resource type="Script" path="res://src/ui/plan/workout_chart.gd" id="2_chart"]
+[ext_resource type="Script" path="res://src/ui/common/plan_preview.gd" id="2_chart"]
 [ext_resource type="PackedScene" path="res://src/ui/common/intervals_key_dialog.tscn" id="3_key"]
 [ext_resource type="PackedScene" path="res://src/ui/common/app_bar.tscn" id="4_bar"]
 [ext_resource type="PackedScene" path="res://src/ui/common/banner.tscn" id="5_banner"]
@@ -124,13 +124,6 @@ visible = false
 custom_minimum_size = Vector2(0, 240)
 layout_mode = 2
 
-[node name="WorkoutList" type="ItemList" parent="Layout/Body/Columns/ListScroll/ListBox"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-focus_mode = 0
-mouse_filter = 2
-
 [node name="PreviewSlot" type="PanelContainer" parent="Layout/Body/Columns"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -170,6 +163,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 240)
 layout_mode = 2
 script = ExtResource("2_chart")
+detailed = true
 
 [node name="PreviewDuration" type="Label" parent="Layout/Body/Columns/PreviewSlot/Preview"]
 unique_name_in_owner = true

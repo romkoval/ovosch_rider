@@ -71,15 +71,20 @@ const VARIATIONS: Dictionary = {
 	"DisplayLabel": "Label", "H1Label": "Label", "H2Label": "Label", "TitleLabel": "Label",
 	"BodyStrongLabel": "Label", "SecondaryLabel": "Label", "CaptionLabel": "Label",
 	"OverlineLabel": "Label", "StatLabel": "Label", "StatLargeLabel": "Label", "ErrorLabel": "Label",
+	"OverlineAccent": "OverlineLabel", "OverlineSim": "OverlineLabel",
+	"LogoLabel": "Label", "LogoAccentLabel": "LogoLabel",
 	"PrimaryButton": "Button", "GhostButton": "Button", "DangerButton": "Button",
 	"IconButton": "Button", "ChipButton": "Button", "CardButton": "Button",
 	"ScenarioCard": "CardButton", "ListRowButton": "CardButton",
 	"AppBar": "PanelContainer", "InsetPanel": "PanelContainer",
 	"BannerWarn": "PanelContainer", "BannerError": "PanelContainer", "BannerInfo": "PanelContainer",
+	"SheetPanel": "PanelContainer",
 	"HudPlate": "PanelContainer", "HudCard": "PanelContainer",
 	"HudHeroLabel": "Label", "HudTargetLabel": "Label", "HudValueLabel": "Label",
 	"HudStripLabel": "Label", "HudUnitLabel": "Label", "HudCaptionLabel": "Label",
 	"HudZoneChipLabel": "Label", "HudButton": "Button",
+	"HudHeroUnit": "Label", "HudTargetUnit": "Label", "HudCountdown": "Label", "HudDelta": "Label",
+	"HudGradeValue": "Label", "HudGradeUnit": "Label", "HudModeLabel": "Label", "HudStepLabel": "Label",
 	"HudPauseCard": "PanelContainer", "HudChipLabel": "Label", "HudPauseTitle": "Label",
 	"NumLabel": "Label", SPINBOX_FIELD: "LineEdit",
 	"Stack0": "VBoxContainer", "Stack8": "VBoxContainer", "Stack12": "VBoxContainer", "Stack16": "VBoxContainer", "Stack24": "VBoxContainer",
@@ -350,6 +355,15 @@ static func _label_variations(t: Theme, fonts: Dictionary) -> void:
 	_label(t, "StatLabel", fonts["inter_num_700"], 22)
 	_label(t, "StatLargeLabel", fonts["inter_num_750"], 32)
 	_label(t, "ErrorLabel", fonts["inter_500"], 13, UiTokens.DANGER_TEXT)
+	# Надзаголовки сценариев (`ui.md` п. 5, 8.2): шрифт и кегль — от `OverlineLabel`, цвет —
+	# `accent` («ТРЕНИРОВКА ПО ПЛАНУ · ERG») или `sim` («СВОБОДНАЯ ЕЗДА · SIM»).
+	t.set_color("font_color", "OverlineAccent", UiTokens.ACCENT)
+	t.set_color("font_color", "OverlineSim", UiTokens.SIM)
+	# Словесный знак `ovosch·rider` в AppBar главного экрана (`ui.md` п. 6, 8.2): H1 28, вес 800;
+	# «·rider» — отдельная подпись `LogoAccentLabel` цветом `accent`. Вес 800 есть только у
+	# `inter_num_800_display` (`tnum` на буквы не влияет) — новое начертание не нужно.
+	_label(t, "LogoLabel", fonts["inter_num_800_display"], 28)
+	t.set_color("font_color", "LogoAccentLabel", UiTokens.ACCENT)
 
 
 static func _button_variations(t: Theme, fonts: Dictionary) -> void:
@@ -419,6 +433,13 @@ static func _button_variations(t: Theme, fonts: Dictionary) -> void:
 
 static func _panel_variations(t: Theme) -> void:
 	t.set_stylebox("panel", "AppBar", _box(UiTokens.BG, 0, Vector2(24, 12)))
+	# Лист снизу (`ui.md` п. 6 «Диалог / лист»; compact-предпросмотр плана и трассы): `surface1`,
+	# скругление 20 только сверху, поля 24, тень диалогов.
+	var sheet := _box(UiTokens.SURFACE1, RADIUS_LARGE, Vector2(24, 24))
+	sheet.corner_radius_bottom_left = 0
+	sheet.corner_radius_bottom_right = 0
+	_shadow(sheet)
+	t.set_stylebox("panel", "SheetPanel", sheet)
 	t.set_stylebox("panel", "InsetPanel", _box(UiTokens.INSET, RADIUS_CONTROL, Vector2(12, 12)))
 	var banners := {"BannerWarn": UiTokens.WARN, "BannerError": UiTokens.DANGER_TEXT, "BannerInfo": UiTokens.ACCENT}
 	for name: String in banners:
@@ -437,9 +458,25 @@ static func _hud_variations(t: Theme, fonts: Dictionary) -> void:
 	_label(t, "HudValueLabel", fonts["inter_num_700"], 34, UiTokens.HUD_TEXT)
 	_label(t, "HudStripLabel", fonts["inter_num_650"], 24, UiTokens.HUD_TEXT)
 	_label(t, "HudUnitLabel", fonts["inter_500"], 14, UiTokens.HUD_TEXT2)
-	_label(t, "HudCaptionLabel", fonts["inter_650"], 12, UiTokens.HUD_TEXT2)
-	# Фишка зоны (`hud.md` п. 11): заливка — цвет зоны (данные), текст `hud.ink`.
-	_label(t, "HudZoneChipLabel", fonts["inter_750"], UiTokens.HUD_ZONE_CHIP_FONT_SIZE, UiTokens.HUD_ZONE_CHIP_TEXT)
+	# Подписи HUD с цифрами («Сопротивление 50 %», «105 %») — `tnum` (HUD-14 крит. 2).
+	_label(t, "HudCaptionLabel", fonts["inter_num_650"], 12, UiTokens.HUD_TEXT2)
+	# Фишка зоны (`hud.md` п. 11): заливка — цвет зоны (данные), текст `hud.ink`, «Z4» — `tnum`.
+	_label(t, "HudZoneChipLabel", fonts["inter_num_750"], UiTokens.HUD_ZONE_CHIP_FONT_SIZE, UiTokens.HUD_ZONE_CHIP_TEXT)
+	# Номер шага «Шаг 3 из 12» (`hud.md` п. 6: 13·s / 500 `hud.text2`). Цифрам нужен `tnum`, а
+	# начертания 500 с `tnum` нет: ближайшее из пяти цифровых — 600.
+	_label(t, "HudStepLabel", fonts["inter_num_600"], 13, UiTokens.HUD_TEXT2)
+	# Карточка цели и герой (`hud.md` п. 5): «Вт» героя 22·s / 600, «Вт» цели 16·s / 600 —
+	# `hud.text2`; отсчёт 22·s / 700 `tnum` и разница отклонения 15·s / 700 `tnum` — `hud.text`
+	# (цвет состояния — `hud.warn`, `hud.dev_*` — задаёт компонент).
+	_label(t, "HudHeroUnit", fonts["inter_600"], 22, UiTokens.HUD_TEXT2)
+	_label(t, "HudTargetUnit", fonts["inter_600"], 16, UiTokens.HUD_TEXT2)
+	_label(t, "HudCountdown", fonts["inter_num_700"], 22, UiTokens.HUD_TEXT)
+	_label(t, "HudDelta", fonts["inter_num_700"], 15, UiTokens.HUD_TEXT)
+	# Карточка «УКЛОН» свободной езды (`hud.md` п. 8): `+6.4` 44·s / 750 `tnum` белым, « %» 18·s / 600
+	# `hud.text2`, режим «SIM 50 %» / «СОПР. 40 %» 16·s / 600 `hud.text2` (с цифрами — `tnum`).
+	_label(t, "HudGradeValue", fonts["inter_num_750"], 44, UiTokens.HUD_TEXT)
+	_label(t, "HudGradeUnit", fonts["inter_600"], 18, UiTokens.HUD_TEXT2)
+	_label(t, "HudModeLabel", fonts["inter_num_600"], 16, UiTokens.HUD_TEXT2)
 	# Фишка «ДАЛЕЕ» (`hud.md` п. 10.1): строка и секунды 18·s / 750 `tnum`; цвет секунд
 	# (`hud.warn`) — состояние, задаётся в компоненте.
 	_label(t, "HudChipLabel", fonts["inter_num_750"], 18, UiTokens.HUD_TEXT)

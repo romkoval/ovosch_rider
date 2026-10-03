@@ -6,12 +6,12 @@ extends Control
 ##
 ## Раскладка: `AppBar` «Тренировка по плану» («назад» → `AppState.go_back()`; действия «Импорт
 ## файла» и «Обновить»). Слева (40 %) — карточки тренировок (`ListRow` с вариацией `CardButton`:
-## миниатюра `PlanPreview`, название, «38:00 · 12 шагов · макс. 300 Вт», источник) в разделах
-## «Сегодня в Intervals.icu» (статус загрузки; без ключа или при отказе ключа — баннер с действием
+## миниатюра `PlanPreview`, название, «38:00 · 12 шагов · макс. 300 Вт · нагрузка 42», источник)
+## в разделах «Сегодня в Intervals.icu» (статус загрузки; без ключа или при отказе ключа — баннер с действием
 ## «Указать ключ» → общий `IntervalsKeyDialog` → `verify_key` → `IntervalsSync.sync_profile`) и
 ## «Библиотека» (пусто — пустое состояние с импортом). Справа (60 %) — предпросмотр выбранной:
-## название, описание (3 строки и «Ещё»), крупное превью (`WorkoutChart` = `PlanPreview` с
-## `detailed = true`: шкала времени, пунктир FTP), длительность, шагов, макс. цель, время в зонах
+## название, описание (3 строки и «Ещё»), крупное превью (`PlanPreview` с `detailed = true`:
+## шкала времени, пунктир FTP), длительность, шагов, макс. цель, время в зонах
 ## и «Начать». Ровно одна карточка «выбрано» (или ни одной, пока выбора нет).
 ## Compact (холст уже 1100 lp, телефон): список во всю ширину, предпросмотр — лист снизу по
 ## нажатию на карточку (Esc или нажатие вне листа закрывают его). Контент — не шире 1216 lp,
@@ -24,11 +24,7 @@ extends Control
 ## решает, какой станок использовать, и при отсутствии станка просит экран показать выбор
 ## «эмулятор / подключить устройства» (`show_trainer_choice()`).
 ## Зависимости — через `setup()`; сетевой транспорт и хранилища инъецируются (тесты — мок).
-## Все строки — ключи `ui.plan.*` (новые ключи T-082 — в `strings_menu_lists.csv`).
-##
-## Совместимость с приёмкой T-040 (до решения tester): скрытый `%WorkoutList` (`ItemList`)
-## повторяет список карточек прежними строками «название · длительность · нагрузка · источник»
-## (тесты читают его тексты и испускают `item_selected`), а `chart()` возвращает `WorkoutChart`.
+## Все строки — ключи `ui.plan.*` (новые ключи T-082 и T-095 — в `strings_menu_lists.csv`).
 
 const SOURCE_INTERVALS: String = "intervals"
 const SOURCE_LIBRARY: String = "library"
@@ -54,6 +50,8 @@ const KEY_STEPS: Dictionary = {
 	"many": "ui.plan.card.steps.many",
 }
 const KEY_MAX_TARGET: String = "ui.plan.card.max_target"
+## Целевая нагрузка Intervals.icu (`icu_training_load`) в строке карточки (REQ-INT-04 крит. 2).
+const KEY_LOAD: String = "ui.plan.card.load"
 const KEY_ZONES_TITLE: String = "ui.plan.zones.title"
 const KEY_ZONE_SHARE: String = "ui.plan.zones.share"
 const KEY_ZONE_FREE: String = "ui.plan.zones.free"
@@ -163,7 +161,6 @@ var _zone_bar: ZoneShareBar = null
 @onready var _library_empty: EmptyState = %LibraryEmpty
 @onready var _reload_button: Button = %ReloadButton
 @onready var _key_dialog: IntervalsKeyDialog = %KeyDialog
-@onready var _list: ItemList = %WorkoutList
 @onready var _import_button: Button = %ImportButton
 @onready var _library_status_label: Label = %LibraryStatusLabel
 @onready var _file_dialog: FileDialog = %ImportDialog
@@ -174,7 +171,7 @@ var _zone_bar: ZoneShareBar = null
 @onready var _preview_description: Label = %PreviewDescription
 @onready var _more_button: Button = %MoreButton
 @onready var _preview_duration: Label = %PreviewDuration
-@onready var _chart: WorkoutChart = %Chart
+@onready var _chart: PlanPreview = %Chart
 @onready var _stats: HBoxContainer = %Stats
 @onready var _stat_duration: StatView = %StatDuration
 @onready var _stat_steps: StatView = %StatSteps
@@ -219,8 +216,6 @@ func _ready() -> void:
 	_key_banner.action_pressed.connect(open_key_form)
 	_library_empty.action_pressed.connect(open_import_dialog)
 	_key_dialog.submitted.connect(_on_key_submitted)
-	_list.item_selected.connect(select_index)
-	_list.item_activated.connect(_on_list_activated)
 	_file_dialog.filters = FILE_FILTERS
 	_file_dialog.file_selected.connect(on_import_file_selected)
 	_more_button.pressed.connect(_on_more_pressed)
@@ -423,9 +418,10 @@ func selected_cards() -> Array[ListRow]:
 	return out
 
 
-## Ключевые цифры тренировки «38:00 · 12 шагов · макс. 300 Вт» (длительность — мм:сс или
-## ч:мм:сс, INT-04 крит. 2; макс. цель с учётом FTP, множителя и зон профиля; без целей — без неё).
-func card_numbers(workout: Workout) -> String:
+## Ключевые цифры тренировки «38:00 · 12 шагов · макс. 300 Вт · нагрузка 42» (длительность —
+## мм:сс или ч:мм:сс, INT-04 крит. 2; макс. цель с учётом FTP, множителя и зон профиля; без целей —
+## без неё; нагрузка — `icu_training_load` из ответа Intervals.icu, если она есть, INT-04 крит. 2).
+func card_numbers(workout: Workout, training_load: int = 0) -> String:
 	var model := _model_for(workout)
 	var parts: Array[String] = [
 		IntervalsPlanService.format_duration(workout.total_duration_sec()),
@@ -434,6 +430,8 @@ func card_numbers(workout: Workout) -> String:
 	var top := model.max_target_w()
 	if top > 0:
 		parts.append(tr(KEY_MAX_TARGET).format({"watts": top}))
+	if training_load > 0:
+		parts.append(tr(KEY_LOAD).format({"load": training_load}))
 	return DOT.join(parts)
 
 
@@ -498,8 +496,6 @@ func select_index(index: int) -> void:
 		_selected = -1
 	else:
 		_selected = index
-		if not _list.is_selected(index) and _list.is_item_selectable(index):
-			_list.select(index)
 	_sync_card_selection()
 	_render_preview()
 
@@ -518,11 +514,8 @@ func selected_item() -> Dictionary:
 	return _items[_selected] if _selected >= 0 and _selected < _items.size() else {}
 
 
-func preview_points() -> PackedVector2Array:
-	return _chart.points()
-
-
-func chart() -> WorkoutChart:
+## Крупное превью предпросмотра (`PlanPreview` с `detailed = true`).
+func chart() -> PlanPreview:
 	return _chart
 
 
@@ -789,10 +782,6 @@ func _on_key_submitted(athlete_id: String, key: String) -> void:
 	submit_key(athlete_id, key)
 
 
-func _on_list_activated(_index: int) -> void:
-	start_selected()
-
-
 func _on_card_pressed(index: int) -> void:
 	select_index(index)
 	if _compact:
@@ -891,13 +880,6 @@ func _rebuild_items() -> void:
 				"workout": _library.get_workout(_profile.id, str(entry["id"])), "error": "",
 				"source_file": str(entry.get("source_file", "")),
 			})
-	_list.clear()
-	for it in _items:
-		var text := _item_text(it)
-		var idx := _list.add_item(text)
-		if it["workout"] == null:
-			_list.set_item_disabled(idx, true)
-			_list.set_item_tooltip(idx, str(it["error"]))
 	_rebuild_cards()
 	_selected = -1
 	if not previous_id.is_empty():
@@ -909,8 +891,6 @@ func _rebuild_items() -> void:
 		var runnable := _runnable_intervals_indices()
 		if runnable.size() == 1:
 			_selected = runnable[0]
-	if _selected >= 0 and _list.is_item_selectable(_selected):
-		_list.select(_selected)
 	_sync_card_selection()
 	_library_empty.visible = _profile != null and library_items().is_empty()
 
@@ -955,7 +935,7 @@ func _rebuild_cards() -> void:
 
 func _apply_card_texts(card: ListRow, it: Dictionary) -> void:
 	var workout: Workout = it["workout"]
-	var numbers := card_numbers(workout) if workout != null else tr(KEY_UNPARSED)
+	var numbers := card_numbers(workout, int(it["training_load"])) if workout != null else tr(KEY_UNPARSED)
 	card.set_texts(str(it["name"]), numbers)
 	var source := card.trailing_slot().get_node_or_null("Source") as Label
 	if source != null:
@@ -974,20 +954,6 @@ func _runnable_intervals_indices() -> Array[int]:
 		if _items[i]["source"] == SOURCE_INTERVALS and _items[i]["workout"] != null:
 			out.append(i)
 	return out
-
-
-## Строка скрытого `%WorkoutList` (совместимость с приёмкой T-040).
-func _item_text(it: Dictionary) -> String:
-	var parts: Array[String] = [str(it["name"]), IntervalsPlanService.format_duration(int(it["duration_sec"]))]
-	if int(it["training_load"]) > 0:
-		parts.append(tr("ui.plan.item.load").format({"load": it["training_load"]}))
-	if it["source"] == SOURCE_LIBRARY:
-		parts.append(tr("ui.plan.source_library"))
-	else:
-		parts.append(tr("ui.plan.source_intervals"))
-	if it["workout"] == null:
-		parts.append(tr("ui.plan.item.unparsed"))
-	return " · ".join(parts)
 
 
 func _update_status() -> void:
