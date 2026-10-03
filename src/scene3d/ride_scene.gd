@@ -15,8 +15,9 @@ extends Node3D
 const DEFAULT_ENVIRONMENT: String = "res://src/scene3d/default_environment.tres"
 const RIDER_SCENE: String = "res://src/scene3d/rider.tscn"
 ## Камера: позади (по горизонтальному направлению движения) и сверху от велосипедиста.
-## Сглаживается ВЕКТОР СМЕЩЕНИЯ, а не позиция: расстояние и высота не зависят от скорости
-## (D3D-01 крит. 1), повороты трассы камера догоняет с запаздыванием τ.
+## Сглаживается УГОЛ направления (yaw), а не вектор смещения: расстояние и высота
+## постоянны при любой скорости и на любых поворотах (D3D-01 крит. 1), повороты
+## трассы камера догоняет с запаздыванием τ.
 const CAMERA_BACK_M: float = 7.0
 const CAMERA_UP_M: float = 3.0
 const CAMERA_LOOK_UP_M: float = 1.0
@@ -36,7 +37,7 @@ var weight_kg: float = SpeedModel.BIKE_MASS_KG + 67.0
 var _session: WorkoutSession = null
 var _speed_model := SpeedModel.new()
 var _sample := TrackSample.new()
-var _camera_offset: Vector3 = Vector3(0.0, CAMERA_UP_M, CAMERA_BACK_M)
+var _camera_yaw: float = 0.0
 var _road: MeshInstance3D = null
 var _props: MultiMeshInstance3D = null
 var _env_instance: Node = null
@@ -52,8 +53,8 @@ func _ready() -> void:
 	if environment_set == null:
 		environment_set = load(DEFAULT_ENVIRONMENT)
 	_apply_environment()
-	if track == null:
-		set_track(LoopTrack.new(track_seed))
+	# Трасса, заданная до входа в дерево (например, GPX), строится здесь же.
+	set_track(track if track != null else LoopTrack.new(track_seed))
 
 
 # ---------------------------------------------------------------------------
@@ -124,10 +125,13 @@ func bind(session: WorkoutSession, profile: Profile = null) -> void:
 	session.state_changed.connect(_on_session_state)
 
 
-## Отвязать от сессии; педалирование останавливается (накат), сцена больше не двигается от телеметрии.
+## Отвязать от сессии: скорость обнуляется (сцена замирает), педалирование останавливается;
+## последний каденс в поле сохраняется — телеметрия отвязанной сессии его больше не меняет.
 func unbind() -> void:
+	speed_kmh = 0.0
 	if is_node_ready():
 		_rider.set_cadence(0)
+		_rider.set_wheel_speed(0.0)
 	if _session != null:
 		if _session.executor.second_elapsed.is_connected(_on_second_elapsed):
 			_session.executor.second_elapsed.disconnect(_on_second_elapsed)
@@ -166,18 +170,23 @@ func advance(delta: float) -> void:
 		distance_m = fmod(distance_m, track.length_m())
 	_place_rider(false)
 	var alpha: float = 1.0 - exp(-dt / CAMERA_TAU_SEC)
-	_camera_offset = _camera_offset.lerp(_desired_camera_offset(), alpha)
-	_camera.global_position = _rider.global_position + _camera_offset
+	_camera_yaw = lerp_angle(_camera_yaw, _desired_yaw(), alpha)
+	_camera.global_position = _rider.global_position + _camera_offset_for(_camera_yaw)
 	_camera.look_at(_rider.global_position + Vector3.UP * CAMERA_LOOK_UP_M, Vector3.UP)
 	_rider.advance(dt)
 
 
-## Смещение камеры: назад по горизонтальной проекции направления и вверх.
-func _desired_camera_offset() -> Vector3:
-	var flat := Vector3(_sample.forward.x, 0.0, _sample.forward.z)
+## Курс движения в горизонтальной плоскости (yaw), рад.
+func _desired_yaw() -> float:
+	var flat := Vector2(_sample.forward.x, _sample.forward.z)
 	if flat.length_squared() < 1e-8:
-		flat = Vector3.FORWARD
-	return -flat.normalized() * CAMERA_BACK_M + Vector3.UP * CAMERA_UP_M
+		return _camera_yaw
+	return atan2(flat.x, flat.y)
+
+
+## Смещение камеры для курса `yaw`: ровно CAMERA_BACK_M назад и CAMERA_UP_M вверх.
+func _camera_offset_for(yaw: float) -> Vector3:
+	return Vector3(-sin(yaw) * CAMERA_BACK_M, CAMERA_UP_M, -cos(yaw) * CAMERA_BACK_M)
 
 
 func _process(delta: float) -> void:
@@ -189,8 +198,8 @@ func _place_rider(snap_camera: bool) -> void:
 	_rider.global_position = _sample.position
 	_rider.look_at(_sample.position + _sample.forward, _sample.up)
 	if snap_camera:
-		_camera_offset = _desired_camera_offset()
-		_camera.global_position = _sample.position + _camera_offset
+		_camera_yaw = _desired_yaw()
+		_camera.global_position = _sample.position + _camera_offset_for(_camera_yaw)
 		_camera.look_at(_sample.position + Vector3.UP * CAMERA_LOOK_UP_M, Vector3.UP)
 
 

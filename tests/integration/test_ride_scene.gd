@@ -324,6 +324,41 @@ func test_environment_set_swap_changes_sky_and_road_material() -> void:
 	assert_true(s.props().multimesh.instance_count <= PerfBudget.MAX_MULTIMESH_INSTANCES)
 
 
+func test_set_track_before_ready_builds_road_after_entering_tree() -> void:
+	var s: RideScene = load(SCENE).instantiate()
+	s.set_track(StraightTrack.new(500.0))
+	assert_null(s.road(), "до входа в дерево дорога не строится")
+	add_child_autofree(s)
+	assert_not_null(s.road(), "заранее заданная трасса (сценарий GPX) построена в _ready")
+	assert_not_null(s.props())
+	assert_true(s.track is StraightTrack, "трасса не подменена на LoopTrack")
+	assert_almost_eq(s.rider_position().z, 0.0, 1e-6)
+
+
+func test_unbind_zeroes_speed_and_scene_freezes() -> void:
+	var s := _bound_scene()
+	for i in 10:
+		_second(s)
+	assert_gt(s.speed_kmh, 20.0)
+	s.unbind()
+	assert_eq(s.speed_kmh, 0.0, "после unbind скорость обнулена")
+	var dist := s.distance_m
+	for i in 60:
+		s.advance(FRAME)
+	assert_eq(s.distance_m, dist, "сцена замерла")
+
+
+func test_camera_distance_constant_through_sharp_turns() -> void:
+	var s := _scene()
+	s.set_track(LoopTrack.new(3, 40.0, 0.4, 6, 0.0))  # маленькая петля — крутые повороты
+	s.apply_telemetry(300, true, 90, true, 40.0, true)
+	for i in 600:
+		s.advance(FRAME)
+		var off := s.camera_offset()
+		assert_almost_eq(Vector2(off.x, off.z).length(), RideScene.CAMERA_BACK_M, 0.05, "дистанция камеры не укорачивается на поворотах (кадр %d)" % i)
+		assert_almost_eq(off.y, RideScene.CAMERA_UP_M, 1e-3)
+
+
 func test_scene3d_doc_describes_track_interface() -> void:
 	var text := FileAccess.get_file_as_string("res://docs/scene3d.md")
 	assert_false(text.is_empty(), "REQ-D3D-06 крит. 3: docs/scene3d.md существует")
