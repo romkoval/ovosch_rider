@@ -91,7 +91,9 @@
 | `on_accent` | `#0B0E13` | текст на `accent` | 9.3:1 |
 | `sim` | `#F0B45A` (янтарный) | надзаголовок и метки свободной езды / SIM | 8.3–10.3:1 |
 | `warn` | `#FFC24D` | предупреждения, «переподключение» | — |
-| `danger` | `#C23A36` | кнопка удаления (текст `text`) | 4.95:1 |
+| `danger` | `#C23A36` | кнопка удаления (текст `text`) | 4.8:1 |
+| `danger_hover` | `#B23532` (`danger` темнее на 8 %) | наведение опасной кнопки | 5.5:1 |
+| `danger_pressed` | `#A3312D` (`danger` темнее на 16 %) | нажатие опасной кнопки | 6.3:1 |
 | `danger_text` | `#FF6B6B` | текст ошибок на фоне | 5.5–6.8:1 |
 | `scrim` | `#000000`, альфа 0.55 | под диалогами | — |
 
@@ -129,8 +131,8 @@
 | **Панель приложения (AppBar)** | высота 72 (compact 64), поля 24 | слева кнопка «назад» (кнопка-иконка `touch_ui`, но не меньше 48 на компьютере, `surface1`, радиус 12) и H1. Справа действия экрана и фишка профиля (аватар 28 + «Роман · 250 Вт», 13 / 600, фон `surface1`, радиус 20). У главного экрана вместо «назад» — словесный знак `ovosch·rider` (H1 800, «·rider» цветом `accent`) |
 | **Кнопка основная** | высота 52 на сенсорных, 44 на компьютере; поля 24; радиус 12 | фон `accent`, текст `on_accent` 16 / 700; наведение +6 % светлоты; нажатие `accent_pressed`; недоступна — альфа 0.4; фокус — кольцо 2 lp `text` с отступом 2 lp |
 | **Кнопка вторичная** | те же | фон `surface2`, рамка 1 `line_strong`, текст `text` 16 / 650; наведение `surface3` |
-| **Кнопка текстовая (Ghost)** | высота `touch_ui` (40 / 52) | без фона, текст `text2` → `text` при наведении, подложка `surface2` при нажатии |
-| **Кнопка опасная** | как вторичная | фон `danger`, текст `text`; всегда с диалогом подтверждения |
+| **Кнопка текстовая (Ghost)** | высота `touch_ui` (40 / 52), поля 16/10 | без фона, текст `text2`; наведение — подложка `surface2`, текст `text`; нажатие — подложка `surface3`, текст `text` |
+| **Кнопка опасная** | как вторичная | фон `danger`, текст `text`; наведение `danger_hover`, нажатие `danger_pressed` (темнее, а не светлее: светлый текст на светлеющем красном теряет контраст); всегда с диалогом подтверждения |
 | **Кнопка-иконка** | `touch_ui` × `touch_ui` (52 на сенсорных, 40 на компьютере), радиус 12 | фон `surface1`, иконка 24 `text`; во время сессии — `hud.plate` |
 | **Фишка статуса** | высота 36 на компьютере, `touch_ui` (52) на сенсорных; радиус — половина высоты | фон `surface1`, точка 10: `accent` — подключено, `warn` — ищет или переподключается, `danger_text` — ошибка, `text_disabled` — нет. Текст 13 / 600 «Станок · Tacx Neo». Нажатие ведёт на «Устройства» |
 | **Карточка-кнопка (CardButton)** | по сетке; поля 16 (крупная 24); радиус 16 (крупная 20) | `Button` с дочерней раскладкой (фокус и клавиатура работают сразу). Фон `surface1`, рамка 1 `line`; наведение — рамка `accent` с альфой 0.6; выбрана (`toggle_mode`) — фон `surface2`, рамка 2 `accent`; фокус — как у выбранной, но рамка `text` |
@@ -153,7 +155,7 @@
 
 Набор **Lucide** (https://lucide.dev, лицензия ISC; часть иконок унаследована из Feather,
 MIT). SVG, сетка 24, штрих 2, цвет задаётся модуляцией. Файлы — в
-`assets/icons/lucide/*.svg`, импорт как текстура с масштабом 3 (72 px: чётко при иконке 24 lp и `ui_scale` 1.8 на экране @3x).
+`assets/icons/lucide/*.svg`, импорт как `DPITexture` (24×24 lp, растр строится под фактический масштаб экрана: чётко и при `ui_scale` 1.8 на экране @3x; подробно — `assets/icons/lucide/README.md`).
 
 Используемые: `play`, `pause`, `square` (стоп), `skip-forward`, `bike`, `mountain`,
 `waves` (приморье), `map`, `history`, `settings`, `bluetooth`, `bluetooth-off`, `heart`
@@ -353,7 +355,7 @@ src/ui/theme/ui_tokens.gd                     # class_name UiTokens: цвета 
 | `Button` (= вторичная) | `normal`: `surface2`, рамка 1 `line_strong`, радиус 12, content margin 24/14; `hover`: `surface3`; `pressed`: `surface3` + рамка `accent`; `disabled`: `surface1`; `focus`: без фона, рамка 2 `text`, `expand_margin` 2 | `inter_650` 16; `font_color` `text`, `font_disabled_color` `text_disabled` | `h_separation` 8, `icon_max_width` 24 |
 | `LineEdit` | `normal`: `inset`, рамка 1 `line_strong`, радиус 12, margin 14/12; `focus`: рамка 2 `accent`; `read_only`: `surface1` | `inter_500` 16; `font_placeholder_color` `text_disabled`; `caret_color` `accent`; `selection_color` `accent` с альфой 0.35 | `minimum_character_width` 4 |
 | `SpinBox` | использует `LineEdit`; иконки `updown` — Lucide `chevron-up` / `chevron-down` 16 | `inter_num_600` 16 | — |
-| `OptionButton` | как `LineEdit` + стрелка `chevron-down` | `inter_500` 16 | `arrow_margin` 12 |
+| `OptionButton` | как `LineEdit` + стрелка `chevron-down`; `hover`: `inset`, рамка 1 `accent` с альфой 0.6 (как наведение карточки); `pressed` (меню открыто): рамка 2 `accent`; `focus`: рамка 2 `accent` (как у поля); `disabled`: как `read_only` поля | `inter_500` 16 | `arrow_margin` 12 |
 | `CheckButton` | иконки `checked`/`unchecked` — свои SVG-переключатели 44×26 (дорожка `accent`/`surface3`, бегунок `text`) | `inter_500` 16 | `h_separation` 12 |
 | `HSlider` | `slider`: `surface3`, высота 6, радиус 3; `grabber_area`: `accent`; `grabber_area_highlight`: `accent` | иконки `grabber`/`grabber_highlight` — круг 22 `text` | — |
 | `ProgressBar` | `background`: `surface3`, радиус 3; `fill`: `accent` | `inter_num_600` 13 | — |
@@ -382,8 +384,8 @@ src/ui/theme/ui_tokens.gd                     # class_name UiTokens: цвета 
 | `ErrorLabel` | Label | `inter_500` 13, `danger_text` |
 | `PrimaryButton` | Button | `normal` `accent`, без рамки; `hover` светлее на 6 %; `pressed` `accent_pressed`; `font_color` `on_accent`, `inter_700` 16; минимальная высота 52 (компьютер 44) |
 | — | — | Тема одна для всех устройств. Минимальные размеры под `touch_ui` выставляет общий скрипт-помощник при старте (`custom_minimum_size` по типу устройства), а не вторая тема |
-| `GhostButton` | Button | `normal`/`disabled` — `StyleBoxEmpty`; `hover` — `surface2`; `font_color` `text2`, `font_hover_color` `text` |
-| `DangerButton` | Button | `normal` `danger`, `font_color` `text` |
+| `GhostButton` | Button | `normal`/`disabled` — `StyleBoxEmpty`; `hover` — `surface2`; `pressed` — `surface3`; поля 16/10 (уже вторичной: без фона широкие поля не нужны, высота 40 / 52 добирается `touch_ui`); радиус 12; `font_color` `text2`, `font_hover_color` и `font_pressed_color` `text` |
+| `DangerButton` | Button | `normal` `danger`; `hover` `danger_hover`; `pressed` `danger_pressed` (без рамки: белая рамка читается как фокус); `disabled` `danger` с альфой 0.4 и текст с альфой 0.4; `font_color` `text` |
 | `IconButton` | Button | квадрат `touch_ui` (52 / 40), радиус 12, `normal` `surface1`, без рамки, `icon_max_width` 24 |
 | `ChipButton` | Button | высота 36 (сенсорные — `touch_ui`), радиус — половина высоты, `surface1`, `inter_600` 13, `h_separation` 8 |
 | `CardButton` | Button | `normal` `surface1` + рамка 1 `line`, радиус 16, margin 16; `hover` рамка `accent` с альфой 0.6; `pressed` (выбрана) — `surface2` + рамка 2 `accent`; `focus` — рамка 2 `text`; текст кнопки пустой, содержимое — дочерние узлы с `mouse_filter = PASS` |
@@ -400,7 +402,7 @@ src/ui/theme/ui_tokens.gd                     # class_name UiTokens: цвета 
 | `HudStripLabel` | Label | `inter_num_650`* 24 |
 | `HudUnitLabel` | Label | `inter_500` 14, `hud.text2` |
 | `HudCaptionLabel` | Label | `inter_650` 12, `hud.text2`, `uppercase` |
-| `HudButton` | Button | 56×56, `hud.plate`, радиус 12, иконка 24, подпись 11 |
+| `HudButton` | Button | 56×56, `hud.plate`, радиус 12, поля 16, иконка 24, подпись `inter_600` 11; `hover` — `surface2` с альфой `hud.plate` (0.78), `pressed` — `surface3` с той же альфой; `disabled` — `hud.plate`, текст и иконка `text_disabled`. Переключатели HUD (ERG, SIM ↔ сопротивление) — не `toggle_mode`: состояние показывают подпись («ERG вкл») и фишка режима (`hud.md` п. 10.3), стиль `pressed` — только отклик на нажатие |
 
 \* `inter_num_650` — ещё одна `FontVariation` (wght 650, tnum); список в начале п. 9
 пополняется по мере надобности, все из одного файла.
@@ -456,3 +458,11 @@ src/ui/theme/ui_tokens.gd                     # class_name UiTokens: цвета 
 - Названия трасс образные, с подписью типа — решение менеджера (D3D-08.1).
 - Крутизна SIM по умолчанию 50 % — решение владельца (FRD-05).
 - Трасса по умолчанию — последняя выбранная, иначе «Пшеничные поля» (FRD-02.3).
+- Состояния, которые T-060 выбрал сам (вердикт game-designer, T-091, UIX-01.3):
+  `OptionButton` hover/pressed — **принято** как есть; `HudButton` hover/pressed — **принято**,
+  плюс правило «переключатели HUD без `toggle_mode`»; `GhostButton` поля 16/10 — **принято**,
+  `pressed` — **правка**: `surface3` вместо `surface2` (на компьютере нажатие не отличалось
+  от наведения); `DangerButton` — **правка**: наведение светлее на 6 % даёт контраст текста
+  ≈ 4.4:1 (< 4.5), нажатие с рамкой 1 `text` похоже на фокус → `danger_hover` и
+  `danger_pressed` (п. 4, 9.2). Код правок — T-089 или экранная задача, которая первой
+  возьмёт `src/ui/theme/**`.
