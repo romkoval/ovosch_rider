@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://src/scene3d/props/shaders/prop_anim_outline.gdshader" id="1_outline"]
+
+[resource]
+shader = ExtResource("1_outline")
+shader_parameter/outline_color = Color(0.1, 0.12, 0.1, 1)
+shader_parameter/outline_width = 0.06
+shader_parameter/albedo_mix = 0.7
+shader_parameter/albedo_darken = 0.35
+shader_parameter/drift_rate = 0.035

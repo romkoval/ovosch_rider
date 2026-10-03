@@ -1,0 +1,409 @@
+class_name PropMeshes
+extends RefCounted
+## Низкополигональные меши ориентиров и построек трасс (T-083, REQ-D3D-08 п.12;
+## `docs/game/tracks.md` п. 4.5, 5, 6): постройки, башни, ветряки, животные, стога, изгороди.
+## Всё собирается `MeshKit` из примитивов с цветом вершин в палитре арт-библии и трассы и
+## красится одним тун-материалом мира (бюджет материалов не растёт); альфа цвета — вес
+## контура. Вращающиеся части (лопасти ветряков и мельницы) и воздушный шар — отдельные меши
+## под анимированный материал (`prop_anim.gdshader`): ось вращения — локальная Z, центр — 0.
+## Меши кэшируются по ключу, цвету палитры и материалу; строятся только при построении мира.
+
+const C_INK := Color(0.12, 0.12, 0.15, 0.0)
+const C_WINDOW := Color(0.22, 0.30, 0.42, 0.0)
+const C_DOOR := Color(0.36, 0.26, 0.20, 0.0)
+const C_WOOD := Color(0.55, 0.42, 0.30, 0.5)
+const C_WOOD_DARK := Color(0.42, 0.32, 0.24, 0.5)
+const C_CONCRETE := Color(0.80, 0.78, 0.72, 1.0)
+const C_CONCRETE_DARK := Color(0.66, 0.64, 0.60, 1.0)
+const C_STONE := Color(0.62, 0.60, 0.56, 1.0)
+const C_STONE_DARK := Color(0.50, 0.49, 0.47, 1.0)
+const C_SLATE := Color(0.38, 0.40, 0.45, 1.0)
+const C_STRAW := Color(0.86, 0.79, 0.54, 1.0)
+const C_STRAW_DARK := Color(0.76, 0.68, 0.46, 1.0)
+const C_WHITE := Color(0.93, 0.93, 0.92, 1.0)
+const C_LEAF := Color(0.36, 0.55, 0.23, 1.0)
+
+static var _cache: Dictionary = {}
+
+
+## Меш по ключу (`house`, `barn`, `silo`, `water_tower`, `turbine`, `turbine_rotor`, …);
+## `wall`/`roof` — цвета построек палитры трассы. Неизвестный ключ — пустой меш.
+static func mesh(key: String, material: Material, wall: Color = Color(0.93, 0.89, 0.80),
+		roof: Color = Color(0.78, 0.32, 0.24)) -> ArrayMesh:
+	var full_key: String = "%s:%s:%s:%d" % [key, wall.to_html(), roof.to_html(),
+		material.get_instance_id() if material != null else 0]
+	if _cache.has(full_key):
+		return _cache[full_key]
+	var kit := MeshKit.new()
+	_build(key, kit, Color(wall, 1.0), Color(roof, 1.0))
+	var m := kit.to_mesh(material)
+	_cache[full_key] = m
+	return m
+
+
+static func _build(key: String, kit: MeshKit, wall: Color, roof: Color) -> void:
+	match key:
+		"house":
+			_house(kit, Vector3(8.0, 4.6, 6.0), wall, roof)
+		"house_small":
+			_house(kit, Vector3(6.0, 3.6, 5.0), wall, roof)
+		"barn":
+			_barn(kit)
+		"silo":
+			_silo(kit, 3.0, 16.0)
+		"water_tower":
+			_water_tower(kit)
+		"turbine":
+			_turbine(kit)
+		"turbine_rotor":
+			_turbine_rotor(kit)
+		"grain_elevator":
+			_grain_elevator(kit)
+		"haystack":
+			_haystack(kit)
+		"sunflowers":
+			_sunflowers(kit)
+		"willow":
+			_willow(kit)
+		"railing":
+			_railing(kit)
+		"parapet":
+			_parapet(kit)
+		"chapel":
+			_chapel(kit)
+		"sheep":
+			_sheep(kit)
+		"hay_bale":
+			_hay_bale(kit)
+		"oak":
+			_oak(kit)
+		"bench":
+			_bench(kit)
+		"windmill":
+			_windmill(kit)
+		"windmill_sails":
+			_windmill_sails(kit)
+		"horse":
+			_horse(kit)
+		"fence":
+			_fence(kit)
+		"castle":
+			_castle(kit)
+		"tv_tower":
+			_tv_tower(kit)
+		"vines":
+			_vines(kit)
+		"balloon":
+			_balloon(kit)
+
+
+# ---------------------------------------------------------------------------
+# Постройки
+# ---------------------------------------------------------------------------
+
+## Дом: стены `size` (x — длина по коньку), двускатная крыша, дверь и окна на длинных
+## сторонах (+Z — к дороге), труба.
+static func _house(kit: MeshKit, size: Vector3, wall: Color, roof: Color) -> void:
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, size.y * 0.5 - 0.3, 0.0)), Vector3(size.x, size.y + 0.6, size.z), wall)
+	kit.add_gable_roof(Transform3D(Basis.IDENTITY, Vector3(0.0, size.y, 0.0)), Vector3(size.x, size.z * 0.42, size.z), 0.45,
+		roof, wall)
+	for zs in [-1.0, 1.0]:
+		var z: float = zs * (size.z * 0.5 + 0.04)
+		for i in 2:
+			var x: float = (float(i) - 0.5) * size.x * 0.5 + size.x * 0.12
+			kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, size.y * 0.58, z)), Vector3(1.0, 1.0, 0.1), C_WINDOW)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-size.x * 0.3, 1.05, size.z * 0.5 + 0.04)), Vector3(1.1, 2.1, 0.1), C_DOOR)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(size.x * 0.28, size.y + size.z * 0.38, -size.z * 0.18)),
+		Vector3(0.7, 1.8, 0.7), C_STONE_DARK)
+
+
+static func _barn(kit: MeshKit) -> void:
+	var walls := Color(0.60, 0.32, 0.24, 1.0)
+	var roof := Color(0.44, 0.44, 0.47, 1.0)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 3.2, 0.0)), Vector3(14.0, 7.0, 9.0), walls)
+	kit.add_gable_roof(Transform3D(Basis.IDENTITY, Vector3(0.0, 6.7, 0.0)), Vector3(14.0, 3.8, 9.0), 0.5, roof, walls)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(7.05, 2.2, 0.0)), Vector3(0.1, 4.4, 4.0), C_DOOR)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(7.08, 2.2, 0.0)), Vector3(0.1, 4.4, 0.25), C_WHITE)
+
+
+static func _silo(kit: MeshKit, r: float, h: float) -> void:
+	kit.add_tube(Vector3(0.0, -0.5, 0.0), Vector3(0.0, h, 0.0), Vector2(r, r), Vector2(r, r), C_CONCRETE, 14)
+	for i in 3:
+		var y: float = h * (0.25 + 0.25 * float(i))
+		kit.add_tube(Vector3(0.0, y, 0.0), Vector3(0.0, y + 0.35, 0.0), Vector2(r + 0.06, r + 0.06), Vector2(r + 0.06, r + 0.06),
+			C_CONCRETE_DARK, 14)
+	kit.add_ellipsoid(Vector3(0.0, h, 0.0), Vector3(r, r * 0.6, r), Color(0.60, 0.65, 0.70, 1.0), Basis.IDENTITY, 5, 14)
+
+
+static func _water_tower(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(0.0, -0.5, 0.0), Vector3(0.0, 20.0, 0.0), Vector2(1.5, 1.5), Vector2(1.2, 1.2), C_CONCRETE, 12)
+	kit.add_tube(Vector3(0.0, 19.6, 0.0), Vector3(0.0, 20.2, 0.0), Vector2(2.8, 2.8), Vector2(2.8, 2.8), C_CONCRETE_DARK, 14)
+	var tank := Color(0.60, 0.68, 0.74, 1.0)
+	kit.add_tube(Vector3(0.0, 20.2, 0.0), Vector3(0.0, 25.4, 0.0), Vector2(3.8, 3.8), Vector2(4.2, 4.2), tank, 16)
+	kit.add_cone(Vector3(0.0, 25.4, 0.0), 2.0, 4.4, Color(0.44, 0.50, 0.56, 1.0), 16)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.0, 1.45)), Vector3(1.0, 2.0, 0.2), C_DOOR)
+
+
+## Ветряк: башня 62 м и гондола; ротор — отдельный меш `turbine_rotor` (крепление — `TURBINE_HUB`).
+const TURBINE_HUB := Vector3(0.0, 63.0, 2.9)
+
+
+static func _turbine(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(0.0, -0.5, 0.0), Vector3(0.0, 62.5, 0.0), Vector2(1.8, 1.8), Vector2(0.9, 0.9), C_WHITE, 12)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 63.0, 0.2)), Vector3(2.4, 2.4, 5.6), C_WHITE)
+
+
+static func _turbine_rotor(kit: MeshKit) -> void:
+	var blade := Color(0.95, 0.95, 0.95, 1.0)
+	kit.add_ellipsoid(Vector3.ZERO, Vector3(0.9, 0.9, 1.4), C_WHITE, Basis.IDENTITY, 5, 10)
+	for i in 3:
+		var a: float = TAU * float(i) / 3.0
+		var dir := Vector3(sin(a), cos(a), 0.0)
+		kit.add_tube(dir * 0.6, dir * 30.0, Vector2(0.9, 0.22), Vector2(0.25, 0.08), blade, 6, true, Vector3(cos(a), -sin(a), 0.0))
+
+
+static func _grain_elevator(kit: MeshKit) -> void:
+	for ix in 2:
+		for iz in 2:
+			var c := Vector3(float(ix) * 7.0 - 3.5, 0.0, float(iz) * 7.0 - 3.5)
+			kit.add_tube(c + Vector3(0.0, -0.5, 0.0), c + Vector3(0.0, 28.0, 0.0), Vector2(3.4, 3.4), Vector2(3.4, 3.4), C_CONCRETE, 14)
+			kit.add_cone(c + Vector3(0.0, 28.0, 0.0), 1.6, 3.4, C_CONCRETE_DARK, 14)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(9.0, 19.0, 0.0)), Vector3(7.0, 39.0, 8.0), C_CONCRETE)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(9.0, 39.2, 0.0)), Vector3(7.6, 1.0, 8.6), C_CONCRETE_DARK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(4.8, 30.0, 0.0)), Vector3(4.0, 1.6, 1.6), C_CONCRETE_DARK)
+	for i in 4:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(9.0, 8.0 + 8.0 * float(i), 4.06)), Vector3(1.2, 1.2, 0.1), C_WINDOW)
+
+
+## Стог: высокий округлый конус соломы, тёмная «шапка» и жердь.
+static func _haystack(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(0.0, -0.3, 0.0), Vector3(0.0, 2.2, 0.0), Vector2(2.3, 2.3), Vector2(2.1, 2.1), C_STRAW, 12, false)
+	kit.add_ellipsoid(Vector3(0.0, 2.2, 0.0), Vector3(2.1, 2.0, 2.1), C_STRAW, Basis.IDENTITY, 6, 12)
+	kit.add_ellipsoid(Vector3(0.0, 3.9, 0.0), Vector3(0.8, 0.7, 0.8), C_STRAW_DARK, Basis.IDENTITY, 5, 10)
+	kit.add_tube(Vector3(0.0, 3.8, 0.0), Vector3(0.0, 5.0, 0.0), Vector2(0.06, 0.06), Vector2(0.05, 0.05), C_WOOD_DARK, 4)
+
+
+## Куртина подсолнухов 3 × 4 м: тёмная зелёная масса листвы и 12 корзинок на стеблях,
+## повёрнутых к +Z (к дороге).
+static func _sunflowers(kit: MeshKit) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var leaves := Color(0.40, 0.55, 0.25, 0.0)
+	kit.add_ellipsoid(Vector3(-0.7, 0.75, -0.9), Vector3(1.0, 0.9, 1.2), leaves, Basis.IDENTITY, 5, 8)
+	kit.add_ellipsoid(Vector3(0.7, 0.8, 0.9), Vector3(1.0, 0.95, 1.2), leaves.darkened(0.06), Basis.IDENTITY, 5, 8)
+	kit.add_ellipsoid(Vector3(0.6, 0.7, -1.0), Vector3(0.9, 0.8, 1.0), leaves.lightened(0.05), Basis.IDENTITY, 5, 8)
+	kit.add_ellipsoid(Vector3(-0.6, 0.72, 1.0), Vector3(0.9, 0.85, 1.0), leaves, Basis.IDENTITY, 5, 8)
+	var head := Color(0.92, 0.74, 0.22, 0.4)
+	var core := Color(0.36, 0.25, 0.14, 0.0)
+	for ix in 3:
+		for iz in 4:
+			var b := Vector3(float(ix) - 1.0 + rng.randf_range(-0.2, 0.2), 0.0, float(iz) * 1.0 - 1.5 + rng.randf_range(-0.2, 0.2))
+			var h: float = rng.randf_range(1.6, 2.1)
+			var top := b + Vector3(0.0, h, 0.0)
+			kit.add_tube(b + Vector3(0.0, 1.2, 0.0), top, Vector2(0.04, 0.04), Vector2(0.03, 0.03), Color(0.34, 0.48, 0.20, 0.0), 4, false)
+			var face := Vector3(rng.randf_range(-0.2, 0.2), 0.45, 1.0).normalized()
+			kit.add_tube(top - face * 0.06, top + face * 0.06, Vector2(0.32, 0.32), Vector2(0.30, 0.30), head, 9)
+			kit.add_tube(top + face * 0.06, top + face * 0.09, Vector2(0.14, 0.14), Vector2(0.12, 0.12), core, 7)
+
+
+static func _willow(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(0.0, -0.3, 0.0), Vector3(0.2, 3.2, 0.0), Vector2(0.35, 0.35), Vector2(0.22, 0.22), Color(0.40, 0.34, 0.27, 1.0), 7)
+	kit.add_ellipsoid(Vector3(0.2, 4.6, 0.0), Vector3(3.3, 2.4, 3.3), Color(0.50, 0.62, 0.34, 1.0), Basis.IDENTITY, 6, 12)
+	kit.add_ellipsoid(Vector3(0.2, 3.2, 0.0), Vector3(3.8, 1.8, 3.8), Color(0.56, 0.67, 0.38, 1.0), Basis.IDENTITY, 6, 12)
+
+
+## Деревянные перила мостика: 14 м вдоль X, стойки через 2 м.
+static func _railing(kit: MeshKit) -> void:
+	for i in 8:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-7.0 + 2.0 * float(i), 0.5, 0.0)), Vector3(0.14, 1.1, 0.14), C_WOOD_DARK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.0, 0.0)), Vector3(14.2, 0.12, 0.12), C_WOOD)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.55, 0.0)), Vector3(14.2, 0.09, 0.08), C_WOOD)
+
+
+## Каменный парапет моста: 16 м вдоль X, столбы на концах.
+static func _parapet(kit: MeshKit) -> void:
+	var stone := Color(0.76, 0.73, 0.66, 0.5)
+	var cap := Color(0.84, 0.82, 0.76, 0.5)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.3, 0.0)), Vector3(16.0, 0.9, 0.5), stone)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.81, 0.0)), Vector3(16.3, 0.14, 0.62), cap)
+	for x in [-8.3, 8.3]:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 0.5, 0.0)), Vector3(0.8, 1.4, 0.8), stone)
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 1.24, 0.0)), Vector3(0.9, 0.12, 0.9), cap)
+
+
+static func _chapel(kit: MeshKit) -> void:
+	var walls := Color(0.95, 0.93, 0.88, 1.0)
+	var roof := Color(0.52, 0.30, 0.26, 1.0)
+	var rot := Basis(Vector3.UP, PI * 0.5)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 2.8, 0.0)), Vector3(7.0, 6.2, 11.0), walls)
+	kit.add_gable_roof(Transform3D(rot, Vector3(0.0, 5.9, 0.0)), Vector3(11.0, 3.6, 7.0), 0.4, roof, walls)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 6.0, 6.6)), Vector3(3.4, 12.6, 3.4), walls)
+	kit.add_pyramid(Vector3(0.0, 12.3, 6.6), Vector2(2.0, 2.0), 5.0, C_SLATE)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 18.3, 6.6)), Vector3(0.14, 1.6, 0.14), C_INK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 18.6, 6.6)), Vector3(0.8, 0.14, 0.14), C_INK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 9.6, 8.32)), Vector3(1.0, 1.4, 0.1), C_INK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.3, 8.32)), Vector3(1.4, 2.6, 0.1), C_DOOR)
+	for z in [-3.0, 0.0, 3.0]:
+		for xs in [-1.0, 1.0]:
+			kit.add_box(Transform3D(Basis.IDENTITY, Vector3(xs * 3.54, 3.4, z)), Vector3(0.1, 1.8, 0.8), C_WINDOW)
+
+
+# ---------------------------------------------------------------------------
+# Животные, сено, сад
+# ---------------------------------------------------------------------------
+
+## Овца: шерсть «облачком», тёмные голова и ноги; смотрит вдоль +X.
+static func _sheep(kit: MeshKit) -> void:
+	var wool := Color(0.95, 0.94, 0.90, 1.0)
+	var dark := Color(0.20, 0.19, 0.20, 0.6)
+	kit.add_ellipsoid(Vector3(0.0, 0.78, 0.0), Vector3(0.75, 0.52, 0.48), wool, Basis.IDENTITY, 6, 10)
+	kit.add_ellipsoid(Vector3(0.25, 1.05, 0.0), Vector3(0.45, 0.35, 0.40), wool, Basis.IDENTITY, 5, 9)
+	kit.add_ellipsoid(Vector3(0.82, 0.95, 0.0), Vector3(0.26, 0.2, 0.18), dark, Basis.IDENTITY, 5, 8)
+	for x in [-0.4, 0.4]:
+		for z in [-0.22, 0.22]:
+			kit.add_tube(Vector3(x, 0.45, z), Vector3(x, 0.0, z), Vector2(0.06, 0.06), Vector2(0.05, 0.05), dark, 5)
+
+
+static func _hay_bale(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(-0.65, 0.82, 0.0), Vector3(0.65, 0.82, 0.0), Vector2(0.85, 0.85), Vector2(0.85, 0.85), Color(0.82, 0.70, 0.40, 1.0),
+		14, true, Vector3.UP)
+
+
+## Большой одинокий дуб: широкий ствол, крона из пяти шаров.
+static func _oak(kit: MeshKit) -> void:
+	var bark := Color(0.40, 0.30, 0.22, 1.0)
+	kit.add_tube(Vector3(0, -0.3, 0), Vector3(0, 4.0, 0), Vector2(0.55, 0.55), Vector2(0.35, 0.35), bark, 8)
+	kit.add_tube(Vector3(0, 3.2, 0), Vector3(2.0, 5.4, 0.4), Vector2(0.22, 0.22), Vector2(0.14, 0.14), bark, 6)
+	kit.add_tube(Vector3(0, 3.4, 0), Vector3(-1.8, 5.6, -0.6), Vector2(0.22, 0.22), Vector2(0.14, 0.14), bark, 6)
+	var leaf := Color(0.38, 0.58, 0.23, 1.0)
+	var dark := Color(0.31, 0.50, 0.21, 1.0)
+	kit.add_ellipsoid(Vector3(0.0, 6.2, 0.0), Vector3(4.2, 2.8, 4.2), dark, Basis.IDENTITY, 7, 14)
+	kit.add_ellipsoid(Vector3(2.2, 7.0, 0.8), Vector3(2.6, 2.1, 2.6), leaf, Basis.IDENTITY, 6, 12)
+	kit.add_ellipsoid(Vector3(-2.0, 7.2, -0.9), Vector3(2.5, 2.0, 2.5), leaf, Basis.IDENTITY, 6, 12)
+	kit.add_ellipsoid(Vector3(0.3, 8.4, 0.2), Vector3(2.6, 1.9, 2.6), leaf, Basis.IDENTITY, 6, 12)
+	kit.add_ellipsoid(Vector3(-0.4, 7.0, 2.2), Vector3(2.2, 1.8, 2.2), leaf, Basis.IDENTITY, 6, 12)
+
+
+static func _bench(kit: MeshKit) -> void:
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.48, 0.0)), Vector3(1.9, 0.08, 0.5), C_WOOD)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.85, -0.24)), Vector3(1.9, 0.35, 0.06), C_WOOD)
+	for x in [-0.8, 0.8]:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 0.22, 0.0)), Vector3(0.08, 0.5, 0.45), C_WOOD_DARK)
+
+
+## Ветряная мельница: белёная башня, деревянная шапка; крылья — `windmill_sails` (крепление — `WINDMILL_HUB`).
+const WINDMILL_HUB := Vector3(0.0, 13.0, 3.4)
+
+
+static func _windmill(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(0.0, -0.5, 0.0), Vector3(0.0, 12.5, 0.0), Vector2(3.6, 3.6), Vector2(2.5, 2.5), Color(0.92, 0.90, 0.84, 1.0), 12)
+	kit.add_ellipsoid(Vector3(0.0, 12.9, 0.3), Vector3(2.8, 2.2, 3.2), Color(0.42, 0.33, 0.26, 1.0), Basis.IDENTITY, 6, 12)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.2, 3.45)), Vector3(1.3, 2.4, 0.2), C_DOOR)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 6.5, 3.0)), Vector3(0.9, 1.1, 0.2), C_WINDOW)
+	kit.add_tube(Vector3(0.0, 13.0, 1.8), Vector3(0.0, 13.0, 3.4), Vector2(0.3, 0.3), Vector2(0.3, 0.3), C_WOOD_DARK, 6)
+
+
+static func _windmill_sails(kit: MeshKit) -> void:
+	var cloth := Color(0.90, 0.86, 0.76, 0.6)
+	kit.add_ellipsoid(Vector3.ZERO, Vector3(0.5, 0.5, 0.5), C_WOOD_DARK, Basis.IDENTITY, 4, 8)
+	for i in 4:
+		var a: float = TAU * float(i) / 4.0 + 0.3
+		var dir := Vector3(sin(a), cos(a), 0.0)
+		var side := Vector3(cos(a), -sin(a), 0.0)
+		kit.add_tube(dir * 0.3, dir * 11.5, Vector2(0.14, 0.14), Vector2(0.1, 0.1), C_WOOD_DARK, 4)
+		var basis := Basis(side, dir, Vector3.BACK)
+		kit.add_box(Transform3D(basis, dir * 6.6 + side * 0.85), Vector3(1.6, 9.0, 0.08), cloth)
+
+
+## Лошадь, смотрит вдоль +X; масть — цвет экземпляра.
+static func _horse(kit: MeshKit) -> void:
+	var coat := Color(0.80, 0.80, 0.80, 1.0)
+	var mane := Color(0.25, 0.22, 0.20, 0.8)
+	kit.add_ellipsoid(Vector3(0.0, 1.35, 0.0), Vector3(1.05, 0.5, 0.42), coat, Basis.IDENTITY, 6, 10)
+	kit.add_tube(Vector3(0.75, 1.55, 0.0), Vector3(1.15, 2.2, 0.0), Vector2(0.24, 0.3), Vector2(0.18, 0.2), coat, 7)
+	kit.add_ellipsoid(Vector3(1.35, 2.1, 0.0), Vector3(0.42, 0.18, 0.17), coat, Basis(Vector3.BACK, -0.6), 5, 8)
+	kit.add_tube(Vector3(0.7, 1.75, 0.0), Vector3(1.1, 2.35, 0.0), Vector2(0.06, 0.06), Vector2(0.05, 0.05), mane, 4)
+	kit.add_tube(Vector3(-1.0, 1.5, 0.0), Vector3(-1.25, 0.8, 0.0), Vector2(0.09, 0.09), Vector2(0.05, 0.05), mane, 4)
+	for x in [-0.7, 0.7]:
+		for z in [-0.22, 0.22]:
+			kit.add_tube(Vector3(x, 1.1, z), Vector3(x, 0.0, z), Vector2(0.1, 0.1), Vector2(0.07, 0.07), coat, 5)
+
+
+## Звено жердевой изгороди: 6 м вдоль X, столб у начала, две жерди.
+static func _fence(kit: MeshKit) -> void:
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-3.0, 0.6, 0.0)), Vector3(0.16, 1.5, 0.16), C_WOOD_DARK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.15, 0.0)), Vector3(6.0, 0.12, 0.09), C_WOOD)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.65, 0.0)), Vector3(6.0, 0.12, 0.09), C_WOOD)
+
+
+## Руины замка (~50 × 30 м): круглая башня с зубцами, обломок второй, стены с рваным верхом.
+static func _castle(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(-16.0, -2.0, 0.0), Vector3(-16.0, 24.0, 0.0), Vector2(5.5, 5.5), Vector2(5.0, 5.0), C_STONE, 14)
+	for i in 8:
+		var a: float = TAU * float(i) / 8.0
+		kit.add_box(Transform3D(Basis(Vector3.UP, -a), Vector3(-16.0 + cos(a) * 4.6, 25.0, sin(a) * 4.6)), Vector3(1.6, 2.0, 1.2), C_STONE)
+	kit.add_tube(Vector3(18.0, -2.0, -6.0), Vector3(18.0, 13.0, -6.0), Vector2(4.5, 4.5), Vector2(4.3, 4.3), C_STONE_DARK, 12)
+	var tops: Array[float] = [9.0, 12.0, 7.0, 10.5, 5.0, 8.0]
+	for i in tops.size():
+		var x: float = -11.0 + 5.0 * float(i)
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, tops[i] * 0.5 - 2.0, 0.0)), Vector3(5.2, tops[i] + 4.0, 2.6), C_STONE)
+	var side_tops: Array[float] = [10.0, 6.0, 8.0]
+	for i in side_tops.size():
+		var z: float = -4.0 - 5.0 * float(i)
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-11.0, 3.0, z)), Vector3(2.4, side_tops[i], 5.2), C_STONE_DARK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-16.0, 14.0, 5.4)), Vector3(1.0, 2.2, 0.3), C_INK)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-4.0, 4.5, 1.35)), Vector3(1.0, 2.2, 0.2), C_INK)
+
+
+## Телевышка: ствол 80 м красно-белыми полосами, площадка, антенна, будка у подножия.
+static func _tv_tower(kit: MeshKit) -> void:
+	var red := Color(0.80, 0.24, 0.20, 1.0)
+	var h: float = 80.0
+	for i in 8:
+		var y0: float = h * float(i) / 8.0
+		var y1: float = h * float(i + 1) / 8.0
+		var r0: float = lerpf(2.2, 0.7, y0 / h)
+		var r1: float = lerpf(2.2, 0.7, y1 / h)
+		kit.add_tube(Vector3(0.0, y0 - (0.5 if i == 0 else 0.0), 0.0), Vector3(0.0, y1, 0.0), Vector2(r0, r0), Vector2(r1, r1),
+			red if i % 2 == 1 else C_WHITE, 10, false)
+	kit.add_tube(Vector3(0.0, 54.0, 0.0), Vector3(0.0, 56.0, 0.0), Vector2(3.6, 3.6), Vector2(3.6, 3.6), C_CONCRETE_DARK, 12)
+	kit.add_tube(Vector3(0.0, h, 0.0), Vector3(0.0, h + 16.0, 0.0), Vector2(0.25, 0.25), Vector2(0.1, 0.1), C_SLATE, 6)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(6.0, 1.3, 0.0)), Vector3(5.0, 3.2, 4.0), C_CONCRETE)
+
+
+## Ряд виноградника: звено 8 м вдоль X — шпалера (зелёная лента), лоза, столбики.
+static func _vines(kit: MeshKit) -> void:
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.0, 0.0)), Vector3(8.0, 1.1, 0.7), Color(0.44, 0.61, 0.28, 0.3))
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.3, 0.0)), Vector3(8.0, 0.5, 0.14), Color(0.40, 0.31, 0.24, 0.0))
+	for x in [-4.0, 4.0]:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 0.8, 0.0)), Vector3(0.12, 1.8, 0.12), C_WOOD_DARK)
+
+
+## Воздушный шар: оболочка дольками в два цвета, корзина и стропы. Начало — в корзине.
+static func _balloon(kit: MeshKit) -> void:
+	var a := Color(0.86, 0.36, 0.24, 1.0)
+	var b := Color(0.96, 0.88, 0.62, 1.0)
+	var rings: int = 10
+	var segs: int = 16
+	var center := Vector3(0.0, 13.0, 0.0)
+	var radii := Vector3(7.0, 8.5, 7.0)
+	for sgi in segs:
+		var col: Color = MeshKit.lin(a if sgi % 2 == 0 else b)
+		var start: int = kit.vertices.size()
+		for r in rings + 1:
+			var phi: float = PI * float(r) / float(rings)
+			# Низ оболочки сужается к горловине.
+			var pinch: float = 1.0 - 0.55 * smoothstep(0.55, 1.0, float(r) / float(rings))
+			for k in 2:
+				var theta: float = TAU * float(sgi + k) / float(segs)
+				var unit := Vector3(sin(phi) * cos(theta) * pinch, cos(phi), sin(phi) * sin(theta) * pinch)
+				kit.vertices.append(center + unit * radii)
+				kit.normals.append(Vector3(unit.x / radii.x, unit.y / radii.y, unit.z / radii.z).normalized())
+				kit.colors.append(col)
+		for r in rings:
+			var i0: int = start + r * 2
+			kit.indices.append_array(PackedInt32Array([i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2]))
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.6, 0.0)), Vector3(1.6, 1.2, 1.6), Color(0.50, 0.38, 0.26, 1.0))
+	for x in [-0.7, 0.7]:
+		for z in [-0.7, 0.7]:
+			kit.add_tube(Vector3(x, 1.2, z), Vector3(x * 2.4, 5.4, z * 2.4), Vector2(0.04, 0.04), Vector2(0.04, 0.04), C_INK, 3, false)

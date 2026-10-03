@@ -78,6 +78,13 @@ const CROSS_WINDOW_M: float = 200.0
 const CROSS_REACH_M: float = 150.0
 ## Высота у дороги: вес точки оси 1/(d⁶ + eps).
 const NEAR_EPS: float = 0.02
+## Маска полей (T-083): цвет вершины рельефа, альфа = 1 − маска; маска растёт от 0 до 1
+## между этими расстояниями от оси трассы (полоса травы у дороги — без лоскутов полей).
+## Шейдер травы рисует лоскуты с силой `field_strength` × (1 − альфа).
+const FIELD_FROM_M: float = 12.0
+const FIELD_FULL_M: float = 18.0
+const ANCHOR_FROM_M: float = 70.0
+const ANCHOR_FULL_M: float = 380.0
 
 var origin := Vector2.ZERO
 var cell_m: float = MIN_CELL_M
@@ -87,6 +94,9 @@ var nz: int = 0
 ## Компактный режим: высоты и расстояние до трассы по всей решётке `nx` × `nz` (в коридоре пусты).
 var heights := PackedFloat32Array()
 var road_dist := PackedFloat32Array()
+## Высота над полем высоты трассы (увалы и холмы, м) по вершинам — UV.x меша: шейдер травы
+## красит склоны холмов по высоте над дорогой, а не над нулём (трассы на 40–700 м).
+var heights_rel := PackedFloat32Array()
 var mean_y: float = 0.0
 var bounds_min := Vector2.ZERO
 var bounds_max := Vector2.ZERO
@@ -101,7 +111,16 @@ var tile_keys: Array[Vector2i] = []
 var tile_step := PackedInt32Array()
 var tile_heights: Array[PackedFloat32Array] = []
 var tile_road_dist: Array[PackedFloat32Array] = []
+var tile_rel: Array[PackedFloat32Array] = []
 var chunk_tiles: int = MIN_CHUNK_TILES
+## Поперечный склон на подъёмах (`CROSS_GAIN` по умолчанию; набор окружения может усилить).
+var cross_gain: float = CROSS_GAIN
+var cross_max: float = CROSS_MAX
+## «Якорь» дальнего рельефа (T-083): доля, с которой поле высоты трассы вдали от дороги
+## (`ANCHOR_FROM_M`…`ANCHOR_FULL_M`) уходит к средней высоте трассы. 0 — рельеф везде идёт за
+## дорогой; > 0 — долины и холмы стоят на месте, дорога поднимается и опускается относительно
+## них (на подъёме внизу открывается долина, у подножия холмы выше дороги).
+var relief_anchor: float = 0.0
 
 var _far_origin := Vector2.ZERO
 var _far_nx: int = 0
@@ -109,6 +128,8 @@ var _far_nz: int = 0
 var _far_dist := PackedFloat32Array()
 ## Поле высоты трассы по грубой сетке (с поперечным склоном; только на время построения).
 var _far_h := PackedFloat32Array()
+## Поле высоты трассы в точке последнего `_height` (для `heights_rel`).
+var _last_far: float = 0.0
 ## Точки трассы (шаг `SAMPLE_STEP_M`): правый вектор (x, z) и коэффициент поперечного склона.
 var _rights := PackedVector2Array()
 var _cross := PackedFloat32Array()
@@ -117,8 +138,12 @@ var _tile_road_y: Array[PackedFloat32Array] = []
 var _tile_road_w: Array[PackedFloat32Array] = []
 
 
-static func build(track: Track, rolling_m: float, hills_m: float, seed: int) -> TerrainField:
+static func build(track: Track, rolling_m: float, hills_m: float, seed: int,
+		cross_slope_gain: float = CROSS_GAIN, anchor: float = 0.0, cross_slope_max: float = CROSS_MAX) -> TerrainField:
 	var f := TerrainField.new()
+	f.cross_gain = maxf(cross_slope_gain, 0.0)
+	f.cross_max = clampf(cross_slope_max, 0.0, 0.6)
+	f.relief_anchor = clampf(anchor, 0.0, 1.0)
 	if PerfBudget.is_compact(track):
 		f._build(track, rolling_m, hills_m, seed)
 	else:
@@ -184,15 +209,18 @@ func _sample_track(track: Track) -> PackedVector3Array:
 		var kappa: float = wrapf(heading[b] - heading[a], -PI, PI) / (float(w * 2) * SAMPLE_STEP_M)
 		var turn: float = clampf(kappa * CROSS_FULL_RADIUS_M, -1.0, 1.0)
 		var side: float = clampf(turn + inner * (1.0 - absf(turn)), -1.0, 1.0)
-		_cross[i] = clampf(CROSS_GAIN * absf(grade[i]), 0.0, CROSS_MAX) * side
+		_cross[i] = clampf(cross_gain * absf(grade[i]), 0.0, cross_max) * side
 	return pts
 
 
 ## Высота земли: увалы, холмы (доля `hills_t` от полной высоты) и у дороги — ровная
 ## площадка на `ROAD_SINK_M` ниже полотна.
 func _height(x: float, z: float, hills_t: float, near_d: float, near_y: float, rolling: FastNoiseLite,
-		hills: FastNoiseLite, rolling_m: float, hills_m: float) -> float:
-	var base: float = _far_height_at(x, z) + rolling.get_noise_2d(x, z) * rolling_m
+		hills: FastNoiseLite, rolling_m: float, hills_m: float, far_d: float = 0.0) -> float:
+	_last_far = _far_height_at(x, z)
+	if relief_anchor > 0.0:
+		_last_far = lerpf(_last_far, mean_y, relief_anchor * smoothstep(ANCHOR_FROM_M, ANCHOR_FULL_M, far_d))
+	var base: float = _last_far + rolling.get_noise_2d(x, z) * rolling_m
 	if hills_t > 0.0:
 		var h01: float = 0.3 + 0.7 * clampf(hills.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
 		base += hills_t * hills_t * h01 * hills_m
@@ -241,6 +269,7 @@ func _build(track: Track, rolling_m: float, hills_m: float, seed: int) -> void:
 				road_y[k] += wt * p.y
 	var noises := _noises(seed)
 	heights.resize(total)
+	heights_rel.resize(total)
 	for iz in nz:
 		for ix in nx:
 			var k: int = iz * nx + ix
@@ -249,7 +278,8 @@ func _build(track: Track, rolling_m: float, hills_m: float, seed: int) -> void:
 			var dbox: float = _box_distance(x, z)
 			var t: float = smoothstep(HILLS_START_M, HILLS_FULL_M, dbox) if dbox > HILLS_START_M else 0.0
 			var ny: float = road_y[k] / road_w[k] if road_w[k] > 0.0 else mean_y
-			heights[k] = _height(x, z, t, road_dist[k], ny, noises[0], noises[1], rolling_m, hills_m)
+			heights[k] = _height(x, z, t, road_dist[k], ny, noises[0], noises[1], rolling_m, hills_m, minf(road_dist[k], dbox + NEAR_RADIUS_M))
+			heights_rel[k] = heights[k] - _last_far
 	_release_build_data()
 
 
@@ -285,6 +315,8 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 		var step: int = tile_step[ti]
 		var n: int = TILE_CELLS / step + 1
 		var h: PackedFloat32Array = tile_heights[ti]
+		var rel := PackedFloat32Array()
+		rel.resize(n * n)
 		var fine: bool = step == 1
 		var rd: PackedFloat32Array = tile_road_dist[ti]
 		var ry: PackedFloat32Array = _tile_road_y[ti]
@@ -298,8 +330,10 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 				var k: int = j * n + i
 				var near_d: float = rd[k] if fine else FAR
 				var near_y: float = ry[k] / rw[k] if fine and rw[k] > 0.0 else mean_y
-				h[k] = _height(x, z, t, near_d, near_y, noises[0], noises[1], rolling_m, hills_m)
+				h[k] = _height(x, z, t, near_d, near_y, noises[0], noises[1], rolling_m, hills_m, d_far)
+				rel[k] = h[k] - _last_far
 		tile_heights[ti] = h
+		tile_rel.append(rel)
 	_snap_fine_edges()
 	_release_build_data()
 
@@ -490,6 +524,71 @@ func _snap_fine_edges() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Котловины (T-083: озёра ориентиров)
+# ---------------------------------------------------------------------------
+
+## Котловина под воду: эллипс с центром `center` (x, z), полуосями `radii` (x — вдоль `axis`)
+## и уровнем воды `level`. Внутри 0.8 радиуса земля не выше `level − BASIN_DEPTH_M`, к краю
+## эллипса — подъём до `level + BASIN_BANK_M` (берег внутри эллипса воды), дальше — склоны
+## долины плавно к исходному рельефу до `BASIN_REACH` радиусов. Вызывается до `build_mesh`
+## (меш строится по высотам).
+const BASIN_DEPTH_M: float = 3.0
+const BASIN_BANK_M: float = 0.8
+const BASIN_REACH: float = 1.4
+
+
+func carve_basin(center: Vector3, axis: Vector3, radii: Vector2, level: float) -> void:
+	var ax := Vector2(axis.x, axis.z).normalized()
+	var side := Vector2(-ax.y, ax.x)
+	var reach: float = maxf(radii.x, radii.y) * (BASIN_REACH + 0.05)
+	var lo := Vector2(center.x - reach, center.z - reach)
+	var hi := Vector2(center.x + reach, center.z + reach)
+	if corridor:
+		for ti in tile_keys.size():
+			var key: Vector2i = tile_keys[ti]
+			var step: int = tile_step[ti]
+			var n: int = TILE_CELLS / step + 1
+			var x0: float = origin.x + float(key.x * TILE_CELLS) * cell_m
+			var z0: float = origin.y + float(key.y * TILE_CELLS) * cell_m
+			var span: float = cell_m * float(TILE_CELLS)
+			if x0 > hi.x or x0 + span < lo.x or z0 > hi.y or z0 + span < lo.y:
+				continue
+			var h: PackedFloat32Array = tile_heights[ti]
+			var rel: PackedFloat32Array = tile_rel[ti]
+			for j in n:
+				for i in n:
+					var k: int = j * n + i
+					var x: float = x0 + float(i * step) * cell_m
+					var z: float = z0 + float(j * step) * cell_m
+					var nh: float = _basin_height(h[k], Vector2(x - center.x, z - center.z), ax, side, radii, level)
+					rel[k] += nh - h[k]
+					h[k] = nh
+			tile_heights[ti] = h
+			tile_rel[ti] = rel
+	else:
+		for iz in nz:
+			for ix in nx:
+				var k: int = iz * nx + ix
+				var d := Vector2(origin.x + float(ix) * cell_m - center.x, origin.y + float(iz) * cell_m - center.z)
+				var nh: float = _basin_height(heights[k], d, ax, side, radii, level)
+				heights_rel[k] += nh - heights[k]
+				heights[k] = nh
+
+
+static func _basin_height(h: float, d: Vector2, ax: Vector2, side: Vector2, radii: Vector2, level: float) -> float:
+	var a: float = d.dot(ax) / maxf(radii.x, 1.0)
+	var b: float = d.dot(side) / maxf(radii.y, 1.0)
+	var e: float = sqrt(a * a + b * b)
+	if e >= BASIN_REACH:
+		return h
+	if e < 0.8:
+		return minf(h, level - BASIN_DEPTH_M)
+	if e < 1.0:
+		return lerpf(level - BASIN_DEPTH_M, level + BASIN_BANK_M, (e - 0.8) / 0.2)
+	return minf(h, lerpf(level + BASIN_BANK_M, h, smoothstep(1.0, BASIN_REACH, e))) if h > level else lerpf(level + BASIN_BANK_M, h, smoothstep(1.0, BASIN_REACH, e))
+
+
+# ---------------------------------------------------------------------------
 # Запросы
 # ---------------------------------------------------------------------------
 
@@ -559,14 +658,17 @@ func build_mesh(material: Material) -> MeshInstance3D:
 	var verts := PackedVector3Array()
 	var norms := PackedVector3Array()
 	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
 	var idx := PackedInt32Array()
 	verts.resize(nx * nz)
+	uvs.resize(nx * nz)
 	norms.resize(nx * nz)
 	cols.resize(nx * nz)
-	cols.fill(Color.WHITE)
 	for iz in nz:
 		for ix in nx:
 			var k: int = iz * nx + ix
+			cols[k] = field_color(road_dist[k])
+			uvs[k] = Vector2(heights_rel[k], 0.0)
 			verts[k] = Vector3(origin.x + float(ix) * cell_m, heights[k], origin.y + float(iz) * cell_m)
 			var hl: float = heights[iz * nx + maxi(ix - 1, 0)]
 			var hr: float = heights[iz * nx + mini(ix + 1, nx - 1)]
@@ -588,18 +690,24 @@ func build_mesh(material: Material) -> MeshInstance3D:
 			idx[t + 4] = d
 			idx[t + 5] = c
 			t += 6
-	var node := _mesh_node(verts, norms, cols, idx, material)
+	var node := _mesh_node(verts, norms, cols, uvs, idx, material)
 	node.name = "Terrain"
 	return node
 
 
+## Цвет вершины рельефа: белый, альфа = 1 − маска полей по расстоянию до оси трассы.
+static func field_color(road_d: float) -> Color:
+	return Color(1.0, 1.0, 1.0, 1.0 - smoothstep(FIELD_FROM_M, FIELD_FULL_M, road_d))
+
+
 func _mesh_node(verts: PackedVector3Array, norms: PackedVector3Array, cols: PackedColorArray,
-		idx: PackedInt32Array, material: Material) -> MeshInstance3D:
+		uvs: PackedVector2Array, idx: PackedInt32Array, material: Material) -> MeshInstance3D:
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = norms
 	arrays[Mesh.ARRAY_COLOR] = cols
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = idx
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -652,12 +760,15 @@ func _chunk_mesh(tiles: PackedInt32Array, material: Material) -> MeshInstance3D:
 	var verts := PackedVector3Array()
 	var norms := PackedVector3Array()
 	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
 	var idx := PackedInt32Array()
 	for ti in tiles:
 		var key: Vector2i = tile_keys[ti]
 		var step: int = tile_step[ti]
 		var n: int = TILE_CELLS / step + 1
 		var h: PackedFloat32Array = tile_heights[ti]
+		var rd: PackedFloat32Array = tile_road_dist[ti]
+		var rel: PackedFloat32Array = tile_rel[ti]
 		var span: float = cell_m * float(step)
 		var start: int = verts.size()
 		for j in n:
@@ -671,7 +782,8 @@ func _chunk_mesh(tiles: PackedInt32Array, material: Material) -> MeshInstance3D:
 				var hd: float = h[k - n] if j > 0 else height_at(x, z - span)
 				var hu: float = h[k + n] if j < n - 1 else height_at(x, z + span)
 				norms.append(Vector3(hl - hr, 2.0 * span, hd - hu).normalized())
-				cols.append(Color.WHITE)
+				cols.append(field_color(rd[k] if step == 1 else FAR))
+				uvs.append(Vector2(rel[k], 0.0))
 		for j in n - 1:
 			for i in n - 1:
 				var a: int = start + j * n + i
@@ -679,4 +791,4 @@ func _chunk_mesh(tiles: PackedInt32Array, material: Material) -> MeshInstance3D:
 				var c: int = a + n
 				var d: int = c + 1
 				idx.append_array(PackedInt32Array([a, b, c, b, d, c]))
-	return _mesh_node(verts, norms, cols, idx, material)
+	return _mesh_node(verts, norms, cols, uvs, idx, material)

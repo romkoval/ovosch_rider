@@ -12,6 +12,10 @@ extends Resource
 @export_group("Sky, fog, light")
 ## Шейдер неба (`sky.gdshader`); null — материал по умолчанию с цветами ниже.
 @export var sky_material: Material = null
+## Облачность неба по умолчанию (0 — ясно, 1 — сплошные облака).
+@export_range(0.0, 1.0) var cloud_cover: float = 0.36
+## Цвет неба ниже линии горизонта (за краем рельефа-коридора): дымка над землёй.
+@export var sky_ground_color: Color = Color(0.45, 0.52, 0.45)
 ## Цвет зенита (и фон без неба).
 @export var sky_color: Color = Color(0.55, 0.72, 0.92)
 @export var horizon_color: Color = Color(0.80, 0.85, 0.90)
@@ -48,6 +52,39 @@ extends Resource
 @export var bush_count: int = 220
 @export var tuft_count: int = 900
 @export var scenery_seed: int = 11
+## Поперечный склон рельефа на подъёмах: уклон поперёк дороги = gain · |g(s)|
+## (`TerrainField.CROSS_GAIN`), потолок — `TerrainField.CROSS_MAX`.
+@export var cross_slope_gain: float = 2.5
+@export_range(0.0, 0.6) var cross_slope_max: float = 0.2
+## Дальний рельеф стоит на месте (0…1, `TerrainField.relief_anchor`): у подъёма внизу
+## видна долина, дорога поднимается относительно холмов горизонта.
+@export_range(0.0, 1.0) var relief_anchor: float = 0.0
+
+@export_group("Vegetation mix")
+## Доля елей среди деревьев рощ: порог маски шума (−1 — все ели, 1 — ни одной).
+@export_range(-1.0, 1.0) var conifer_threshold: float = 0.15
+## Рощи на возвышенностях (0 — где угодно, 1 — почти только на вершинах холмов).
+@export_range(0.0, 1.0) var tree_hilltop_bias: float = 0.0
+## Лесополосы из тополей-«свечей» (ряды вдоль полей): рядов на километр трассы, длина
+## ряда, шаг деревьев в ряду и удаление ряда от дороги (м).
+@export var windbreak_rows_per_km: float = 0.0
+@export var windbreak_length_m: Vector2 = Vector2(140.0, 360.0)
+@export var windbreak_spacing_m: float = 7.0
+@export var windbreak_offset_m: Vector2 = Vector2(40.0, 320.0)
+## Низкие каменные изгороди вдоль полей (доля длины трассы, отступ от оси дороги, м).
+@export_range(0.0, 1.0) var stone_wall_share: float = 0.0
+@export var stone_wall_offset_m: float = 11.0
+
+@export_group("Landmarks")
+## Ориентиры трассы (`RouteCatalog.landmarks`): `LandmarkBuilder`, по одному узлу на ориентир.
+## Включаются в наборе трассы, где типы ориентиров уже есть в `LandmarkBuilder` (равнина и
+## холмы — T-083; горы и приморье — T-087/T-088).
+@export var landmarks_enabled: bool = false
+## Цвета построек ориентиров (деревни, хутор, ферма) — палитра трассы (`tracks.md` п. 6).
+@export var building_wall_color: Color = Color(0.93, 0.89, 0.80)
+@export var building_roof_color: Color = Color(0.78, 0.32, 0.24)
+## Цвет воды ручьёв и озёр ориентиров.
+@export var water_color: Color = Color(0.22, 0.62, 0.72)
 
 @export_group("Roadside posts")
 ## Повторяющиеся объекты вдоль дороги (сигнальные столбики) — одним `MultiMeshInstance3D`.

@@ -34,6 +34,8 @@ const C_RAIL := Color(0.70, 0.73, 0.77, 0.0)
 const C_RAIL_GROOVE := Color(0.52, 0.55, 0.60, 0.0)
 const C_POST := Color(0.40, 0.42, 0.45, 0.0)
 const C_DRY := Color(0.98, 0.86, 0.62)
+## Лоскуты полей на полосе травы начинаются за кюветом (отступ от внешней грани бордюра, м).
+const VERGE_FIELD_FROM_M: float = 5.0
 
 
 ## Внешняя грань бордюра от центра дороги.
@@ -224,6 +226,9 @@ static func _add_verge_side(kit: MeshKit, centers: PackedVector3Array, rights: P
 			var nrm: Vector3 = (up - o * slope).normalized()
 			var dry: float = 1.0 - clampf(pr.x / 1.6, 0.0, 1.0)
 			var col: Color = MeshKit.lin(Color.WHITE.lerp(C_DRY, dry))
+			# Альфа — «не поле» для шейдера травы (T-083): у кромки 1, за кюветом лоскуты полей
+			# набора окружения начинаются уже на полосе травы (как на рельефе, `TerrainField.field_color`).
+			col.a = 1.0 - smoothstep(VERGE_FIELD_FROM_M, VERGE_PROFILE[VERGE_PROFILE.size() - 1].x, pr.x)
 			kit.vertices.append(centers[i] + o * w + up * pr.y)
 			kit.normals.append(nrm)
 			kit.colors.append(col)

@@ -7,12 +7,19 @@ extends RefCounted
 ## тун-материал мира. Всё строится один раз в `set_track()`, детерминированно по seed.
 ## На длинной трассе каждый тип разбит на куски вдоль трассы с дальностью видимости
 ## (REQ-D3D-08 п.6, T-066): плотность — на километр, в кадре столько же, сколько на петле.
+## Наборы окружения трасс (T-083) добавляют лесополосы тополей (ряды вдоль полей и поперёк),
+## низкие каменные изгороди вдоль дороги и долю елей/рощи на возвышенностях.
 
 const TREE_MIN_ROAD_M: float = 9.0
 const TREE_MAX_OFFSET_M: float = 200.0
 ## Длина трассы, на которую рассчитаны числа объектов `EnvironmentSet` (петля по умолчанию
 ## ~2.1 км); на трассе длиннее — пропорционально длине (плотность на километр).
 const DENSITY_REFERENCE_M: float = 2200.0
+## Звено каменной изгороди, м.
+const WALL_SEGMENT_M: float = 4.0
+## Слои, которые есть не в каждом наборе окружения (лесополосы, изгороди): `RideScene` держит
+## их в отдельном контейнере, чтобы состав корня окружения не зависел от трассы.
+const EXTRA_LAYERS: Array[String] = ["Poplars", "StoneWalls"]
 
 static var _meshes: Dictionary = {}
 
@@ -92,6 +99,36 @@ static func tuft_mesh(material: Material) -> ArrayMesh:
 	)
 
 
+## Тополь-«свеча»: короткий ствол и вытянутая крона из двух эллипсоидов (лесополосы равнины).
+static func poplar_mesh(material: Material) -> ArrayMesh:
+	return _cached("poplar", material, func(kit: MeshKit) -> void:
+		var bark := Color(0.45, 0.38, 0.30, 1.0)
+		kit.add_tube(Vector3(0, -0.3, 0), Vector3(0, 2.2, 0), Vector2(0.18, 0.18), Vector2(0.12, 0.12), bark, 6)
+		var leaf := Color(0.36, 0.56, 0.24, 1.0)
+		var leaf_dark := Color(0.29, 0.47, 0.21, 1.0)
+		kit.add_ellipsoid(Vector3(0.0, 5.6, 0.0), Vector3(1.15, 4.4, 1.15), leaf_dark, Basis.IDENTITY, 8, 9)
+		kit.add_ellipsoid(Vector3(0.25, 7.4, 0.15), Vector3(0.8, 3.0, 0.8), leaf, Basis.IDENTITY, 7, 8)
+	)
+
+
+## Звено каменной изгороди длиной `WALL_SEGMENT_M` (ось X), низ — на нуле.
+static func wall_mesh(material: Material) -> ArrayMesh:
+	return _cached("wall", material, func(kit: MeshKit) -> void:
+		# Сухая кладка: нижний ряд из трёх камней, верхний — из пяти разной высоты, два тона.
+		var tones: Array[Color] = [Color(0.66, 0.64, 0.59, 0.3), Color(0.56, 0.55, 0.52, 0.3), Color(0.72, 0.70, 0.64, 0.3)]
+		var base_w: float = WALL_SEGMENT_M / 3.0
+		for i in 3:
+			var h: float = 0.42 + 0.06 * float(i % 2)
+			kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-WALL_SEGMENT_M * 0.5 + base_w * (float(i) + 0.5), h * 0.5 - 0.15, 0.0)),
+				Vector3(base_w + 0.02, h + 0.3, 0.6), tones[i % 3])
+		var top_w: float = WALL_SEGMENT_M / 5.0
+		for i in 5:
+			var h: float = 0.22 + 0.07 * float((i * 3) % 4)
+			kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-WALL_SEGMENT_M * 0.5 + top_w * (float(i) + 0.5), 0.36 + h * 0.5, 0.0)),
+				Vector3(top_w - 0.04, h, 0.5 - 0.04 * float(i % 2)), tones[(i + 1) % 3])
+	)
+
+
 static func _cached(key: String, material: Material, build: Callable) -> ArrayMesh:
 	var full_key: String = "%s:%d" % [key, material.get_instance_id() if material != null else 0]
 	if _meshes.has(full_key):
@@ -112,9 +149,9 @@ static func _cached(key: String, material: Material, build: Callable) -> ArrayMe
 ## трассы: если видно больше, каждый кусок прореживается одинаково. `field` может быть
 ## null (рельеф выключен) — тогда высота берётся у дороги.
 static func build(track: Track, env: EnvironmentSet, field: TerrainField, material: Material, budget: int,
-		total_budget: int = PerfBudget.MAX_MULTIMESH_INSTANCES) -> Array[MultiMeshInstance3D]:
+		total_budget: int = PerfBudget.MAX_MULTIMESH_INSTANCES, keep_out: LandmarkBuilder.KeepOut = null) -> Array[MultiMeshInstance3D]:
 	var out: Array[MultiMeshInstance3D] = []
-	for layer in place(track, env, field, material, budget, total_budget):
+	for layer in place(track, env, field, material, budget, total_budget, keep_out):
 		out.append(chunked_multimesh(layer.name, layer.mesh, layer.xf, layer.col, layer.chunk, layer.chunks,
 			layer.range_m if layer.chunks > 1 else 0.0, layer.keep))
 	return out
@@ -123,9 +160,11 @@ static func build(track: Track, env: EnvironmentSet, field: TerrainField, materi
 ## Расстановка без узлов (данные `build`): слои — лиственные, ели, кусты, трава; у слоя
 ## трансформы и цвета экземпляров, кусок каждого и доля `keep`, которая останется в каждом
 ## куске. Позиции экземпляров готовых MultiMesh на headless-сервере недоступны — тесты
-## проверяют расстановку здесь.
+## проверяют расстановку здесь. `keep_out` — пятна ориентиров (`LandmarkBuilder.keep_out`):
+## деревья, кусты, лесополосы и изгороди туда не ставятся.
 static func place(track: Track, env: EnvironmentSet, field: TerrainField, material: Material, budget: int,
-		total_budget: int = PerfBudget.MAX_MULTIMESH_INSTANCES) -> Array[Layer]:
+		total_budget: int = PerfBudget.MAX_MULTIMESH_INSTANCES, keep_out: LandmarkBuilder.KeepOut = null) -> Array[Layer]:
+	var ko: LandmarkBuilder.KeepOut = keep_out if keep_out != null and not keep_out.is_empty() else null
 	var chunk_m: float = PerfBudget.chunk_length_m(track)
 	var chunks: int = PerfBudget.chunk_count(track, chunk_m)
 	var length: float = track.length_m()
@@ -136,6 +175,15 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	# считается после расстановки по кускам.
 	if chunks == 1:
 		cap = mini(cap, maxi(budget, 0))
+	# Лесополосы и изгороди (своя последовательность случайных чисел — расстановка рощ
+	# от них не зависит); их экземпляры вычитаются из потолка растительности.
+	var poplars := Layer.new("Poplars", poplar_mesh(material), PerfBudget.RANGE_TREES_M, chunks)
+	var extra_rng := RandomNumberGenerator.new()
+	extra_rng.seed = env.scenery_seed + 17
+	_place_windbreaks(poplars, track, env, field, extra_rng, chunk_m, chunks, cap / 4, ko)
+	var walls := Layer.new("StoneWalls", wall_mesh(material), PerfBudget.RANGE_BUSHES_M, chunks)
+	_place_walls(walls, track, env, field, chunk_m, chunks, cap / 8, ko)
+	cap = maxi(cap - poplars.xf.size() - walls.xf.size(), 0)
 	var scale: float = per_length if wanted <= cap else per_length * float(cap) / float(maxi(wanted, 1))
 	var n_trees: int = int(env.tree_count * scale)
 	var n_bushes: int = int(env.bush_count * scale)
@@ -168,13 +216,19 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var mask: float = forest.get_noise_2d(p.x, p.z) * 0.5 + 0.5
 		if not near_row and rng.randf() > mask * mask * 1.6:
 			continue
+		if not near_row and env.tree_hilltop_bias > 0.0 and field != null:
+			var rise: float = field.height_at(p.x, p.z) - sample.position.y
+			if rng.randf() > lerpf(1.0, smoothstep(-4.0, 22.0, rise), env.tree_hilltop_bias):
+				continue
 		if field != null and field.road_distance_at(p.x, p.z) < TREE_MIN_ROAD_M + absf(env.road_center_offset_m):
+			continue
+		if ko != null and ko.blocks(p.x, p.z, 2.0):
 			continue
 		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
 		var sc: float = rng.randf_range(0.75, 1.35)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.9, 1.15), sc))
 		var xf := Transform3D(basis, Vector3(p.x, y - 0.1, p.z))
-		var conifer: bool = forest.get_noise_2d(p.x + 913.0, p.z - 377.0) > 0.15
+		var conifer: bool = forest.get_noise_2d(p.x + 913.0, p.z - 377.0) > env.conifer_threshold
 		var shade: float = rng.randf_range(0.85, 1.12)
 		var chunk: int = PerfBudget.chunk_of(s, chunk_m, chunks)
 		if conifer:
@@ -192,6 +246,8 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var right: Vector3 = sample.right()
 		var p: Vector3 = sample.position + right * (env.road_center_offset_m + sgn * w)
 		if field != null and field.road_distance_at(p.x, p.z) < curb_out + 2.5:
+			continue
+		if ko != null and ko.blocks(p.x, p.z, 1.0):
 			continue
 		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
 		var sc: float = rng.randf_range(0.6, 1.3)
@@ -214,12 +270,117 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		tufts.add(Transform3D(basis, Vector3(p.x, y - 0.02, p.z)), Color(1.0 + dry * 0.15, 1.0, 1.0 - dry * 0.2, 1.0),
 			PerfBudget.chunk_of(s, chunk_m, chunks))
 	var layers: Array[Layer] = [trees, pines, bushes, tufts]
+	for extra in [poplars, walls]:
+		if not (extra as Layer).xf.is_empty():
+			layers.append(extra)
 	if chunks > 1:
 		var seen: int = _max_visible(layers, chunks, track)
 		if seen > budget:
 			for layer in layers:
 				layer.keep = float(maxi(budget, 0)) / float(seen)
 	return layers
+
+
+## Лесополосы: ряды тополей вдоль дороги (по её изгибу, на постоянном удалении) и поперёк
+## (от дороги в поле). Не ближе `TREE_MIN_ROAD_M` к любой части трассы; не больше `limit`.
+static func _place_windbreaks(layer: Layer, track: Track, env: EnvironmentSet, field: TerrainField,
+		rng: RandomNumberGenerator, chunk_m: float, chunks: int, limit: int, ko: LandmarkBuilder.KeepOut = null) -> void:
+	var rows: int = int(round(maxf(env.windbreak_rows_per_km, 0.0) * track.length_m() / 1000.0))
+	if rows <= 0 or env.windbreak_spacing_m <= 0.5:
+		return
+	var length: float = track.length_m()
+	var sample := TrackSample.new()
+	var curb_out: float = RoadsideBuilder.curb_outer_m(env.road_width_m)
+	var verge_w: float = RoadsideBuilder.verge_width_m(env.road_width_m)
+	var min_road: float = maxf(TREE_MIN_ROAD_M + absf(env.road_center_offset_m), curb_out + 6.0)
+	for r in rows:
+		var s0: float = rng.randf() * length
+		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
+		var w0: float = rng.randf_range(env.windbreak_offset_m.x, env.windbreak_offset_m.y)
+		var row_len: float = rng.randf_range(env.windbreak_length_m.x, env.windbreak_length_m.y)
+		var along: bool = rng.randf() < 0.65
+		var n: int = int(row_len / env.windbreak_spacing_m)
+		track.sample_into(s0, sample)
+		var base: Vector3 = sample.position + sample.right() * env.road_center_offset_m
+		var out_dir: Vector3 = sample.right() * sgn
+		for i in n:
+			if layer.xf.size() >= limit:
+				return
+			var t: float = float(i) * env.windbreak_spacing_m + rng.randf_range(-0.8, 0.8)
+			var s: float = s0
+			var p: Vector3
+			var w: float = w0
+			if along:
+				s = fposmod(s0 + t, length) if track.is_loop() else clampf(s0 + t, 0.0, length)
+				track.sample_into(s, sample)
+				p = sample.position + sample.right() * (env.road_center_offset_m + sgn * w0)
+			else:
+				w = w0 + t
+				p = base + out_dir * w
+			p += Vector3(rng.randf_range(-0.6, 0.6), 0.0, rng.randf_range(-0.6, 0.6))
+			if field != null and field.road_distance_at(p.x, p.z) < min_road:
+				continue
+			if ko != null and ko.blocks(p.x, p.z, 1.5):
+				continue
+			var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
+			var sc: float = rng.randf_range(0.8, 1.2)
+			var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.9, 1.2), sc))
+			var shade: float = rng.randf_range(0.88, 1.1)
+			layer.add(Transform3D(basis, Vector3(p.x, y - 0.1, p.z)), Color(shade, shade, shade * 0.92, 1.0),
+				PerfBudget.chunk_of(s, chunk_m, chunks))
+
+
+## Каменные изгороди: звенья по `WALL_SEGMENT_M` на удалении `stone_wall_offset_m` от оси
+## дороги, участками (маска шума вдоль трассы, доля `stone_wall_share`), сторона участка — по
+## знаку второй маски; звено наклонено по рельефу.
+static func _place_walls(layer: Layer, track: Track, env: EnvironmentSet, field: TerrainField,
+		chunk_m: float, chunks: int, limit: int, ko: LandmarkBuilder.KeepOut = null) -> void:
+	if env.stone_wall_share <= 0.0:
+		return
+	var length: float = track.length_m()
+	var noise := FastNoiseLite.new()
+	noise.seed = env.scenery_seed + 31
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 1.0 / 260.0
+	var verge_w: float = RoadsideBuilder.verge_width_m(env.road_width_m)
+	var a := TrackSample.new()
+	var b := TrackSample.new()
+	var n: int = int(length / WALL_SEGMENT_M)
+	# Порог маски — квантиль значений шума по звеньям: изгородь занимает долю `stone_wall_share`.
+	var values := PackedFloat32Array()
+	values.resize(n)
+	for i in n:
+		values[i] = noise.get_noise_1d(float(i) * WALL_SEGMENT_M)
+	var sorted_values := values.duplicate()
+	sorted_values.sort()
+	var threshold: float = sorted_values[clampi(int(float(n) * (1.0 - clampf(env.stone_wall_share, 0.0, 1.0))), 0, maxi(n - 1, 0))] if n > 0 else 1.0
+	var w: float = env.stone_wall_offset_m
+	for i in n:
+		if layer.xf.size() >= limit:
+			return
+		var s0: float = float(i) * WALL_SEGMENT_M
+		if values[i] < threshold:
+			continue
+		var sgn: float = 1.0 if noise.get_noise_1d(s0 + 5000.0) >= 0.0 else -1.0
+		track.sample_into(s0, a)
+		track.sample_into(minf(s0 + WALL_SEGMENT_M, length), b)
+		var p0: Vector3 = a.position + a.right() * (env.road_center_offset_m + sgn * w)
+		var p1: Vector3 = b.position + b.right() * (env.road_center_offset_m + sgn * w)
+		if field != null and minf(field.road_distance_at(p0.x, p0.z), field.road_distance_at(p1.x, p1.z)) < w - absf(env.road_center_offset_m) - 1.0:
+			continue
+		if ko != null and (ko.blocks(p0.x, p0.z) or ko.blocks(p1.x, p1.z)):
+			continue
+		p0.y = _ground_y(p0, w, a.position.y, env.road_width_m, verge_w, field) - 0.12
+		p1.y = _ground_y(p1, w, b.position.y, env.road_width_m, verge_w, field) - 0.12
+		var x: Vector3 = p1 - p0
+		if x.length_squared() < 1e-4:
+			continue
+		var xs: float = x.length() / WALL_SEGMENT_M
+		x = x.normalized()
+		var z: Vector3 = x.cross(Vector3.UP).normalized()
+		var y: Vector3 = z.cross(x).normalized()
+		var shade: float = 0.9 + 0.16 * absf(values[(i * 7) % n])
+		layer.add(Transform3D(Basis(x * xs, y, z), (p0 + p1) * 0.5), Color(shade, shade, shade), PerfBudget.chunk_of(s0, chunk_m, chunks))
 
 
 static func _ground_y(p: Vector3, w: float, road_y: float, road_width: float, verge_w: float, field: TerrainField) -> float:

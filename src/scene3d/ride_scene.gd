@@ -72,6 +72,12 @@ var _props: MultiMeshInstance3D = null
 var _world_nodes: Array[Node] = []
 var _terrain: TerrainField = null
 var _env_instance: Node = null
+## Ориентиры трассы каталога (T-083): расстановка и узлы (входят в `_world_nodes`).
+var _landmarks_placed: Array[LandmarkBuilder.Placed] = []
+var _landmark_nodes: Array[MultiMeshInstance3D] = []
+## Контейнер того, что есть не на каждой трассе (ориентиры, лесополосы, изгороди): живёт всё
+## время сцены, поэтому число детей корня окружения от трассы не зависит.
+var _features: Node3D = null
 
 @onready var _rider: Rider = %Rider
 @onready var _camera: Camera3D = %Camera
@@ -84,6 +90,9 @@ func _ready() -> void:
 	# Велосипедиста двигает только сцена (`advance` → `Rider.advance`), иначе его анимация
 	# и колёса продвигались бы дважды за кадр.
 	_rider.set_process(false)
+	_features = Node3D.new()
+	_features.name = "RouteFeatures"
+	_environment_root.add_child(_features)
 	if environment_set == null:
 		environment_set = RouteWorld.environment(route_id) if not route_id.is_empty() else load(DEFAULT_ENVIRONMENT)
 	_apply_environment()
@@ -124,6 +133,8 @@ func set_track(new_track: Track) -> void:
 		node.queue_free()
 	_world_nodes.clear()
 	_terrain = null
+	_landmarks_placed.clear()
+	_landmark_nodes.clear()
 	if not is_node_ready():
 		return
 	var env: EnvironmentSet = environment_set
@@ -163,6 +174,17 @@ func world_nodes() -> Array[Node]:
 ## Поле высот рельефа (null — рельеф выключен в `EnvironmentSet`).
 func terrain() -> TerrainField:
 	return _terrain
+
+
+## Узлы ориентиров (корни; части — их дети). Пусто — у трассы нет ориентиров или они
+## выключены в `EnvironmentSet`.
+func landmark_nodes() -> Array[MultiMeshInstance3D]:
+	return _landmark_nodes
+
+
+## Расстановка ориентиров (данные для тестов: тип, s, точка привязки, экземпляры частей).
+func landmarks_placed() -> Array[LandmarkBuilder.Placed]:
+	return _landmarks_placed
 
 
 func rider_position() -> Vector3:
@@ -343,6 +365,8 @@ func _apply_environment() -> void:
 		var sm := (load(DEFAULT_SKY_MATERIAL) as ShaderMaterial).duplicate() as ShaderMaterial
 		sm.set_shader_parameter("top_color", e.sky_color)
 		sm.set_shader_parameter("horizon_color", e.horizon_color)
+		sm.set_shader_parameter("ground_color", e.sky_ground_color)
+		sm.set_shader_parameter("cloud_cover", e.cloud_cover)
 		sky_mat = sm
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
@@ -385,17 +409,42 @@ func _build_world() -> void:
 		_add_world_node(side["roadside"])
 		_add_world_node(_no_shadow(side["verge"]))
 	if e.terrain_enabled:
-		_terrain = TerrainField.build(track, e.rolling_height_m, e.hills_height_m, e.scenery_seed)
+		_terrain = TerrainField.build(track, e.rolling_height_m, e.hills_height_m, e.scenery_seed, e.cross_slope_gain, e.relief_anchor,
+			e.cross_slope_max)
+	# Ориентиры расставляются по рельефу до его меша: озёра опускают землю под водой.
+	_place_landmarks(world_mat)
+	if _terrain != null:
+		LandmarkBuilder.carve(_landmarks_placed, _terrain)
 		_add_world_node(_no_shadow(_terrain.build_mesh(grass_mat)))
 	_props = _build_props()
-	var posts_visible: int = 0
-	var posts_total: int = 0
-	if _props != null:
-		posts_visible = PerfBudget.max_visible_along([_props], track)
-		posts_total = int(PerfBudget.count(_props)["multimesh_instances"])
-	for node in SceneryBuilder.build(track, e, _terrain, world_mat, PerfBudget.MAX_VISIBLE_MULTIMESH_INSTANCES - posts_visible,
-			PerfBudget.MAX_MULTIMESH_INSTANCES - posts_total):
-		_add_world_node(node)
+	_landmark_nodes = LandmarkBuilder.nodes(_landmarks_placed)
+	for node in _landmark_nodes:
+		_add_world_node(node, true)
+	var fixed: Array = []
+	fixed.append(_props)
+	fixed.append_array(_landmark_nodes)
+	var fixed_visible: int = PerfBudget.max_visible_along(fixed, track)
+	var fixed_total: int = 0
+	for node in fixed:
+		if node != null:
+			fixed_total += int(PerfBudget.count(node)["multimesh_instances"])
+	var keep: LandmarkBuilder.KeepOut = LandmarkBuilder.keep_out(_landmarks_placed)
+	for node in SceneryBuilder.build(track, e, _terrain, world_mat, PerfBudget.MAX_VISIBLE_MULTIMESH_INSTANCES - fixed_visible,
+			PerfBudget.MAX_MULTIMESH_INSTANCES - fixed_total, keep):
+		_add_world_node(node, SceneryBuilder.EXTRA_LAYERS.has(String(node.name)))
+
+
+## Ориентиры трассы каталога (`ProfiledTrack.route.landmarks`, `LandmarkBuilder`); у прочих
+## трасс (петля, GPX) их нет. Строятся до растительности: она обходит их пятна и получает
+## остаток бюджета видимых экземпляров.
+func _place_landmarks(world_mat: Material) -> void:
+	var e: EnvironmentSet = environment_set
+	if not e.landmarks_enabled or not (track is ProfiledTrack):
+		return
+	var def: RouteCatalog.RouteDef = (track as ProfiledTrack).route
+	if def == null or def.landmarks.is_empty():
+		return
+	_landmarks_placed = LandmarkBuilder.place(track, def.landmarks, e, _terrain, world_mat)
 
 
 ## Земля тени не отбрасывает: её габарит — весь мир, он растянул бы глубину карты теней
@@ -405,9 +454,16 @@ func _no_shadow(node: GeometryInstance3D) -> GeometryInstance3D:
 	return node
 
 
-func _add_world_node(node: Node) -> void:
+func _add_world_node(node: Node, feature: bool = false) -> void:
 	_world_nodes.append(node)
-	_environment_root.add_child(node)
+	if feature:
+		if _features == null:
+			_features = Node3D.new()
+			_features.name = "RouteFeatures"
+			_environment_root.add_child(_features)
+		_features.add_child(node)
+	else:
+		_environment_root.add_child(node)
 
 
 ## Сигнальные столбики (`RoadsideBuilder.build_posts`): шаг `prop_spacing_m` по всей

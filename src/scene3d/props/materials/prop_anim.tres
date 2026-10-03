@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://src/scene3d/props/shaders/prop_anim.gdshader" id="1_anim"]
+[ext_resource type="Material" path="res://src/scene3d/props/materials/prop_anim_outline.tres" id="2_outline"]
+
+[resource]
+next_pass = ExtResource("2_outline")
+shader = ExtResource("1_anim")
+shader_parameter/toon_threshold = 0.0
+shader_parameter/toon_softness = 0.08
+shader_parameter/toon_sun_gain = 1.0
+shader_parameter/toon_rim = 0.0
+shader_parameter/drift_rate = 0.035

@@ -229,6 +229,52 @@ func add_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3, color:
 		indices.append_array(PackedInt32Array([i0, i0 + 2, i0 + 1, i0, i0 + 3, i0 + 2]))
 
 
+## Треугольник (a, b, c) с нормалью `n` (обход приводится к нормали в `fix_winding`).
+func add_triangle(a: Vector3, b: Vector3, c: Vector3, n: Vector3, color: Color) -> void:
+	var col := lin(color)
+	var i0: int = _add_vertex(a, n, col)
+	_add_vertex(b, n, col)
+	_add_vertex(c, n, col)
+	indices.append_array(PackedInt32Array([i0, i0 + 1, i0 + 2]))
+
+
+## Двускатная крыша (T-083, постройки ориентиров): основание — прямоугольник `size.x` × `size.z`
+## на высоте 0 в осях `xform`, конёк вдоль X на высоте `size.y`, свес `overhang` со всех сторон.
+## Скаты — `color`, фронтоны (треугольники на торцах) — `gable_color`.
+func add_gable_roof(xform: Transform3D, size: Vector3, overhang: float, color: Color, gable_color: Color) -> void:
+	var hx: float = size.x * 0.5 + overhang
+	var hz: float = size.z * 0.5 + overhang
+	var drop: float = size.y * overhang / maxf(size.z * 0.5, 1e-3)
+	var ridge_a: Vector3 = xform * Vector3(-hx, size.y, 0.0)
+	var ridge_b: Vector3 = xform * Vector3(hx, size.y, 0.0)
+	for sgn in [-1.0, 1.0]:
+		var eave_a: Vector3 = xform * Vector3(-hx, -drop, sgn * hz)
+		var eave_b: Vector3 = xform * Vector3(hx, -drop, sgn * hz)
+		var n: Vector3 = (xform.basis * Vector3(0.0, hz, sgn * (size.y + drop))).normalized()
+		add_quad(eave_a, eave_b, ridge_b, ridge_a, n, color)
+	for sgn in [-1.0, 1.0]:
+		var x: float = sgn * size.x * 0.5
+		var n: Vector3 = (xform.basis * Vector3(sgn, 0.0, 0.0)).normalized()
+		add_triangle(xform * Vector3(x, 0.0, -size.z * 0.5), xform * Vector3(x, 0.0, size.z * 0.5),
+			xform * Vector3(x, size.y, 0.0), n, gable_color)
+
+
+## Четырёхскатная пирамида (крыша башни): основание `half.x` × `half.y` (полуразмеры по X и Z)
+## с центром `base`, вершина на `height` выше, грани вдоль осей X/Z.
+func add_pyramid(base: Vector3, half: Vector2, height: float, color: Color) -> void:
+	var apex: Vector3 = base + Vector3(0.0, height, 0.0)
+	var c: Array[Vector3] = [
+		base + Vector3(-half.x, 0.0, -half.y), base + Vector3(half.x, 0.0, -half.y),
+		base + Vector3(half.x, 0.0, half.y), base + Vector3(-half.x, 0.0, half.y),
+	]
+	for i in 4:
+		var a: Vector3 = c[i]
+		var b: Vector3 = c[(i + 1) % 4]
+		var mid: Vector3 = (a + b) * 0.5 - base
+		var n: Vector3 = (mid.normalized() * height + Vector3.UP * mid.length()).normalized()
+		add_triangle(a, b, apex, n, color)
+
+
 ## Привести обход треугольников к нормалям вершин (в Godot лицевая грань — обход по часовой
 ## при взгляде на неё): примитивам выше не нужно заботиться о порядке индексов.
 func fix_winding() -> void:

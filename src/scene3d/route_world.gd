@@ -5,13 +5,17 @@ extends RefCounted
 ## (`RideScene`) знает только интерфейсы `Track`/`EnvironmentSet`; смена трассы — смена
 ## данных, а не ветвление кода (`RideScene.set_route(id)`).
 ##
-## Окружения по трассам появятся в T-083/T-087/T-088 (`src/scene3d/tracks/env_<id>.tres`);
-## пока у всех четырёх — общее `default_environment.tres`. Планы трасс неизменяемы и
-## строятся один раз на процесс (кэш по id).
+## Окружения по трассам — `src/scene3d/tracks/env_<id>.tres`: равнина и холмы — T-083,
+## горы и приморье — T-087/T-088 (до них — общее `default_environment.tres`). Ориентиры —
+## из `RouteDef.landmarks` (`ProfiledTrack.route`, расстановка — `LandmarkBuilder`). Планы
+## трасс неизменяемы и строятся один раз на процесс (кэш по id).
 
 const DEFAULT_ENVIRONMENT: String = "res://src/scene3d/default_environment.tres"
 ## Набор окружения по `RouteDef.environment_set_id`; нет записи — `DEFAULT_ENVIRONMENT`.
-const ENVIRONMENTS: Dictionary = {}
+const ENVIRONMENTS: Dictionary = {
+	RouteCatalog.FLAT: "res://src/scene3d/tracks/env_flat.tres",
+	RouteCatalog.HILLS: "res://src/scene3d/tracks/env_hills.tres",
+}
 
 static var _tracks: Dictionary = {}
 
