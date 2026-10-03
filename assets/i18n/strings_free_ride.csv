@@ -1,3 +1,16 @@
 keys,ru,en
 meta.area.free_ride,Свободная езда,Free ride
 ride.free_ride.default_name,Свободная езда — %s,Free ride — %s
+ui.free_ride.relief.lap,круг {n},lap {n}
+ui.free_ride.relief.ahead,Впереди 2 км,Next 2 km
+ui.free_ride.relief.lap_distance,{lap} / {length} км,{lap} / {length} km
+ui.free_ride.relief.ascent,↑ {m} м,↑ {m} m
+ui.free_ride.relief.to_summit,до вершины {km} км · +{m} м,to summit {km} km · +{m} m
+ui.free_ride.relief.climb_in,подъём через {km} км,climb in {km} km
+ui.free_ride.relief.grade,{value} %,{value} %
+ui.free_ride.grade.title,Уклон,Grade
+ui.free_ride.grade.sim,SIM {value} %,SIM {value} %
+ui.free_ride.grade.fixed,СОПР. {value} %,RES. {value} %
+ui.free_ride.unit.pct,%,%
+ui.free_ride.unit.m,м,m
+ui.free_ride.chart.now,сейчас,now

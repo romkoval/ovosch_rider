@@ -18,8 +18,12 @@ extends Control
 ## Итоговый порядок совпадает с HUD-11.6: подложка → FTP → сегменты → пульс → мощность → курсор.
 ##
 ## Режимы: `Mode.PLAN` — тренировка по плану (весь план целиком по X); `Mode.WINDOW` —
-## заготовка «истории усилия» свободной езды (окно `EffortSeries.sliding_window`): подложка,
-## FTP, линии и шкала времени окна; площадь мощности по зонам и подпись «сейчас» — T-079.
+## «история усилия» свободной езды (REQ-FRD-06 крит. 4, `hud.md` п. 8; окно
+## `EffortSeries.sliding_window`): первые 30 мин шкала 0…30 мин и линия растёт слева направо,
+## дальше окно скользит, «сейчас» у правого края с подписью; мощность — площадь, раскрашенная
+## по зоне каждой точки (альфа `AREA_ALPHA`), с белой линией сверху; пульс — красная линия без
+## заливки; FTP пунктиром; шкала мощности — `EffortSeries.power_y_max()`. Порядок слоя факта
+## в окне: площадь мощности → пульс → линия мощности (плана и курсора нет).
 ##
 ## Для тестов: `debug_draw_commands()` прогоняет отрисовку обоих слоёв в журнал без холста —
 ## список `{layer, tag, op, filled, color, width, points, meta}` в порядке вызовов.
@@ -65,6 +69,8 @@ const SCALE_FONT_SIZE: int = 11
 const LEGEND_STROKE: float = 16.0
 const LEGEND_GAP: float = 4.0
 const LEGEND_ITEM_GAP: float = 12.0
+## Площадь мощности окна: альфа заливки цветом зоны точки (`hud.md` п. 8).
+const AREA_ALPHA: float = 0.55
 ## Фон превью: `inset`, радиус 12 (`ui.md` п. 5, PlanThumb).
 const INSET_RADIUS: float = 12.0
 
@@ -79,6 +85,7 @@ const TAG_HR_OUTLINE: String = "hr_outline"
 const TAG_HR_LINE: String = "hr_line"
 const TAG_POWER_OUTLINE: String = "power_outline"
 const TAG_POWER_LINE: String = "power_line"
+const TAG_POWER_AREA: String = "power_area"
 const TAG_CURSOR: String = "cursor"
 const TAG_FTP_LABEL: String = "ftp_label"
 const TAG_TIME_LABEL: String = "time_label"
@@ -152,12 +159,19 @@ const _FONT_DIR: String = "res://src/ui/theme/fonts/"
 	set(value):
 		legend_hr_key = value
 		_invalidate()
+## Ключ перевода подписи «сейчас» у правого края скользящего окна (пусто — без подписи).
+@export var now_label_key: String = "ui.free_ride.chart.now":
+	set(value):
+		now_label_key = value
+		_invalidate()
 
 var mode: Mode = Mode.PLAN
 
 var _model: PlanChartModel = null
 var _series: EffortSeries = null
 var _window_ftp_w: int = 0
+## Зоны мощности для заливки площади окна (по умолчанию — Коган от FTP окна).
+var _window_zones: PowerZones = null
 ## Куски плана текущего сэмпла (`PlanChartModel.pieces()`), один вызов на `refresh()`.
 var _pieces: Array[Dictionary] = []
 ## Ключ кэша слоя плана: версия модели, размер, потолок шкалы окна.
@@ -205,14 +219,21 @@ func set_series(series: EffortSeries) -> void:
 	refresh()
 
 
-## Режим «история усилия» свободной езды (заготовка API, наполнение — T-079).
-## `series` — `EffortSeries.sliding_window(...)`, `ftp_w` — для пунктира FTP.
-func set_window(series: EffortSeries, ftp_w: int) -> void:
+## Режим «история усилия» свободной езды (REQ-FRD-06 крит. 4). `series` —
+## `EffortSeries.sliding_window(ftp, max_hr)`, `ftp_w` — для пунктира FTP, `zones` — зоны
+## профиля для заливки площади (null — зоны Когана от `ftp_w`).
+func set_window(series: EffortSeries, ftp_w: int, zones: PowerZones = null) -> void:
 	mode = Mode.WINDOW
 	_model = null
 	_series = series
 	_window_ftp_w = ftp_w
+	_window_zones = zones if zones != null else PowerZones.coggan(ftp_w)
 	_invalidate()
+
+
+## Зоны мощности заливки окна.
+func window_zones() -> PowerZones:
+	return _window_zones
 
 
 func plan_model() -> PlanChartModel:
@@ -233,6 +254,15 @@ func sync(session: WorkoutSession) -> void:
 			_series.sync_from_plan(session.samples, _model)
 		else:
 			_series.sync_from_stream(session.samples)
+	refresh()
+
+
+## Свободная езда: новые сэмплы потока сессии — в серии окна (`sync_from_stream`), затем
+## `refresh()`. Вызывать раз в сэмпл (`FreeRideSession.second_elapsed`); на паузе сэмплов
+## нет — линия стоит.
+func sync_free_ride(session: FreeRideSession) -> void:
+	if _series != null:
+		_series.sync_from_stream(session.samples)
 	refresh()
 
 
@@ -391,13 +421,16 @@ func _paint_plan(p: Painter) -> void:
 		_paint_time_axis(p, f)
 
 
-## Слой факта: текущий шаг → пульс → мощность → курсор → шкала пульса и легенда.
+## Слой факта: текущий шаг (план) или площадь мощности (окно) → пульс → мощность → курсор →
+## шкала пульса и легенда.
 func _paint_fact(p: Painter) -> void:
 	var f: Rect2 = field_rect()
 	if f.size.x <= 0.0 or f.size.y <= 0.0:
 		return
 	if mode == Mode.PLAN:
 		_paint_pieces(p, f, true)
+	if show_fact and _series != null and mode == Mode.WINDOW:
+		_paint_power_area(p, f)
 	if show_fact and _series != null:
 		_paint_series(p, f, EffortSeries.SERIES_HR, TAG_HR_OUTLINE, TAG_HR_LINE)
 		_paint_series(p, f, EffortSeries.SERIES_POWER, TAG_POWER_OUTLINE, TAG_POWER_LINE)
@@ -468,6 +501,8 @@ func _paint_ftp_label(p: Painter, f: Rect2) -> void:
 
 
 ## Подписи времени (HUD-10.4) по центру под делением: 11 / 550 tnum `hud.text2`, без рисок.
+## У правого края скользящего окна — «сейчас» (`now_label_key`), выровнена так, чтобы не
+## выходить за подложку.
 func _paint_time_axis(p: Painter, f: Rect2) -> void:
 	var labels: Array[Dictionary] = []
 	if mode == Mode.WINDOW:
@@ -482,9 +517,16 @@ func _paint_time_axis(p: Painter, f: Rect2) -> void:
 	var box: float = 64.0
 	for label in labels:
 		var text: String = str(label["text"])
+		var x: float = f.position.x + float(label["fraction"]) * f.size.x
+		if bool(label.get("is_now", false)) and not now_label_key.is_empty():
+			text = tr(now_label_key)
+			var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, SCALE_FONT_SIZE).x
+			var left: float = minf(x - w * 0.5, size.x - w - 2.0)
+			p.text(TAG_TIME_LABEL, font, Vector2(left, base), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+					SCALE_FONT_SIZE, UiTokens.HUD_TEXT2)
+			continue
 		if text.is_empty():
 			continue
-		var x: float = f.position.x + float(label["fraction"]) * f.size.x
 		p.text(TAG_TIME_LABEL, font, Vector2(x - box * 0.5, base), text, HORIZONTAL_ALIGNMENT_CENTER, box,
 				SCALE_FONT_SIZE, UiTokens.HUD_TEXT2)
 
@@ -628,7 +670,7 @@ func _paint_hatch(p: Painter, f: Rect2, poly: PackedVector2Array, color: Color, 
 
 ## Линия серии: обводка `hud.ink` 0.9 толщиной 5 lp, затем линия 2 lp (HUD-11.7, HUD-12.4).
 ## Только полилинии, без заливки (у пульса стиль «линия», HUD-12.3). Мощность в режиме плана
-## и пульс — левее курсора; площадь мощности окна (`STYLE_AREA_LINE`) — T-079.
+## и пульс — левее курсора; площадь под мощностью окна (`STYLE_AREA_LINE`) — `_paint_power_area`.
 func _paint_series(p: Painter, f: Rect2, series: String, outline_tag: String, line_tag: String) -> void:
 	var style: Dictionary = _series.style(series)
 	var t_from: float = 0.0
@@ -675,6 +717,46 @@ func _paint_series(p: Painter, f: Rect2, series: String, outline_tag: String, li
 		p.polyline(outline_tag, pts, outline, outline_w, meta)
 	for pts in lines:
 		p.polyline(line_tag, pts, color, line_w, meta)
+
+
+## Площадь под линией мощности окна (стиль `STYLE_AREA_LINE`, `hud.md` п. 8): те же отрезки,
+## что у линии (разрывы, прореживание HUD-11), до низа поля; каждая точка красит свою ячейку
+## (от середины до предыдущей точки до середины до следующей) цветом своей зоны мощности
+## с альфой `AREA_ALPHA`; соседние ячейки одной зоны — одна площадь.
+func _paint_power_area(p: Painter, f: Rect2) -> void:
+	if not bool(_series.style(EffortSeries.SERIES_POWER)["fill"]):
+		return
+	var r: Vector2 = _series.visible_range()
+	if r.y <= r.x:
+		return
+	var top: float = power_y_max()
+	var runs: Array[Dictionary] = _series.power_runs(r.x, r.y, maxi(int(f.size.x), 1), top)
+	var zones: PowerZones = _window_zones if _window_zones != null else PowerZones.coggan(_window_ftp_w)
+	var base: float = f.end.y
+	for run in runs:
+		var src: PackedVector2Array = run["points"]
+		var pts := PackedVector2Array()
+		var tokens: Array[String] = []
+		for pt in src:
+			var frac: float = clampf(pt.y / top, 0.0, 1.0) if top > 0.0 else 0.0
+			pts.append(Vector2(f.position.x + _series.window_x_of(pt.x, f.size.x), f.position.y + f.size.y * (1.0 - frac)))
+			tokens.append(ZonePalette.power_token(zones.zone_of(roundi(pt.y))))
+		if pts.size() == 1:
+			# Одиночная точка между разрывами — полоска шириной 2 lp, как штрих линии.
+			pts.append(pts[0] + Vector2(1.0, 0.0))
+			pts[0] -= Vector2(1.0, 0.0)
+			tokens.append(tokens[0])
+		var group := PackedVector2Array([pts[0]])
+		var token: String = tokens[0]
+		for i in range(1, pts.size()):
+			if tokens[i] != token:
+				var mid: Vector2 = (pts[i - 1] + pts[i]) * 0.5
+				group.append(mid)
+				p.area(TAG_POWER_AREA, group, base, Color(ZonePalette.color(token), AREA_ALPHA), {"token": token})
+				group = PackedVector2Array([mid])
+				token = tokens[i]
+			group.append(pts[i])
+		p.area(TAG_POWER_AREA, group, base, Color(ZonePalette.color(token), AREA_ALPHA), {"token": token})
 
 
 ## Курсор: вертикаль 2 lp `hud.text` на всю высоту поля и треугольник 12 × 8 вершиной вниз над полем.
@@ -822,6 +904,32 @@ class Painter extends RefCounted:
 		if canvas != null:
 			canvas.draw_colored_polygon(points, color)
 		_log(tag, "polygon", true, color, 0.0, points, meta)
+
+	## Площадь под верхним контуром `top` (x по возрастанию) до горизонтали `base_y` — четырёхугольниками
+	## между соседними точками (без триангуляции: вырожденные контуры не теряются). В журнале одна
+	## запись `area`: `points` — контур, `meta.base` — низ.
+	func area(tag: String, top: PackedVector2Array, base_y: float, color: Color, meta: Dictionary = {}) -> void:
+		if top.size() < 2:
+			return
+		if canvas != null:
+			var colors := PackedColorArray([color, color, color, color])
+			for i in range(1, top.size()):
+				var a: Vector2 = top[i - 1]
+				var b: Vector2 = top[i]
+				if b.x - a.x <= 0.0:
+					continue
+				canvas.draw_primitive(PackedVector2Array([a, b, Vector2(b.x, base_y), Vector2(a.x, base_y)]), colors,
+						PackedVector2Array())
+		var m: Dictionary = meta.duplicate()
+		m["base"] = base_y
+		_log(tag, "area", true, color, 0.0, top, m)
+
+	func circle(tag: String, center: Vector2, radius: float, color: Color, meta: Dictionary = {}) -> void:
+		if canvas != null:
+			canvas.draw_circle(center, radius, color, true, -1.0, true)
+		var m: Dictionary = meta.duplicate()
+		m["radius"] = radius
+		_log(tag, "circle", true, color, 0.0, PackedVector2Array([center]), m)
 
 	func polyline(tag: String, points: PackedVector2Array, color: Color, width: float, meta: Dictionary = {}) -> void:
 		if points.size() < 2:

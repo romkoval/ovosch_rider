@@ -21,9 +21,20 @@ extends PanelContainer
 ## Фишка зоны — белая плашка 32×18 (r 5) под текстом `hud.ink`, тонированная `modulate` цветом
 ## зоны; «нет данных» — без заливки, рамка и «—» цветом `hud.text2`.
 ##
-## Режим `FREE_RIDE` (`hud.md` п. 8) наполняет T-079: сейчас он только прячет карточку цели и
-## отклонение. Вход данных — `set_state(state)`: словарь `HudModel.state()` плюс поля экрана
-## (см. `set_state`).
+## Режим `FREE_RIDE` (`hud.md` п. 8; REQ-FRD-06 крит. 1, 2, REQ-FRD-05 крит. 6 — отображение):
+## - ряд A — четыре равные ячейки: время, дистанция (км с одним знаком, накопленная за заезд),
+##   скорость, набор за заезд «↑ 612 м» (целые метры);
+## - полоса — прогресс круга трассы, заливка `hud.text` с альфой 0.85;
+## - вместо карточки цели — карточка «УКЛОН»: полный уклон трассы g(s) (не переданный станку),
+##   знак всегда, один знак после точки («+6.4», «−3.0» с U+2212, «0.0»), белым; справа в строке
+##   заголовка клин 32 × 14 цвета палитры уклона (`UiTokens.grade_color`) с наклоном ×2;
+##   строка 3 — режим нагрузки и крутизна «SIM 50 %» или уровень «СОПР. 40 %»;
+## - герой — факт мощности с фишкой и полосой зоны, без отклонения; пульс и каденс — как в плане;
+##   цели, отсчёта и списка нет. Отсутствующее значение — «—».
+##
+## Вход данных — `set_state(state)`: словарь `HudModel.state()` (или такой же словарь экрана
+## свободной езды) плюс поля экрана (см. `set_state`); поля свободной езды из сессии —
+## `free_ride_fields(session)`.
 
 enum Mode { PLAN, FREE_RIDE }
 
@@ -36,6 +47,16 @@ const TEMPLATE_DISTANCE: String = "888.8"
 const TEMPLATE_ELAPSED: String = "8:88:88"
 const TEMPLATE_COUNTDOWN: String = "88:88"
 const TEMPLATE_DELTA: String = "−8888"
+const TEMPLATE_GRADE: String = "+88.8"
+const TEMPLATE_ASCENT: String = "8888"
+
+## Поля состояния свободной езды (`set_state`).
+const KEY_GRADE_PCT: String = "grade_pct"
+const KEY_LOAD_MODE: String = "load_mode"
+const KEY_STEEPNESS_PCT: String = "steepness_pct"
+const KEY_RESISTANCE_PCT: String = "resistance_pct"
+const KEY_ASCENT_M: String = "ascent_m"
+const KEY_LAP_FRACTION: String = "lap_fraction"
 
 const MINUS: String = "−"
 const DEVIATION_GLYPHS: Dictionary = {
@@ -78,6 +99,13 @@ const VITALS_ROW2_BASELINE: float = 90.0
 const VITALS_VALUE_X: float = 24.0
 const VITALS_SIDE_GAP: float = 8.0
 const CHIP_SIZE: Vector2 = UiTokens.HUD_ZONE_CHIP_SIZE
+## Полоса круга в свободной езде (`hud.md` п. 8).
+const LAP_BAR_COLOR: Color = Color(UiTokens.HUD_TEXT, 0.85)
+## Клин уклона: рамка 32 × 14, наклон утрирован ×2 (высота = ширина × 2 × |g| / 100, не больше
+## рамки); ровно (|g| < 0.05 %) — полоска `WEDGE_MIN_HEIGHT`.
+const WEDGE_SIZE: Vector2 = Vector2(32, 14)
+const WEDGE_EXAGGERATION: float = 2.0
+const WEDGE_MIN_HEIGHT: float = 2.0
 
 var _mode: Mode = Mode.PLAN
 var _state: Dictionary = {}
@@ -85,6 +113,8 @@ var _step_fraction: float = 0.0
 var _step_color: Color = UiTokens.HUD_FREE
 var _target_color: Color = UiTokens.HUD_FREE
 var _power_zone_color: Color = Color.TRANSPARENT
+## Уклон трассы для клина (NAN — нет данных).
+var _grade: float = NAN
 var _deviation: String = HudModel.DEVIATION_HIDDEN
 var _delta_text: String = ""
 var _unit_texts: Array[String] = []
@@ -102,6 +132,9 @@ var _chip_empty_box: StyleBoxFlat
 @onready var _distance_unit: Label = %DistanceUnit
 @onready var _speed_label: Label = %SpeedLabel
 @onready var _speed_unit: Label = %SpeedUnit
+@onready var _ascent_icon: Label = %AscentIcon
+@onready var _ascent_label: Label = %AscentLabel
+@onready var _ascent_unit: Label = %AscentUnit
 @onready var _step_bar: Control = %StepBar
 @onready var _target_card: Control = %TargetCard
 @onready var _target_title: Label = %TargetTitle
@@ -111,6 +144,12 @@ var _chip_empty_box: StyleBoxFlat
 @onready var _target_unit: Label = %TargetUnit
 @onready var _countdown_prefix: Label = %CountdownPrefix
 @onready var _countdown_label: Label = %CountdownLabel
+@onready var _grade_card: Control = %GradeCard
+@onready var _grade_title: Label = %GradeTitle
+@onready var _grade_wedge: Control = %GradeWedge
+@onready var _grade_label: Label = %GradeLabel
+@onready var _grade_unit: Label = %GradeUnit
+@onready var _grade_mode_label: Label = %GradeModeLabel
 @onready var _hero: Control = %Hero
 @onready var _power_label: Label = %PowerLabel
 @onready var _power_unit: Label = %PowerUnit
@@ -130,6 +169,8 @@ func _ready() -> void:
 	_make_boxes()
 	_step_bar.draw.connect(_draw_step_bar)
 	_target_card.draw.connect(_draw_target_card)
+	_grade_card.draw.connect(_draw_grade_card)
+	_grade_wedge.draw.connect(_draw_grade_wedge)
 	_zone_row.draw.connect(_draw_zone_row)
 	for chip: Label in [_target_zone_label, _power_zone_label, _hr_zone_label]:
 		var fill: Control = chip.get_node("Fill")
@@ -153,10 +194,11 @@ func _notification(what: int) -> void:
 # API
 # ---------------------------------------------------------------------------
 
-## Режим панели: план (по умолчанию) или свободная езда (наполнение — T-079).
+## Режим панели: план (по умолчанию) или свободная езда. Меняет состав ряда A и карточку.
 func set_mode(new_mode: Mode) -> void:
 	_mode = new_mode
 	if is_node_ready():
+		_relayout()
 		_apply_state()
 
 
@@ -168,6 +210,10 @@ func mode() -> Mode:
 ## `step_fraction` (0..1, пройденная доля шага), `step_free` (bool, шаг FreeRide),
 ## `target_zone_token` (зона цели), `target_cadence_rpm` (0 — нет), `resistance_pct`
 ## (уровень сопротивления для FreeRide-шага). Отсутствующие поля — «нет данных».
+## Свободная езда (`Mode.FREE_RIDE`), см. `free_ride_fields`: `grade_pct` (float, полный уклон
+## трассы g(s), %), `load_mode` (`SimController.Mode`), `steepness_pct`, `resistance_pct`
+## (уровень фиксированного сопротивления), `distance_m` (накопленная дистанция), `ascent_m`
+## (набор за заезд), `lap_fraction` (0..1, пройденная доля круга).
 func set_state(state: Dictionary) -> void:
 	_state = state
 	if is_node_ready():
@@ -253,7 +299,7 @@ func is_countdown_accented() -> bool:
 	return bool(_state.get("about_to_change", false))
 
 
-## Пройденная доля текущего шага на полосе шага.
+## Пройденная доля на полосе: текущего шага (план) или круга (свободная езда).
 func step_fraction() -> float:
 	return _step_fraction
 
@@ -265,6 +311,94 @@ func step_bar_color() -> Color:
 ## Цвет заливки фишки: цвет зоны или прозрачный («нет данных»).
 func chip_fill_color(chip: Label) -> Color:
 	return chip.modulate if bool(_chip_filled.get(chip, false)) else Color.TRANSPARENT
+
+
+## Уклон в карточке «УКЛОН» («+6.4», «−3.0», «0.0») или «—» (REQ-FRD-06 крит. 1, 2).
+func grade_text() -> String:
+	return _grade_label.text
+
+
+## Строка режима в карточке уклона: «SIM 50 %», «СОПР. 40 %» или «—» (REQ-FRD-05 крит. 6).
+func grade_mode_text() -> String:
+	return _grade_mode_label.text
+
+
+## Цвет клина уклона (палитра уклона); прозрачный — нет данных.
+func grade_wedge_color() -> Color:
+	return UiTokens.grade_color(_grade) if not is_nan(_grade) else Color.TRANSPARENT
+
+
+## Высота клина уклона, lp (0 — нет данных).
+func grade_wedge_height() -> float:
+	if is_nan(_grade):
+		return 0.0
+	var g := roundf(_grade * 10.0) / 10.0
+	if g == 0.0:
+		return WEDGE_MIN_HEIGHT
+	return clampf(WEDGE_SIZE.x * WEDGE_EXAGGERATION * absf(g) / 100.0, WEDGE_MIN_HEIGHT, WEDGE_SIZE.y)
+
+
+## Набор за заезд — целые метры или «—» (REQ-FRD-06 крит. 1).
+func ascent_text() -> String:
+	return _ascent_label.text
+
+
+## Карточка уклона (на месте карточки цели в свободной езде).
+func grade_card() -> Control:
+	return _grade_card
+
+
+## Узлы свободной езды по именам — для тестов раскладки и экрана.
+func free_ride_nodes() -> Dictionary:
+	return {
+		"ascent_icon": _ascent_icon, "ascent": _ascent_label, "ascent_unit": _ascent_unit,
+		"grade_card": _grade_card, "grade_title": _grade_title, "grade_wedge": _grade_wedge,
+		"grade": _grade_label, "grade_unit": _grade_unit, "grade_mode": _grade_mode_label,
+	}
+
+
+## Поля свободной езды для `set_state` из сессии: уклон трассы (не переданный станку,
+## FRD-06 крит. 2), режим нагрузки, крутизна и уровень, накопленная дистанция, набор,
+## пройденная доля круга. Остальные поля (время, мощность, пульс…) даёт модель экрана.
+static func free_ride_fields(session: FreeRideSession) -> Dictionary:
+	var length: float = session.position.length_m()
+	return {
+		KEY_GRADE_PCT: session.route_grade_pct(),
+		KEY_LOAD_MODE: int(session.mode()),
+		KEY_STEEPNESS_PCT: session.steepness_pct(),
+		KEY_RESISTANCE_PCT: session.resistance_level(),
+		"distance_m": session.distance_m(),
+		KEY_ASCENT_M: session.ascent_m(),
+		KEY_LAP_FRACTION: session.position.lap_distance_m() / length if length > 0.0 else 0.0,
+	}
+
+
+## Уклон со знаком всегда и одним знаком после точки: «+6.4», «−3.0» (U+2212), «0.0»;
+## NAN/бесконечность — «—» (REQ-FRD-06 крит. 1).
+static func format_grade(grade_pct: float) -> String:
+	if not is_finite(grade_pct):
+		return HudModel.NO_DATA_TEXT
+	var r: float = roundf(grade_pct * 10.0) / 10.0
+	if r == 0.0:
+		return "0.0"
+	return ("+%.1f" % r) if r > 0.0 else ("%s%.1f" % [MINUS, -r])
+
+
+## Набор — целые метры; отрицательное/NAN — «—».
+static func format_ascent(ascent_m: float) -> String:
+	if not is_finite(ascent_m) or ascent_m < 0.0:
+		return HudModel.NO_DATA_TEXT
+	return "%d" % roundi(ascent_m)
+
+
+## Строка режима нагрузки: SIM — «SIM {крутизна} %», фиксированное — «СОПР. {уровень} %».
+static func load_mode_text(load_mode: int, steepness_pct: int, resistance_pct: int) -> String:
+	match load_mode:
+		SimController.Mode.SIM:
+			return String(TranslationServer.translate("ui.free_ride.grade.sim")).format({"value": steepness_pct})
+		SimController.Mode.FIXED:
+			return String(TranslationServer.translate("ui.free_ride.grade.fixed")).format({"value": resistance_pct})
+	return HudModel.NO_DATA_TEXT
 
 
 ## Узлы-значения по именам — для тестов раскладки и экрана (подписи и соседи).
@@ -308,13 +442,28 @@ func _apply_state() -> void:
 	_elapsed_label.text = str(s.get("elapsed_text", HudModel.format_elapsed(0)))
 	_distance_label.text = "%.1f" % (float(s.get("distance_m", 0.0)) / 1000.0)
 	_speed_label.text = str(s.get("speed_text", HudModel.NO_DATA_TEXT))
-	# Полоса шага.
+	_ascent_label.text = format_ascent(float(s.get(KEY_ASCENT_M, -1.0)))
+	for node: Control in [_ascent_icon, _ascent_label, _ascent_unit]:
+		node.visible = free_mode
+	# Полоса шага (план) или круга (свободная езда).
 	var step_free := bool(s.get("step_free", false))
-	_step_fraction = clampf(float(s.get("step_fraction", 0.0)), 0.0, 1.0)
 	var target_token := str(s.get("target_zone_token", ""))
-	_step_color = UiTokens.HUD_FREE if step_free or target_token.is_empty() else ZonePalette.color(target_token)
+	if free_mode:
+		_step_fraction = clampf(float(s.get(KEY_LAP_FRACTION, 0.0)), 0.0, 1.0)
+		_step_color = LAP_BAR_COLOR
+	else:
+		_step_fraction = clampf(float(s.get("step_fraction", 0.0)), 0.0, 1.0)
+		_step_color = UiTokens.HUD_FREE if step_free or target_token.is_empty() else ZonePalette.color(target_token)
 	_target_color = _step_color
 	_step_bar.queue_redraw()
+	# Карточка уклона (свободная езда).
+	_grade_card.visible = free_mode
+	_grade = float(s.get(KEY_GRADE_PCT, NAN))
+	_grade_label.text = format_grade(_grade)
+	_grade_mode_label.text = load_mode_text(int(s.get(KEY_LOAD_MODE, -1)), int(s.get(KEY_STEEPNESS_PCT, 0)),
+			int(s.get(KEY_RESISTANCE_PCT, 0)))
+	_grade_wedge.queue_redraw()
+	_grade_card.queue_redraw()
 	# Карточка цели.
 	_target_card.visible = not free_mode
 	var has_target := int(s.get("target_w", HudModel.NO_DATA)) >= 0
@@ -373,6 +522,8 @@ func _set_static_texts() -> void:
 	_hr_unit.text = tr("ui.hud.unit.bpm")
 	_cadence_unit.text = tr("ui.hud.unit.rpm")
 	_countdown_prefix.text = tr("ui.hud.target.remaining")
+	_ascent_unit.text = tr("ui.free_ride.unit.m")
+	_grade_unit.text = tr("ui.free_ride.unit.pct")
 	if not _state.is_empty():
 		_apply_state()
 
@@ -389,8 +540,9 @@ func _relayout() -> void:
 	_content.custom_minimum_size = CONTENT_SIZE
 	_step_bar.position = STEP_BAR_RECT.position
 	_step_bar.size = STEP_BAR_RECT.size
-	# Ряд A: три равные ячейки, группа «значение + единица» по центру ячейки.
-	var cell_w := CONTENT_SIZE.x / 3.0
+	# Ряд A: три (план) или четыре (свободная езда: + набор) равные ячейки, группа «значение +
+	# единица» по центру ячейки.
+	var cell_w := CONTENT_SIZE.x / (4.0 if _mode == Mode.FREE_RIDE else 3.0)
 	var elapsed_w := _reserve(_elapsed_label, TEMPLATE_ELAPSED)
 	var group_w := ICON_SIZE + ICON_GAP + elapsed_w
 	var x := (cell_w - group_w) * 0.5
@@ -398,6 +550,14 @@ func _relayout() -> void:
 	_place_right(_elapsed_label, x + ICON_SIZE + ICON_GAP, elapsed_w, ROW_A_BASELINE)
 	_place_value_unit(_distance_label, _distance_unit, TEMPLATE_DISTANCE, cell_w, cell_w, ROW_A_BASELINE)
 	_place_value_unit(_speed_label, _speed_unit, TEMPLATE_SPEED, cell_w * 2.0, cell_w, ROW_A_BASELINE)
+	# Набор: «↑» + значение в резерве `8888` + «м».
+	var arrow_w := ceilf(_text_width(_ascent_icon, _ascent_icon.text))
+	var ascent_w := _reserve(_ascent_label, TEMPLATE_ASCENT)
+	var ascent_unit_w := _text_width(_ascent_unit, _ascent_unit.text)
+	var ax := cell_w * 3.0 + (cell_w - arrow_w - ICON_GAP - ascent_w - UNIT_GAP - ascent_unit_w) * 0.5
+	_place(_ascent_icon, Vector2(ax, 0), ROW_A_BASELINE)
+	_place_right(_ascent_label, ax + arrow_w + ICON_GAP, ascent_w, ROW_A_BASELINE)
+	_place(_ascent_unit, Vector2(ax + arrow_w + ICON_GAP + ascent_w + UNIT_GAP, 0), ROW_A_BASELINE)
 	# Карточка цели (координаты карточки).
 	_target_card.position = CARD_RECT.position
 	_target_card.size = CARD_RECT.size
@@ -409,6 +569,16 @@ func _relayout() -> void:
 	_place(_countdown_prefix, Vector2(CARD_INNER_LEFT, 0), CARD_ROW3_BASELINE)
 	var prefix_w := _text_width(_countdown_prefix, _countdown_prefix.text)
 	_place_right(_countdown_label, CARD_INNER_LEFT + prefix_w + ICON_GAP, _reserve(_countdown_label, TEMPLATE_COUNTDOWN), CARD_ROW3_BASELINE)
+	# Карточка уклона — в тех же границах и по тем же строкам, что карточка цели.
+	_grade_card.position = CARD_RECT.position
+	_grade_card.size = CARD_RECT.size
+	_place(_grade_title, Vector2(CARD_INNER_LEFT, 0), CARD_ROW1_BASELINE)
+	_grade_wedge.position = Vector2(CARD_INNER_RIGHT - WEDGE_SIZE.x, CARD_CHIP_Y + (CHIP_SIZE.y - WEDGE_SIZE.y) * 0.5)
+	_grade_wedge.size = WEDGE_SIZE
+	var grade_w := _reserve(_grade_label, TEMPLATE_GRADE)
+	_place_right(_grade_label, CARD_INNER_LEFT, grade_w, CARD_ROW2_BASELINE)
+	_place(_grade_unit, Vector2(CARD_INNER_LEFT + grade_w + UNIT_GAP, 0), CARD_ROW2_BASELINE)
+	_place(_grade_mode_label, Vector2(CARD_INNER_LEFT, 0), CARD_ROW3_BASELINE)
 	# Герой (координаты героя).
 	_hero.position = HERO_RECT.position
 	_hero.size = HERO_RECT.size
@@ -516,6 +686,30 @@ func _draw_target_card() -> void:
 	_stripe_box.corner_radius_top_left = radius
 	_stripe_box.corner_radius_bottom_left = radius
 	_target_card.draw_style_box(_stripe_box, Rect2(Vector2.ZERO, Vector2(CARD_STRIPE_WIDTH, rect.size.y)))
+
+
+## Подложка карточки уклона — стиль `HudCard` темы, без полосы зоны (цвет есть только у клина).
+func _draw_grade_card() -> void:
+	_grade_card.draw_style_box(get_theme_stylebox(&"panel", &"HudCard"), Rect2(Vector2.ZERO, _grade_card.size))
+
+
+## Клин уклона: прямоугольный треугольник на нижней стороне рамки, подъём — вверх вправо,
+## спуск — вниз вправо; ровно — полоска (`grade_wedge_height`).
+func _draw_grade_wedge() -> void:
+	if is_nan(_grade):
+		return
+	var w := WEDGE_SIZE.x
+	var bottom := WEDGE_SIZE.y
+	var h := grade_wedge_height()
+	var color := grade_wedge_color()
+	var g := roundf(_grade * 10.0) / 10.0
+	if g == 0.0:
+		_grade_wedge.draw_rect(Rect2(0, bottom - h, w, h), color)
+		return
+	var tip_x := w if g > 0.0 else 0.0
+	_grade_wedge.draw_colored_polygon(PackedVector2Array([
+		Vector2(0, bottom), Vector2(w, bottom), Vector2(tip_x, bottom - h),
+	]), color)
 
 
 ## Строка зоны под героем: полоса цвета зоны факта (скрыта без данных), справа значок
