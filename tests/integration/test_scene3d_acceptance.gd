@@ -63,6 +63,7 @@ func before_each() -> void:
 
 func _scene(track: Track = null) -> RideScene:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	add_child_autofree(s)
 	if track != null:
 		s.set_track(track)
@@ -544,6 +545,7 @@ func test_req_d3d_06_c1_environment_set_swap_changes_sky_road_material_and_props
 	mat.albedo_color = Color.RED
 	custom.road_material = mat
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	s.environment_set = custom
 	add_child_autofree(s)
 	var env := (s.get_node("%WorldEnvironment") as WorldEnvironment).environment
@@ -592,6 +594,7 @@ func test_req_d3d_06_c3_docs_describe_architecture_interfaces_and_gpx_route() ->
 
 func test_edge_set_track_before_ready_builds_road_after_entering_tree() -> void:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	s.set_track(SquareLoopTrack.new(200.0))
 	add_child_autofree(s)
 	assert_true(s.track is SquareLoopTrack, "трасса, заданная до входа в дерево, сохранена")
@@ -604,6 +607,7 @@ func test_edge_set_track_before_ready_builds_road_after_entering_tree() -> void:
 
 func test_edge_bind_before_set_track_and_before_ready_is_safe() -> void:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	_session = WorkoutSession.new(_plan(), _trainer, 200, 1.0, 75.0)
 	s.bind(_session, _profile)
 	assert_true(s.is_bound())

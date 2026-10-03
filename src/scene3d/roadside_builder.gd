@@ -3,11 +3,14 @@ extends RefCounted
 ## Обочина вдоль `Track` (REQ-D3D-07, арт-библия «Дорога»): гравийная кромка, бетонный
 ## бордюр, отбойник участками на внешней стороне поворотов (материал мира, цвет вершин)
 ## и полоса травы с кюветом до ~14 м от кромки (материал травы). Сечение одинаково на
-## всей трассе; на внутренней стороне крутых поворотов ширина полосы ограничивается
-## радиусом поворота, чтобы меш не выворачивался. Строится один раз в `set_track()`.
+## всей трассе и строится от полотна (высота и нормаль — из `Track`, на подъёме обочина
+## идёт вместе с дорогой, REQ-D3D-08 п.4); на внутренней стороне крутых поворотов ширина
+## полосы ограничивается радиусом поворота, чтобы меш не выворачивался. Кольца — те же,
+## что у дороги (`RoadBuilder.ring_distances`, шаг ~5 м на любой длине): край асфальта и
+## кромка совпадают, щели «асфальт — бордюр» нет. Куски — как у дороги
+## (`RoadBuilder.chunk_rings`): кусок 0 — узел, остальные — его дети с дальностью видимости.
+## Строится один раз в `set_track()`.
 
-const STEP_M: float = 4.0
-const MAX_RINGS: int = 700
 const SHOULDER_M: float = 0.35
 const CURB_W_M: float = 0.2
 const CURB_H_M: float = 0.13
@@ -59,17 +62,15 @@ static func curvature(track: Track, s: float, probe_m: float, a: TrackSample, b:
 	return cross_y / (2.0 * probe_m)
 
 
-## Построить `{roadside: MeshInstance3D, verge: MeshInstance3D}`.
+## Построить `{roadside: MeshInstance3D, verge: MeshInstance3D}` (корни кусков).
 static func build(track: Track, road_width_m: float, center_offset_m: float, world_material: Material,
 		grass_material: Material, guardrail: bool, seed: int) -> Dictionary:
-	var length: float = track.length_m()
-	var n: int = clampi(int(ceil(length / STEP_M)), 8, MAX_RINGS)
-	var step: float = length / float(n)
+	var dist: PackedFloat64Array = RoadBuilder.ring_distances(track)
+	var rings: int = dist.size()
+	var last: int = rings - 1
 	var half: float = road_width_m * 0.5
 	var curb_in: float = half + SHOULDER_M
 	var curb_out: float = curb_in + CURB_W_M
-	var kit := MeshKit.new()
-	var verge := MeshKit.new()
 	var sample := TrackSample.new()
 	var pa := TrackSample.new()
 	var pb := TrackSample.new()
@@ -77,57 +78,82 @@ static func build(track: Track, road_width_m: float, center_offset_m: float, wor
 	noise.seed = seed
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = 1.0 / 320.0
-	# Кольца: центр дороги, правый вектор, кривизна.
+	# Кольца: центр дороги, правый вектор, нормаль полотна, кривизна.
 	var centers := PackedVector3Array()
 	var rights := PackedVector3Array()
 	var ups := PackedVector3Array()
 	var kappa := PackedFloat32Array()
-	for i in n + 1:
-		var s: float = float(i) * step if not (track.is_loop() and i == n) else 0.0
-		track.sample_into(minf(s, length), sample)
+	for i in rings:
+		var s: float = 0.0 if (track.is_loop() and i == last) else dist[i]
+		track.sample_into(s, sample)
 		var r: Vector3 = sample.right()
 		centers.append(sample.position + r * center_offset_m)
 		rights.append(r)
 		ups.append(sample.up)
 		kappa.append(curvature(track, s, 10.0, pa, pb))
+	var limits: Array[PackedFloat32Array] = []
+	var rails: Array[PackedByteArray] = []
 	for side_i in 2:
 		var sgn: float = -1.0 if side_i == 0 else 1.0
 		# Ограничение ширины на внутренней стороне поворота.
-		var limits := PackedFloat32Array()
-		for i in n + 1:
+		var limit_side := PackedFloat32Array()
+		for i in rings:
 			var limit: float = 1.0e6
 			var k: float = kappa[i]
 			var inner_sgn: float = -1.0 if k > 0.0 else 1.0
 			if absf(k) > 1e-5 and inner_sgn == sgn:
 				limit = 0.8 / absf(k) - center_offset_m * sgn
-			limits.append(maxf(limit, curb_out + 0.5))
-		for i in n:
-			var c0: Vector3 = centers[i]
-			var c1: Vector3 = centers[i + 1]
-			var o0: Vector3 = rights[i] * sgn
-			var o1: Vector3 = rights[i + 1] * sgn
-			var u0: Vector3 = ups[i]
-			var u1: Vector3 = ups[i + 1]
-			# Гравийная кромка.
-			kit.add_quad(c0 + o0 * half, c1 + o1 * half, c1 + o1 * curb_in, c0 + o0 * curb_in, u0, C_GRAVEL)
-			# Бордюр: внутренняя грань, верх, внешняя грань.
-			kit.add_quad(c0 + o0 * curb_in, c1 + o1 * curb_in, c1 + o1 * curb_in + u1 * CURB_H_M,
-				c0 + o0 * curb_in + u0 * CURB_H_M, -o0, C_CURB_FACE)
-			kit.add_quad(c0 + o0 * curb_in + u0 * CURB_H_M, c1 + o1 * curb_in + u1 * CURB_H_M,
-				c1 + o1 * curb_out + u1 * CURB_H_M, c0 + o0 * curb_out + u0 * CURB_H_M, u0, C_CURB_TOP)
-			kit.add_quad(c0 + o0 * curb_out + u0 * CURB_H_M, c1 + o1 * curb_out + u1 * CURB_H_M,
-				c1 + o1 * curb_out + u1 * (GRASS_AT_CURB_M - 0.02), c0 + o0 * curb_out + u0 * (GRASS_AT_CURB_M - 0.02),
-				o0, C_CURB_FACE)
-		_add_verge_side(verge, centers, rights, ups, limits, sgn, curb_out)
-		if guardrail:
-			_add_guardrail_side(kit, centers, rights, ups, kappa, step, sgn, curb_out, noise)
-	var roadside := MeshInstance3D.new()
-	roadside.name = "Roadside"
-	roadside.mesh = kit.to_mesh(world_material)
-	var verge_node := MeshInstance3D.new()
-	verge_node.name = "Verge"
-	verge_node.mesh = verge.to_mesh(grass_material)
-	return {"roadside": roadside, "verge": verge_node}
+			limit_side.append(maxf(limit, curb_out + 0.5))
+		limits.append(limit_side)
+		rails.append(_guardrail_active(dist, kappa, sgn, noise) if guardrail else PackedByteArray())
+	var chunks: int = RoadBuilder.chunk_count(track)
+	var roadside: MeshInstance3D = null
+	var verge_root: MeshInstance3D = null
+	for c in chunks:
+		var span: Vector2i = RoadBuilder.chunk_rings(track, c)
+		var kit := MeshKit.new()
+		var verge := MeshKit.new()
+		for side_i in 2:
+			var sgn: float = -1.0 if side_i == 0 else 1.0
+			for i in range(span.x, span.y):
+				var c0: Vector3 = centers[i]
+				var c1: Vector3 = centers[i + 1]
+				var o0: Vector3 = rights[i] * sgn
+				var o1: Vector3 = rights[i + 1] * sgn
+				var u0: Vector3 = ups[i]
+				var u1: Vector3 = ups[i + 1]
+				# Гравийная кромка.
+				kit.add_quad(c0 + o0 * half, c1 + o1 * half, c1 + o1 * curb_in, c0 + o0 * curb_in, u0, C_GRAVEL)
+				# Бордюр: внутренняя грань, верх, внешняя грань.
+				kit.add_quad(c0 + o0 * curb_in, c1 + o1 * curb_in, c1 + o1 * curb_in + u1 * CURB_H_M,
+					c0 + o0 * curb_in + u0 * CURB_H_M, -o0, C_CURB_FACE)
+				kit.add_quad(c0 + o0 * curb_in + u0 * CURB_H_M, c1 + o1 * curb_in + u1 * CURB_H_M,
+					c1 + o1 * curb_out + u1 * CURB_H_M, c0 + o0 * curb_out + u0 * CURB_H_M, u0, C_CURB_TOP)
+				kit.add_quad(c0 + o0 * curb_out + u0 * CURB_H_M, c1 + o1 * curb_out + u1 * CURB_H_M,
+					c1 + o1 * curb_out + u1 * (GRASS_AT_CURB_M - 0.02), c0 + o0 * curb_out + u0 * (GRASS_AT_CURB_M - 0.02),
+					o0, C_CURB_FACE)
+			_add_verge_side(verge, centers, rights, ups, limits[side_i], sgn, curb_out, span)
+			if guardrail:
+				var post_end: int = span.y if (span.y == last and not track.is_loop()) else span.y - 1
+				_add_guardrail_side(kit, centers, rights, ups, rails[side_i], sgn, curb_out, Vector2i(span.x, post_end))
+		var side_node := MeshInstance3D.new()
+		side_node.mesh = kit.to_mesh(world_material)
+		var verge_node := MeshInstance3D.new()
+		verge_node.mesh = verge.to_mesh(grass_material)
+		if chunks > 1:
+			for node: MeshInstance3D in [side_node, verge_node]:
+				node.visibility_range_end = RoadBuilder.RANGE_M + node.get_aabb().size.length() * 0.5
+		if roadside == null:
+			side_node.name = "Roadside"
+			verge_node.name = "Verge"
+			roadside = side_node
+			verge_root = verge_node
+		else:
+			side_node.name = "Roadside_%02d" % c
+			verge_node.name = "Verge_%02d" % c
+			roadside.add_child(side_node)
+			verge_root.add_child(verge_node)
+	return {"roadside": roadside, "verge": verge_root}
 
 
 ## Столбиков на сторону: с шагом `spacing_m` по всей трассе (плотность на километр,
@@ -179,10 +205,10 @@ static func place_posts(track: Track, env: EnvironmentSet) -> Dictionary:
 
 
 static func _add_verge_side(kit: MeshKit, centers: PackedVector3Array, rights: PackedVector3Array,
-		ups: PackedVector3Array, limits: PackedFloat32Array, sgn: float, curb_out: float) -> void:
+		ups: PackedVector3Array, limits: PackedFloat32Array, sgn: float, curb_out: float, span: Vector2i) -> void:
 	var cols: int = VERGE_PROFILE.size()
 	var start: int = kit.vertices.size()
-	for i in centers.size():
+	for i in range(span.x, span.y + 1):
 		var o: Vector3 = rights[i] * sgn
 		var up: Vector3 = ups[i]
 		var prev_w: float = curb_out - 0.01
@@ -201,7 +227,7 @@ static func _add_verge_side(kit: MeshKit, centers: PackedVector3Array, rights: P
 			kit.vertices.append(centers[i] + o * w + up * pr.y)
 			kit.normals.append(nrm)
 			kit.colors.append(col)
-	for i in centers.size() - 1:
+	for i in span.y - span.x:
 		for j in cols - 1:
 			var a: int = start + i * cols + j
 			var b: int = a + 1
@@ -210,24 +236,29 @@ static func _add_verge_side(kit: MeshKit, centers: PackedVector3Array, rights: P
 			kit.indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
 
 
+## Участки отбойника по кольцам: шум вдоль трассы + только внешняя сторона поворота (на
+## прямой — справа).
+static func _guardrail_active(dist: PackedFloat64Array, kappa: PackedFloat32Array, sgn: float,
+		noise: FastNoiseLite) -> PackedByteArray:
+	var active := PackedByteArray()
+	active.resize(dist.size())
+	for i in dist.size():
+		var k: float = kappa[i]
+		var outer_sgn: float = 1.0 if k > 0.0 else -1.0
+		var want_side: float = outer_sgn if absf(k) > 1.0 / 900.0 else 1.0
+		var on: bool = noise.get_noise_1d(dist[i]) > -0.05 and want_side == sgn
+		active[i] = 1 if on else 0
+	return active
+
+
+## Стойки на кольцах `posts.x..posts.y`, планки — между соседними активными кольцами.
 static func _add_guardrail_side(kit: MeshKit, centers: PackedVector3Array, rights: PackedVector3Array,
-		ups: PackedVector3Array, kappa: PackedFloat32Array, step: float, sgn: float, curb_out: float,
-		noise: FastNoiseLite) -> void:
+		ups: PackedVector3Array, active: PackedByteArray, sgn: float, curb_out: float, posts: Vector2i) -> void:
 	var w: float = curb_out + GUARDRAIL_W_M
 	var ground: float = _profile_y(GUARDRAIL_W_M)
 	var count: int = centers.size()
-	var active := PackedByteArray()
-	active.resize(count)
-	for i in count:
-		var s: float = float(i) * step
-		var k: float = kappa[i]
-		var outer_sgn: float = 1.0 if k > 0.0 else -1.0
-		# Участки: шум вдоль трассы + только внешняя сторона поворота (на прямой — справа).
-		var want_side: float = outer_sgn if absf(k) > 1.0 / 900.0 else 1.0
-		var on: bool = noise.get_noise_1d(s) > -0.05 and want_side == sgn
-		active[i] = 1 if on else 0
 	var post_size := Vector3(0.09, POST_H_M - ground + 0.15, 0.12)
-	for i in count:
+	for i in range(posts.x, posts.y + 1):
 		if active[i] == 0:
 			continue
 		var o: Vector3 = rights[i] * sgn

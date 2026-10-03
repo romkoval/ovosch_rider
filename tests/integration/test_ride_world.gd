@@ -39,6 +39,7 @@ class CircleTrack extends Track:
 
 func _scene() -> RideScene:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	add_child_autofree(s)
 	return s
 
@@ -86,6 +87,7 @@ func test_world_disabled_by_environment_set() -> void:
 	env.bush_count = 0
 	env.tuft_count = 0
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	s.environment_set = env
 	add_child_autofree(s)
 	assert_null(s.terrain())

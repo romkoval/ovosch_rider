@@ -121,6 +121,7 @@ func _env() -> EnvironmentSet:
 
 func _scene(track: Track = null, env: EnvironmentSet = null) -> RideScene:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	if env != null:
 		s.environment_set = env
 	# Трасса до входа в дерево: мир строится один раз в _ready (без старых узлов в очереди
@@ -136,6 +137,7 @@ func _scene_in_viewport(size: Vector2i, track: Track) -> RideScene:
 	vp.size = size
 	add_child_autofree(vp)
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	s.set_track(track)
 	vp.add_child(s)
 	return s

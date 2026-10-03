@@ -1,4 +1,4 @@
-# 3D-сцена заезда: архитектура (REQ-D3D-01..07)
+# 3D-сцена заезда: архитектура (REQ-D3D-01..08)
 
 Игровой цикл не знает ни конкретной трассы, ни конкретного окружения. `RideScene` получает
 телеметрию от `WorkoutSession` (закрытые слоты потока 1 Гц), превращает её в скорость
@@ -16,9 +16,30 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
                                      ▼                           ▼
                        Track.sample_into(s, TrackSample) ──▶ Rider / Camera / Road / Props
                            ▲                 {position, forward, up, grade}
-              ┌────────────┴─────────────┐
-         LoopTrack (Curve3D, seed)   GpxTrack (этап 10, маршрут)   StraightTrack (тесты)
+              ┌────────────┴──────────────┬───────────────────────────┐
+     ProfiledTrack (план + h(s))   LoopTrack (Curve3D, seed)   GpxTrack (этап 10)   StraightTrack (тесты)
+              ▲
+  RouteWorld: id трассы ──▶ ProfiledTrack + EnvironmentSet ◀── RouteCatalog (RouteDef: профиль,
+  RideScene.set_route(id)                                        layout, seed, мосты, ориентиры)
 ```
+
+**Трассы каталога (REQ-D3D-08).** `RideScene.set_route(id)` берёт у `RouteWorld` трассу и набор
+окружения по id каталога (`flat`, `hills`, `mountains`, `seaside`); по умолчанию сцена едет по
+`flat` — поэтому тренировка по плану идёт на равнине без правки `workout_screen` (D3D-08 п.13),
+`route_id = ""` — процедурная петля `LoopTrack`. `ProfiledTrack` строит план-схему один раз: форма
+(`layout.shape`) — последовательность прямых и дуг с радиусами из `tracks.md`, кривизна сглаживается
+(переходные кривые), три группы прямых с разными курсами подгоняются так, чтобы круг замкнулся и
+длина плана равнялась длине профиля; позиция — (план(s), h(s)), `forward` — касательная плана с
+уклоном профиля g(s) (продольный наклон велосипедиста = atan(g)), `up` — нормаль полотна. Скорость от
+уклона не зависит (модель ровной дороги, D3D-02), высота и наклон — по профилю. Мир строится от
+полотна, а не от средней высоты: **рельеф-коридор** (`TerrainField`, длинная трасса) — плитки
+±700 м вдоль трассы, у дороги мелкая ячейка, дальше крупная (LOD), куски-меши с дальностью
+видимости; высота земли у полотна — по ближайшим точкам оси (у дороги ровно h(s), ниже полотна на
+`ROAD_SINK_M`), дальше — «поле высоты трассы» (сглаженное среднее высот точек трассы) с поперечным
+склоном на подъёмах, поверх — увалы и холмы. **Куски**: дорога и обочина — общие кольца с шагом ~5 м
+на любой длине (`RoadBuilder.ring_distances`, край асфальта совпадает с кромкой), до 800 сегментов
+на кусок и до 5 кусков; растительность и столбики — куски ~500 м с `visibility_range`
+(`docs/perf_budget.md`).
 
 ## Интерфейсы
 
@@ -29,9 +50,12 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
 - `EnvironmentSet` (`Resource`): материалы дороги и объектов, цвета неба/тумана, свет, шаг объектов,
   `environment_scene: PackedScene` (опционально).
 - `RideScene`: `set_track(track)`, `bind(session, profile)`, `unbind()`, `apply_telemetry(...)`, `advance(dt)`.
-- `RoadBuilder.build(track, material, width, segments, center_offset)` — один `MeshInstance3D`, число
-  сегментов фиксировано (`MAX_SEGMENTS`), не растёт со временем (D3D-03 крит. 2); ось дороги может
+- `RoadBuilder.build(track, material, width, segments, center_offset)` — дорога кусками: узел «Road»
+  (кусок 0) и дети `Road_<k>`, шаг колец ~5 м, в куске ≤ `MAX_SEGMENTS`, кусков ≤ `MAX_CHUNKS`; число
+  сегментов фиксировано при построении, не растёт со временем (D3D-03 крит. 2); ось дороги может
   быть сдвинута от линии трассы (`center_offset`) — велосипедист едет в правой полосе.
+- `ProfiledTrack` (`Track`): трасса каталога по `RouteDef` (`from_id`, `from_route`); `RouteWorld`:
+  `track(id)` (кэш), `environment(id)`, `environment_path(id)`; `RideScene.set_route(id)`, `route_id`.
 
 ## Мир (REQ-D3D-07)
 
@@ -41,8 +65,9 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
 - `RoadsideBuilder.build(...)` → `{roadside, verge}`: кромка, бордюр, отбойник (материал мира) и
   полоса травы с кюветом (материал травы); на внутренней стороне крутых поворотов ширина
   ограничена радиусом.
-- `TerrainField.build(track, …)` — сетка высот вокруг габарита трассы: у дороги ниже полотна,
-  дальше увалы, на краю холмы; `height_at`/`road_distance_at` — для расстановки объектов.
+- `TerrainField.build(track, …)` — рельеф: на компактной петле — одна сетка вокруг габарита, на длинной
+  трассе — коридор кусками; высота отсчитывается от полотна (у дороги ниже него, дальше поле высоты
+  трассы, увалы, на краю холмы); `height_at`/`road_distance_at` — для расстановки объектов.
 - `SceneryBuilder.build(track, env, field, material, budget)` — деревья, ели, кусты, трава
   (`MultiMeshInstance3D` на тип), урезается под остаток бюджета MultiMesh; сигнальные столбики —
   `RideScene.props()`.

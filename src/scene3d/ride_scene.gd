@@ -13,7 +13,10 @@ extends Node3D
 ## (дорога, обочина, рельеф, растительность, свет, небо) строится в `set_track()`/`_ready()`.
 ## В поворотах велосипедист наклоняется на угол atan(v²·κ/g), κ — кривизна трассы.
 ## Трасса и окружение подменяются через интерфейсы `Track`/`EnvironmentSet` — цикл и
-## привязка не знают конкретной сцены (REQ-D3D-06).
+## привязка не знают конкретной сцены (REQ-D3D-06). Трасса каталога — `set_route(id)`
+## (`RouteWorld`: план-схема + профиль + набор окружения); по умолчанию — `flat`, поэтому
+## тренировка по плану идёт на равнине (REQ-D3D-08 п.13). Скорость от уклона не зависит
+## (модель — ровная дорога, D3D-02), высота и продольный наклон велосипедиста — по профилю.
 
 const DEFAULT_ENVIRONMENT: String = "res://src/scene3d/default_environment.tres"
 const RIDER_SCENE: String = "res://src/scene3d/rider.tscn"
@@ -45,7 +48,10 @@ const LEAN_TAU_SEC: float = 0.35
 const GRAVITY: float = 9.81
 
 @export var environment_set: EnvironmentSet = null
-## Seed процедурной трассы по умолчанию.
+## Трасса каталога по умолчанию (`RouteCatalog`); пустая строка — процедурная петля
+## `LoopTrack(track_seed)` на окружении по умолчанию.
+@export var route_id: String = RouteCatalog.DEFAULT_ID
+## Seed процедурной петли (при пустом `route_id`).
 @export var track_seed: int = 7
 
 var track: Track = null
@@ -79,10 +85,26 @@ func _ready() -> void:
 	# и колёса продвигались бы дважды за кадр.
 	_rider.set_process(false)
 	if environment_set == null:
-		environment_set = load(DEFAULT_ENVIRONMENT)
+		environment_set = RouteWorld.environment(route_id) if not route_id.is_empty() else load(DEFAULT_ENVIRONMENT)
 	_apply_environment()
 	# Трасса, заданная до входа в дерево (например, GPX), строится здесь же.
-	set_track(track if track != null else LoopTrack.new(track_seed))
+	if track != null:
+		set_track(track)
+	elif not route_id.is_empty():
+		set_track(RouteWorld.track(route_id))
+	else:
+		set_track(LoopTrack.new(track_seed))
+
+
+## Трасса каталога (`flat`, `hills`, `mountains`, `seaside`; неизвестный id — трасса по
+## умолчанию): план и профиль (`ProfiledTrack`) и набор окружения из `RouteWorld`. Игровой
+## цикл и движение велосипедиста не меняются (REQ-D3D-08 п.7).
+func set_route(id: String) -> void:
+	route_id = RouteWorld.resolve_id(id)
+	environment_set = RouteWorld.environment(route_id)
+	if is_node_ready():
+		_apply_environment()
+	set_track(RouteWorld.track(route_id))
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +246,11 @@ func advance(delta: float) -> void:
 	_rider.advance(dt)
 
 
+## Продольный наклон велосипедиста, рад (> 0 — нос вверх): atan(g) уклона трассы.
+func rider_pitch_rad() -> float:
+	return _rider.pitch_rad()
+
+
 ## Курс движения в горизонтальной плоскости (yaw), рад.
 func _desired_yaw() -> float:
 	var flat := Vector2(_sample.forward.x, _sample.forward.z)
@@ -239,7 +266,9 @@ func _camera_offset_for(yaw: float) -> Vector3:
 	return Vector3(-sin(a) * CAMERA_BACK_M, CAMERA_UP_M, -cos(a) * CAMERA_BACK_M)
 
 
-## Точка взгляда камеры: на дороге впереди велосипедиста по курсу камеры.
+## Точка взгляда камеры: на дороге впереди велосипедиста по курсу камеры. Наклон камеры от
+## уклона не зависит (горизонтальная дистанция и высота постоянны, D3D-07.5): на подъёме
+## дорога и склон в кадре уходят вверх, на спуске — вниз (REQ-D3D-08 п.5, 8).
 func _camera_target(yaw: float) -> Vector3:
 	return _rider.global_position + Vector3(sin(yaw) * CAMERA_LOOK_AHEAD_M, CAMERA_LOOK_UP_M, cos(yaw) * CAMERA_LOOK_AHEAD_M)
 

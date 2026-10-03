@@ -15,9 +15,17 @@ extends RefCounted
 ##   дальностью видимости `RANGE_M`; на стыке мелкой и крупной плитки рёбра мелкой
 ##   выровнены по крупной (без щелей).
 ##
-## Расстояние до трассы считается «штампом»: каждая точка трассы обновляет вершины сетки в
-## радиусе — без перебора всех пар (у дороги — по мелкой сетке до `near_radius_m`, для
-## холмов коридора — по грубой сетке `FAR_CELL_M`). Всё строится один раз в `RideScene.set_track()`.
+## Высота земли отсчитывается от дороги, а не от средней высоты трассы (REQ-D3D-08 п.4,
+## `tracks.md` п. 5): у полотна — высота ближайших точек оси (вес 1/d⁶: у дороги ровно h(s),
+## между двумя участками трассы — плавный переход без ступеньки), дальше — «поле высоты
+## трассы»: среднее высот точек трассы с ядром 1/(1 + (d/`FAR_KERNEL_M`)⁴) плюс поперечный
+## склон: на подъёмах внутренняя сторона поворота (на прямой — петли) выше, внешняя ниже.
+## Поверх — увалы и холмы горизонта. На трассе с перепадом 400 м рельеф идёт вместе с
+## дорогой, а не стоит на одной высоте.
+##
+## Расстояние и высоты считаются «штампом»: каждая точка трассы обновляет вершины сетки в
+## радиусе — без перебора всех пар (у дороги — по мелкой сетке до `near_radius_m`, поле
+## высоты и холмы — по грубой сетке `FAR_CELL_M`). Всё строится один раз в `RideScene.set_track()`.
 
 const SAMPLE_STEP_M: float = 5.0
 ## Дальше этого расстояния от трассы рельеф не зависит от высоты дороги (минимум; на
@@ -57,6 +65,20 @@ const MIN_CHUNK_TILES: int = 4
 ## плоскость камеры: земля видна до горизонта, куски позади и дальше отсекаются.
 const RANGE_M: float = 3000.0
 
+## Поле высоты трассы: ширина ядра, м (на таком расстоянии вес — половина).
+const FAR_KERNEL_M: float = 120.0
+## Поперечный склон: уклон поперёк дороги = `CROSS_GAIN` · |g(s)| (не больше `CROSS_MAX`);
+## выше внутренняя сторона поворота радиусом ≤ `CROSS_FULL_RADIUS_M` (кривизна — по курсу
+## через ±`CROSS_WINDOW_M`), на прямой — внутренняя сторона петли; растёт до бокового
+## смещения `CROSS_REACH_M`.
+const CROSS_GAIN: float = 2.5
+const CROSS_MAX: float = 0.2
+const CROSS_FULL_RADIUS_M: float = 300.0
+const CROSS_WINDOW_M: float = 200.0
+const CROSS_REACH_M: float = 150.0
+## Высота у дороги: вес точки оси 1/(d⁶ + eps).
+const NEAR_EPS: float = 0.02
+
 var origin := Vector2.ZERO
 var cell_m: float = MIN_CELL_M
 ## Размер решётки вершин (в коридоре — виртуальной: хранятся только плитки).
@@ -85,8 +107,14 @@ var _far_origin := Vector2.ZERO
 var _far_nx: int = 0
 var _far_nz: int = 0
 var _far_dist := PackedFloat32Array()
-## Высота ближайшей точки трассы по вершинам мелких плиток (только на время построения).
+## Поле высоты трассы по грубой сетке (с поперечным склоном; только на время построения).
+var _far_h := PackedFloat32Array()
+## Точки трассы (шаг `SAMPLE_STEP_M`): правый вектор (x, z) и коэффициент поперечного склона.
+var _rights := PackedVector2Array()
+var _cross := PackedFloat32Array()
+## Высота у дороги по вершинам мелких плиток: Σw·h и Σw (только на время построения).
 var _tile_road_y: Array[PackedFloat32Array] = []
+var _tile_road_w: Array[PackedFloat32Array] = []
 
 
 static func build(track: Track, rolling_m: float, hills_m: float, seed: int) -> TerrainField:
@@ -122,15 +150,41 @@ func _sample_track(track: Track) -> PackedVector3Array:
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
 	var sum_y: float = 0.0
+	var heading := PackedFloat32Array()
+	var grade := PackedFloat32Array()
+	heading.resize(count + 1)
+	grade.resize(count + 1)
+	_rights.resize(count + 1)
 	for i in count + 1:
 		track.sample_into(minf(float(i) * SAMPLE_STEP_M, length), sample)
 		pts[i] = sample.position
 		lo = Vector2(minf(lo.x, sample.position.x), minf(lo.y, sample.position.z))
 		hi = Vector2(maxf(hi.x, sample.position.x), maxf(hi.y, sample.position.z))
 		sum_y += sample.position.y
+		var r: Vector3 = sample.right()
+		_rights[i] = Vector2(r.x, r.z)
+		heading[i] = atan2(sample.forward.z, sample.forward.x)
+		grade[i] = sample.grade
 	mean_y = sum_y / float(count + 1)
 	bounds_min = lo
 	bounds_max = hi
+	# Поперечный склон, сила — |g|. Сторона: в повороте (кривизна по курсу через
+	# ±`CROSS_WINDOW_M`) выше внутренняя (курс растёт — поворот вправо, выше правая), на
+	# прямой — внутренняя сторона петли; между ними — плавно.
+	var w: int = maxi(int(CROSS_WINDOW_M / SAMPLE_STEP_M), 1)
+	var loop: bool = track.is_loop()
+	var total_turn: float = 0.0
+	for i in count:
+		total_turn += wrapf(heading[i + 1] - heading[i], -PI, PI)
+	var inner: float = 1.0 if total_turn >= 0.0 else -1.0
+	_cross.resize(count + 1)
+	for i in count + 1:
+		var a: int = posmod(i - w, count) if loop else maxi(i - w, 0)
+		var b: int = posmod(i + w, count) if loop else mini(i + w, count)
+		var kappa: float = wrapf(heading[b] - heading[a], -PI, PI) / (float(w * 2) * SAMPLE_STEP_M)
+		var turn: float = clampf(kappa * CROSS_FULL_RADIUS_M, -1.0, 1.0)
+		var side: float = clampf(turn + inner * (1.0 - absf(turn)), -1.0, 1.0)
+		_cross[i] = clampf(CROSS_GAIN * absf(grade[i]), 0.0, CROSS_MAX) * side
 	return pts
 
 
@@ -138,7 +192,7 @@ func _sample_track(track: Track) -> PackedVector3Array:
 ## площадка на `ROAD_SINK_M` ниже полотна.
 func _height(x: float, z: float, hills_t: float, near_d: float, near_y: float, rolling: FastNoiseLite,
 		hills: FastNoiseLite, rolling_m: float, hills_m: float) -> float:
-	var base: float = mean_y + rolling.get_noise_2d(x, z) * rolling_m
+	var base: float = _far_height_at(x, z) + rolling.get_noise_2d(x, z) * rolling_m
 	if hills_t > 0.0:
 		var h01: float = 0.3 + 0.7 * clampf(hills.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
 		base += hills_t * hills_t * h01 * hills_m
@@ -168,7 +222,9 @@ func _build(track: Track, rolling_m: float, hills_m: float, seed: int) -> void:
 	road_dist.fill(FAR)
 	var road_y := PackedFloat32Array()
 	road_y.resize(total)
-	road_y.fill(mean_y)
+	var road_w := PackedFloat32Array()
+	road_w.resize(total)
+	_stamp_far(pts, origin, extent.x + cell_m, extent.y + cell_m, maxf(extent.x, extent.y) + FAR_CELL_M)
 	var reach: int = int(ceil(near_radius_m / cell_m))
 	for p in pts:
 		var cx: int = int(round((p.x - origin.x) / cell_m))
@@ -177,11 +233,12 @@ func _build(track: Track, rolling_m: float, hills_m: float, seed: int) -> void:
 			var vz: float = origin.y + float(iz) * cell_m - p.z
 			for ix in range(maxi(cx - reach, 0), mini(cx + reach, nx - 1) + 1):
 				var vx: float = origin.x + float(ix) * cell_m - p.x
-				var d: float = sqrt(vx * vx + vz * vz)
+				var d2: float = vx * vx + vz * vz
 				var k: int = iz * nx + ix
-				if d < road_dist[k]:
-					road_dist[k] = d
-					road_y[k] = p.y
+				road_dist[k] = minf(road_dist[k], sqrt(d2))
+				var wt: float = 1.0 / (d2 * d2 * d2 + NEAR_EPS)
+				road_w[k] += wt
+				road_y[k] += wt * p.y
 	var noises := _noises(seed)
 	heights.resize(total)
 	for iz in nz:
@@ -191,7 +248,9 @@ func _build(track: Track, rolling_m: float, hills_m: float, seed: int) -> void:
 			var z: float = origin.y + float(iz) * cell_m
 			var dbox: float = _box_distance(x, z)
 			var t: float = smoothstep(HILLS_START_M, HILLS_FULL_M, dbox) if dbox > HILLS_START_M else 0.0
-			heights[k] = _height(x, z, t, road_dist[k], road_y[k], noises[0], noises[1], rolling_m, hills_m)
+			var ny: float = road_y[k] / road_w[k] if road_w[k] > 0.0 else mean_y
+			heights[k] = _height(x, z, t, road_dist[k], ny, noises[0], noises[1], rolling_m, hills_m)
+	_release_build_data()
 
 
 func _box_distance(x: float, z: float) -> float:
@@ -217,7 +276,7 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 	var tiles_z: int = int(ceil((bounds_max.y - bounds_min.y + pad * 2.0) / tile_m))
 	nx = tiles_x * TILE_CELLS + 1
 	nz = tiles_z * TILE_CELLS + 1
-	_stamp_far(pts, tiles_x, tiles_z)
+	_stamp_far(pts, origin, float(tiles_x) * tile_m, float(tiles_z) * tile_m, CORRIDOR_RADIUS_M + tile_m * 1.5)
 	_select_tiles(tiles_x, tiles_z)
 	_stamp_near(pts)
 	var noises := _noises(seed)
@@ -229,6 +288,7 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 		var fine: bool = step == 1
 		var rd: PackedFloat32Array = tile_road_dist[ti]
 		var ry: PackedFloat32Array = _tile_road_y[ti]
+		var rw: PackedFloat32Array = _tile_road_w[ti]
 		for j in n:
 			var z: float = origin.y + float(key.y * TILE_CELLS + j * step) * cell_m
 			for i in n:
@@ -237,39 +297,77 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 				var t: float = smoothstep(HILLS_START_M, HILLS_FULL_M, d_far) if d_far > HILLS_START_M else 0.0
 				var k: int = j * n + i
 				var near_d: float = rd[k] if fine else FAR
-				var near_y: float = ry[k] if fine else mean_y
+				var near_y: float = ry[k] / rw[k] if fine and rw[k] > 0.0 else mean_y
 				h[k] = _height(x, z, t, near_d, near_y, noises[0], noises[1], rolling_m, hills_m)
 		tile_heights[ti] = h
-	_tile_road_y.clear()
 	_snap_fine_edges()
-	_far_dist = PackedFloat32Array()
+	_release_build_data()
 
 
-## Грубая сетка расстояния до трассы: штамп из точек трассы через `FAR_SAMPLE_STEP_M`.
-func _stamp_far(pts: PackedVector3Array, tiles_x: int, tiles_z: int) -> void:
-	var per_tile: int = int(round(cell_m * float(TILE_CELLS) / FAR_CELL_M))
-	_far_origin = origin
-	_far_nx = tiles_x * per_tile + 1
-	_far_nz = tiles_z * per_tile + 1
-	_far_dist.resize(_far_nx * _far_nz)
+## Грубая сетка от `grid_origin` размером `size_x` × `size_z` м: расстояние до трассы и поле
+## высоты трассы — штамп из точек трассы через `FAR_SAMPLE_STEP_M` в радиусе `reach_m`.
+func _stamp_far(pts: PackedVector3Array, grid_origin: Vector2, size_x: float, size_z: float, reach_m: float) -> void:
+	_far_origin = grid_origin
+	_far_nx = int(ceil(size_x / FAR_CELL_M)) + 1
+	_far_nz = int(ceil(size_z / FAR_CELL_M)) + 1
+	var total: int = _far_nx * _far_nz
+	_far_dist.resize(total)
 	_far_dist.fill(FAR)
-	var reach: int = int(ceil((CORRIDOR_RADIUS_M + 2.0 * FAR_CELL_M) / FAR_CELL_M))
+	var wsum := PackedFloat64Array()
+	var hsum := PackedFloat64Array()
+	wsum.resize(total)
+	hsum.resize(total)
+	var reach: int = int(ceil(reach_m / FAR_CELL_M))
 	var every: int = maxi(int(FAR_SAMPLE_STEP_M / SAMPLE_STEP_M), 1)
 	var picks := PackedInt32Array(range(0, pts.size(), every))
 	if picks[picks.size() - 1] != pts.size() - 1:
 		picks.append(pts.size() - 1)
+	var inv_k2: float = 1.0 / (FAR_KERNEL_M * FAR_KERNEL_M)
 	for pi in picks:
 		var p: Vector3 = pts[pi]
+		var r: Vector2 = _rights[pi]
+		var c: float = _cross[pi]
 		var cx: int = int(round((p.x - _far_origin.x) / FAR_CELL_M))
 		var cz: int = int(round((p.z - _far_origin.y) / FAR_CELL_M))
 		for iz in range(maxi(cz - reach, 0), mini(cz + reach, _far_nz - 1) + 1):
 			var vz: float = _far_origin.y + float(iz) * FAR_CELL_M - p.z
 			for ix in range(maxi(cx - reach, 0), mini(cx + reach, _far_nx - 1) + 1):
 				var vx: float = _far_origin.x + float(ix) * FAR_CELL_M - p.x
-				var d: float = sqrt(vx * vx + vz * vz)
+				var d2: float = vx * vx + vz * vz
 				var k: int = iz * _far_nx + ix
-				if d < _far_dist[k]:
-					_far_dist[k] = d
+				_far_dist[k] = minf(_far_dist[k], sqrt(d2))
+				var q: float = d2 * inv_k2
+				var wt: float = 1.0 / (1.0 + q * q)
+				var lat: float = clampf(vx * r.x + vz * r.y, -CROSS_REACH_M, CROSS_REACH_M)
+				wsum[k] += wt
+				hsum[k] += wt * (p.y + c * lat)
+	_far_h.resize(total)
+	for k in total:
+		_far_h[k] = hsum[k] / wsum[k] if wsum[k] > 0.0 else mean_y
+
+
+## Поле высоты трассы в точке (билинейно по грубой сетке).
+func _far_height_at(x: float, z: float) -> float:
+	if _far_h.is_empty():
+		return mean_y
+	var fx: float = clampf((x - _far_origin.x) / FAR_CELL_M, 0.0, float(_far_nx - 1) - 1e-4)
+	var fz: float = clampf((z - _far_origin.y) / FAR_CELL_M, 0.0, float(_far_nz - 1) - 1e-4)
+	var ix: int = int(fx)
+	var iz: int = int(fz)
+	var k: int = iz * _far_nx + ix
+	var a: float = lerpf(_far_h[k], _far_h[k + 1], fx - float(ix))
+	var b: float = lerpf(_far_h[k + _far_nx], _far_h[k + _far_nx + 1], fx - float(ix))
+	return lerpf(a, b, fz - float(iz))
+
+
+## Данные построения больше не нужны (запросы `height_at` их не используют).
+func _release_build_data() -> void:
+	_tile_road_y.clear()
+	_tile_road_w.clear()
+	_far_dist = PackedFloat32Array()
+	_far_h = PackedFloat32Array()
+	_rights = PackedVector2Array()
+	_cross = PackedFloat32Array()
 
 
 func _far_distance_at(x: float, z: float) -> float:
@@ -308,16 +406,19 @@ func _select_tiles(tiles_x: int, tiles_z: int) -> void:
 			tile_heights.append(h)
 			var rd := PackedFloat32Array()
 			var ry := PackedFloat32Array()
+			var rw := PackedFloat32Array()
 			if step == 1:
 				rd.resize(n * n)
 				rd.fill(FAR)
 				ry.resize(n * n)
-				ry.fill(mean_y)
+				rw.resize(n * n)
 			tile_road_dist.append(rd)
 			_tile_road_y.append(ry)
+			_tile_road_w.append(rw)
 
 
-## Мелкая сетка расстояния до трассы и высоты дороги — в мелких плитках, до `near_radius_m`.
+## Мелкая сетка расстояния до трассы и высоты дороги (вес 1/d⁶) — в мелких плитках,
+## до `near_radius_m`.
 ## Вершина на ребре принадлежит обеим плиткам — пишется в каждую.
 func _stamp_near(pts: PackedVector3Array) -> void:
 	var reach: int = int(ceil(near_radius_m / cell_m))
@@ -338,6 +439,7 @@ func _stamp_near(pts: PackedVector3Array) -> void:
 					continue
 				var rd: PackedFloat32Array = tile_road_dist[ti]
 				var ry: PackedFloat32Array = _tile_road_y[ti]
+				var rw: PackedFloat32Array = _tile_road_w[ti]
 				var n: int = TILE_CELLS + 1
 				var bx: int = tx * TILE_CELLS
 				var bz: int = tz * TILE_CELLS
@@ -345,13 +447,15 @@ func _stamp_near(pts: PackedVector3Array) -> void:
 					var vz: float = origin.y + float(gz) * cell_m - p.z
 					for gx in range(maxi(gx0, bx), mini(gx1, bx + TILE_CELLS) + 1):
 						var vx: float = origin.x + float(gx) * cell_m - p.x
-						var d: float = sqrt(vx * vx + vz * vz)
+						var d2: float = vx * vx + vz * vz
 						var k: int = (gz - bz) * n + (gx - bx)
-						if d < rd[k]:
-							rd[k] = d
-							ry[k] = p.y
+						rd[k] = minf(rd[k], sqrt(d2))
+						var wt: float = 1.0 / (d2 * d2 * d2 + NEAR_EPS)
+						rw[k] += wt
+						ry[k] += wt * p.y
 				tile_road_dist[ti] = rd
 				_tile_road_y[ti] = ry
+				_tile_road_w[ti] = rw
 
 
 ## Рёбра мелкой плитки, соседней с крупной: промежуточные вершины — на прямой между

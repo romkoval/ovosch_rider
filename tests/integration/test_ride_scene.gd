@@ -41,6 +41,7 @@ func before_each() -> void:
 
 func _scene() -> RideScene:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	add_child_autofree(s)
 	return s
 
@@ -317,6 +318,7 @@ func test_environment_set_swap_changes_sky_and_road_material() -> void:
 	env.road_material = StandardMaterial3D.new()
 	env.prop_spacing_m = 50.0
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	s.environment_set = env
 	add_child_autofree(s)
 	assert_eq((s.get_node("%WorldEnvironment") as WorldEnvironment).environment.background_color, Color.RED)
@@ -326,6 +328,7 @@ func test_environment_set_swap_changes_sky_and_road_material() -> void:
 
 func test_set_track_before_ready_builds_road_after_entering_tree() -> void:
 	var s: RideScene = load(SCENE).instantiate()
+	s.route_id = ""  # петля LoopTrack, как до T-070 (сцена по умолчанию — на трассе flat)
 	s.set_track(StraightTrack.new(500.0))
 	assert_null(s.road(), "до входа в дерево дорога не строится")
 	add_child_autofree(s)
