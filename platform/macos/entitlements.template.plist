@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements macOS-сборки ovosch-rider для Mac App Store (App Sandbox обязателен).
+  REQ-NFR-07 (разрешения), REQ-STR-01 крит. 7 (loopback-сервер), REQ-IMP-03 / REQ-LOC-05 (файлы пользователя).
+  Применение — platform/README.md: либо указать файл в опции пресета codesign/entitlements/custom_file,
+  либо выставить одноимённые встроенные опции codesign/entitlements/app_sandbox/*.
+  Для Developer ID (вне магазина) sandbox можно выключить, тогда device.bluetooth не нужен; hardened runtime — в пресете.
+  Плейсхолдеров bundle id здесь нет: keychain-access-group не требуется, пока нет общего Keychain между iOS и macOS.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Обязателен для Mac App Store -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- CoreBluetooth внутри sandbox: велостанок и датчики -->
+	<key>com.apple.security.device.bluetooth</key>
+	<true/>
+
+	<!-- Исходящие HTTPS: Intervals.icu, Strava -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- Входящее соединение на 127.0.0.1:<port>/callback во время входа OAuth (решение В-6) -->
+	<key>com.apple.security.network.server</key>
+	<true/>
+
+	<!-- Файлы, выбранные пользователем: импорт .zwo/.erg/.mrc и сохранение .fit через системный диалог -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Не включать: com.apple.security.cs.disable-library-validation (GDExtension подписан тем же Team ID),
+	     com.apple.security.device.usb, camera, microphone, location — не используются. -->
+</dict>
+</plist>

@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Заготовка Info.plist для iOS-сборки ovosch-rider (REQ-NFR-07 крит. 2, REQ-IMP-03 крит. 3, REQ-STR-01 крит. 7).
+  Godot сам генерирует Info.plist в Xcode-проекте; сюда вынесены ключи, которых экспортер не знает.
+  Способ применения — platform/README.md: фрагмент между маркерами ADDITIONAL_PLIST_CONTENT вставляется в опцию
+  пресета application/additional_plist_content (или в Info.plist Xcode-проекта вручную).
+  Плейсхолдеры: <BUNDLE_ID_IOS> — bundle id, например <BUNDLE_ID_PREFIX>.ovoschrider.
+  Русский текст описаний — в ru.lproj/InfoPlist.strings (см. ниже), английский — значение по умолчанию.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Заполняется экспортером Godot из пресета; приведено для справки. -->
+	<key>CFBundleIdentifier</key>
+	<string>&lt;BUNDLE_ID_IOS&gt;</string>
+	<key>CFBundleDisplayName</key>
+	<string>ovosch-rider</string>
+
+	<!-- ADDITIONAL_PLIST_CONTENT_BEGIN -->
+
+	<!-- Bluetooth: обязательный ключ iOS 13+; без него CBCentralManager завершает приложение. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>ovosch-rider uses Bluetooth to connect to your smart trainer and to heart-rate, cadence and power sensors.</string>
+	<!-- Только если min iOS < 13 (устаревший ключ). При min_ios_version >= 15 удалить. -->
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>ovosch-rider uses Bluetooth to connect to your smart trainer and to heart-rate, cadence and power sensors.</string>
+
+	<!-- Стандартный HTTPS — освобождённая категория экспортного контроля; снимает вопрос при загрузке в TestFlight. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
+	<!-- Схема redirect OAuth (решение В-6): ovoschrider://strava, ovoschrider://intervals -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>&lt;BUNDLE_ID_IOS&gt;.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ovoschrider</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+		</dict>
+	</array>
+
+	<!-- Типы документов для «Открыть в…» (REQ-IMP-03 крит. 3): .zwo, .erg, .mrc. Файл копируется в контейнер. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Zwift Workout</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>&lt;BUNDLE_ID_IOS&gt;.zwo</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>ERG Workout</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>&lt;BUNDLE_ID_IOS&gt;.erg</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>MRC Workout</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>&lt;BUNDLE_ID_IOS&gt;.mrc</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>&lt;BUNDLE_ID_IOS&gt;.zwo</string>
+			<key>UTTypeDescription</key>
+			<string>Zwift Workout (ZWO)</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>zwo</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>&lt;BUNDLE_ID_IOS&gt;.erg</string>
+			<key>UTTypeDescription</key>
+			<string>ERG Workout</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>erg</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>&lt;BUNDLE_ID_IOS&gt;.mrc</string>
+			<key>UTTypeDescription</key>
+			<string>MRC Workout</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>mrc</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+
+	<!-- Фоновый BLE (bluetooth-central) НЕ включаем по умолчанию — решение владельца, см. app_store_checklist.md раздел 3. -->
+	<!--
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+	-->
+
+	<!-- ADDITIONAL_PLIST_CONTENT_END -->
+</dict>
+</plist>
+<!--
+  ru.lproj/InfoPlist.strings (добавить в Xcode-проект или через опцию локализации пресета):
+  "NSBluetoothAlwaysUsageDescription" = "ovosch-rider использует Bluetooth для подключения к велостанку и датчикам пульса, каденса и мощности.";
+  "NSBluetoothPeripheralUsageDescription" = "ovosch-rider использует Bluetooth для подключения к велостанку и датчикам пульса, каденса и мощности.";
+-->

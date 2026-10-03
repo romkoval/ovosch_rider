@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Заготовка манифеста Android-плагина BLE ovosch-rider (REQ-NFR-07 крит. 3, этап 9).
+  Сливается Gradle с манифестом приложения, которое генерирует Godot при экспорте (Use Gradle Build).
+  Применение — platform/README.md; обоснование разрешений — docs/ports/android.md.
+  Плейсхолдер <APPLICATION_ID> — applicationId приложения (например <BUNDLE_ID_PREFIX>.ovoschrider);
+  атрибут package в манифесте плагина не нужен (namespace задаётся в build.gradle).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Устройство обязано поддерживать BLE: Google Play не покажет приложение без адаптера. -->
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="true" />
+
+    <!-- Android 12+ (API 31+): новые разрешения BLE. neverForLocation — приложение не выводит
+         местоположение из результатов сканирования, поэтому ACCESS_FINE_LOCATION на API 31+ не требуется
+         и Google Play не требует обоснования доступа к геолокации. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Android ≤ 11 (API ≤ 30): legacy-разрешения. maxSdkVersion не даёт им запрашиваться на новых версиях. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <!-- Сканирование BLE на API 23–30 требует разрешения на местоположение (runtime-запрос). -->
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <!-- API 23–28 принимали и COARSE; оставлено для согласованности с FINE на тех же версиях. -->
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- Сеть: Intervals.icu и Strava (обычное разрешение, без runtime-запроса). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Фоновая запись тренировки при выключенном экране — РЕШЕНИЕ ВЛАДЕЛЬЦА (docs/ports/android.md, раздел 5).
+         По REQ-NFR-04 экран во время тренировки не гаснет, поэтому по умолчанию foreground service не объявляется.
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    -->
+
+    <!-- Приложение не запрашивает: ACCESS_BACKGROUND_LOCATION, BLUETOOTH_ADVERTISE, камеру, микрофон,
+         READ_EXTERNAL_STORAGE (импорт файлов — через Storage Access Framework / системный диалог). -->
+
+    <application>
+        <!-- Элементы ниже относятся к Activity приложения (Godot генерирует её сам). При слиянии
+             манифестов intent-filter попадёт в GodotApp через tools:node="merge" по имени активности
+             экспортера; если Godot 4.7 использует другое имя — перенести в
+             опцию пресета или в android/build/AndroidManifest.xml (gradle-шаблон). -->
+        <activity
+            android:name="com.godot.game.GodotApp"
+            tools:node="merge">
+
+            <!-- Redirect OAuth (решение В-6): ovoschrider://strava, ovoschrider://intervals -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ovoschrider" />
+            </intent-filter>
+
+            <!-- Share / «Открыть с помощью» для файлов тренировок (REQ-IMP-03 крит. 4). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:pathPattern=".*\\.zwo" />
+                <data android:pathPattern=".*\\.erg" />
+                <data android:pathPattern=".*\\.mrc" />
+                <data android:pathPattern=".*\\.ZWO" />
+                <data android:pathPattern=".*\\.ERG" />
+                <data android:pathPattern=".*\\.MRC" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

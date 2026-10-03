@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Заготовка Info.plist для macOS-сборки ovosch-rider (Mac App Store и Developer ID).
+  REQ-NFR-07 крит. 2, REQ-IMP-03 крит. 3, REQ-STR-01 крит. 7. Применение — platform/README.md:
+  фрагмент между маркерами ADDITIONAL_PLIST_CONTENT → опция пресета application/additional_plist_content.
+  Плейсхолдер <BUNDLE_ID_MACOS> — bundle id macOS-сборки (например <BUNDLE_ID_PREFIX>.ovoschrider.mac или общий с iOS).
+  Русский текст — ru.lproj/InfoPlist.strings (см. в конце файла).
+-->
+<plist version="1.0">
+<dict>
+	<!-- Заполняется экспортером Godot; для справки. -->
+	<key>CFBundleIdentifier</key>
+	<string>&lt;BUNDLE_ID_MACOS&gt;</string>
+	<key>CFBundleName</key>
+	<string>ovosch-rider</string>
+
+	<!-- ADDITIONAL_PLIST_CONTENT_BEGIN -->
+
+	<!-- Bluetooth: обязателен для CoreBluetooth начиная с macOS 11; без ключа — TCC-отказ без диалога. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>ovosch-rider uses Bluetooth to connect to your smart trainer and to heart-rate, cadence and power sensors.</string>
+
+	<!-- Категория Mac App Store: Health & Fitness -->
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.healthcare-fitness</string>
+
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
+	<!-- Схема redirect OAuth на macOS не используется (loopback по В-6), но регистрируется на случай
+	     перехода к universal links / единой схеме; безвредна. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>&lt;BUNDLE_ID_MACOS&gt;.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ovoschrider</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Типы документов (двойной клик / «Открыть с помощью»): .zwo, .erg, .mrc — REQ-IMP-03 крит. 3 -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Zwift Workout</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>&lt;BUNDLE_ID_MACOS&gt;.zwo</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>ERG Workout</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>&lt;BUNDLE_ID_MACOS&gt;.erg</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>MRC Workout</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>&lt;BUNDLE_ID_MACOS&gt;.mrc</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>&lt;BUNDLE_ID_MACOS&gt;.zwo</string>
+			<key>UTTypeDescription</key>
+			<string>Zwift Workout (ZWO)</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>zwo</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>&lt;BUNDLE_ID_MACOS&gt;.erg</string>
+			<key>UTTypeDescription</key>
+			<string>ERG Workout</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>erg</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>&lt;BUNDLE_ID_MACOS&gt;.mrc</string>
+			<key>UTTypeDescription</key>
+			<string>MRC Workout</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>mrc</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+
+	<!-- ADDITIONAL_PLIST_CONTENT_END -->
+</dict>
+</plist>
+<!--
+  ru.lproj/InfoPlist.strings:
+  "NSBluetoothAlwaysUsageDescription" = "ovosch-rider использует Bluetooth для подключения к велостанку и датчикам пульса, каденса и мощности.";
+-->
