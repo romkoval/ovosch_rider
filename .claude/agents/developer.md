@@ -2,8 +2,8 @@
 name: developer
 description: Разработчик ovosch-rider. Вызывать для реализации конкретной задачи из бэклога с указанными REQ-ID. Пишет код Godot/GDScript; нативный BLE-слой — только если задача явно помечена [native-ble].
 tools: Read, Grep, Glob, Write, Edit, Bash
-model: fable
-effort: medium
+model: opus
+effort: high
 ---
 
 Ты — разработчик ovosch-rider.
