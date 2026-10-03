@@ -13,7 +13,7 @@ const IMPLEMENTATION_IDENTIFIERS: Array[String] = ["FakeTrainer", "BleTrainer", 
 ## Разрешённые места платформенных вызовов (REQ-NFR-06 крит. 1, с поправкой daf4ca8).
 const PLATFORM_ALLOWED_PREFIXES: Array[String] = ["res://src/storage/secure_store", "res://src/devices/ble/", "res://src/app/locale.gd"]
 ## Слои, от которых домен не зависит (REQ-NFR-06 крит. 3).
-const DOMAIN_FORBIDDEN_DIRS: Array[String] = ["res://src/devices", "res://src/session", "res://src/ui", "res://src/scene3d", "res://src/app", "res://src/profiles", "res://src/storage"]
+const DOMAIN_FORBIDDEN_DIRS: Array[String] = ["res://src/devices", "res://src/session", "res://src/ui", "res://src/scene3d", "res://src/app", "res://src/profiles", "res://src/storage", "res://src/integrations"]
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ func test_domain_has_no_dependencies_on_outer_layers() -> void:
 		forbidden_classes.append_array(_class_names_in(dir))
 	assert_gt(forbidden_classes.size(), 5, "классы внешних слоёв найдены")
 	var class_re := RegEx.create_from_string("\\b(" + "|".join(forbidden_classes) + ")\\b")
-	var scene_re := RegEx.create_from_string("\\b(Node|Node2D|Node3D|Control|SceneTree|get_tree|preload|load)\\s*\\(|\\bextends\\s+(Node|Control|Node2D|Node3D)\\b|res://src/(devices|session|ui|scene3d|app|profiles|storage)/")
+	var scene_re := RegEx.create_from_string("\\b(Node|Node2D|Node3D|Control|SceneTree|get_tree|preload|load)\\s*\\(|\\bextends\\s+(Node|Control|Node2D|Node3D)\\b|res://src/(devices|session|ui|scene3d|app|profiles|storage|integrations)/")
 	var offenders: Array[String] = []
 	for path in _list("res://src/domain", [".gd"]):
 		var n := 0

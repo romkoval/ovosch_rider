@@ -492,6 +492,213 @@ func test_req_nfr_06_c3_architecture_tests_exist_and_cover_negative_probe_by_des
 		assert_string_contains(arch, name)
 
 
+# ---------------------------------------------------------------------------
+# REQ-NFR-06 крит. 3 (редакция В-19) — детектор зависимостей по определению п.3:
+# упоминание вне комментариев пути `res://src/<слой>` (preload/load/extends/.tscn)
+# или имени `class_name`-класса из этого слоя. Каталоги домена → integrations и
+# нижних слоёв devices/integrations/storage → ui/app ранее не проверялись.
+# ---------------------------------------------------------------------------
+
+## Каталоги-слои `src/`, перечисленные в п.3.
+const NFR06_LAYERS: Array[String] = ["domain", "devices", "session", "integrations", "profiles", "storage", "ui", "scene3d", "app"]
+## Нижние слои п.3: не зависят ни от `src/ui/`, ни от `src/app/` (включая AppState).
+const NFR06_LOWER_LAYERS: Array[String] = ["domain", "session", "devices", "integrations", "storage"]
+const NFR06_SCAN_EXTS: Array[String] = [".gd", ".tscn", ".tres", ".scn"]
+
+
+## Строка без комментария. `.gd`: `#` вне строкового литерала (`"#fff"` комментарием не считается);
+## `.tscn`/`.tres`: строка, начинающаяся с `;`.
+static func _nfr06_strip_comment(line: String, is_gd: bool) -> String:
+	if not is_gd:
+		return "" if line.strip_edges().begins_with(";") else line
+	var quote := ""
+	var i := 0
+	while i < line.length():
+		var ch := line[i]
+		if quote.is_empty():
+			if ch == "#":
+				return line.substr(0, i)
+			if ch == "\"" or ch == "'":
+				quote = ch
+		elif ch == "\\":
+			i += 1
+		elif ch == quote:
+			quote = ""
+		i += 1
+	return line
+
+
+## Имена class_name слоёв `layers`.
+static func _nfr06_classes(layers: Array[String]) -> Array[String]:
+	var out: Array[String] = []
+	for layer in layers:
+		out.append_array(_class_names_in(SRC.path_join(layer)))
+	return out
+
+
+## Детектор ссылок на слои `layers`: путь `res://src/<слой>` или имя class_name слоя.
+static func _nfr06_detector(layers: Array[String]) -> RegEx:
+	var pattern := "res://src/(" + "|".join(layers) + ")\\b"
+	var classes := _nfr06_classes(layers)
+	if not classes.is_empty():
+		pattern += "|\\b(" + "|".join(classes) + ")\\b"
+	return RegEx.create_from_string(pattern)
+
+
+## Нарушения в тексте файла `path`: "<путь>:<строка> <код без комментария>".
+static func _nfr06_scan_text(path: String, text: String, re: RegEx) -> Array[String]:
+	var out: Array[String] = []
+	var is_gd := path.ends_with(".gd")
+	var n := 0
+	for raw in text.split("\n"):
+		n += 1
+		var line := _nfr06_strip_comment(raw, is_gd)
+		if re.search(line) != null:
+			out.append("%s:%d %s" % [path, n, line.strip_edges()])
+	return out
+
+
+## Нарушения во всех файлах каталога слоя `from_layer`.
+static func _nfr06_offenders(from_layer: String, re: RegEx) -> Array[String]:
+	var out: Array[String] = []
+	for path in _list(SRC.path_join(from_layer), NFR06_SCAN_EXTS):
+		out.append_array(_nfr06_scan_text(path, FileAccess.get_file_as_string(path), re))
+	return out
+
+
+static func _nfr06_without(layers: Array[String], excluded: Array[String]) -> Array[String]:
+	var out: Array[String] = []
+	for layer in layers:
+		if not excluded.has(layer):
+			out.append(layer)
+	return out
+
+
+func test_req_nfr_06_c3_layer_dirs_from_requirement_exist_and_have_classes() -> void:
+	# Без этого детектор может молча стать пустым (каталог переименован — проверка ничего не ищет).
+	for layer in NFR06_LAYERS:
+		assert_true(DirAccess.dir_exists_absolute(SRC.path_join(layer)), "каталог src/%s/ существует" % layer)
+	for layer in ["devices", "session", "integrations", "storage", "ui", "app"]:
+		assert_gt(_list(SRC.path_join(layer), [".gd"]).size(), 0, "src/%s/ содержит .gd" % layer)
+		assert_gt(_nfr06_classes([layer]).size(), 0, "src/%s/ объявляет class_name" % layer)
+
+
+func test_req_nfr_06_c3_domain_references_no_other_src_layer_including_integrations() -> void:
+	# П.3: «src/domain/ … не ссылается ни на один другой каталог src/ (devices, session,
+	# integrations, profiles, storage, ui, scene3d, app)».
+	var forbidden := _nfr06_without(NFR06_LAYERS, ["domain"])
+	assert_has(forbidden, "integrations")
+	assert_eq(forbidden.size(), 8, "все 8 чужих каталогов из п.3: %s" % str(forbidden))
+	var classes := _nfr06_classes(["integrations"])
+	for cls in ["IntervalsIcuClient", "ZwoParser", "FitEncoder", "StravaUploader"]:
+		assert_has(classes, cls, "класс integrations в списке запрещённых для домена")
+	var offenders := _nfr06_offenders("domain", _nfr06_detector(forbidden))
+	assert_eq(offenders, [], "src/domain/ ссылается на другие слои src/: %s" % str(offenders))
+
+
+func test_req_nfr_06_c3_domain_does_not_reference_integrations_by_path_or_class() -> void:
+	# Отдельно по integrations — пробел прежних проверок (ни DOMAIN_FORBIDDEN_DIRS, ни outer его не содержали).
+	var offenders := _nfr06_offenders("domain", _nfr06_detector(["integrations"]))
+	assert_eq(offenders, [], "src/domain/ → src/integrations/: %s" % str(offenders))
+
+
+func test_req_nfr_06_c3_lower_layers_reference_neither_ui_nor_app() -> void:
+	# П.3: «Нижние слои src/domain/, src/session/, src/devices/, src/integrations/, src/storage/
+	# не зависят ни от src/ui/, ни от src/app/ (включая AppState)».
+	var re := _nfr06_detector(["ui", "app"])
+	assert_has(_nfr06_classes(["app"]), "AppState")
+	var by_layer: Dictionary = {}
+	for layer in NFR06_LOWER_LAYERS:
+		var offenders := _nfr06_offenders(layer, re)
+		if not offenders.is_empty():
+			by_layer[layer] = offenders
+	assert_eq(by_layer, {}, "нижние слои ссылаются на src/ui/ или src/app/: %s" % str(by_layer))
+
+
+func test_req_nfr_06_c3_devices_reference_neither_ui_nor_app() -> void:
+	var offenders := _nfr06_offenders("devices", _nfr06_detector(["ui", "app"]))
+	assert_eq(offenders, [], "src/devices/ → ui/app: %s" % str(offenders))
+
+
+func test_req_nfr_06_c3_integrations_reference_neither_ui_nor_app() -> void:
+	var offenders := _nfr06_offenders("integrations", _nfr06_detector(["ui", "app"]))
+	assert_eq(offenders, [], "src/integrations/ → ui/app: %s" % str(offenders))
+
+
+func test_req_nfr_06_c3_storage_references_neither_ui_nor_app() -> void:
+	var offenders := _nfr06_offenders("storage", _nfr06_detector(["ui", "app"]))
+	assert_eq(offenders, [], "src/storage/ → ui/app: %s" % str(offenders))
+
+
+func test_req_nfr_06_c3_session_references_neither_ui_nor_app_by_path() -> void:
+	# Прежняя проверка session — только по именам классов; здесь — и по путям res://src/ui|app.
+	var offenders := _nfr06_offenders("session", _nfr06_detector(["ui", "app"]))
+	assert_eq(offenders, [], "src/session/ → ui/app: %s" % str(offenders))
+
+
+## Синтетические строки с запрещённой ссылкой на слой `layer` (пути + класс `cls`).
+static func _nfr06_probe_lines(layer: String, cls: String) -> Dictionary:
+	return {
+		"res://src/domain/tmp_probe_preload.gd": "extends RefCounted\nconst P := preload(\"res://src/%s/probe.gd\")\n" % layer,
+		"res://src/domain/tmp_probe_load.gd": "extends RefCounted\nfunc f() -> void:\n\tvar s = load(\"res://src/%s/probe.tscn\")\n" % layer,
+		"res://src/domain/tmp_probe_extends.gd": "extends \"res://src/%s/probe.gd\"\n" % layer,
+		"res://src/domain/tmp_probe_class.gd": "extends RefCounted\nvar x: %s = null\n" % cls,
+		"res://src/domain/tmp_probe_class_call.gd": "extends RefCounted\nfunc f() -> void:\n\t%s.new()\n" % cls,
+		"res://src/domain/tmp_probe_after_hash_in_string.gd": "extends RefCounted\nvar c := \"#fff\"; const P := preload(\"res://src/%s/x.gd\")\n" % layer,
+		"res://src/domain/tmp_probe.tscn": "[gd_scene format=3]\n[ext_resource type=\"Script\" path=\"res://src/%s/probe.gd\" id=\"1\"]\n" % layer,
+	}
+
+
+func test_req_nfr_06_c3_detector_negative_probe_catches_synthetic_forbidden_refs() -> void:
+	# Негативная проверка без файлов в репозитории: синтетический текст подаётся в тот же сканер.
+	var domain_re := _nfr06_detector(_nfr06_without(NFR06_LAYERS, ["domain"]))
+	var lower_re := _nfr06_detector(["ui", "app"])
+	var cases: Array = [
+		[domain_re, "integrations", "IntervalsIcuClient"],
+		[domain_re, "integrations", "ZwoParser"],
+		[domain_re, "devices", "TrainerDevice"],
+		[domain_re, "session", "WorkoutSession"],
+		[domain_re, "storage", "RideRepository"],
+		[domain_re, "profiles", "ProfileRepository"],
+		[domain_re, "scene3d", "RideScene"],
+		[domain_re, "ui", "HudModel"],
+		[domain_re, "app", "AppState"],
+		[lower_re, "ui", "HudModel"],
+		[lower_re, "ui", "PlanScreen"],
+		[lower_re, "app", "AppState"],
+		[lower_re, "app", "AppSettings"],
+		[lower_re, "app", "AppMain"],
+	]
+	for c in cases:
+		var probes := _nfr06_probe_lines(c[1], c[2])
+		for path in probes.keys():
+			var hits := _nfr06_scan_text(path, probes[path], c[0])
+			assert_eq(hits.size(), 1, "детектор должен поймать ссылку на %s (%s) в %s; найдено: %s" % [c[1], c[2], path, str(hits)])
+
+
+func test_req_nfr_06_c3_detector_finds_real_allowed_refs_in_upper_layers() -> void:
+	# Положительный контроль на реальных файлах: сканер читает файлы и находит разрешённые
+	# п.3 зависимости (src/app/ зависит от всех; src/ui/ — от integrations/storage/AppState).
+	# Если здесь пусто — пустой результат проверок нижних слоёв ничего не доказывает.
+	assert_gt(_nfr06_offenders("app", _nfr06_detector(["ui"])).size(), 0, "src/app/ ссылается на src/ui/ (main.gd/main.tscn)")
+	assert_gt(_nfr06_offenders("ui", _nfr06_detector(["integrations"])).size(), 0, "src/ui/ ссылается на src/integrations/")
+	assert_gt(_nfr06_offenders("ui", _nfr06_detector(["app"])).size(), 0, "src/ui/ ссылается на AppState")
+
+func test_req_nfr_06_c3_detector_ignores_comments_and_allowed_refs() -> void:
+	# Комментарии — не зависимость (п.3: «упоминание в коде (без комментариев)»).
+	var domain_re := _nfr06_detector(_nfr06_without(NFR06_LAYERS, ["domain"]))
+	var lower_re := _nfr06_detector(["ui", "app"])
+	var clean_gd := "extends RefCounted\n# preload(\"res://src/integrations/x.gd\")\n## См. AppState и IntervalsIcuClient\nvar c := \"#fff\"  # res://src/ui/x.tscn HudModel\nvar w := Workout.new()\nconst D := preload(\"res://src/domain/workout.gd\")\n"
+	assert_eq(_nfr06_scan_text("res://src/domain/tmp_probe.gd", clean_gd, domain_re), [], "комментарии и ссылки домена на себя — не нарушение")
+	assert_eq(_nfr06_scan_text("res://src/storage/tmp_probe.gd", clean_gd, lower_re), [], "комментарии — не нарушение для нижних слоёв")
+	var lower_ok := "extends RefCounted\nvar t: TrainerDevice\nvar r: RideRepository\nconst W := preload(\"res://src/domain/workout.gd\")\n"
+	assert_eq(_nfr06_scan_text("res://src/integrations/tmp_probe.gd", lower_ok, lower_re), [], "ссылки нижнего слоя на domain/devices/storage — не ui/app")
+	var tscn := "[gd_scene format=3]\n; [ext_resource path=\"res://src/ui/x.gd\"]\n"
+	assert_eq(_nfr06_scan_text("res://src/devices/tmp_probe.tscn", tscn, lower_re), [], "комментарий в .tscn — не нарушение")
+	# Префикс имени каталога не путается с другим каталогом (res://src/uix/ ≠ res://src/ui/).
+	assert_eq(_nfr06_scan_text("res://src/devices/tmp_probe.gd", "const P := preload(\"res://src/uix/a.gd\")\n", lower_re), [])
+
+
 # ===========================================================================
 # REQ-NFR-05 крит. 1 — единственная точка работы с секретами
 # ===========================================================================
