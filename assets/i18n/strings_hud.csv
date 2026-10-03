@@ -1,2 +1,23 @@
 keys,ru,en
 meta.area.hud,HUD тренировки,Workout HUD
+ui.hud.target.title,Цель,Target
+ui.hud.target.free,Свободно,Free
+ui.hud.target.cadence,{value} rpm,{value} rpm
+ui.hud.target.resistance,сопр. {value} %,res. {value} %
+ui.hud.target.remaining,ещё,left
+ui.hud.unit.km,км,km
+ui.hud.unit.kmh,км/ч,km/h
+ui.hud.unit.bpm,уд/мин,bpm
+ui.hud.unit.rpm,rpm,rpm
+ui.hud.status.trainer,СТАНОК,TRAINER
+ui.hud.status.hr,ПУЛЬС,HR
+ui.hud.status.erg,ERG,ERG
+ui.hud.status.hr_ok,Датчик пульса на связи,Heart rate sensor connected
+ui.hud.status.hr_missing,Нет данных пульса,No heart rate data
+ui.hud.status.intensity,{value} %,{value} %
+ui.hud.status.intensity_hint,Интенсивность {value} %,Intensity {value} %
+ui.hud.interval_list.free,свободно,free
+ui.hud.interval_list.remaining,Осталось,Remaining
+ui.hud.interval_list.step_of,Шаг {step} из {steps},Step {step} of {steps}
+ui.hud.chart.legend_power,мощность,power
+ui.hud.chart.legend_hr,пульс,heart rate

@@ -1,0 +1,243 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/ui/hud/hud_metric_panel.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/icons/lucide/clock.svg" id="2_clock"]
+[ext_resource type="Texture2D" path="res://assets/icons/lucide/heart.svg" id="3_heart"]
+[ext_resource type="Texture2D" path="res://assets/icons/lucide/gauge.svg" id="4_gauge"]
+
+[node name="HudMetricPanel" type="PanelContainer"]
+custom_minimum_size = Vector2(640, 166)
+mouse_filter = 2
+theme_type_variation = &"HudPlate"
+script = ExtResource("1_script")
+
+[node name="Content" type="Control" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(616, 150)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ElapsedIcon" type="TextureRect" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+offset_right = 18.0
+offset_bottom = 18.0
+texture = ExtResource("2_clock")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ElapsedLabel" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudStripLabel"
+text = "00:00"
+
+[node name="DistanceLabel" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudStripLabel"
+text = "0.0"
+
+[node name="DistanceUnit" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudUnitLabel"
+text = "ui.hud.unit.km"
+
+[node name="SpeedLabel" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudStripLabel"
+text = "—"
+
+[node name="SpeedUnit" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudUnitLabel"
+text = "ui.hud.unit.kmh"
+
+[node name="StepBar" type="Control" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="TargetCard" type="Control" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="TargetTitle" type="Label" parent="Content/TargetCard"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.target.title"
+uppercase = true
+
+[node name="TargetCadenceLabel" type="Label" parent="Content/TargetCard"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"NumLabel"
+
+[node name="TargetZoneLabel" type="Label" parent="Content/TargetCard"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudZoneChipLabel"
+text = "—"
+
+[node name="Fill" type="Control" parent="Content/TargetCard/TargetZoneLabel"]
+show_behind_parent = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TargetLabel" type="Label" parent="Content/TargetCard"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudTargetLabel"
+text = "—"
+
+[node name="TargetUnit" type="Label" parent="Content/TargetCard"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudUnitLabel"
+text = "ui.workout.unit_w"
+
+[node name="CountdownPrefix" type="Label" parent="Content/TargetCard"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudUnitLabel"
+text = "ui.hud.target.remaining"
+
+[node name="CountdownLabel" type="Label" parent="Content/TargetCard"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudStripLabel"
+text = "—"
+
+[node name="Hero" type="Control" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="PowerLabel" type="Label" parent="Content/Hero"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudHeroLabel"
+text = "—"
+
+[node name="PowerUnit" type="Label" parent="Content/Hero"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudUnitLabel"
+text = "ui.workout.unit_w"
+
+[node name="ZoneRow" type="Control" parent="Content/Hero"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="PowerZoneLabel" type="Label" parent="Content/Hero/ZoneRow"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudZoneChipLabel"
+text = "—"
+
+[node name="Fill" type="Control" parent="Content/Hero/ZoneRow/PowerZoneLabel"]
+show_behind_parent = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Vitals" type="Control" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="HrIcon" type="TextureRect" parent="Content/Vitals"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+offset_right = 18.0
+offset_bottom = 18.0
+texture = ExtResource("3_heart")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HrLabel" type="Label" parent="Content/Vitals"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudValueLabel"
+text = "—"
+
+[node name="HrZoneLabel" type="Label" parent="Content/Vitals"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudZoneChipLabel"
+text = "—"
+
+[node name="Fill" type="Control" parent="Content/Vitals/HrZoneLabel"]
+show_behind_parent = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="HrUnit" type="Label" parent="Content/Vitals"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.unit.bpm"
+
+[node name="CadenceIcon" type="TextureRect" parent="Content/Vitals"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+offset_right = 18.0
+offset_bottom = 18.0
+texture = ExtResource("4_gauge")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CadenceLabel" type="Label" parent="Content/Vitals"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudValueLabel"
+text = "—"
+
+[node name="CadenceUnit" type="Label" parent="Content/Vitals"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.unit.rpm"

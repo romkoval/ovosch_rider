@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/ui/workout/workout_screen.gd" id="1_script"]
 [ext_resource type="Script" path="res://src/ui/workout/workout_progress_bar.gd" id="2_bar"]
 [ext_resource type="PackedScene" path="res://src/scene3d/ride_scene.tscn" id="3_ride"]
+[ext_resource type="PackedScene" path="res://src/ui/hud/hud_metric_panel.tscn" id="4_panel"]
+[ext_resource type="Texture2D" path="res://assets/icons/lucide/pause.svg" id="5_pause"]
 
 [node name="WorkoutScreen" type="Control"]
 layout_mode = 3
@@ -15,12 +17,9 @@ script = ExtResource("1_script")
 
 [node name="ViewportContainer" type="SubViewportContainer" parent="."]
 unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
 mouse_filter = 2
 stretch = true
 
@@ -28,8 +27,8 @@ stretch = true
 unique_name_in_owner = true
 handle_input_locally = false
 msaa_3d = 2
-size = Vector2i(1152, 648)
-render_target_update_mode = 4
+size = Vector2i(1280, 720)
+render_target_update_mode = 3
 
 [node name="RideScene" parent="ViewportContainer/Viewport" instance=ExtResource("3_ride")]
 unique_name_in_owner = true
@@ -47,7 +46,7 @@ grow_vertical = 2
 text = "ui.workout.no_session"
 horizontal_alignment = 1
 
-[node name="HudRoot" type="MarginContainer" parent="."]
+[node name="HudRoot" type="Control" parent="."]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -55,185 +54,196 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 16
+mouse_filter = 2
 
-[node name="VBox" type="VBoxContainer" parent="HudRoot"]
+[node name="ChartSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="ProgressBar" type="Control" parent="HudRoot/ChartSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+script = ExtResource("2_bar")
+
+[node name="ListSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="StepPlate" type="PanelContainer" parent="HudRoot/ListSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudPlate"
+
+[node name="StepLabel" type="Label" parent="HudRoot/ListSlot/StepPlate"]
+unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_type_variation = &"HudUnitLabel"
+text = "ui.workout.step"
 
-[node name="TopRow" type="HBoxContainer" parent="HudRoot/VBox"]
+[node name="MetricPanel" parent="HudRoot" instance=ExtResource("4_panel")]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="HintSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="CuePlate" type="PanelContainer" parent="HudRoot/HintSlot"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudPlate"
+
+[node name="CueLabel" type="Label" parent="HudRoot/HintSlot/CuePlate"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"BodyStrongLabel"
+horizontal_alignment = 1
+autowrap_mode = 3
+max_lines_visible = 2
+
+[node name="StatusSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="TrainerChip" type="Control" parent="HudRoot/StatusSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="ConnectionLabel" type="Label" parent="HudRoot/StatusSlot/TrainerChip"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.status.trainer"
+
+[node name="HrChip" type="Control" parent="HudRoot/StatusSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="HrStatusLabel" type="Label" parent="HudRoot/StatusSlot/HrChip"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.status.hr"
+
+[node name="ModeChip" type="Control" parent="HudRoot/StatusSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="ModeStatusLabel" type="Label" parent="HudRoot/StatusSlot/ModeChip"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.status.erg"
+
+[node name="IntensityChip" type="Control" parent="HudRoot/StatusSlot"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+
+[node name="IntensityStatusLabel" type="Label" parent="HudRoot/StatusSlot/IntensityChip"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+
+[node name="PauseButton" type="Button" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+theme_type_variation = &"HudButton"
+text = "ui.workout.pause"
+icon = ExtResource("5_pause")
+
+[node name="ToolbarSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="Toolbar" type="PanelContainer" parent="HudRoot/ToolbarSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudPlate"
+
+[node name="Tools" type="VBoxContainer" parent="HudRoot/ToolbarSlot/Toolbar"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="SkipButton" type="Button" parent="HudRoot/ToolbarSlot/Toolbar/Tools"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudButton"
+text = "ui.workout.skip"
+
+[node name="StopButton" type="Button" parent="HudRoot/ToolbarSlot/Toolbar/Tools"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudButton"
+text = "ui.workout.stop"
+
+[node name="ErgButton" type="Button" parent="HudRoot/ToolbarSlot/Toolbar/Tools"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudButton"
+text = "ui.workout.erg_on"
+
+[node name="ResistanceRow" type="HBoxContainer" parent="HudRoot/ToolbarSlot/Toolbar/Tools"]
+unique_name_in_owner = true
+visible = false
 layout_mode = 2
 
-[node name="StepLabel" type="Label" parent="HudRoot/VBox/TopRow"]
+[node name="ResistanceMinus" type="Button" parent="HudRoot/ToolbarSlot/Toolbar/Tools/ResistanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudButton"
+text = "ui.workout.minus_5"
+
+[node name="ResistanceLabel" type="Label" parent="HudRoot/ToolbarSlot/Toolbar/Tools/ResistanceRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "ui.workout.step"
-
-[node name="ConnectionLabel" type="Label" parent="HudRoot/VBox/TopRow"]
-unique_name_in_owner = true
-layout_mode = 2
-horizontal_alignment = 2
-
-[node name="TargetTitle" type="Label" parent="HudRoot/VBox"]
-layout_mode = 2
-text = "ui.workout.target_title"
-horizontal_alignment = 1
-
-[node name="TargetLabel" type="Label" parent="HudRoot/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-horizontal_alignment = 1
-
-[node name="PowerRow" type="HBoxContainer" parent="HudRoot/VBox"]
-layout_mode = 2
-alignment = 1
-
-[node name="PowerLabel" type="Label" parent="HudRoot/VBox/PowerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="DeviationLabel" type="Label" parent="HudRoot/VBox/PowerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="PowerZoneLabel" type="Label" parent="HudRoot/VBox/PowerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="Metrics" type="GridContainer" parent="HudRoot/VBox"]
-layout_mode = 2
-columns = 4
-
-[node name="HrTitle" type="Label" parent="HudRoot/VBox/Metrics"]
-layout_mode = 2
-text = "ui.workout.hr"
-
-[node name="CadenceTitle" type="Label" parent="HudRoot/VBox/Metrics"]
-layout_mode = 2
-text = "ui.workout.cadence"
-
-[node name="SpeedTitle" type="Label" parent="HudRoot/VBox/Metrics"]
-layout_mode = 2
-text = "ui.workout.speed"
-
-[node name="ElapsedTitle" type="Label" parent="HudRoot/VBox/Metrics"]
-layout_mode = 2
-text = "ui.workout.elapsed"
-
-[node name="HrBox" type="HBoxContainer" parent="HudRoot/VBox/Metrics"]
-layout_mode = 2
-
-[node name="HrLabel" type="Label" parent="HudRoot/VBox/Metrics/HrBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="HrZoneLabel" type="Label" parent="HudRoot/VBox/Metrics/HrBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="CadenceLabel" type="Label" parent="HudRoot/VBox/Metrics"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="SpeedLabel" type="Label" parent="HudRoot/VBox/Metrics"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ElapsedLabel" type="Label" parent="HudRoot/VBox/Metrics"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="CountdownTitle" type="Label" parent="HudRoot/VBox"]
-layout_mode = 2
-text = "ui.workout.countdown"
-horizontal_alignment = 1
-
-[node name="CountdownLabel" type="Label" parent="HudRoot/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-horizontal_alignment = 1
-
-[node name="CueLabel" type="Label" parent="HudRoot/VBox"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-horizontal_alignment = 1
-autowrap_mode = 3
-
-[node name="ProgressBar" type="Control" parent="HudRoot/VBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-script = ExtResource("2_bar")
-
-[node name="Controls" type="HBoxContainer" parent="HudRoot/VBox"]
-layout_mode = 2
-alignment = 1
-
-[node name="PauseButton" type="Button" parent="HudRoot/VBox/Controls"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.workout.pause"
-
-[node name="SkipButton" type="Button" parent="HudRoot/VBox/Controls"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.workout.skip"
-
-[node name="StopButton" type="Button" parent="HudRoot/VBox/Controls"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.workout.stop"
-
-[node name="ErgButton" type="Button" parent="HudRoot/VBox/Controls"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.workout.erg_on"
-
-[node name="Adjust" type="HBoxContainer" parent="HudRoot/VBox"]
-layout_mode = 2
-alignment = 1
-
-[node name="ResistanceRow" type="HBoxContainer" parent="HudRoot/VBox/Adjust"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-
-[node name="ResistanceMinus" type="Button" parent="HudRoot/VBox/Adjust/ResistanceRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.workout.minus_5"
-
-[node name="ResistanceLabel" type="Label" parent="HudRoot/VBox/Adjust/ResistanceRow"]
-unique_name_in_owner = true
-layout_mode = 2
+theme_type_variation = &"HudCaptionLabel"
 text = "ui.workout.resistance"
+horizontal_alignment = 1
 
-[node name="ResistancePlus" type="Button" parent="HudRoot/VBox/Adjust/ResistanceRow"]
+[node name="ResistancePlus" type="Button" parent="HudRoot/ToolbarSlot/Toolbar/Tools/ResistanceRow"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"HudButton"
 text = "ui.workout.plus_5"
 
-[node name="IntensityRow" type="HBoxContainer" parent="HudRoot/VBox/Adjust"]
+[node name="IntensityRow" type="HBoxContainer" parent="HudRoot/ToolbarSlot/Toolbar/Tools"]
 layout_mode = 2
 
-[node name="IntensityMinus" type="Button" parent="HudRoot/VBox/Adjust/IntensityRow"]
+[node name="IntensityMinus" type="Button" parent="HudRoot/ToolbarSlot/Toolbar/Tools/IntensityRow"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"HudButton"
 text = "ui.workout.minus_5pct"
 
-[node name="IntensityLabel" type="Label" parent="HudRoot/VBox/Adjust/IntensityRow"]
+[node name="IntensityLabel" type="Label" parent="HudRoot/ToolbarSlot/Toolbar/Tools/IntensityRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"HudCaptionLabel"
 text = "ui.workout.intensity"
+horizontal_alignment = 1
 
-[node name="IntensityPlus" type="Button" parent="HudRoot/VBox/Adjust/IntensityRow"]
+[node name="IntensityPlus" type="Button" parent="HudRoot/ToolbarSlot/Toolbar/Tools/IntensityRow"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"HudButton"
 text = "ui.workout.plus_5pct"
 
 [node name="SummaryRoot" type="CenterContainer" parent="."]
@@ -248,7 +258,7 @@ grow_vertical = 2
 
 [node name="SummaryVBox" type="VBoxContainer" parent="SummaryRoot"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_type_variation = &"Stack12"
 
 [node name="FinishedTitle" type="Label" parent="SummaryRoot/SummaryVBox"]
 layout_mode = 2

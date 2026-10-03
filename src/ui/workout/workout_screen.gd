@@ -1,25 +1,44 @@
 class_name WorkoutScreen
 extends Control
 ## Экран тренировки (`AppState.Screen.WORKOUT`): собирает `WorkoutSession`, один
-## `SessionTicker`, `HudModel`, `KeepAwake` и отрисовывает HUD (REQ-HUD-01..09,
+## `SessionTicker`, `HudModel`, `KeepAwake` и отрисовывает HUD (REQ-HUD-01..09, 13, 14,
 ## REQ-WRK-03..07, REQ-NFR-04). Зависимости приходят через `setup()`; станок — любой
 ## `TrainerDevice` (в приложении — `SensorHub` из `ConnectionManager`, в режиме
 ## разработки — эмулятор из `TrainerFactory`). При переданном `ConnectionManager`
 ## экран ставит `ticks_devices = false` на время сессии, чтобы устройства не
 ## получали время дважды, и возвращает `true` по завершении.
 ##
-## Строки — через ключи `ui.workout.*`; значения HUD берутся из `HudModel.state()`.
+## Раскладка HUD — `HudLayout` (`docs/game/hud.md` п. 4.1): панель цифр `HudMetricPanel`
+## сверху по центру, левый слот (список интервалов — T-078; пока номер шага), слот графика
+## снизу (график — T-078; пока полоса прогресса HUD-07), слот подсказки, фишки статусов и
+## кнопка паузы справа сверху, колонка органов управления у правого края (панель
+## инструментов — T-074/T-078; пока прежние кнопки). Слоты отдаются наружу (`list_slot()`,
+## `chart_slot()`, `hint_slot()`, `toolbar_slot()`), чтобы T-078 наполнил их компонентами.
+##
+## 3D-фон — `RideScene` в `SubViewport` (REQ-D3D-01) в физическом разрешении окна
+## (REQ-HUD-13 крит. 10, `hud.md` п. 3): размер вьюпорта = размер экрана в пикселях окна,
+## контейнер уменьшен `scale` обратно в lp холста, поэтому при растяжении `canvas_items`
+## сцена не растягивается из меньшего растра. Вьюпорт рисуется, только пока экран виден.
+## На время экрана включается масштаб HUD (`UiScaleRuntime.set_mode(UiScale.Mode.HUD)`).
+##
+## Строки — через ключи `ui.workout.*` и `ui.hud.*`; значения HUD берутся из `HudModel.state()`.
 ## После FINISHED показывается сводка-заглушка с кнопкой «На главный»; сохранение
 ## заезда — этап 5, для него есть сигнал `session_finished(session)`.
-## Фон под HUD — `RideScene` в `SubViewportContainer` (REQ-D3D-01); сцена привязывается
-## к сессии в `start()` (`RideScene.bind`) и отвязывается при завершении/перезапуске.
 
 const UNIT_KEY: String = "ui.workout.unit_w"
 const RESISTANCE_STEP: int = 5
 const INTENSITY_STEP: float = 0.05
-## Размер шрифта цели (≥ 2× метрик, REQ-HUD-01 крит. 3).
-const TARGET_FONT_SIZE: int = 96
-const METRIC_FONT_SIZE: int = 40
+const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
+const ICON_PLAY: Texture2D = preload("res://assets/icons/lucide/play.svg")
+## Фишка статуса (`hud.md` п. 10.3): высота 24, радиус 12, точка 8, текст 12 / 650.
+const CHIP_HEIGHT: float = HudLayout.STATUS_CHIP_HEIGHT
+const CHIP_RADIUS: int = 12
+const CHIP_DOT_RADIUS: float = 4.0
+const CHIP_PAD_LEFT: float = 22.0
+const CHIP_PAD_RIGHT: float = 10.0
+const CHIP_GAP: float = 6.0
+## Поля временной полосы прогресса внутри слота графика.
+const CHART_PADDING: Vector2 = Vector2(16, 12)
 
 ## Сессия создана и сейчас стартует — владелец подключает запись заезда (`RideRecorder`, REQ-LOC-07).
 signal session_created(session: WorkoutSession)
@@ -43,27 +62,37 @@ var _ticker: SessionTicker
 var _hud: HudModel
 var _keep_awake: KeepAwake
 var _stop_pending: bool = false
+var _layout: HudLayout
+## Цвета точек фишек статусов: фишка → цвет.
+var _chip_dots: Dictionary = {}
+var _chart_plate: StyleBoxFlat
+var _status_chip_box: StyleBoxFlat
 
 @onready var _ride_scene: RideScene = %RideScene
 @onready var _viewport_container: SubViewportContainer = %ViewportContainer
+@onready var _viewport: SubViewport = %Viewport
 @onready var _hud_root: Control = %HudRoot
 @onready var _summary_root: Control = %SummaryRoot
 @onready var _no_session_label: Label = %NoSessionLabel
-@onready var _target_label: Label = %TargetLabel
-@onready var _power_label: Label = %PowerLabel
-@onready var _deviation_label: Label = %DeviationLabel
-@onready var _power_zone_label: Label = %PowerZoneLabel
-@onready var _hr_label: Label = %HrLabel
-@onready var _hr_zone_label: Label = %HrZoneLabel
-@onready var _cadence_label: Label = %CadenceLabel
-@onready var _speed_label: Label = %SpeedLabel
-@onready var _elapsed_label: Label = %ElapsedLabel
-@onready var _countdown_label: Label = %CountdownLabel
+@onready var _metric_panel: HudMetricPanel = %MetricPanel
+@onready var _list_slot: Control = %ListSlot
+@onready var _step_plate: Control = %StepPlate
 @onready var _step_label: Label = %StepLabel
-@onready var _connection_label: Label = %ConnectionLabel
-@onready var _cue_label: Label = %CueLabel
+@onready var _chart_slot: Control = %ChartSlot
 @onready var _progress_bar: WorkoutProgressBar = %ProgressBar
+@onready var _hint_slot: Control = %HintSlot
+@onready var _cue_plate: PanelContainer = %CuePlate
+@onready var _cue_label: Label = %CueLabel
+@onready var _status_slot: Control = %StatusSlot
+@onready var _trainer_chip: Control = %TrainerChip
+@onready var _connection_label: Label = %ConnectionLabel
+@onready var _hr_chip: Control = %HrChip
+@onready var _mode_chip: Control = %ModeChip
+@onready var _intensity_chip: Control = %IntensityChip
+@onready var _intensity_status_label: Label = %IntensityStatusLabel
 @onready var _pause_button: Button = %PauseButton
+@onready var _toolbar_slot: Control = %ToolbarSlot
+@onready var _toolbar: PanelContainer = %Toolbar
 @onready var _skip_button: Button = %SkipButton
 @onready var _stop_button: Button = %StopButton
 @onready var _erg_button: Button = %ErgButton
@@ -93,9 +122,18 @@ func setup(workout: Workout, profile: Profile, trainer: TrainerDevice, app_state
 
 
 func _ready() -> void:
-	_target_label.add_theme_font_size_override("font_size", TARGET_FONT_SIZE)
-	for label in [_power_label, _hr_label, _cadence_label, _speed_label, _elapsed_label, _countdown_label]:
-		(label as Label).add_theme_font_size_override("font_size", METRIC_FONT_SIZE)
+	# Узлы-значения панели доступны по уникальным именам и от экрана (`%TargetLabel` и др.).
+	_metric_panel.share_unique_names(self)
+	_chart_plate = StyleBoxFlat.new()
+	_chart_plate.bg_color = UiTokens.HUD_PLATE
+	_status_chip_box = StyleBoxFlat.new()
+	_status_chip_box.bg_color = UiTokens.HUD_PLATE
+	_status_chip_box.set_corner_radius_all(CHIP_RADIUS)
+	_chart_slot.draw.connect(_draw_chart_backdrop)
+	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip, _intensity_chip]:
+		chip.draw.connect(_draw_status_chip.bind(chip))
+	resized.connect(_on_resized)
+	get_viewport().size_changed.connect(_on_resized)
 	_pause_button.pressed.connect(toggle_pause)
 	_skip_button.pressed.connect(skip_step)
 	_stop_button.pressed.connect(func() -> void: request_stop())
@@ -107,6 +145,7 @@ func _ready() -> void:
 	_stop_dialog.confirmed.connect(func() -> void: confirm_stop())
 	_stop_dialog.canceled.connect(func() -> void: _stop_pending = false)
 	_home_button.pressed.connect(go_home)
+	_fit_viewport()
 	refresh()
 
 
@@ -171,15 +210,60 @@ func ride_scene() -> RideScene:
 	return _ride_scene
 
 
-## Уход с экрана тренировки: снимаем запрет гашения (REQ-NFR-04 крит. 1).
+## Размер изображения 3D-сцены в пикселях (REQ-HUD-13 крит. 10).
+func ride_viewport_size() -> Vector2i:
+	return _viewport.size
+
+
+## Панель цифр HUD (`HudMetricPanel`).
+func metric_panel() -> HudMetricPanel:
+	return _metric_panel
+
+
+## Текущая геометрия HUD (пересчитывается при смене размера и на каждой отрисовке).
+func hud_layout() -> HudLayout:
+	if _layout == null:
+		_layout_hud()
+	return _layout
+
+
+## Левый слот (список интервалов — T-078). Содержимое ставится от его левого верхнего угла.
+func list_slot() -> Control:
+	return _list_slot
+
+
+## Слот графика: прямоугольник градиента и графика (`hud_layout().chart_gradient` ∪ `chart`).
+func chart_slot() -> Control:
+	return _chart_slot
+
+
+## Слот подсказки и фишки «ДАЛЕЕ».
+func hint_slot() -> Control:
+	return _hint_slot
+
+
+## Колонка панели инструментов у правого края.
+func toolbar_slot() -> Control:
+	return _toolbar_slot
+
+
+## Уход с экрана тренировки: снимаем запрет гашения (REQ-NFR-04 крит. 1) и возвращаем
+## масштаб меню.
 func on_screen_exited() -> void:
 	if _keep_awake != null:
 		_keep_awake.on_screen_exited()
+	var ui := _ui_scale()
+	if ui != null and ui.mode == UiScale.Mode.HUD:
+		ui.set_mode(UiScale.Mode.MENU)
 
 
+## Вход на экран: запрет гашения и масштаб HUD (`hud.md` п. 3).
 func on_screen_entered() -> void:
 	if _keep_awake != null:
 		_keep_awake.on_screen_entered()
+	var ui := _ui_scale()
+	if ui != null and ui.mode != UiScale.Mode.HUD:
+		ui.set_mode(UiScale.Mode.HUD)
 	refresh()
 
 
@@ -261,47 +345,48 @@ func go_home() -> void:
 # ---------------------------------------------------------------------------
 
 func target_text() -> String:
-	return _target_label.text
+	return _metric_panel.target_text()
 
 
 func power_text() -> String:
-	return _power_label.text
+	return _metric_panel.power_text()
 
 
 func deviation_text() -> String:
-	return _deviation_label.text
+	return _metric_panel.deviation_text()
 
 
 func power_zone_text() -> String:
-	return _power_zone_label.text
+	return _metric_panel.power_zone_text()
 
 
 func hr_text() -> String:
-	return _hr_label.text
+	return _metric_panel.hr_text()
 
 
 func cadence_text() -> String:
-	return _cadence_label.text
+	return _metric_panel.cadence_text()
 
 
 func speed_text() -> String:
-	return _speed_label.text
+	return _metric_panel.speed_text()
 
 
 func elapsed_text() -> String:
-	return _elapsed_label.text
+	return _metric_panel.elapsed_text()
 
 
 func countdown_text() -> String:
-	return _countdown_label.text
+	return _metric_panel.countdown_text()
 
 
 func step_text() -> String:
 	return _step_label.text
 
 
+## Полный текст состояния станка (подсказка фишки «СТАНОК»).
 func connection_text() -> String:
-	return _connection_label.text
+	return _trainer_chip.tooltip_text
 
 
 func cue_text() -> String:
@@ -321,7 +406,7 @@ func is_summary_visible() -> bool:
 
 
 func is_countdown_accented() -> bool:
-	return _countdown_label.modulate != Color.WHITE
+	return _metric_panel.is_countdown_accented()
 
 
 # ---------------------------------------------------------------------------
@@ -351,41 +436,218 @@ func _render() -> void:
 	if _hud == null or _session == null or _session.get_state() == WorkoutSession.State.FINISHED:
 		return
 	var s := _hud.state()
-	_target_label.text = tr("ui.workout.target_value").format({"value": s["target_text"]}) if s["target_w"] >= 0 else HudModel.NO_DATA_TEXT
-	_power_label.text = tr("ui.workout.target_value").format({"value": s["power_text"]}) if s["smoothed_power_w"] >= 0 else HudModel.NO_DATA_TEXT
-	match str(s["power_deviation"]):
-		HudModel.DEVIATION_ABOVE:
-			_deviation_label.text = "▲"
-			_deviation_label.modulate = ZonePalette.COLORS["orange"]
-		HudModel.DEVIATION_BELOW:
-			_deviation_label.text = "▼"
-			_deviation_label.modulate = ZonePalette.COLORS["blue"]
-		HudModel.DEVIATION_ON:
-			_deviation_label.text = "●"
-			_deviation_label.modulate = ZonePalette.COLORS["green"]
-		_:
-			_deviation_label.text = ""
-			_deviation_label.modulate = Color.WHITE
-	_power_zone_label.text = s["power_zone_text"]
-	_power_zone_label.modulate = ZonePalette.color(s["power_zone_token"])
-	_hr_label.text = s["hr_text"]
-	_hr_zone_label.text = s["hr_zone_text"]
-	_hr_zone_label.modulate = ZonePalette.color(s["hr_zone_token"])
-	_cadence_label.text = s["cadence_text"]
-	_speed_label.text = s["speed_text"]
-	_elapsed_label.text = s["elapsed_text"]
-	_countdown_label.text = s["countdown_text"]
-	_countdown_label.modulate = ZonePalette.COLORS["orange"] if s["about_to_change"] else Color.WHITE
+	_metric_panel.set_state(_panel_state(s))
 	_step_label.text = tr("ui.workout.step").format({"step": s["step_text"]})
-	_connection_label.text = tr(s["connection_key"])
+	_render_status(s)
 	_cue_label.text = s["cue_text"]
-	_cue_label.visible = not str(s["cue_text"]).is_empty()
-	_pause_button.text = tr("ui.workout.resume") if s["session_state"] == WorkoutSession.State.PAUSED else tr("ui.workout.pause")
+	var has_cue := not str(s["cue_text"]).is_empty()
+	_cue_label.visible = has_cue
+	_cue_plate.visible = has_cue
+	var paused: bool = s["session_state"] == WorkoutSession.State.PAUSED
+	_pause_button.text = tr("ui.workout.resume") if paused else tr("ui.workout.pause")
+	_pause_button.icon = ICON_PLAY if paused else ICON_PAUSE
 	_erg_button.text = tr("ui.workout.erg_on") if s["erg_enabled"] else tr("ui.workout.erg_off")
 	_resistance_row.visible = not s["erg_enabled"]
 	_resistance_label.text = tr("ui.workout.resistance").format({"value": _session.resistance_level})
 	_intensity_label.text = tr("ui.workout.intensity").format({"value": s["intensity_pct"]})
 	_progress_bar.set_segments(_hud.progress_segments(), _hud.cursor())
+	_layout_hud()
+
+
+## Состояние для панели цифр: `HudModel.state()` + доля шага, зона цели, каденс шага.
+func _panel_state(s: Dictionary) -> Dictionary:
+	var ex := _session.executor
+	var step := ex.current_step()
+	var duration: int = step.duration_sec if step != null else 0
+	var target: int = int(s["target_w"])
+	var zone: int = 0
+	if target > 0:
+		zone = _profile.power_zone_of(target) if _profile != null else Zones.power_zone(target, ex.ftp_w)
+	s["step_fraction"] = 1.0 - float(ex.step_remaining_sec()) / float(duration) if duration > 0 else 0.0
+	s["step_free"] = step != null and step.is_free_ride()
+	s["target_zone_token"] = ZonePalette.power_token(zone)
+	s["target_cadence_rpm"] = step.cadence_rpm if step != null else 0
+	s["resistance_pct"] = _session.resistance_level
+	return s
+
+
+## Фишки статусов (`hud.md` п. 10.3): станок, пульс, ERG, интенсивность ≠ 100 %.
+func _render_status(s: Dictionary) -> void:
+	_trainer_chip.tooltip_text = tr(s["connection_key"])
+	_chip_dots[_trainer_chip] = _connection_dot(int(s["connection_state"]))
+	var has_hr: bool = int(s["hr_bpm"]) >= 0
+	_hr_chip.tooltip_text = tr("ui.hud.status.hr_ok") if has_hr else tr("ui.hud.status.hr_missing")
+	_chip_dots[_hr_chip] = UiTokens.HUD_OK if has_hr else UiTokens.HUD_ERR
+	var erg_on: bool = s["erg_enabled"]
+	_mode_chip.tooltip_text = tr("ui.workout.erg_on") if erg_on else tr("ui.workout.erg_off")
+	if not erg_on:
+		_chip_dots[_mode_chip] = UiTokens.HUD_TEXT2
+	else:
+		_chip_dots[_mode_chip] = UiTokens.HUD_OK if s["erg_active_on_trainer"] else UiTokens.HUD_WARN
+	var pct: int = int(s["intensity_pct"])
+	_intensity_chip.visible = pct != 100
+	_intensity_status_label.text = tr("ui.hud.status.intensity").format({"value": pct})
+	_intensity_chip.tooltip_text = tr("ui.hud.status.intensity_hint").format({"value": pct})
+	_chip_dots[_intensity_chip] = UiTokens.HUD_WARN
+	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip, _intensity_chip]:
+		chip.queue_redraw()
+
+
+static func _connection_dot(state: int) -> Color:
+	match state:
+		TrainerDevice.ConnectionState.CONNECTED:
+			return UiTokens.HUD_OK
+		TrainerDevice.ConnectionState.SCANNING, TrainerDevice.ConnectionState.CONNECTING, TrainerDevice.ConnectionState.RECONNECTING:
+			return UiTokens.HUD_WARN
+		_:
+			return UiTokens.HUD_ERR
+
+
+# ---------------------------------------------------------------------------
+# Раскладка и 3D в физическом разрешении
+# ---------------------------------------------------------------------------
+
+func _on_resized() -> void:
+	_fit_viewport()
+	_layout_hud()
+
+
+## Вьюпорт 3D — в пикселях окна: размер экрана в lp × пикселей на lp; контейнер уменьшен
+## `scale` обратно до размера экрана (REQ-HUD-13 крит. 10).
+func _fit_viewport() -> void:
+	var lp := size
+	if lp.x <= 0.0 or lp.y <= 0.0:
+		return
+	var px_per_lp := _px_per_lp()
+	var px := Vector2i(maxi(roundi(lp.x * px_per_lp.x), 1), maxi(roundi(lp.y * px_per_lp.y), 1))
+	_viewport_container.position = Vector2.ZERO
+	_viewport_container.scale = lp / Vector2(px)
+	_viewport_container.size = Vector2(px)
+	if _viewport.size != px:
+		_viewport.size = px
+
+
+## Пикселей окна в одном lp холста этого экрана (по осям).
+func _px_per_lp() -> Vector2:
+	var visible_lp := get_viewport_rect().size
+	var window := get_window()
+	if window == null or visible_lp.x <= 0.0 or visible_lp.y <= 0.0:
+		return Vector2.ONE
+	return Vector2(window.size) / visible_lp
+
+
+## Расставить слоты HUD по `HudLayout`.
+func _layout_hud() -> void:
+	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
+		return
+	var ui := _ui_scale()
+	var s := ui.current_scale() if ui != null and ui.mode == UiScale.Mode.HUD else 1.0
+	var touch := ui.touch_hud() if ui != null else UiScale.TOUCH_HUD_DESKTOP
+	var phone := ui != null and ui.device == UiScale.Device.PHONE
+	var safe := ui.safe_margins() if ui != null else Vector4.ZERO
+	var chips := _visible_chips()
+	_size_chips(chips)
+	var row_w := CHIP_GAP * maxf(chips.size() - 1, 0)
+	for chip in chips:
+		row_w += chip.size.x
+	_layout = HudLayout.compute(size, safe, s, touch, phone, _pause_button.get_combined_minimum_size(), row_w)
+	_set_rect(_metric_panel, _layout.panel)
+	_set_rect(_pause_button, _layout.pause_button)
+	_set_rect(_list_slot, _layout.list_slot)
+	_step_plate.position = Vector2.ZERO
+	_step_plate.size = _step_plate.get_combined_minimum_size()
+	var chart_rect := _layout.chart_gradient.merge(_layout.chart)
+	_set_rect(_chart_slot, chart_rect)
+	_progress_bar.position = Vector2(CHART_PADDING.x, _layout.chart_gradient.size.y + CHART_PADDING.y)
+	_progress_bar.size = Vector2(chart_rect.size.x - 2.0 * CHART_PADDING.x, _layout.chart.size.y - 2.0 * CHART_PADDING.y)
+	_chart_slot.queue_redraw()
+	_set_rect(_hint_slot, _layout.hint_slot)
+	_layout_cue()
+	_set_rect(_status_slot, _layout.status_slot)
+	_layout_chips(chips)
+	_set_rect(_toolbar_slot, _layout.toolbar_slot)
+	var tools := _toolbar.get_combined_minimum_size()
+	_toolbar.size = tools
+	_toolbar.position = Vector2(_layout.toolbar_slot.size.x - tools.x, maxf((_layout.toolbar_slot.size.y - tools.y) * 0.5, 0.0))
+
+
+## Плашка подсказки: по ширине текста (не шире слота); вверху слота на компьютере и
+## планшете, внизу — на телефоне (слот у низа кадра).
+func _layout_cue() -> void:
+	if not _cue_plate.visible:
+		return
+	var slot := _layout.hint_slot.size
+	var box := _cue_plate.get_theme_stylebox(&"panel")
+	var pad := box.get_minimum_size() if box != null else Vector2.ZERO
+	var font := _cue_label.get_theme_font(&"font")
+	var text_w := font.get_string_size(_cue_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _cue_label.get_theme_font_size(&"font_size")).x
+	var width := minf(ceilf(text_w) + pad.x + 1.0, slot.x)
+	_cue_label.custom_minimum_size = Vector2(width - pad.x, 0)
+	_cue_plate.size = Vector2(width, 0)
+	_cue_plate.size = _cue_plate.get_combined_minimum_size()
+	var y := slot.y - _cue_plate.size.y if _layout.phone else 0.0
+	_cue_plate.position = Vector2((slot.x - _cue_plate.size.x) * 0.5, y)
+
+
+func _visible_chips() -> Array[Control]:
+	var out: Array[Control] = []
+	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip, _intensity_chip]:
+		if chip.visible:
+			out.append(chip)
+	return out
+
+
+func _size_chips(chips: Array[Control]) -> void:
+	for chip in chips:
+		var label := chip.get_child(0) as Label
+		var label_size := label.get_combined_minimum_size()
+		label.position = Vector2(CHIP_PAD_LEFT, (CHIP_HEIGHT - label_size.y) * 0.5)
+		label.size = label_size
+		chip.size = Vector2(CHIP_PAD_LEFT + label_size.x + CHIP_PAD_RIGHT, CHIP_HEIGHT)
+
+
+## Строкой — вправо к кнопке паузы; столбиком — под кнопкой, по правому краю.
+func _layout_chips(chips: Array[Control]) -> void:
+	var slot := _layout.status_slot.size
+	if _layout.status_vertical:
+		var y := 0.0
+		for chip in chips:
+			chip.position = Vector2(slot.x - chip.size.x, y)
+			y += CHIP_HEIGHT + HudLayout.STATUS_GAP
+	else:
+		var x := slot.x
+		for i in range(chips.size() - 1, -1, -1):
+			x -= chips[i].size.x
+			chips[i].position = Vector2(x, 0)
+			x -= CHIP_GAP
+
+
+static func _set_rect(node: Control, rect: Rect2) -> void:
+	node.position = rect.position
+	node.size = rect.size
+
+
+func _ui_scale() -> UiScale:
+	return get_node_or_null(^"/root/UiScaleRuntime") as UiScale
+
+
+## Градиент 28 lp (прозрачность 0 → подложка) и подложка графика.
+func _draw_chart_backdrop() -> void:
+	if _layout == null:
+		return
+	var w := _chart_slot.size.x
+	var g := _layout.chart_gradient.size.y
+	var clear := Color(UiTokens.HUD_PLATE, 0.0)
+	_chart_slot.draw_polygon(
+		PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, g), Vector2(0, g)]),
+		PackedColorArray([clear, clear, UiTokens.HUD_PLATE, UiTokens.HUD_PLATE]))
+	_chart_slot.draw_style_box(_chart_plate, Rect2(0, g, w, _layout.chart.size.y))
+
+
+## Фишка статуса: подложка `hud.plate` (r 12) и точка состояния.
+func _draw_status_chip(chip: Control) -> void:
+	chip.draw_style_box(_status_chip_box, Rect2(Vector2.ZERO, chip.size))
+	chip.draw_circle(Vector2(CHIP_PAD_LEFT * 0.5 + 1.0, CHIP_HEIGHT * 0.5), CHIP_DOT_RADIUS, _chip_dots.get(chip, UiTokens.HUD_TEXT2))
 
 
 func _render_summary() -> void:
