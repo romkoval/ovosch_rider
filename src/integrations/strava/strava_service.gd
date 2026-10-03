@@ -17,8 +17,13 @@ extends RefCounted
 ## статусы ожидавших заездов → `none` (`disconnect` занято `Object`).
 
 const QUEUE_TICK_INTERVAL_SEC: float = 5.0
-## Шаблон названия без плана (REQ-STR-03 крит. 1); локализуется UI через `name_template`.
+## Шаблон названия без плана (REQ-STR-03 крит. 1) — запасной, если перевода нет.
 const DEFAULT_NAME_TEMPLATE: String = "Тренировка %s"
+## Ключи перевода названия «Тренировка <дата>» (`%s` — дата) и строки приложения в описании
+## (REQ-STR-03 крит. 1, 2). Перевод берётся на текущем языке интерфейса в момент постановки
+## в очередь, поэтому смена языка на лету сразу действует на новые выгрузки.
+const KEY_DEFAULT_NAME: String = "ui.strava.default_name"
+const KEY_DEFAULT_DESCRIPTION: String = "ui.strava.default_description"
 
 ## Статус выгрузки заезда изменился (уже записан в `RideRepository`).
 signal status_changed(ride_id: String)
@@ -32,10 +37,11 @@ var uploader: StravaUploader
 var queue: UploadQueue
 var status_store: UploadStatusStore
 var config: StravaConfig
-## Шаблон названия заезда без плана (`%s` — дата), задаётся UI на языке интерфейса.
-var name_template: String = DEFAULT_NAME_TEMPLATE
-## Строка приложения в описании (REQ-STR-03 крит. 2).
-var description_app_line: String = "Записано в " + StravaUploader.APP_NAME
+## Явный шаблон названия заезда без плана (`%s` — дата). Пусто (по умолчанию) — перевод
+## `KEY_DEFAULT_NAME` на текущем языке интерфейса в момент постановки в очередь.
+var name_template: String = ""
+## Явная строка приложения в описании (REQ-STR-03 крит. 2). Пусто — перевод `KEY_DEFAULT_DESCRIPTION`.
+var description_app_line: String = ""
 
 var _profile: Profile
 var _rides: RideRepository
@@ -153,14 +159,40 @@ func on_ride_deleted(ride_id: String) -> void:
 	queue.remove(ride_id)
 
 
-## Название по умолчанию (REQ-STR-03 крит. 1): план или «Тренировка <дата>».
+## Название по умолчанию (REQ-STR-03 крит. 1): план или «Тренировка <дата>» на текущем языке.
 func default_name(ride: Ride) -> String:
-	return StravaUploader.default_name(ride.name, _date_text(ride.started_at_unix), name_template)
+	return compose_default_name(ride, current_name_template())
 
 
-## Описание по умолчанию (REQ-STR-03 крит. 2).
+## Описание по умолчанию (REQ-STR-03 крит. 2): описание плана + строка приложения на текущем языке.
 func default_description(ride: Ride) -> String:
-	return StravaUploader.default_description(ride.description, description_app_line)
+	return compose_default_description(ride, current_app_line())
+
+
+## Шаблон названия, действующий сейчас: явный `name_template` или перевод `KEY_DEFAULT_NAME`.
+func current_name_template() -> String:
+	if not name_template.is_empty():
+		return name_template
+	var translated := tr(KEY_DEFAULT_NAME)
+	return translated if translated != KEY_DEFAULT_NAME and translated.contains("%s") else DEFAULT_NAME_TEMPLATE
+
+
+## Строка приложения, действующая сейчас: явная `description_app_line` или перевод.
+func current_app_line() -> String:
+	if not description_app_line.is_empty():
+		return description_app_line
+	var translated := tr(KEY_DEFAULT_DESCRIPTION)
+	return translated if translated != KEY_DEFAULT_DESCRIPTION else "Записано в " + StravaUploader.APP_NAME
+
+
+## Название по умолчанию с заданным шаблоном (карточка заезда строит его тем же правилом).
+static func compose_default_name(ride: Ride, template: String) -> String:
+	return StravaUploader.default_name(ride.name, _date_text(ride.started_at_unix), template)
+
+
+## Описание по умолчанию с заданной строкой приложения.
+static func compose_default_description(ride: Ride, app_line: String) -> String:
+	return StravaUploader.default_description(ride.description, app_line)
 
 
 func _enqueue_ride(ride: Ride, name: String, description: String) -> void:

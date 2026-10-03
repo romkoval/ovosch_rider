@@ -3,7 +3,7 @@ extends GutTest
 ## UI есть в strings.csv с непустыми ru и en; в литералах `src/ui/` нет кириллицы.
 
 const CSV_PATH: String = "res://assets/i18n/strings.csv"
-const SCAN_DIRS: Array[String] = ["res://src/ui", "res://src/app"]
+const SCAN_DIRS: Array[String] = ["res://src/ui", "res://src/app", "res://src/scene3d"]
 
 var _table: Dictionary = {}
 var _locales: Array[String] = []

@@ -225,10 +225,13 @@ func test_strava_status_and_link_in_detail() -> void:
 	s.select_index(0)
 	assert_string_contains(s.detail().status_text(), "Uploaded")
 	assert_eq(s.detail().strava_activity_url(), "https://www.strava.com/activities/123456", "REQ-STR-05 крит. 3")
-	_rides.update_upload_status(r.id, {"strava_status": Ride.UPLOAD_FAILED, "last_error": "boom"})
+	_rides.update_upload_status(r.id, {"strava_status": Ride.UPLOAD_FAILED, "last_error": "Strava отклонила выгрузку",
+		"last_error_code": ApiResult.CODE_BAD_RESPONSE, "last_error_detail": "Improperly formatted data."})
 	# Открытая карточка перерисовывается по `rides_changed` без повторного show_ride.
 	assert_string_contains(s.detail().status_text(), "Failed", "REQ-STR-05 крит. 2: статус в открытой карточке")
-	assert_string_contains(s.detail().status_text(), "boom")
+	assert_string_contains(s.detail().status_text(), "Strava did not accept the file", "REQ-NFR-08: причина переведена по коду")
+	assert_string_contains(s.detail().status_text(), "Improperly formatted data.", "ответ Strava — деталь после причины")
+	assert_false(s.detail().status_text().contains("отклонила"), "сырой текст выгрузчика не показывается")
 	assert_eq(s.detail().strava_activity_url(), "")
 
 
@@ -259,13 +262,44 @@ func test_upload_button_disabled_without_link_and_emits_when_linked() -> void:
 	assert_false(d.is_upload_enabled(), "без привязки недоступна")
 	assert_eq(d.upload_tooltip(), "Strava is not linked")
 	var requested: Array[String] = []
-	s.upload_requested.connect(func(id: String) -> void: requested.append(id))
+	s.upload_requested.connect(func(id: String, _n: String, _d: String) -> void: requested.append(id))
 	d.request_upload()
 	assert_eq(requested, [], "без привязки сигнала нет")
 	s.set_strava_linked(true)
 	assert_true(d.is_upload_enabled())
 	d.request_upload()
 	assert_eq(requested, [r.id])
+
+
+## REQ-STR-03 крит. 1–3: поля названия/описания в карточке — значения по умолчанию на языке
+## интерфейса, правка пользователя уходит с сигналом, после выгрузки поля недоступны.
+func test_upload_fields_default_values_edits_and_locale() -> void:
+	var untitled := _ride(_pa, 1700000000, 60, "")
+	_rides.save(untitled)
+	var s := _screen()
+	s.set_strava_linked(true)
+	s.select_index(0)
+	var d := s.detail()
+	var name_edit := d.get_node("%UploadNameEdit") as LineEdit
+	var desc_edit := d.get_node("%UploadDescriptionEdit") as TextEdit
+	var date := HistoryScreen.format_date_time(untitled.started_at_unix).substr(0, 10)
+	assert_eq(name_edit.text, "Workout " + date, "название по умолчанию на английском")
+	assert_eq(desc_edit.text, "Recorded in ovosch-rider")
+	assert_true(d.is_upload_fields_editable())
+	# Смена языка: непередактированные поля следуют языку, изменённые — нет.
+	desc_edit.text = "legs"
+	TranslationServer.set_locale("ru")
+	s.refresh()
+	assert_eq(name_edit.text, "Тренировка " + date, "название перерисовано на русском")
+	assert_eq(desc_edit.text, "legs", "правка пользователя сохранена")
+	TranslationServer.set_locale("en")
+	var got: Array = []
+	s.upload_requested.connect(func(id: String, n: String, desc: String) -> void: got.append([id, n, desc]))
+	name_edit.text = "  Morning Neo  "
+	d.request_upload()
+	assert_eq(got, [[untitled.id, "Morning Neo", "legs"]], "значения полей уходят с сигналом")
+	_rides.update_upload_status(untitled.id, {"strava_status": Ride.UPLOAD_DONE, "strava_activity_id": "1"})
+	assert_false(d.is_upload_fields_editable(), "выгруженный заезд — поля недоступны")
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +342,11 @@ func test_export_to_unwritable_path_reports_failure() -> void:
 	var s := _screen()
 	s.select_index(0)
 	assert_false(s.detail().export_to_path(ProjectSettings.globalize_path(_dir).path_join("no_such_dir/x.fit")))
+	var err := FileAccess.get_open_error()
 	assert_string_contains(s.detail().export_status_text(), "Export failed")
+	assert_eq(s.detail().export_status_text(), tr("ui.history.export.failed").format({"reason": s.detail().export_error_text(err)}),
+		"причина — переведённый ключ, не error_string()")
+	assert_false(s.detail().export_status_text().contains(error_string(err)), "текст движка не показывается")
 
 
 # ---------------------------------------------------------------------------

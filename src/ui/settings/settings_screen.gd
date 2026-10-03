@@ -281,7 +281,6 @@ func set_strava_service(service: StravaService) -> void:
 	if _strava != null:
 		_strava.authorized_changed.connect(_on_strava_authorized_changed)
 		_strava.connect_flow_changed.connect(_on_strava_flow_changed)
-		_strava.name_template = tr("ui.strava.default_name")
 	if is_node_ready():
 		_render_strava()
 

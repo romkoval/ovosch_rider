@@ -244,10 +244,15 @@ func _recover_rides(profile_id: String) -> void:
 		_recovery_dialog.show_for(rides)
 
 
+## Решение по восстановленному заезду (REQ-LOC-07 крит. 3, REQ-STR-04 крит. 1): только
+## «сохранить» передаёт заезд Strava (очередь при привязке и автовыгрузке); «удалить» —
+## заезд удаляется, в Strava ничего не уходит.
 func _on_recovery_resolved(ride_id: String, action: String) -> void:
 	if action == RecoveryDialog.ACTION_DELETE:
 		ride_repository.delete(ride_id)
 		_on_ride_deleted(ride_id)
+	elif action == RecoveryDialog.ACTION_KEEP and strava != null:
+		strava.on_ride_saved(ride_id)
 
 
 ## Заезд удалён (карточка истории или диалог восстановления): элемент очереди Strava,
@@ -296,24 +301,25 @@ func _on_profile_selected(id: String) -> void:
 	var profile: Profile = repo.get_by_id(id)
 	if profile != null and connections.hub != null:
 		connections.hub.set_power_source(profile.power_source)
-	_setup_strava(profile)
+	# Восстановление — до создания сервиса Strava: `recover_in_progress` сохраняет заезды,
+	# и подписанный сервис поставил бы их в очередь до ответа пользователя (REQ-STR-04 крит. 1).
+	_dispose_strava()
 	_recover_rides(id)
+	_setup_strava(profile)
 
 
 ## Сервис Strava для выбранного профиля (T-049): секреты приложения — `user://secrets.cfg`
 ## или окружение (`SecureStore.read_env`), токены — в `secure_store`, очередь — в данных.
 func _setup_strava(profile: Profile) -> void:
-	if strava != null:
-		strava.dispose()
-		strava = null
+	_dispose_strava()
 	if profile == null:
 		return
 	var root: String = data_dir if data_dir.ends_with("/") else data_dir + "/"
 	if _strava_config == null:
 		_strava_config = StravaConfig.load(root + "secrets.cfg", SecureStore.read_env)
 	strava = StravaService.new(profile, transport, secure_store, ride_repository, _strava_config, Callable(), root)
-	strava.name_template = tr("ui.strava.default_name")
-	strava.description_app_line = tr("ui.strava.default_description")
+	# Название «Тренировка <дата>» и строку приложения сервис переводит сам в момент постановки
+	# в очередь (текущий язык интерфейса, REQ-STR-03 крит. 1, 2).
 	strava.attach()
 	strava.authorized_changed.connect(_on_strava_authorized_changed)
 	var settings := settings_screen()
@@ -324,16 +330,26 @@ func _setup_strava(profile: Profile) -> void:
 		history.set_strava_linked(strava.is_authorized())
 
 
+func _dispose_strava() -> void:
+	if strava == null:
+		return
+	if strava.authorized_changed.is_connected(_on_strava_authorized_changed):
+		strava.authorized_changed.disconnect(_on_strava_authorized_changed)
+	strava.dispose()
+	strava = null
+
+
 func _on_strava_authorized_changed(authorized: bool) -> void:
 	var history := history_screen()
 	if history != null:
 		history.set_strava_linked(authorized)
 
 
-## «Выгрузить в Strava» из карточки заезда (REQ-STR-04 крит. 5).
-func _on_upload_requested(ride_id: String) -> void:
+## «Выгрузить в Strava» из карточки заезда (REQ-STR-04 крит. 5): название и описание из полей
+## карточки попадают в запрос (REQ-STR-03 крит. 3); пустые — значения по умолчанию.
+func _on_upload_requested(ride_id: String, ride_name: String = "", description: String = "") -> void:
 	if strava != null:
-		strava.upload_now(ride_id)
+		strava.upload_now(ride_id, ride_name, description)
 
 
 ## Language changed at runtime (REQ-NFR-08 crit. 4): scene texts re-translate by themselves,

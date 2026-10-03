@@ -138,7 +138,9 @@ static func interpret_upload_status(payload: Dictionary) -> UploadResult:
 	if not error.is_empty():
 		if error.to_lower().contains("duplicate"):
 			return UploadResult.duplicate_of(error, upload_id)
-		return UploadResult.failed(error, ApiResult.CODE_BAD_RESPONSE, false, upload_id)
+		var rejected := UploadResult.failed(error, ApiResult.CODE_BAD_RESPONSE, false, upload_id)
+		rejected.detail = error
+		return rejected
 	return UploadResult.uploading(upload_id)
 
 
@@ -206,9 +208,13 @@ static func _http_failure(response: HttpResponse) -> UploadResult:
 	if not response.ok():
 		var payload: Variant = response.json()
 		var text := "Strava отклонила выгрузку (HTTP %d)" % response.status
+		var server_message := ""
 		if payload is Dictionary and (payload as Dictionary).has("message"):
-			text += ": " + str((payload as Dictionary)["message"])
-		return UploadResult.failed(text, ApiResult.CODE_BAD_RESPONSE)
+			server_message = str((payload as Dictionary)["message"])
+			text += ": " + server_message
+		var rejected := UploadResult.failed(text, ApiResult.CODE_BAD_RESPONSE)
+		rejected.detail = server_message
+		return rejected
 	return null
 
 

@@ -2,11 +2,17 @@ class_name RideRepositoryUploadStore
 extends UploadStatusStore
 ## Адаптер `UploadStatusStore` → `RideRepository` (REQ-STR-05 крит. 2): статус выгрузки
 ## пишется в метаданные заезда (`Ride.upload`: `strava_status`, `strava_activity_id`,
-## `last_error`, `attempts`) через `RideRepository.update_upload_status`.
+## `last_error`, `last_error_code`, `last_error_detail`, `attempts`) через
+## `RideRepository.update_upload_status`.
 ##
 ## Словарь очереди (`UploadResult.to_status_dict`) ↔ словарь заезда:
-## `status → strava_status`, `activity_id → strava_activity_id`, `error → last_error`,
-## `attempts → attempts`; `upload_id`/`code` в заезде не хранятся.
+## `status → strava_status`, `activity_id → strava_activity_id`, `error → last_error`
+## (текст выгрузчика для логов), `code → last_error_code` (код причины — по нему UI берёт
+## перевод), `detail → last_error_detail` (ответ Strava как есть — деталь после причины),
+## `attempts → attempts`; `upload_id` в заезде не хранится.
+
+const KEY_ERROR_CODE: String = "last_error_code"
+const KEY_ERROR_DETAIL: String = "last_error_detail"
 
 var _rides: RideRepository
 
@@ -35,6 +41,10 @@ static func to_ride_upload(status: Dictionary) -> Dictionary:
 		out["strava_activity_id"] = str(status["activity_id"])
 	if status.has("error"):
 		out["last_error"] = str(status["error"])
+	if status.has("code"):
+		out[KEY_ERROR_CODE] = str(status["code"])
+	if status.has("detail"):
+		out[KEY_ERROR_DETAIL] = str(status["detail"])
 	if status.has("attempts"):
 		out["attempts"] = int(status["attempts"])
 	return out
@@ -47,7 +57,8 @@ static func from_ride_upload(upload: Dictionary) -> Dictionary:
 		"activity_id": str(upload.get("strava_activity_id", "")),
 		"upload_id": "",
 		"error": str(upload.get("last_error", "")),
-		"code": "",
+		"code": str(upload.get(KEY_ERROR_CODE, "")),
+		"detail": str(upload.get(KEY_ERROR_DETAIL, "")),
 		"attempts": int(upload.get("attempts", 0)),
 		"updated_at": 0,
 	}

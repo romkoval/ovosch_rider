@@ -11,6 +11,8 @@ signal disconnect_requested()
 
 var _authorized: bool = false
 var _busy: bool = false
+## Привязка возможна (есть client_id/client_secret); false — кнопка выключена при любом `_busy`.
+var _available: bool = true
 
 @onready var _button: Button = %Button
 @onready var _open_link: LinkButton = %OpenLink
@@ -48,8 +50,13 @@ func set_busy(busy: bool) -> void:
 
 ## Привязка недоступна (нет client_id/client_secret): кнопка выключена.
 func set_available(available: bool) -> void:
-	_button.disabled = not available or _busy
+	_available = available
 	_button.visible = true
+	_render()
+
+
+func is_available() -> bool:
+	return _available
 
 
 ## URL авторизации: показать ссылку «Открыть страницу входа Strava» (пусто — скрыть).
@@ -80,7 +87,7 @@ func _on_pressed() -> void:
 func _render() -> void:
 	if not is_node_ready():
 		return
-	_button.disabled = _busy
+	_button.disabled = _busy or not _available
 	if _authorized:
 		_button.text = tr("ui.settings.strava_disconnect")
 		_button.remove_theme_stylebox_override("normal")

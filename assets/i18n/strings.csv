@@ -304,9 +304,17 @@ ui.history.export.dialog_title,Сохранить FIT-файл,Save FIT file
 ui.history.export.save,Сохранить,Save
 ui.history.export.done,Сохранено: {path},Saved: {path}
 ui.history.export.failed,Экспорт не выполнен: {reason},Export failed: {reason}
+ui.history.export.error.no_permission,нет прав на запись в эту папку,no permission to write to this folder
+ui.history.export.error.bad_path,папка не найдена или путь неверен,the folder does not exist or the path is invalid
+ui.history.export.error.cant_open,не удалось открыть файл для записи,could not open the file for writing
+ui.history.export.error.cant_write,не удалось записать файл,could not write the file
+ui.history.export.error.in_use,файл занят другой программой,the file is in use by another program
+ui.history.export.error.unknown,неизвестная ошибка записи файла,unknown file write error
 ui.history.delete,Удалить заезд,Delete ride
 ui.history.delete_confirm,Удалить заезд «{name}»? Активность в Strava не затрагивается.,Delete ride “{name}”? The Strava activity is not affected.
 ui.history.upload,Выгрузить в Strava,Upload to Strava
+ui.history.upload.name,Название в Strava,Name in Strava
+ui.history.upload.description,Описание в Strava,Description in Strava
 ui.history.strava_not_linked,Strava не привязана,Strava is not linked
 ui.history.strava.none,Не выгружен,Not uploaded
 ui.history.strava.queued,В очереди,Queued
@@ -314,6 +322,12 @@ ui.history.strava.uploading,Обрабатывается,Processing
 ui.history.strava.done,Выгружено,Uploaded
 ui.history.strava.failed,Ошибка,Failed
 ui.history.strava.duplicate,Дубликат,Duplicate
+ui.history.strava.error.network,нет связи со Strava — повторите позже,cannot reach Strava — try again later
+ui.history.strava.error.rate_limited,слишком много запросов к Strava — повторите позже,too many requests to Strava — try again later
+ui.history.strava.error.reauth_required,нужно заново войти в Strava в настройках,sign in to Strava again in Settings
+ui.history.strava.error.not_configured,привязка Strava недоступна в этой сборке,Strava linking is not available in this build
+ui.history.strava.error.bad_response,Strava не приняла файл,Strava did not accept the file
+ui.history.strava.error.unknown,неизвестная ошибка выгрузки,unknown upload error
 ui.history.recovery.title,Незавершённый заезд,Unfinished ride
 ui.history.recovery.text,Заезд «{name}» от {date} ({time}) не был завершён. Сохранить как завершённый досрочно или удалить?,Ride “{name}” from {date} ({time}) was not finished. Keep it as ended early or delete it?
 ui.history.recovery.keep,Сохранить досрочно,Keep as ended early

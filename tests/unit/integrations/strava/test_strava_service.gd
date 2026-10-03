@@ -147,11 +147,37 @@ func test_already_uploaded_ride_is_not_requeued_and_other_profile_ignored() -> v
 
 
 func test_default_name_without_plan_uses_template_with_date() -> void:
+	var previous := TranslationServer.get_locale()
+	TranslationServer.set_locale("ru")
 	var ride := _ride("")
 	assert_eq(_service.default_name(ride), "Тренировка 2026-10-02", "REQ-STR-03 крит. 1")
-	_service.name_template = "Workout %s"
-	assert_eq(_service.default_name(ride), "Workout 2026-10-02")
 	assert_eq(_service.default_description(ride), "Записано в ovosch-rider", "REQ-STR-03 крит. 2: без описания — строка приложения")
+	# Язык интерфейса сменился на лету — перевод берётся в момент вызова.
+	TranslationServer.set_locale("en")
+	assert_eq(_service.default_name(ride), "Workout 2026-10-02", "REQ-STR-03 крит. 1: текущий язык")
+	assert_eq(_service.default_description(ride), "Recorded in ovosch-rider", "REQ-STR-03 крит. 2: текущий язык")
+	# Явный шаблон важнее перевода.
+	_service.name_template = "Ride %s"
+	_service.description_app_line = "via app"
+	assert_eq(_service.default_name(ride), "Ride 2026-10-02")
+	assert_eq(_service.default_description(ride), "via app")
+	TranslationServer.set_locale(previous)
+
+
+func test_enqueue_takes_translation_at_enqueue_time() -> void:
+	var previous := TranslationServer.get_locale()
+	_authorize()
+	TranslationServer.set_locale("ru")
+	var first := _ride("")
+	_rides.save(first)
+	assert_eq(str(_service.queue.get_item(first.id)["name"]), "Тренировка 2026-10-02")
+	TranslationServer.set_locale("en")
+	var second := _ride("")
+	second.id = Ride.generate_id(STARTED + 60)
+	_rides.save(second)
+	assert_eq(str(_service.queue.get_item(second.id)["name"]), "Workout 2026-10-02", "REQ-STR-03 крит. 1: язык на момент постановки")
+	assert_eq(str(_service.queue.get_item(second.id)["description"]), "Recorded in ovosch-rider", "REQ-STR-03 крит. 2")
+	TranslationServer.set_locale(previous)
 
 
 # ---------------------------------------------------------------------------
@@ -324,10 +350,18 @@ func test_disconnect_revokes_tokens_clears_queue_and_resets_statuses() -> void:
 
 func test_adapter_maps_queue_status_to_ride_upload_and_back() -> void:
 	var up := RideRepositoryUploadStore.to_ride_upload(UploadResult.done("55").to_status_dict(2, 1))
-	assert_eq(up, {"strava_status": "done", "strava_activity_id": "55", "last_error": "", "attempts": 2})
-	var back := RideRepositoryUploadStore.from_ride_upload({"strava_status": "failed", "strava_activity_id": "", "last_error": "boom", "attempts": 3})
+	assert_eq(up, {"strava_status": "done", "strava_activity_id": "55", "last_error": "", "last_error_code": "",
+		"last_error_detail": "", "attempts": 2})
+	var rejected := StravaUploader.interpret_upload_status({"id": 7, "error": "Improperly formatted data.", "activity_id": null})
+	var failed_up := RideRepositoryUploadStore.to_ride_upload(rejected.to_status_dict(1, 1))
+	assert_eq(str(failed_up["last_error_code"]), ApiResult.CODE_BAD_RESPONSE, "код причины в метаданных заезда")
+	assert_eq(str(failed_up["last_error_detail"]), "Improperly formatted data.", "ответ Strava — отдельной деталью")
+	var back := RideRepositoryUploadStore.from_ride_upload({"strava_status": "failed", "strava_activity_id": "",
+		"last_error": "нет связи со Strava", "last_error_code": ApiResult.CODE_NETWORK, "attempts": 3})
 	assert_eq(str(back["status"]), "failed")
-	assert_eq(str(back["error"]), "boom")
+	assert_eq(str(back["error"]), "нет связи со Strava")
+	assert_eq(str(back["code"]), ApiResult.CODE_NETWORK)
+	assert_eq(str(back["detail"]), "")
 	assert_eq(int(back["attempts"]), 3)
 	var ride := _ride()
 	_rides.save(ride)
@@ -335,6 +369,8 @@ func test_adapter_maps_queue_status_to_ride_upload_and_back() -> void:
 	adapter.update_upload_status(ride.id, UploadResult.failed("err", ApiResult.CODE_BAD_RESPONSE).to_status_dict(1, 0))
 	assert_eq(str(adapter.get_upload_status(ride.id)["status"]), "failed")
 	assert_eq(str(_rides.get_ride(ride.id).upload["last_error"]), "err")
+	assert_eq(str(_rides.get_ride(ride.id).upload["last_error_code"]), ApiResult.CODE_BAD_RESPONSE, "код сохранён на диске")
+	assert_eq(str(adapter.get_upload_status(ride.id)["code"]), ApiResult.CODE_BAD_RESPONSE)
 	assert_eq(adapter.get_upload_status("missing"), {})
 
 

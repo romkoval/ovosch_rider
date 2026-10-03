@@ -8,29 +8,60 @@ extends Control
 ## графика (`RideChart` по `RideSeries`: мощность с целью плана, пульс, каденс),
 ## кнопки «Экспорт FIT» (`FileDialog` → `FitEncoder.encode` → файл), «Удалить»
 ## (подтверждение → `RideRepository.delete`), «Выгрузить в Strava» (сигнал
-## `upload_requested`; без привязки недоступна с подсказкой). Строки — ключи `ui.history.*`.
+## `upload_requested`; без привязки недоступна с подсказкой). Перед выгрузкой название и
+## описание можно изменить в полях карточки (REQ-STR-03 крит. 3): они заполнены значениями
+## по умолчанию на текущем языке и доступны, пока заезд не выгружен. Ошибка выгрузки
+## показывается переведённой причиной по коду (`Ride.upload.last_error_code`), ответ Strava —
+## только деталью после неё. Строки — ключи `ui.history.*`.
 
 const EXPORT_FILTERS: PackedStringArray = ["*.fit ; FIT"]
 const STRAVA_ACTIVITY_URL: String = "https://www.strava.com/activities/{id}"
 const POWER_COLOR := Color(0.95, 0.75, 0.25)
 const HR_COLOR := Color(0.90, 0.30, 0.30)
 const CADENCE_COLOR := Color(0.35, 0.65, 0.95)
+## Причина ошибки выгрузки по коду (`UploadResult.code` → `Ride.upload.last_error_code`).
+const STRAVA_ERROR_KEYS: Dictionary = {
+	ApiResult.CODE_NETWORK: "ui.history.strava.error.network",
+	ApiResult.CODE_RATE_LIMITED: "ui.history.strava.error.rate_limited",
+	ApiResult.CODE_REAUTH_REQUIRED: "ui.history.strava.error.reauth_required",
+	ApiResult.CODE_AUTH_FAILED: "ui.history.strava.error.reauth_required",
+	ApiResult.CODE_NOT_CONFIGURED: "ui.history.strava.error.not_configured",
+	ApiResult.CODE_BAD_RESPONSE: "ui.history.strava.error.bad_response",
+}
+const STRAVA_ERROR_UNKNOWN_KEY: String = "ui.history.strava.error.unknown"
+## Причина неудачного экспорта FIT по коду `Error` (вместо `error_string()` движка).
+const EXPORT_ERROR_KEYS: Dictionary = {
+	ERR_FILE_NO_PERMISSION: "ui.history.export.error.no_permission",
+	ERR_FILE_BAD_PATH: "ui.history.export.error.bad_path",
+	ERR_FILE_NOT_FOUND: "ui.history.export.error.bad_path",
+	ERR_FILE_CANT_OPEN: "ui.history.export.error.cant_open",
+	ERR_FILE_CANT_WRITE: "ui.history.export.error.cant_write",
+	ERR_FILE_ALREADY_IN_USE: "ui.history.export.error.in_use",
+}
+const EXPORT_ERROR_UNKNOWN_KEY: String = "ui.history.export.error.unknown"
 
 signal back_requested()
 ## Заезд удалён из хранилища.
 signal deleted(ride_id: String)
-## Пользователь запросил выгрузку в Strava (подключается очередью T-048/T-049).
-signal upload_requested(ride_id: String)
+## Пользователь запросил выгрузку в Strava: название и описание — из полей карточки
+## (REQ-STR-03 крит. 3; подключается очередью T-048/T-049).
+signal upload_requested(ride_id: String, ride_name: String, description: String)
 
 var _ride: Ride = null
 var _repository: RideRepository = null
 var _series: RideSeries = null
 var _strava_linked: bool = false
 var _delete_pending: bool = false
+## Значения по умолчанию, показанные в полях выгрузки: поле, которое пользователь не менял,
+## обновляется при перерисовке (например, после смены языка); изменённое — сохраняется.
+var _shown_default_name: String = ""
+var _shown_default_description: String = ""
 
 @onready var _title_label: Label = %TitleLabel
 @onready var _summary_label: Label = %SummaryLabel
 @onready var _status_label: Label = %StatusLabel
+@onready var _upload_name_edit: LineEdit = %UploadNameEdit
+@onready var _upload_description_edit: TextEdit = %UploadDescriptionEdit
 @onready var _power_zone_bar: ZoneBar = %PowerZoneBar
 @onready var _hr_zone_bar: ZoneBar = %HrZoneBar
 @onready var _hr_zones_label: Label = %HrZonesLabel
@@ -64,8 +95,12 @@ func show_ride(ride: Ride, repository: RideRepository) -> void:
 	_repository = repository
 	_series = RideSeries.from_samples(ride.samples) if ride != null else null
 	_delete_pending = false
+	_shown_default_name = ""
+	_shown_default_description = ""
 	if is_node_ready():
 		_export_status_label.text = ""
+		_upload_name_edit.text = ""
+		_upload_description_edit.text = ""
 		_render()
 
 
@@ -137,7 +172,7 @@ func export_to_path(path: String) -> bool:
 	var bytes := FitEncoder.encode(_ride)
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		_export_status_label.text = tr("ui.history.export.failed").format({"reason": error_string(FileAccess.get_open_error())})
+		_export_status_label.text = tr("ui.history.export.failed").format({"reason": export_error_text(FileAccess.get_open_error())})
 		return false
 	file.store_buffer(bytes)
 	file.close()
@@ -151,6 +186,11 @@ func _on_export_file_selected(path: String) -> void:
 
 func export_status_text() -> String:
 	return _export_status_label.text
+
+
+## Переведённая причина неудачного экспорта по коду `Error`.
+func export_error_text(err: Error) -> String:
+	return tr(str(EXPORT_ERROR_KEYS.get(err, EXPORT_ERROR_UNKNOWN_KEY)))
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +235,28 @@ func is_delete_pending() -> bool:
 
 func request_upload() -> void:
 	if _ride != null and _strava_linked and _can_upload():
-		upload_requested.emit(_ride.id)
+		upload_requested.emit(_ride.id, upload_name(), upload_description())
+
+
+## Название для выгрузки из поля карточки (REQ-STR-03 крит. 3).
+func upload_name() -> String:
+	return _upload_name_edit.text.strip_edges()
+
+
+## Описание для выгрузки из поля карточки (REQ-STR-03 крит. 3).
+func upload_description() -> String:
+	return _upload_description_edit.text.strip_edges()
+
+
+func is_upload_fields_editable() -> bool:
+	return _upload_name_edit.editable and _upload_description_edit.editable
+
+
+## Переведённая причина ошибки выгрузки по коду; `detail` (ответ Strava) — после причины.
+func strava_error_text(code: String, detail: String = "") -> String:
+	var reason := tr(str(STRAVA_ERROR_KEYS.get(code, STRAVA_ERROR_UNKNOWN_KEY)))
+	var extra := detail.strip_edges()
+	return reason if extra.is_empty() else "%s (%s)" % [reason, extra]
 
 
 func _can_upload() -> bool:
@@ -263,6 +324,7 @@ func _render() -> void:
 		_power_chart.clear()
 		_hr_chart.clear()
 		_cadence_chart.clear()
+		_render_upload_fields()
 		_render_buttons()
 		return
 	var s := _ride.summary
@@ -296,7 +358,9 @@ func _render() -> void:
 		Ride.UPLOAD_DONE:
 			status_text += " " + strava_activity_url()
 		Ride.UPLOAD_FAILED:
-			status_text += ": " + str(_ride.upload.get("last_error", ""))
+			status_text += ": " + strava_error_text(
+				str(_ride.upload.get(RideRepositoryUploadStore.KEY_ERROR_CODE, "")),
+				str(_ride.upload.get(RideRepositoryUploadStore.KEY_ERROR_DETAIL, "")))
 	_status_label.text = tr("ui.history.detail.strava").format({"status": status_text})
 	var power_tokens: Array[String] = []
 	for i in s.time_in_power_zones.size():
@@ -312,7 +376,27 @@ func _render() -> void:
 	_power_chart.set_series(_series.time_sec, _series.values(RideSeries.POWER), POWER_COLOR, duration, _series.values(RideSeries.TARGET))
 	_hr_chart.set_series(_series.time_sec, _series.values(RideSeries.HEART_RATE), HR_COLOR, duration)
 	_cadence_chart.set_series(_series.time_sec, _series.values(RideSeries.CADENCE), CADENCE_COLOR, duration)
+	_render_upload_fields()
 	_render_buttons()
+
+
+## Поля названия/описания: значения по умолчанию на текущем языке (REQ-STR-03 крит. 1, 2);
+## изменённое пользователем поле не перезаписывается.
+func _render_upload_fields() -> void:
+	if _ride == null:
+		_upload_name_edit.text = ""
+		_upload_description_edit.text = ""
+		_shown_default_name = ""
+		_shown_default_description = ""
+		return
+	var default_name := StravaService.compose_default_name(_ride, tr(StravaService.KEY_DEFAULT_NAME))
+	var default_description := StravaService.compose_default_description(_ride, tr(StravaService.KEY_DEFAULT_DESCRIPTION))
+	if _upload_name_edit.text == _shown_default_name:
+		_upload_name_edit.text = default_name
+	if _upload_description_edit.text == _shown_default_description:
+		_upload_description_edit.text = default_description
+	_shown_default_name = default_name
+	_shown_default_description = default_description
 
 
 func _render_buttons() -> void:
@@ -321,6 +405,10 @@ func _render_buttons() -> void:
 	_delete_button.disabled = not has_ride
 	var can_upload: bool = has_ride and _strava_linked and _can_upload()
 	_upload_button.disabled = not can_upload
+	# Поля доступны, пока заезд не выгружен (REQ-STR-03 крит. 3).
+	var editable: bool = has_ride and _can_upload()
+	_upload_name_edit.editable = editable
+	_upload_description_edit.editable = editable
 	if not has_ride:
 		_upload_button.tooltip_text = ""
 	elif not _strava_linked:

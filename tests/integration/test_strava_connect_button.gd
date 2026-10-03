@@ -58,6 +58,24 @@ func test_authorize_url_link_busy_and_availability() -> void:
 	assert_true(b.is_button_disabled(), "без client_id/secret кнопка выключена")
 
 
+## REQ-STR-01 крит. 6: недоступность не затирается перерисовкой (busy, смена привязки, язык).
+func test_unavailable_stays_disabled_after_busy_and_rerender() -> void:
+	var b := _button()
+	b.set_available(false)
+	assert_true(b.is_button_disabled())
+	b.set_busy(true)
+	b.set_busy(false)
+	assert_true(b.is_button_disabled(), "после ожидания кнопка остаётся выключенной")
+	b.set_authorized(false)
+	b.set_authorize_url("")
+	assert_true(b.is_button_disabled(), "после перерисовки кнопка остаётся выключенной")
+	assert_false(b.is_available())
+	b.set_available(true)
+	assert_false(b.is_button_disabled(), "доступность вернулась — кнопка включена")
+	b.set_busy(true)
+	assert_true(b.is_button_disabled(), "ожидание выключает доступную кнопку")
+
+
 func test_settings_screen_uses_component_and_service_state() -> void:
 	var dir := "user://test_strava_settings_%d/" % Time.get_ticks_usec()
 	var screen: SettingsScreen = load("res://src/ui/settings/settings_screen.tscn").instantiate()

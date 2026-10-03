@@ -23,8 +23,11 @@ var upload_id: String = ""
 var activity_id: String = ""
 ## Текст ошибки для пользователя (без токенов).
 var error: String = ""
-## Код причины (`ApiResult.CODE_*`), пустой при успехе.
+## Код причины (`ApiResult.CODE_*`), пустой при успехе. UI строит текст причины по коду.
 var code: String = ""
+## Текст ответа Strava как есть (поле `error`/`message`), если причина пришла от Strava;
+## UI показывает его только как деталь после переведённой причины.
+var detail: String = ""
 ## Повтор имеет смысл (сеть, 5xx, 429).
 var can_retry: bool = false
 ## Для 429 — через сколько секунд повторять.
@@ -44,6 +47,7 @@ static func duplicate_of(message: String, upload: String = "") -> UploadResult:
 	var r := UploadResult.new()
 	r.status = STATUS_DUPLICATE
 	r.error = message
+	r.detail = message
 	r.upload_id = upload
 	return r
 
@@ -84,6 +88,7 @@ func to_status_dict(attempts: int = 0, updated_at: int = 0) -> Dictionary:
 		"upload_id": upload_id,
 		"error": error,
 		"code": code,
+		"detail": detail,
 		"attempts": attempts,
 		"updated_at": updated_at,
 	}

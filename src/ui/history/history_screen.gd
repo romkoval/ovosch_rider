@@ -6,8 +6,9 @@ extends Control
 ## дистанция, средняя/NP мощность, статус Strava. Выбор строки открывает
 ## карточку `RideDetail`; удаление возвращает к списку. Строки — ключи `ui.history.*`.
 
-## Пользователь запросил выгрузку заезда в Strava (из карточки).
-signal upload_requested(ride_id: String)
+## Пользователь запросил выгрузку заезда в Strava (из карточки) с названием и описанием
+## из её полей (REQ-STR-03 крит. 3; пустые — значения по умолчанию).
+signal upload_requested(ride_id: String, ride_name: String, description: String)
 ## Заезд удалён из хранилища через карточку (REQ-LOC-06 крит. 1): владелец убирает
 ## элемент очереди Strava, если он был.
 signal ride_deleted(ride_id: String)
@@ -42,7 +43,7 @@ func _ready() -> void:
 	_home_button.pressed.connect(go_home)
 	_detail.back_requested.connect(back_to_list)
 	_detail.deleted.connect(_on_ride_deleted)
-	_detail.upload_requested.connect(func(id: String) -> void: upload_requested.emit(id))
+	_detail.upload_requested.connect(_on_detail_upload_requested)
 	_detail.set_strava_linked(_strava_linked)
 	if _rides != null:
 		refresh()
@@ -178,6 +179,10 @@ func _find_index(ride_id: String) -> int:
 func _on_rides_changed(_profile_id: String) -> void:
 	if visible and is_node_ready():
 		refresh()
+
+
+func _on_detail_upload_requested(ride_id: String, ride_name: String, description: String) -> void:
+	upload_requested.emit(ride_id, ride_name, description)
 
 
 func _on_ride_deleted(ride_id: String) -> void:
