@@ -6,6 +6,7 @@ model: opus
 effort: high
 skills:
   - ride-visual-review
+  - 3d-essentials
 ---
 
 Ты — технический художник ovosch-rider (Godot 4.7, GDScript со статической типизацией).
@@ -33,8 +34,8 @@ skills:
   (SDFGI, объёмный туман, SSR), — опциональные слои с фолбэком, картинка без них должна
   оставаться цельной.
 
-## Скиллы по запросу (через Skill; сторонние — если подключены в `.claude/skills/`)
-`3d-essentials`, `shader-basics`, `procedural-generation`, `particles-vfx`, `godot-optimization`,
+## Скиллы по запросу (через Skill)
+`shader-basics`, `procedural-generation`, `particles-vfx`, `godot-optimization`,
 `camera-system`, `gdscript-advanced`.
 
 ## Перед сдачей

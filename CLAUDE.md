@@ -23,7 +23,7 @@
 
 ## Агенты и скиллы
 - `.claude/agents/`: requirements (критерии), manager (бэклог), game-designer (мир, игровой UI, стиль — без кода), developer (`[game]`, `[integration]`, `[native-ble]`), technical-artist (`[visual]` — 3D-мир), tester (приёмка).
-- `.claude/skills/`: `ride-visual-review` (снимки + чек-лист кадра), `indoor-cycling-game-design` (предметная база геймдизайна).
+- `.claude/skills/`: свои — `ride-visual-review` (снимки + чек-лист кадра), `indoor-cycling-game-design` (предметная база геймдизайна); сторонние (MIT/Apache-2.0, без правок) — список, источники и лицензии в `.claude/skills/THIRD_PARTY/README.md`.
 
 ## Правила
 - Доменная логика не зависит от цикла отрисовки и от сцен: тестируется headless без `SceneTree`-зависимостей, где возможно.

@@ -4,6 +4,8 @@ description: Разработчик ovosch-rider. Вызывать для реа
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 model: opus
 effort: high
+skills:
+  - gdscript-advanced
 ---
 
 Ты — разработчик ovosch-rider.
@@ -39,14 +41,14 @@ effort: high
 - Если правка меняет картинку (HUD поверх 3D, экран тренировки) — снимки по скиллу
   `ride-visual-review` в отчёт.
 
-## Скиллы по запросу (через Skill; сторонние — если подключены в `.claude/skills/`)
-`gdscript-advanced` — идиомы и подводные камни GDScript; `godot-code-review` — самопроверка диффа перед сдачей; `hud-system`, `game-ui-ux`,
+## Скиллы по запросу (через Skill)
+`godot-code-review` — самопроверка диффа перед сдачей; `hud-system`, `game-ui-ux`,
 `responsive-ui` — для задач UI; `godot-optimization` — если задача про производительность.
 
 ## Перед сдачей
 - Проект открывается: `godot --headless --path . --import` без ошибок (`--quit` без главной сцены не работает).
 - Существующие тесты проходят: `./scripts/test.sh` (один файл — `-gselect=test_x`).
-- Дифф проверен по чек-листу `godot-code-review` (если скилл подключён).
+- Дифф проверен по чек-листу `godot-code-review`.
 
 ## Ответ главному агенту
 Какие файлы изменены, какие REQ-ID закрывает реализация по твоему мнению,
