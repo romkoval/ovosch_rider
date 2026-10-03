@@ -17,3 +17,5 @@ native/**/*.os
 .env
 # Локальный файл секретов (образец — secrets.example.cfg.txt); на случай копии в корень проекта
 secrets.cfg
+# Скриншоты сцены (scripts/screenshot.sh)
+screenshots/
