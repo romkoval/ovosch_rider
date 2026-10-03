@@ -1,2 +1,29 @@
 keys,ru,en
 meta.area.menu,Меню,Menu
+ui.menu.back,Назад,Back
+ui.menu.unit.w,Вт,W
+ui.menu.unit.km,км,km
+ui.menu.unit.m,м,m
+ui.menu.unit.kj,кДж,kJ
+ui.menu.unit.bpm,уд/мин,bpm
+ui.menu.unit.rpm,об/мин,rpm
+ui.menu.unit.pct,%,%
+ui.menu.unit.min,мин,min
+ui.menu.stand.title,Компоненты меню,Menu components
+ui.menu.stand.action_search,Искать,Search
+ui.menu.stand.banner_warn,Bluetooth недоступен — включите Bluetooth в настройках системы,Bluetooth is unavailable — turn it on in system settings
+ui.menu.stand.banner_warn_action,Как включить,How to turn on
+ui.menu.stand.banner_error,Не удалось выгрузить заезд в Strava,Could not upload the ride to Strava
+ui.menu.stand.banner_error_action,Повторить,Retry
+ui.menu.stand.banner_info,Ключ Intervals.icu не указан — тренировки на сегодня не загружаются,No Intervals.icu key — today's workouts are not loaded
+ui.menu.stand.banner_info_action,Указать ключ,Add key
+ui.menu.stand.stat_duration,длительность,duration
+ui.menu.stand.stat_max_target,макс. цель,max target
+ui.menu.stand.stat_distance,дистанция,distance
+ui.menu.stand.stat_avg_power,ср. мощность,avg power
+ui.menu.stand.empty_title,Заездов пока нет,No rides yet
+ui.menu.stand.empty_text,Первая тренировка появится здесь,Your first workout will appear here
+ui.menu.stand.empty_action,На главный,Go home
+ui.menu.stand.row_connect,Подключить,Connect
+ui.menu.stand.mode_plan,ПЛАН,PLAN
+ui.menu.stand.mode_sim,SIM,SIM

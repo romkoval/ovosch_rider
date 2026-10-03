@@ -1,0 +1,104 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/common/list_row.gd" id="1_script"]
+
+[node name="ListRow" type="Button"]
+custom_minimum_size = Vector2(40, 64)
+size_flags_horizontal = 3
+theme_type_variation = &"ListRowButton"
+script = ExtResource("1_script")
+
+[node name="Content" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+theme_type_variation = &"CardMargin"
+
+[node name="Rows" type="VBoxContainer" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 1
+theme_type_variation = &"Stack8"
+
+[node name="Main" type="HBoxContainer" parent="Content/Rows"]
+layout_mode = 2
+mouse_filter = 1
+theme_type_variation = &"Stack16"
+
+[node name="Leading" type="HBoxContainer" parent="Content/Rows/Main"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 1
+
+[node name="Texts" type="VBoxContainer" parent="Content/Rows/Main"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 1
+
+[node name="Overline" type="Label" parent="Content/Rows/Main/Texts"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 1
+theme_type_variation = &"CaptionLabel"
+auto_translate_mode = 2
+
+[node name="Title" type="Label" parent="Content/Rows/Main/Texts"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 1
+theme_type_variation = &"TitleLabel"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Subtitle" type="Label" parent="Content/Rows/Main/Texts"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 1
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Columns" type="HBoxContainer" parent="Content/Rows/Main"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 1
+theme_type_variation = &"Stack16"
+
+[node name="Trailing" type="HBoxContainer" parent="Content/Rows/Main"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 1
+theme_type_variation = &"Stack8"
+
+[node name="Chevron" type="TextureRect" parent="Content/Rows/Main"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 1
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Bottom" type="VBoxContainer" parent="Content/Rows"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 1

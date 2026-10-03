@@ -1,0 +1,38 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/common/banner.gd" id="1_script"]
+
+[node name="Banner" type="PanelContainer"]
+size_flags_horizontal = 3
+theme_type_variation = &"BannerInfo"
+script = ExtResource("1_script")
+
+[node name="Row" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"Stack12"
+
+[node name="Icon" type="TextureRect" parent="Row"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+auto_translate_mode = 2
+autowrap_mode = 3
+
+[node name="Action" type="Button" parent="Row"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"GhostButton"
+auto_translate_mode = 2
