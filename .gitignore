@@ -19,3 +19,6 @@ native/**/*.os
 secrets.cfg
 # Скриншоты сцены (scripts/screenshot.sh)
 screenshots/
+
+# Временные worktree агентов
+.claude/worktrees/
