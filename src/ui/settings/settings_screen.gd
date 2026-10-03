@@ -46,6 +46,20 @@ const SYNC_WARNING_KEYS: Dictionary = {
 	IntervalsSync.WARN_NO_BIKE_SETTINGS: "ui.settings.warn_no_bike_settings",
 }
 const SYNC_WARNING_UNKNOWN_KEY: String = "ui.settings.warn_unknown"
+## Human-readable reasons for a failed Strava sign-in (`StravaService.flow_error_code()`:
+## `ApiResult.CODE_*` or a redirect refusal from `StravaOAuth`). The service's `message`
+## is a log text and is never shown. `not_configured` has its own full message.
+const STRAVA_ERROR_KEYS: Dictionary = {
+	ApiResult.CODE_AUTH_FAILED: "ui.settings.strava_err_auth_failed",
+	ApiResult.CODE_REAUTH_REQUIRED: "ui.settings.strava_err_auth_failed",
+	ApiResult.CODE_NETWORK: "ui.settings.strava_err_network",
+	ApiResult.CODE_RATE_LIMITED: "ui.settings.strava_err_rate_limited",
+	ApiResult.CODE_BAD_RESPONSE: "ui.settings.strava_err_bad_response",
+	"timeout": "ui.settings.strava_err_timeout",
+	"access_denied": "ui.settings.strava_err_access_denied",
+	"bad_request": "ui.settings.strava_err_bad_redirect",
+	"state_mismatch": "ui.settings.strava_err_bad_redirect",
+}
 ## Static labels/buttons: node path -> key. `Control.text` keeps the raw key (auto-translate
 ## applies only at draw time), so they are re-applied with `tr()` on every `refresh()` —
 ## this is what makes the language switch take effect without a restart (REQ-NFR-08 crit. 4).
@@ -293,7 +307,7 @@ func _on_strava_authorized_changed(_authorized: bool) -> void:
 	_render_strava()
 
 
-func _on_strava_flow_changed(state: String, message: String) -> void:
+func _on_strava_flow_changed(state: String, _message: String) -> void:
 	match state:
 		"waiting":
 			_strava_status_label.text = tr("ui.settings.strava_connecting")
@@ -302,7 +316,7 @@ func _on_strava_flow_changed(state: String, message: String) -> void:
 		"failed":
 			_strava_connect_button.set_busy(false)
 			_strava_connect_button.set_authorize_url("")
-			_strava_status_label.text = tr("ui.settings.strava_error").format({"message": message})
+			_strava_status_label.text = strava_error_text(_strava.flow_error_code() if _strava != null else "")
 		_:
 			_strava_connect_button.set_busy(false)
 
@@ -316,6 +330,13 @@ func _render_strava() -> void:
 	_strava_connect_button.set_available(true)
 	_strava_connect_button.set_authorized(_strava.is_authorized())
 	_strava_status_label.text = tr("ui.settings.strava_linked") if _strava.is_authorized() else tr("ui.settings.strava_not_linked")
+
+
+## Translated text for a failed Strava sign-in by reason code (never the service message).
+func strava_error_text(code: String) -> String:
+	if code == ApiResult.CODE_NOT_CONFIGURED:
+		return tr("ui.settings.strava_unavailable")
+	return tr("ui.settings.strava_error").format({"message": tr(str(STRAVA_ERROR_KEYS.get(code, API_ERROR_UNKNOWN_KEY)))})
 
 
 func strava_button() -> StravaConnectButton:

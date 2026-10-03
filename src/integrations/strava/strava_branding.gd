@@ -14,11 +14,9 @@ const CONNECT_BUTTON_MIN_WIDTH_PX: int = 193
 ## Логотип «Powered by Strava» (горизонтальный, оранжевый) — обязателен на экранах с данными Strava.
 const POWERED_BY_ASSET: String = "res://assets/strava/api_logo_pwrdBy_strava_horiz_orange.svg"
 const POWERED_BY_HEIGHT_PX: int = 24
-## Ключи переводов (таблица `assets/i18n/strings.csv`, T-054).
-const KEY_CONNECT_BUTTON: String = "STRAVA_CONNECT_WITH"
-const KEY_POWERED_BY: String = "STRAVA_POWERED_BY"
-const KEY_UPLOAD_TO_STRAVA: String = "STRAVA_UPLOAD"
-const KEY_VIEW_ON_STRAVA: String = "STRAVA_VIEW_ACTIVITY"
+## Ключи переводов (таблица `assets/i18n/strings.csv`, T-054); в обеих локалях — текст брендбука.
+const KEY_CONNECT_BUTTON: String = "ui.strava.connect"
+const KEY_POWERED_BY: String = "ui.strava.powered_by"
 ## Английские тексты по брендбуку (переводить нельзя — названия продукта).
 const TEXT_CONNECT_BUTTON: String = "Connect with Strava"
 const TEXT_POWERED_BY: String = "Powered by Strava"

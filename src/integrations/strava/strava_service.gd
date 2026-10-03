@@ -45,6 +45,8 @@ var _ticking: bool = false
 var _exchanging: bool = false
 var _attached: bool = false
 var _flow_state: String = "idle"
+## Код причины последнего `failed` (см. `flow_error_code`).
+var _flow_error_code: String = ""
 
 
 func _init(profile: Profile, transport: HttpTransport, secure_store: SecureStore,
@@ -100,6 +102,14 @@ func is_authorized() -> bool:
 
 func flow_state() -> String:
 	return _flow_state
+
+
+## Код причины последнего перехода входа в `failed` (пусто в остальных состояниях): `ApiResult.CODE_*`
+## (`not_configured`, `auth_failed`, `network`, …) или отказ redirect от `StravaOAuth`
+## (`timeout`, `access_denied`, `bad_request`, `state_mismatch`). UI строит текст по коду;
+## `message` сигнала `connect_flow_changed` — русский текст для логов.
+func flow_error_code() -> String:
+	return _flow_error_code
 
 
 ## Активная тренировка — очередь стоит (REQ-STR-04 крит. 6).
@@ -175,7 +185,7 @@ func _on_item_changed(ride_id: String, _status: Dictionary) -> void:
 ## Начать вход: loopback-сервер + URL авторизации (REQ-STR-01 крит. 1, 7). "" — не настроено.
 func connect_flow_start() -> String:
 	if not config.is_configured():
-		_set_flow("failed", config.unavailable_message())
+		_set_flow("failed", config.unavailable_message(), ApiResult.CODE_NOT_CONFIGURED)
 		return ""
 	var redirect := oauth.start_loopback_listener()
 	var url := oauth.authorize_url("")
@@ -194,7 +204,7 @@ func handle_redirect_url(url: String) -> void:
 	if r.has("code"):
 		_exchange(str(r["code"]))
 	elif r.has("error"):
-		_set_flow("failed", str(r["error"]))
+		_set_flow("failed", str(r["error"]), str(r["error"]))
 
 
 func _exchange(code: String) -> void:
@@ -208,7 +218,7 @@ func _exchange(code: String) -> void:
 		_set_flow("done", str((result.data as Dictionary).get("athlete_name", "")))
 		authorized_changed.emit(true)
 	else:
-		_set_flow("failed", result.message)
+		_set_flow("failed", result.message, result.code)
 
 
 ## Отвязка (REQ-STR-01 крит. 8, REQ-PRF-03 крит. 2): отзыв токенов, очистка очереди профиля,
@@ -241,7 +251,7 @@ func tick(delta: float) -> void:
 		if r.has("code"):
 			_exchange(str(r["code"]))
 		elif r.has("error"):
-			_set_flow("failed", str(r["error"]))
+			_set_flow("failed", str(r["error"]), str(r["error"]))
 	_since_tick += delta
 	if _since_tick >= QUEUE_TICK_INTERVAL_SEC:
 		_since_tick = 0.0
@@ -257,8 +267,9 @@ func step_queue() -> void:
 	_ticking = false
 
 
-func _set_flow(state: String, message: String) -> void:
+func _set_flow(state: String, message: String, error_code: String = "") -> void:
 	_flow_state = state
+	_flow_error_code = error_code if state == "failed" else ""
 	connect_flow_changed.emit(state, message)
 
 

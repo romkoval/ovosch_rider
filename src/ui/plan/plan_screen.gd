@@ -292,7 +292,9 @@ func submit_key(athlete_id: String, key: String) -> ApiResult:
 			ApiResult.CODE_NOT_CONFIGURED:
 				_show_key_error(tr("ui.plan.key.fill_both"))
 			_:
-				_show_key_error(tr("ui.plan.key.failed").format({"reason": result.message}))
+				# Причина — по коду (общие с экраном настроек тексты), не `ApiResult.message`:
+				# тот — русский текст для логов (REQ-NFR-08 крит. 1).
+				_show_key_error(tr("ui.plan.key.failed").format({"reason": api_error_text(result.code)}))
 		return result
 	var athlete: Dictionary = result.data
 	_profile.intervals_athlete_id = athlete_id.strip_edges()
@@ -305,6 +307,11 @@ func submit_key(athlete_id: String, key: String) -> ApiResult:
 	_last_result = null
 	await load_today()
 	return result
+
+
+## Переведённая причина отказа `ApiResult` по коду (никогда не сырой код и не `message`).
+func api_error_text(code: String) -> String:
+	return tr(str(SettingsScreen.API_ERROR_KEYS.get(code, SettingsScreen.API_ERROR_UNKNOWN_KEY)))
 
 
 # ---------------------------------------------------------------------------

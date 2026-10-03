@@ -18,6 +18,8 @@ var _current: Ride = null
 func _init() -> void:
 	title = "ui.history.recovery.title"
 	ok_button_text = "ui.history.recovery.keep"
+	# Без явного ключа ConfirmationDialog показывает встроенное «Cancel» движка (не из strings.csv).
+	cancel_button_text = "ui.common.cancel"
 	add_button("ui.history.recovery.delete", true, ACTION_DELETE)
 	confirmed.connect(keep)
 	canceled.connect(keep)

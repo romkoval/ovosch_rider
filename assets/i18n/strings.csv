@@ -1,5 +1,4 @@
 keys,ru,en
-ui.app.title,ovosch-rider,ovosch-rider
 ui.common.coming_soon,Этот экран появится позже,This screen is coming soon
 ui.common.cancel,Отмена,Cancel
 ui.common.delete,Удалить,Delete
@@ -145,10 +144,6 @@ ui.plan.status.rate_limited,Слишком много запросов к Interv
 ui.plan.status.bad_response,Неожиданный ответ Intervals.icu,Unexpected response from Intervals.icu
 ui.plan.status.no_profile,Профиль не выбран,No profile selected
 ui.plan.key.button,Указать API-ключ,Set API key
-ui.plan.key.title,Ключ API Intervals.icu,Intervals.icu API key
-ui.plan.key.athlete_id,Athlete ID (например i12345),Athlete ID (e.g. i12345)
-ui.plan.key.api_key,Ключ API,API key
-ui.plan.key.save,Проверить и сохранить,Verify and save
 ui.plan.key.rejected,Ключ не принят Intervals.icu (401),Key rejected by Intervals.icu (401)
 ui.plan.key.fill_both,Введите Athlete ID и ключ API,Enter Athlete ID and API key
 ui.plan.key.failed,Не удалось проверить ключ: {reason},Could not verify the key: {reason}
@@ -266,7 +261,6 @@ ui.settings.warn_no_bike_settings,в Intervals.icu нет настроек дл�
 ui.settings.warn_unknown,неизвестное замечание,unknown warning
 ui.settings.strava_title,Strava,Strava
 ui.settings.strava_not_linked,Strava не привязана,Strava not linked
-ui.settings.strava_connect,Connect with Strava,Connect with Strava
 ui.settings.strava_disconnect,Отвязать Strava,Disconnect Strava
 ui.settings.about_title,О программе,About
 ui.settings.version,ovosch-rider {version},ovosch-rider {version}
@@ -333,3 +327,10 @@ ui.settings.strava_linked,Strava привязана: заезды выгружа
 ui.settings.strava_connecting,Ожидаем вход в Strava в браузере…,Waiting for the Strava sign-in in the browser…
 ui.settings.strava_unavailable,Привязка Strava недоступна: не заданы client_id/client_secret приложения,Strava link unavailable: the app client_id/client_secret are not configured
 ui.settings.strava_error,Ошибка Strava: {message},Strava error: {message}
+ui.settings.strava_err_auth_failed,Strava не приняла вход — попробуйте ещё раз,Strava rejected the sign-in — try again
+ui.settings.strava_err_network,нет связи со Strava,no connection to Strava
+ui.settings.strava_err_rate_limited,слишком много запросов к Strava — повторите позже,too many requests to Strava — try again later
+ui.settings.strava_err_bad_response,неожиданный ответ Strava,unexpected response from Strava
+ui.settings.strava_err_timeout,вход не завершён вовремя — начните заново,sign-in timed out — start again
+ui.settings.strava_err_access_denied,доступ в Strava не разрешён,access was not granted in Strava
+ui.settings.strava_err_bad_redirect,некорректный ответ страницы входа — начните заново,invalid sign-in response — start again

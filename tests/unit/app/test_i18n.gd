@@ -70,6 +70,39 @@ func test_every_key_has_non_empty_ru_and_en() -> void:
 			assert_false(str(_table[key].get(locale, "")).strip_edges().is_empty(), "REQ-NFR-08 крит. 2: %s [%s]" % [key, locale])
 
 
+## REQ-NFR-08 крит. 2 по сырому CSV (словарь `_table` схлопывает дубликаты и короткие строки):
+## каждый ключ встречается один раз, у каждой строки ровно столько колонок, сколько в заголовке,
+## и непустые ru и en.
+func test_csv_keys_unique_and_rows_complete() -> void:
+	var f := FileAccess.open(CSV_PATH, FileAccess.READ)
+	assert_not_null(f, "strings.csv открывается")
+	var header := f.get_csv_line()
+	var ru_col := header.find("ru")
+	var en_col := header.find("en")
+	assert_true(ru_col > 0 and en_col > 0, "в заголовке есть колонки ru и en")
+	var seen: Dictionary = {}
+	var duplicates: Array[String] = []
+	var row_no := 1
+	while not f.eof_reached():
+		var line := f.get_csv_line()
+		row_no += 1
+		if line.size() == 1 and line[0].strip_edges().is_empty():
+			continue
+		var key := line[0].strip_edges()
+		assert_false(key.is_empty(), "строка %d: пустой ключ" % row_no)
+		if seen.has(key):
+			duplicates.append("%s (строки %d и %d)" % [key, seen[key], row_no])
+		else:
+			seen[key] = row_no
+		assert_eq(line.size(), header.size(), "строка %d (%s): число колонок" % [row_no, key])
+		for col in [ru_col, en_col]:
+			var value := line[col] if col < line.size() else ""
+			assert_false(value.strip_edges().is_empty(), "REQ-NFR-08 крит. 2: %s [%s] пустой" % [key, header[col]])
+	f.close()
+	assert_eq(duplicates, [] as Array[String], "REQ-NFR-08 крит. 2: ключи в strings.csv не повторяются")
+	assert_gt(seen.size(), 20)
+
+
 func test_every_key_used_in_ui_sources_exists_in_csv() -> void:
 	var used := _keys_in_sources()
 	assert_gt(used.size(), 15, "ключи в сценах/скриптах найдены")

@@ -22,10 +22,10 @@ func _ready() -> void:
 	_button.custom_minimum_size.x = StravaBranding.CONNECT_BUTTON_MIN_WIDTH_PX
 	_button.pressed.connect(_on_pressed)
 	_open_link.visible = false
-	# Ключи `ui.strava.connect` / `ui.strava.powered_by` в обеих локалях содержат один и тот же
-	# английский текст: брендбук Strava требует именно «Connect with Strava» и «Powered by Strava»
-	# (`StravaBranding.TEXT_*`); ключ нужен лишь для проверки «в сценах нет литералов».
-	_powered_by.text = tr("ui.strava.powered_by")
+	# Ключи `StravaBranding.KEY_*` (`ui.strava.connect` / `ui.strava.powered_by`) в обеих локалях
+	# содержат один и тот же английский текст: брендбук Strava требует именно «Connect with Strava»
+	# и «Powered by Strava» (`StravaBranding.TEXT_*`); ключ нужен для проверки «в сценах нет литералов».
+	_powered_by.text = tr(StravaBranding.KEY_POWERED_BY)
 	_render()
 
 
@@ -88,7 +88,7 @@ func _render() -> void:
 		_button.remove_theme_stylebox_override("pressed")
 		_button.remove_theme_color_override("font_color")
 	else:
-		_button.text = tr("ui.strava.connect")
+		_button.text = tr(StravaBranding.KEY_CONNECT_BUTTON)
 		var style := StyleBoxFlat.new()
 		style.bg_color = StravaBranding.BRAND_COLOR
 		style.set_corner_radius_all(4)
