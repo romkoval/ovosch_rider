@@ -20,3 +20,65 @@ ui.plan.preview.less,Свернуть,Less
 ui.plan.sheet.close,Закрыть,Close
 ui.plan.empty.library_title,Библиотека пуста,The library is empty
 ui.plan.empty.library_text,"Импортируйте тренировку в формате .zwo, .erg или .mrc","Import a workout in .zwo, .erg or .mrc format"
+ui.history.bar.title,История,History
+ui.history.filter.all,Все,All
+ui.history.filter.plan,План,Plan
+ui.history.filter.free,Свободная,Free ride
+ui.history.mode.plan,План,Plan
+ui.history.mode.sim,SIM,SIM
+ui.history.col.time,время,time
+ui.history.col.km,км,km
+ui.history.col.avg,ср. Вт,avg W
+ui.history.col.np,NP,NP
+ui.history.col.ascent,"набор, м","ascent, m"
+ui.history.empty.title,Заездов пока нет,No rides yet
+ui.history.empty.text,Первая тренировка появится здесь,Your first ride will appear here
+ui.history.empty.action,На главный,Go home
+ui.history.empty.filtered_title,Нет заездов этого типа,No rides of this type
+ui.history.empty.filtered_text,Смените фильтр вверху экрана,Change the filter at the top of the screen
+ui.history.empty.filtered_action,Показать все,Show all
+ui.history.date.row,"{day} {mon}, {time}","{mon} {day}, {time}"
+ui.history.date.full,"{day} {mon} {year}, {time}","{mon} {day}, {year}, {time}"
+ui.history.month_header,{month} {year},{month} {year}
+ui.history.month.1,Январь,January
+ui.history.month.2,Февраль,February
+ui.history.month.3,Март,March
+ui.history.month.4,Апрель,April
+ui.history.month.5,Май,May
+ui.history.month.6,Июнь,June
+ui.history.month.7,Июль,July
+ui.history.month.8,Август,August
+ui.history.month.9,Сентябрь,September
+ui.history.month.10,Октябрь,October
+ui.history.month.11,Ноябрь,November
+ui.history.month.12,Декабрь,December
+ui.history.mon.1,янв,Jan
+ui.history.mon.2,фев,Feb
+ui.history.mon.3,мар,Mar
+ui.history.mon.4,апр,Apr
+ui.history.mon.5,мая,May
+ui.history.mon.6,июн,Jun
+ui.history.mon.7,июл,Jul
+ui.history.mon.8,авг,Aug
+ui.history.mon.9,сен,Sep
+ui.history.mon.10,окт,Oct
+ui.history.mon.11,ноя,Nov
+ui.history.mon.12,дек,Dec
+ui.history.flag.stopped_early,завершён досрочно,ended early
+ui.history.flag.recovered,восстановлен после сбоя,recovered after a crash
+ui.history.flag.in_progress,не завершён,in progress
+ui.history.stat.time,время,time
+ui.history.stat.distance,дистанция,distance
+ui.history.stat.avg_power,ср. мощность,avg power
+ui.history.stat.np,NP,NP
+ui.history.stat.max_power,макс. мощность,max power
+ui.history.stat.work,работа,work
+ui.history.stat.avg_hr,ср. пульс,avg heart rate
+ui.history.stat.avg_cadence,ср. каденс,avg cadence
+ui.history.stat.ascent,набор,ascent
+ui.history.section.effort,Мощность и пульс,Power and heart rate
+ui.history.section.altitude,Профиль высоты,Elevation profile
+ui.history.section.strava,Strava,Strava
+ui.history.detail.target,Средняя цель плана: {target} Вт,Average plan target: {target} W
+ui.history.detail.track,Трасса «{track}» · крутизна SIM {pct} %,Track “{track}” · SIM steepness {pct}%
+ui.history.menu.more,Действия с заездом,Ride actions

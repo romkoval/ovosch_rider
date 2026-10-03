@@ -1,9 +1,11 @@
 class_name ZoneBar
 extends Control
 ## Мини-полоса «время в зонах» (REQ-LOC-04 крит. 5): сегменты пропорциональны
-## секундам в зоне, цвета — `ZonePalette` по токенам зон мощности или пульса.
+## секундам в зоне, цвета — `ZonePalette` по токенам зон мощности или пульса; подложка —
+## `inset` (`docs/game/ui.md` п. 4). В карточке заезда — полоса 12 lp с подписями долей,
+## в строке истории — 4 lp во всю ширину строки (`ui.md` п. 8.5).
 
-const BACKGROUND := Color(0.14, 0.14, 0.16)
+const BACKGROUND := UiTokens.INSET
 
 var _times := PackedInt32Array()
 var _tokens: Array[String] = []
@@ -26,6 +28,22 @@ func total_sec() -> int:
 
 func zone_count() -> int:
 	return _times.size()
+
+
+## Доли зон с временем: `[{zone, token, sec, pct}]` по порядку зон (подписи «Z2 35 %»).
+func shares() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _total <= 0:
+		return out
+	for i in _times.size():
+		var sec: int = maxi(_times[i], 0)
+		if sec <= 0:
+			continue
+		out.append({
+			"zone": i + 1, "token": _tokens[i] if i < _tokens.size() else "", "sec": sec,
+			"pct": roundi(float(sec) * 100.0 / float(_total)),
+		})
+	return out
 
 
 func _draw() -> void:

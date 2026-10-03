@@ -1,7 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://src/ui/history/history_screen.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://src/ui/history/ride_detail.tscn" id="2_detail"]
+[ext_resource type="PackedScene" path="res://src/ui/common/app_bar.tscn" id="3_app_bar"]
+[ext_resource type="PackedScene" path="res://src/ui/common/empty_state.tscn" id="4_empty"]
 
 [node name="HistoryScreen" type="Control"]
 layout_mode = 3
@@ -12,7 +14,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="ListPanel" type="MarginContainer" parent="."]
+[node name="ListPanel" type="VBoxContainer" parent="."]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -20,40 +22,91 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 24
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 24
+theme_type_variation = &"Stack0"
 
-[node name="VBox" type="VBoxContainer" parent="ListPanel"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Header" type="HBoxContainer" parent="ListPanel/VBox"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="HomeButton" type="Button" parent="ListPanel/VBox/Header"]
+[node name="AppBar" parent="ListPanel" instance=ExtResource("3_app_bar")]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.history.home"
+title = "ui.history.bar.title"
 
-[node name="Title" type="Label" parent="ListPanel/VBox/Header"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "ui.history.title"
-horizontal_alignment = 1
-
-[node name="EmptyLabel" type="Label" parent="ListPanel/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.history.empty"
-horizontal_alignment = 1
-
-[node name="RideList" type="ItemList" parent="ListPanel/VBox"]
+[node name="Margin" type="MarginContainer" parent="ListPanel"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
+theme_type_variation = &"ScreenMargin"
+
+[node name="Center" type="HBoxContainer" parent="ListPanel/Margin"]
+layout_mode = 2
+alignment = 1
+
+[node name="Column" type="VBoxContainer" parent="ListPanel/Margin/Center"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="Scroll" type="ScrollContainer" parent="ListPanel/Margin/Center/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="List" type="VBoxContainer" parent="ListPanel/Margin/Center/Column/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"Stack0"
+
+[node name="ColumnHeader" type="MarginContainer" parent="ListPanel/Margin/Center/Column/Scroll/List"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CardMargin"
+
+[node name="Row" type="HBoxContainer" parent="ListPanel/Margin/Center/Column/Scroll/List/ColumnHeader"]
+layout_mode = 2
+theme_type_variation = &"Stack16"
+
+[node name="LeadingSpacer" type="Control" parent="ListPanel/Margin/Center/Column/Scroll/List/ColumnHeader/Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(44, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="TextSpacer" type="Control" parent="ListPanel/Margin/Center/Column/Scroll/List/ColumnHeader/Row"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="ColumnTitles" type="HBoxContainer" parent="ListPanel/Margin/Center/Column/Scroll/List/ColumnHeader/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack16"
+
+[node name="TrailingSpacer" type="Control" parent="ListPanel/Margin/Center/Column/Scroll/List/ColumnHeader/Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ChevronSpacer" type="Control" parent="ListPanel/Margin/Center/Column/Scroll/List/ColumnHeader/Row"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Groups" type="VBoxContainer" parent="ListPanel/Margin/Center/Column/Scroll/List"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="Empty" parent="ListPanel/Margin/Center/Column" instance=ExtResource("4_empty")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+icon_name = "history"
+title = "ui.history.empty.title"
+text = "ui.history.empty.text"
+action = "ui.history.empty.action"
 
 [node name="Detail" parent="." instance=ExtResource("2_detail")]
 unique_name_in_owner = true
