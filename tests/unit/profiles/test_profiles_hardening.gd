@@ -1,7 +1,7 @@
 extends GutTest
 ## Устойчивость профилей (финальное ревью): атомарная запись `profiles.json`, повреждённый
 ## файл откладывается в `.corrupt`, подписка `RememberedDevices` на удаление профилей
-## связанным методом, `delete`/`set_active` не меняют память при сбое записи
+## связанным методом, `save`/`delete`/`set_active` не меняют память при сбое записи
 ## (REQ-PRF-01 крит. 4, 6; REQ-PRF-04 крит. 1).
 
 var _dir: String
@@ -178,3 +178,48 @@ func test_set_active_unknown_id_returns_not_found() -> void:
 	assert_push_error("не найден")
 	assert_eq(repo.active_profile_id, a.id)
 	assert_eq(repo.set_active(a.id), "", "уже активный — успех без записи")
+
+
+func test_save_write_error_rolls_back_changed_profile_in_memory() -> void:
+	var repo := ProfileRepository.new(_dir)
+	var a := repo.create("Аня")
+	var saved: Array[String] = []
+	repo.profile_saved.connect(func(id: String) -> void: saved.append(id))
+	var edited := repo.get_by_id(a.id)
+	edited.name = "Анна"
+	edited.ftp_w = 300
+	AtomicFile.simulate_write_error_prefix = repo.file_path()
+	assert_has(repo.save(edited), ProfileRepository.ERR_STORAGE_WRITE_FAILED)
+	assert_push_error("AtomicFile")
+	assert_push_error("ProfileRepository")
+	var in_memory := repo.get_by_id(a.id)
+	assert_eq(in_memory.name, "Аня", "в памяти прежнее имя")
+	assert_eq(in_memory.ftp_w, a.ftp_w, "в памяти прежний FTP")
+	assert_true(repo.is_name_available("Анна"), "незаписанное имя не занято")
+	assert_eq(saved, [] as Array[String], "без profile_saved при сбое")
+	# Новый профиль при сбое не появляется.
+	assert_has(repo.save(Profile.create("Борис")), ProfileRepository.ERR_STORAGE_WRITE_FAILED)
+	assert_push_error("AtomicFile")
+	assert_push_error("ProfileRepository")
+	assert_eq(repo.count(), 1)
+	assert_true(repo.is_name_available("Борис"))
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_eq(repo.save(edited), [] as Array[String], "после устранения сбоя сохраняется")
+	assert_eq(repo.get_by_id(a.id).name, "Анна")
+	assert_eq(saved, [a.id] as Array[String])
+
+
+func test_first_profile_save_write_error_leaves_no_active_profile() -> void:
+	var repo := ProfileRepository.new(_dir)
+	var active_changes: Array[String] = []
+	repo.active_profile_changed.connect(func(id: String) -> void: active_changes.append(id))
+	AtomicFile.simulate_write_error_prefix = repo.file_path()
+	assert_null(repo.create("Аня"), "create при сбое записи — null")
+	assert_push_error("AtomicFile")
+	assert_push_error("ProfileRepository")
+	assert_eq(repo.count(), 0)
+	assert_eq(repo.active_profile_id, "", "активный не назначен")
+	assert_null(repo.get_active())
+	assert_eq(active_changes, [] as Array[String], "без active_profile_changed")
+	assert_eq(repo.last_errors, [ProfileRepository.ERR_STORAGE_WRITE_FAILED] as Array[String])
+	AtomicFile.simulate_write_error_prefix = ""

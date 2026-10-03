@@ -247,3 +247,49 @@ func test_write_error_keeps_previous_trainer_file() -> void:
 	assert_false(FileAccess.file_exists(AtomicFile.tmp_path(path)))
 	AtomicFile.simulate_write_error_prefix = ""
 	assert_eq(str(_open().trainer().get("id", "")), "neo-1")
+
+
+func test_remember_write_error_keeps_memory_unchanged() -> void:
+	assert_true(_dev.remember("p1", _hr("hr-1", "Garmin HRM")))
+	var changes_before := _changes
+	AtomicFile.simulate_write_error_prefix = _dev.profile_file_path("p1")
+	assert_false(_dev.remember("p1", _hr("hr-2", "Polar H10")), "новый датчик не записан")
+	assert_push_error("AtomicFile")
+	assert_push_error("RememberedDevices")
+	var renamed := _hr("hr-1", "Переименован")
+	assert_false(_dev.remember("p1", renamed), "замена записи не записана")
+	assert_push_error("AtomicFile")
+	assert_push_error("RememberedDevices")
+	assert_false(_dev.set_auto_connect("p1", "hr-1", false))
+	assert_push_error("AtomicFile")
+	assert_push_error("RememberedDevices")
+	var in_memory := _dev.sensors("p1")
+	assert_eq(in_memory.size(), 1, "в памяти нет незаписанного датчика")
+	assert_eq(str(in_memory[0]["name"]), "Garmin HRM", "в памяти прежняя запись")
+	assert_true(bool(in_memory[0]["auto_connect"]), "флаг автоподключения прежний")
+	assert_eq(_changes, changes_before, "без сигнала changed при сбое")
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_true(_dev.remember("p1", _hr("hr-2", "Polar H10")), "после устранения сбоя запись проходит")
+	assert_eq(_dev.sensors("p1").size(), 2)
+
+
+func test_set_trainer_write_error_keeps_memory_unchanged() -> void:
+	assert_true(_dev.set_trainer(_trainer()))
+	var changes_before := _changes
+	AtomicFile.simulate_write_error_prefix = _dev.trainer_file_path()
+	assert_false(_dev.set_trainer(RememberedDevices.make_device("kickr-1", "Wahoo KICKR", RememberedDevices.KIND_TRAINER)))
+	assert_push_error("AtomicFile")
+	assert_push_error("RememberedDevices")
+	assert_eq(str(_dev.trainer().get("id", "")), "neo-1", "в памяти прежний станок")
+	assert_eq(_changes, changes_before, "без сигнала changed при сбое")
+	AtomicFile.simulate_write_error_prefix = ""
+
+
+func test_first_trainer_write_error_leaves_no_trainer_in_memory() -> void:
+	AtomicFile.simulate_write_error_prefix = _dev.trainer_file_path()
+	assert_false(_dev.set_trainer(_trainer()))
+	assert_push_error("AtomicFile")
+	assert_push_error("RememberedDevices")
+	assert_false(_dev.has_trainer())
+	assert_eq(_dev.list("p1"), [] as Array[Dictionary])
+	AtomicFile.simulate_write_error_prefix = ""

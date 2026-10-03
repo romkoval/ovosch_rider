@@ -7,8 +7,9 @@ extends RefCounted
 ## или к уже идущей сессии — тогда заезд создаётся сразу с накопленными сэмплами.
 ## Каждые `FLUSH_INTERVAL_SEC` секунд сессионного времени (по `second_elapsed`
 ## исполнителя — на паузе время не идёт) дозаписывает новые сэмплы в поток
-## (`RideRepository.append_samples`) и переписывает метаданные с событиями
-## (`save_meta`): на диске всегда состояние не старше 10 с (крит. 1, 2).
+## (`RideRepository.append_samples`) и записывает метаданные с событиями дешёвым способом
+## (`save_progress` — без переименования файлов, см. `FileRideRepository`): на диске всегда
+## состояние не старше 10 с (крит. 1, 2), а сброс укладывается в бюджет тика (крит. 4).
 ## Событие паузы сбрасывает метаданные сразу (по `event_logged`, т.к. сессия
 ## пишет его в журнал после смены состояния) — пауза не теряется при сбое.
 ## При FINISHED — финальная запись: сводка, `in_progress = false` (`save`).
@@ -82,7 +83,7 @@ func flush() -> void:
 			flushed_samples = total
 	ride.refresh_from_session(session)
 	ride.metadata["in_progress"] = true
-	repository.save_meta(ride)
+	repository.save_progress(ride)
 	last_flush_ms = Time.get_ticks_msec() - t0
 	flush_count += 1
 	flushed.emit(session.executor.elapsed_sec())

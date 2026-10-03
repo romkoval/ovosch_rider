@@ -81,7 +81,8 @@ func remember(profile_id: String, device: Dictionary) -> bool:
 		return set_trainer(device)
 	if profile_id.is_empty():
 		return false
-	var sensors: Array[Dictionary] = _sensors_of(profile_id)
+	# Память меняется только после успешной записи: правим копию списка.
+	var sensors: Array[Dictionary] = _sensors_of(profile_id).duplicate()
 	var record: Dictionary = _normalize(device)
 	var replaced: bool = false
 	for i in sensors.size():
@@ -91,10 +92,11 @@ func remember(profile_id: String, device: Dictionary) -> bool:
 			break
 	if not replaced:
 		sensors.append(record)
-	var ok: bool = _save_sensors(profile_id)
-	if ok:
-		changed.emit()
-	return ok
+	if not _write_sensors(profile_id, sensors):
+		return false
+	_sensors[profile_id] = sensors
+	changed.emit()
+	return true
 
 
 ## Забыть устройство: датчик — из профиля; если id совпадает с общим станком — забыть станок.
@@ -183,17 +185,18 @@ func has_trainer() -> bool:
 	return not _trainer.is_empty()
 
 
-## Запомнить общий станок (kind принудительно `"trainer"`).
+## Запомнить общий станок (kind принудительно `"trainer"`). false при сбое записи —
+## тогда в памяти остаётся прежний станок.
 func set_trainer(device: Dictionary) -> bool:
 	if str(device.get("id", "")).is_empty():
 		return false
 	var record: Dictionary = _normalize(device)
 	record["kind"] = KIND_TRAINER
+	if not _write_trainer(record):
+		return false
 	_trainer = record
-	var ok: bool = _save_trainer()
-	if ok:
-		changed.emit()
-	return ok
+	changed.emit()
+	return true
 
 
 func clear_trainer() -> void:
@@ -269,8 +272,13 @@ func _load_sensors(profile_id: String) -> Array[Dictionary]:
 
 
 func _save_sensors(profile_id: String) -> bool:
+	return _write_sensors(profile_id, _sensors_of(profile_id))
+
+
+## Записать данный список датчиков профиля (память не трогается).
+func _write_sensors(profile_id: String, sensors: Array[Dictionary]) -> bool:
 	var items: Array = []
-	for d in _sensors_of(profile_id):
+	for d in sensors:
 		items.append(d)
 	return _write_json(profile_file_path(profile_id), {"schema": SCHEMA_VERSION, "profile_id": profile_id, "devices": items})
 
@@ -284,8 +292,9 @@ func _load_trainer() -> void:
 		_trainer["kind"] = KIND_TRAINER
 
 
-func _save_trainer() -> bool:
-	return _write_json(trainer_file_path(), {"schema": SCHEMA_VERSION, "trainer": _trainer})
+## Записать данный станок (память не трогается).
+func _write_trainer(record: Dictionary) -> bool:
+	return _write_json(trainer_file_path(), {"schema": SCHEMA_VERSION, "trainer": record})
 
 
 func _read_json(path: String) -> Dictionary:

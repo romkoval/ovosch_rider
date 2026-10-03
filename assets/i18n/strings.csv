@@ -254,6 +254,7 @@ ui.settings.store_unreadable,"Не удалось прочитать защищ�
 ui.settings.store_reset,Сбросить привязки,Reset links
 ui.settings.store_reset_confirm,"Удалить все сохранённые привязки Strava и Intervals.icu для всех профилей? Профили и заезды останутся, сервисы нужно будет привязать заново.","Delete all saved Strava and Intervals.icu links for every profile? Profiles and rides are kept; you will need to link the services again."
 ui.settings.store_reset_confirm_ok,Сбросить,Reset
+ui.settings.locale_save_failed,"Язык переключён, но не сохранён: после перезапуска может вернуться прежний","Language switched but not saved: the previous language may return after a restart"
 ui.settings.store_reset_done,Привязки сброшены — привяжите сервисы заново,Links have been reset — link the services again
 ui.settings.store_reset_failed,Не удалось сбросить защищённое хранилище,Could not reset secure storage
 ui.settings.err_storage_failed,не удалось сохранить в защищённое хранилище,could not save to secure storage

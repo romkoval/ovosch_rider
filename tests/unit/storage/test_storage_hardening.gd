@@ -205,3 +205,118 @@ func test_secure_store_attach_is_idempotent_and_does_not_retain_store() -> void:
 	var ref: WeakRef = weakref(store)
 	store = null
 	assert_null(ref.get_ref(), "подписка не удерживает хранилище (нет лямбды с self)")
+
+
+# ---------------------------------------------------------------------------
+# Периодический сброс без rename (REQ-LOC-07 крит. 1, 4)
+# ---------------------------------------------------------------------------
+
+func _ride_dir_abs(ride: Ride) -> String:
+	return ProjectSettings.globalize_path(_dir).path_join(PROFILE).path_join(ride.id)
+
+
+func _in_progress_ride(n: int) -> Ride:
+	var r := _ride(n)
+	r.metadata = {"in_progress": true, "elapsed_sec": n, "event_count": 0}
+	r.events = [{"type": WorkoutSession.EVENT_START, "at_sec": 0.0, "value": 0}] as Array[Dictionary]
+	return r
+
+
+func test_save_progress_writes_in_place_without_touching_meta_and_index() -> void:
+	var repo := FileRideRepository.new(_dir)
+	var ride := _in_progress_ride(3)
+	assert_ne(repo.save(ride), "")
+	var dir := _ride_dir_abs(ride)
+	var meta_before := FileAccess.get_file_as_string(dir.path_join(FileRideRepository.META_FILE))
+	var index_path := ProjectSettings.globalize_path(_dir).path_join(PROFILE).path_join(FileRideRepository.INDEX_FILE)
+	var index_before := FileAccess.get_file_as_string(index_path)
+	ride.events.append({"type": WorkoutSession.EVENT_SKIP, "at_sec": 2.0, "value": 0})
+	ride.metadata["elapsed_sec"] = 20
+	assert_true(repo.save_progress(ride))
+	assert_eq(FileAccess.get_file_as_string(dir.path_join(FileRideRepository.META_FILE)), meta_before, "meta.json не переписывается")
+	assert_eq(FileAccess.get_file_as_string(index_path), index_before, "index.json не переписывается")
+	assert_true(FileAccess.file_exists(dir.path_join(FileRideRepository.PROGRESS_FILE)))
+	assert_false(FileAccess.file_exists(AtomicFile.tmp_path(dir.path_join(FileRideRepository.PROGRESS_FILE))), "без временного файла")
+	var fresh := FileRideRepository.new(_dir).get_ride(ride.id)
+	assert_eq(fresh.events.size(), 2, "читатель видит промежуточную копию")
+	assert_eq(int(fresh.metadata["elapsed_sec"]), 20)
+	assert_eq(repo.list(PROFILE)[0].ride_id, ride.id, "индекс в памяти обновлён")
+
+
+func test_save_progress_shorter_content_is_padded_and_readable() -> void:
+	var repo := FileRideRepository.new(_dir)
+	var ride := _in_progress_ride(3)
+	repo.save(ride)
+	ride.metadata["note"] = "x".repeat(2000)
+	ride.metadata["elapsed_sec"] = 10
+	assert_true(repo.save_progress(ride))
+	ride.metadata.erase("note")
+	ride.metadata["elapsed_sec"] = 20
+	assert_true(repo.save_progress(ride))
+	var progress := _ride_dir_abs(ride).path_join(FileRideRepository.PROGRESS_FILE)
+	assert_gt(FileAccess.get_file_as_bytes(progress).size(), 2000, "файл не укорачивается")
+	var fresh := FileRideRepository.new(_dir).get_ride(ride.id)
+	assert_eq(int(fresh.metadata["elapsed_sec"]), 20)
+	assert_false(fresh.metadata.has("note"))
+
+
+func test_torn_progress_file_falls_back_to_meta_json() -> void:
+	var repo := FileRideRepository.new(_dir)
+	var ride := _in_progress_ride(3)
+	repo.save(ride)
+	ride.metadata["elapsed_sec"] = 30
+	repo.save_progress(ride)
+	var progress := _ride_dir_abs(ride).path_join(FileRideRepository.PROGRESS_FILE)
+	var f := FileAccess.open(progress, FileAccess.READ_WRITE)
+	f.seek(5)
+	f.store_string("\u0000\u0000обрыв")
+	f.close()
+	var fresh := FileRideRepository.new(_dir).get_ride(ride.id)
+	assert_not_null(fresh, "заезд не теряется")
+	assert_eq(int(fresh.metadata["elapsed_sec"]), 3, "используется meta.json")
+	var recovered := FileRideRepository.new(_dir).recover_in_progress(PROFILE)
+	assert_eq(recovered.size(), 1)
+
+
+func test_newer_meta_json_wins_and_finish_removes_progress_copy() -> void:
+	var repo := FileRideRepository.new(_dir)
+	var ride := _in_progress_ride(3)
+	repo.save(ride)
+	ride.metadata["elapsed_sec"] = 10
+	repo.save_progress(ride)
+	ride.events.append({"type": WorkoutSession.EVENT_PAUSE, "at_sec": 10.0, "value": 0})
+	ride.metadata["elapsed_sec"] = 10
+	assert_true(repo.save_meta(ride), "пауза — атомарная запись meta.json")
+	var dir := _ride_dir_abs(ride)
+	assert_false(FileAccess.file_exists(dir.path_join(FileRideRepository.PROGRESS_FILE)), "копия удалена после полной записи")
+	assert_eq(FileRideRepository.new(_dir).get_ride(ride.id).events.size(), 2)
+	ride.metadata["elapsed_sec"] = 20
+	repo.save_progress(ride)
+	ride.metadata["in_progress"] = false
+	assert_ne(repo.save(ride), "")
+	assert_false(FileAccess.file_exists(dir.path_join(FileRideRepository.PROGRESS_FILE)))
+	var fresh := FileRideRepository.new(_dir)
+	assert_false(fresh.get_ride(ride.id).is_in_progress(), "завершённый заезд не перекрывается копией")
+	assert_false(fresh.list(PROFILE)[0].in_progress)
+
+
+func test_recorder_periodic_flush_does_not_rewrite_meta_or_index() -> void:
+	var repo := FileRideRepository.new(_dir)
+	var p := Profile.create("Rec")
+	p.id = PROFILE
+	var t := FakeTrainer.new(7)
+	t.connect_delay_sec = 0.0
+	t.connect_device("fake-hardening")
+	var s := WorkoutSession.new(Workout.make("P", [WorkoutStep.watts(120, 150.0)] as Array[WorkoutStep], "zwo"), t, 200, 1.0, 70.0)
+	var rec := RideRecorder.new(repo, p, s)
+	s.start()
+	var dir := ProjectSettings.globalize_path(_dir).path_join(PROFILE).path_join(rec.ride_id())
+	var meta_before := FileAccess.get_file_as_string(dir.path_join(FileRideRepository.META_FILE))
+	for i in 30:
+		s.tick(1.0)
+	assert_eq(rec.flush_count, 3)
+	assert_eq(FileAccess.get_file_as_string(dir.path_join(FileRideRepository.META_FILE)), meta_before, "периодический сброс не переписывает meta.json")
+	var on_disk := FileRideRepository.new(_dir).get_ride(rec.ride_id())
+	assert_eq(on_disk.samples.size(), 30, "поток дописан")
+	assert_eq(int(on_disk.metadata["elapsed_sec"]), 30, "метаданные не старше 10 с")
+	rec.dispose()

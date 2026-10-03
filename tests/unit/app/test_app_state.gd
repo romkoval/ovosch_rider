@@ -1,6 +1,6 @@
 extends GutTest
 ## Тесты модели навигации AppState (REQ-PRF-05 крит. 1–3, REQ-NFR-08 крит. 3); сбой записи
-## активного профиля при выборе (REQ-PRF-01 крит. 6).
+## активного профиля при выборе (REQ-PRF-01 крит. 6); сбой записи языка (REQ-NFR-08 крит. 3).
 
 var _dir: String
 var _repo: ProfileRepository
@@ -171,3 +171,22 @@ func test_select_profile_fails_when_active_profile_not_persisted() -> void:
 	assert_true(s.select_profile(b.id))
 	assert_eq(s.last_select_error(), "")
 	assert_eq(s.current_screen, AppState.Screen.HOME)
+
+
+func test_set_locale_applies_language_but_reports_settings_write_failure() -> void:
+	var previous := TranslationServer.get_locale()
+	var settings := AppSettings.new(_dir + "settings.json")
+	var s := AppState.new(_repo, settings)
+	AtomicFile.simulate_write_error_prefix = settings.path()
+	assert_true(s.set_locale("ru"), "язык применяется и при сбое записи")
+	assert_push_error("AtomicFile")
+	assert_push_error("AppSettings")
+	assert_eq(s.locale(), "ru")
+	assert_eq(s.last_settings_error(), ERR_FILE_CANT_WRITE, "сбой сохранения не теряется")
+	assert_false(FileAccess.file_exists(settings.path()), "на диске ничего не записано")
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_true(s.set_locale("en"))
+	assert_eq(s.last_settings_error(), OK, "успешная запись сбрасывает ошибку")
+	assert_eq(AppSettings.load_from(settings.path()).locale, "en")
+	assert_false(s.set_locale("de"))
+	TranslationServer.set_locale(previous)

@@ -19,6 +19,17 @@ extends RideRepository
 ## cadence_age i16, heart_rate_age i16, flags u8 (бит 0 has_power, 1 has_cadence,
 ## 2 has_speed, 3 has_heart_rate, 4 erg_enabled), 1 байт выравнивания.
 ##
+## Периодический сброс во время тренировки (`save_progress`, LOC-07 крит. 4) не переименовывает
+## файлы: на ext4 rename поверх существующего файла запускает принудительную запись данных
+## (auto_da_alloc) и на нагруженном диске занимает сотни миллисекунд. Поэтому поток
+## дописывается в конец `samples.bin`, а метаданные пишутся на место в
+## `<ride_id>/meta.progress.json` — без усечения (хвост добивается пробелами) и без rename;
+## `index.json` при этом обновляется только в памяти. Читатель берёт `meta.progress.json`, только
+## если `meta.json` помечен `in_progress`, копия разбирается и не старше `meta.json` (по
+## `event_count`, `elapsed_sec`); оборванная запись копии → используется `meta.json`
+## (не старше начала заезда или последней паузы). `save`/`save_meta` пишут атомарно и
+## удаляют копию.
+##
 ## Устойчивость: JSON и полная перезапись `samples.bin` идут через временный файл и
 ## переименование (`AtomicFile`), дозапись — в конец существующего файла; повреждённый
 ## `index.json` перестраивается по `meta.json` заездов; повреждённый `meta.json`
@@ -27,6 +38,8 @@ extends RideRepository
 const DEFAULT_DIR: String = "user://rides/"
 const INDEX_FILE: String = "index.json"
 const META_FILE: String = "meta.json"
+## Промежуточная копия метаданных незавершённого заезда (см. `save_progress`).
+const PROGRESS_FILE: String = "meta.progress.json"
 const SAMPLES_FILE: String = "samples.bin"
 const INDEX_SCHEMA_VERSION: int = 1
 
@@ -89,6 +102,26 @@ func save_meta(ride: Ride) -> bool:
 		return false
 	_locations[ride.id] = ride.profile_id
 	_index_put(ride)
+	rides_changed.emit(ride.profile_id)
+	return true
+
+
+## Периодический сброс метаданных (LOC-07 крит. 1, 4): запись на место в `meta.progress.json`
+## без усечения и rename, индекс — только в памяти (на диске остаётся запись `in_progress`
+## от начала заезда). Для завершённого заезда — обычный `save_meta`.
+func save_progress(ride: Ride) -> bool:
+	if ride == null or ride.profile_id.is_empty() or ride.id.is_empty():
+		push_warning("FileRideRepository.save_progress: нужен заезд с id и профилем")
+		return false
+	if not ride.is_in_progress():
+		return save_meta(ride)
+	var dir := _ride_dir(ride.profile_id, ride.id)
+	if not DirAccess.dir_exists_absolute(dir) or not FileAccess.file_exists(dir.path_join(META_FILE)):
+		return save_meta(ride)  # первая запись заезда — атомарно
+	if not _write_in_place(dir.path_join(PROGRESS_FILE), JSON.stringify(ride.to_meta_dict()).to_utf8_buffer()):
+		return false
+	_locations[ride.id] = ride.profile_id
+	_index_put(ride, false)
 	rides_changed.emit(ride.profile_id)
 	return true
 
@@ -283,19 +316,75 @@ static func _remove_tree(abs_path: String) -> void:
 # ---------------------------------------------------------------------------
 
 func _write_meta(ride: Ride) -> bool:
-	var path := _ride_dir(ride.profile_id, ride.id).path_join(META_FILE)
-	return _write_text_atomic(path, JSON.stringify(ride.to_meta_dict(), "\t"))
+	var dir := _ride_dir(ride.profile_id, ride.id)
+	if not _write_text_atomic(dir.path_join(META_FILE), JSON.stringify(ride.to_meta_dict(), "\t")):
+		return false
+	# Полные метаданные записаны — промежуточная копия больше не нужна.
+	var progress := dir.path_join(PROGRESS_FILE)
+	if FileAccess.file_exists(progress):
+		DirAccess.remove_absolute(progress)
+	return true
 
 
+## `meta.json`, а для незавершённого заезда — более свежая целая копия `meta.progress.json`.
 func _read_meta(path: String) -> Ride:
 	if not FileAccess.file_exists(path):
 		return null
-	var text := FileAccess.get_file_as_string(path)
-	var json := JSON.new()
-	if json.parse(text) != OK or not (json.data is Dictionary):
-		push_warning("FileRideRepository: повреждён %s (%s)" % [path, json.get_error_message()])
+	var data := _parse_json_file(path)
+	if data.is_empty():
+		push_warning("FileRideRepository: повреждён %s" % path)
 		return null
-	return Ride.from_meta_dict(json.data)
+	if _bool_of(data.get("metadata", {}), "in_progress"):
+		var progress := _parse_json_file(path.get_base_dir().path_join(PROGRESS_FILE))
+		if not progress.is_empty() and str(progress.get("id", "")) == str(data.get("id", "")) \
+				and _bool_of(progress.get("metadata", {}), "in_progress") and _not_older(progress, data):
+			data = progress
+	return Ride.from_meta_dict(data)
+
+
+## Словарь из JSON-файла или {} (нет файла, оборванная запись, не объект).
+static func _parse_json_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var json := JSON.new()
+	if json.parse(FileAccess.get_file_as_string(path)) != OK or not (json.data is Dictionary):
+		return {}
+	return json.data
+
+
+static func _bool_of(meta: Variant, key: String) -> bool:
+	return meta is Dictionary and bool((meta as Dictionary).get(key, false))
+
+
+## Копия `a` не старше `b`: событий не меньше и сессионное время не меньше.
+static func _not_older(a: Dictionary, b: Dictionary) -> bool:
+	var ma: Dictionary = a.get("metadata", {}) if a.get("metadata") is Dictionary else {}
+	var mb: Dictionary = b.get("metadata", {}) if b.get("metadata") is Dictionary else {}
+	var events_a: int = (a.get("events") as Array).size() if a.get("events") is Array else 0
+	var events_b: int = (b.get("events") as Array).size() if b.get("events") is Array else 0
+	return events_a >= events_b and float(ma.get("elapsed_sec", 0)) >= float(mb.get("elapsed_sec", 0))
+
+
+## Запись на место без усечения и переименования (дёшево на нагруженном диске): файл не
+## укорачивается — хвост прежнего содержимого затирается пробелами (JSON их допускает).
+static func _write_in_place(path: String, bytes: PackedByteArray) -> bool:
+	var exists := FileAccess.file_exists(path)
+	var file := FileAccess.open(path, FileAccess.READ_WRITE if exists else FileAccess.WRITE)
+	if file == null:
+		push_error("FileRideRepository: не удалось записать %s (%s)" % [path, error_string(FileAccess.get_open_error())])
+		return false
+	var old_length: int = file.get_length()
+	file.seek(0)
+	var ok := file.store_buffer(bytes)
+	if ok and old_length > bytes.size():
+		var pad := PackedByteArray()
+		pad.resize(old_length - bytes.size())
+		pad.fill(0x20)
+		ok = file.store_buffer(pad)
+	file.close()
+	if not ok:
+		push_error("FileRideRepository: не удалось записать %s" % path)
+	return ok
 
 
 ## Временный файл → проверка ошибки записи → rename (см. `AtomicFile`).
@@ -336,7 +425,8 @@ func _index(profile_id: String) -> Array[RideSummary]:
 	return entries
 
 
-func _index_put(ride: Ride) -> void:
+## Обновить строку индекса; `persist = false` — только в памяти (периодический сброс).
+func _index_put(ride: Ride, persist: bool = true) -> void:
 	var entries := _index(ride.profile_id)
 	ride.sync_summary_header()
 	var copy := RideSummary.from_dict(ride.summary.to_dict())
@@ -349,7 +439,8 @@ func _index_put(ride: Ride) -> void:
 	if not replaced:
 		entries.append(copy)
 	_sort_index(entries)
-	_write_index(ride.profile_id, entries)
+	if persist:
+		_write_index(ride.profile_id, entries)
 
 
 func _index_remove(profile_id: String, id: String) -> bool:

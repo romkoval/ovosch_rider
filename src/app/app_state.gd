@@ -40,6 +40,8 @@ var _profile_chosen: bool = false
 ## `storage_write_failed` (`ProfileRepository.ERR_*`); экран выбора показывает его как
 ## `error.profile.<code>`.
 var _last_select_error: String = ""
+## Результат записи настроек последним `set_locale` (`OK` — сохранено или настроек нет).
+var _last_settings_error: Error = OK
 
 
 ## `settings` — хранилище настроек приложения (язык); null — язык не сохраняется.
@@ -65,12 +67,16 @@ static func pick_locale(system_language: String) -> String:
 ## Применить язык без перезапуска (REQ-NFR-08 крит. 3, 4): сохранить в `AppSettings`,
 ## `TranslationServer.set_locale`, `locale_changed` для перерисовки экранов.
 ## Неподдерживаемый язык → false. Единственная точка смены языка для UI (Н-5).
+## Язык применяется и при сбое записи настроек (true); сбой не теряется — код в
+## `last_settings_error()` (`ERR_FILE_CANT_WRITE`), экран настроек показывает предупреждение.
 func set_locale(locale: String) -> bool:
 	if not SUPPORTED_LOCALES.has(locale):
 		return false
+	_last_settings_error = OK
 	if _settings != null:
 		_settings.locale = locale
-		_settings.save()
+		if not _settings.save():
+			_last_settings_error = ERR_FILE_CANT_WRITE
 	TranslationServer.set_locale(locale)
 	locale_changed.emit(locale)
 	return true
@@ -109,6 +115,11 @@ func is_profile_chosen() -> bool:
 ## Код ошибки последнего `select_profile` ("" — успех).
 func last_select_error() -> String:
 	return _last_select_error
+
+
+## Ошибка записи настроек последним `set_locale` (`OK` — язык сохранён на диск).
+func last_settings_error() -> Error:
+	return _last_settings_error
 
 
 ## Выбрать профиль: делает его активным и открывает HOME. false — профиль не найден или

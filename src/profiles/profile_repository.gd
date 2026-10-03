@@ -14,9 +14,9 @@ extends RefCounted
 ## - `save()` валидирует профиль (`Profile.validate()`) и уникальность имени без
 ##   учёта регистра (REQ-PRF-01 крит. 1, 2); при ошибках ничего не пишет.
 ## - `delete()` отказывает удалять последний профиль (REQ-PRF-01 крит. 5).
-## - `delete()` и `set_active()` меняют состояние в памяти только после успешной записи на
-##   диск: при сбое возвращают `storage_write_failed`, список и активный профиль прежние,
-##   сигналы и каскадные хуки не вызываются.
+## - `save()`, `delete()` и `set_active()` меняют состояние в памяти только после успешной
+##   записи на диск: при сбое возвращают `storage_write_failed`, список и активный профиль
+##   прежние, сигналы и каскадные хуки не вызываются.
 ## - Удаление каскадно: сначала вызываются хуки `add_on_delete_hook`, затем
 ##   испускается `profile_deleted(id)` — на них подписываются хранилища секретов,
 ##   датчиков и заездов (T-010/T-011/T-041), сам модуль профилей о них не знает.
@@ -128,6 +128,8 @@ func save(profile: Profile) -> Array[String]:
 		last_errors = errors
 		return errors
 	var snapshot := profile.duplicate_profile()
+	var previous_profiles := _profiles.duplicate()
+	var previous_active := _active_id
 	var existing := _find_stored(profile.id)
 	if existing == null:
 		_profiles.append(snapshot)
@@ -135,12 +137,18 @@ func save(profile: Profile) -> Array[String]:
 		_profiles[_profiles.find(existing)] = snapshot
 	if _active_id.is_empty():
 		_active_id = profile.id
-		active_profile_changed.emit(_active_id)
 	if not _persist():
+		# Файл не записан — память возвращается к прежнему состоянию (новый профиль не
+		# появляется, изменённый — прежний, активный — прежний), сигналы не испускаются.
+		_profiles = previous_profiles
+		_active_id = previous_active
 		errors.append(ERR_STORAGE_WRITE_FAILED)
+		last_errors = errors
+		return errors
 	last_errors = errors
-	if errors.is_empty():
-		profile_saved.emit(profile.id)
+	if _active_id != previous_active:
+		active_profile_changed.emit(_active_id)
+	profile_saved.emit(profile.id)
 	return errors
 
 

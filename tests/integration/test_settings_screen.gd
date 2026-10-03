@@ -69,6 +69,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	AtomicFile.simulate_write_error_prefix = ""
 	TranslationServer.set_locale(_previous_locale)
 	if _strava != null:
 		_strava.dispose()
@@ -632,7 +633,7 @@ func test_unreadable_store_shows_warning_and_reset_with_confirmation_unlinks_ser
 	assert_eq(store.size(), 0, "все привязки стёрты")
 	assert_false(s.is_reset_store_pending())
 	assert_false(s.is_store_warning_visible(), "после сброса предупреждения нет")
-	assert_eq(s.store_message_text(), "Links have been reset — link the services again")
+	assert_eq(s.notice_text(), "Links have been reset — link the services again")
 	assert_eq(s.intervals_status_text(), "Intervals.icu not linked")
 	assert_true((s.get_node("%IntervalsForgetButton") as Button).disabled)
 	assert_eq(s.strava_status_text(), "Strava not linked")
@@ -653,3 +654,21 @@ func _strava_service(store: SecureStore) -> StravaService:
 	var service := StravaService.new(_repo.get_active(), _transport, store, rides,
 		StravaConfig.from_values("1", "fixture-secret"), Callable(), _dir)
 	return service
+
+
+func test_locale_save_failure_applies_language_and_shows_notice() -> void:
+	var s := _screen()
+	assert_eq(s.notice_text(), "")
+	AtomicFile.simulate_write_error_prefix = _settings.path()
+	assert_true(s.set_locale("ru"), "язык применён")
+	assert_push_error("AtomicFile")
+	assert_push_error("AppSettings")
+	assert_eq(TranslationServer.get_locale(), "ru")
+	assert_eq((s.get_node("%SaveProfileButton") as Button).text, "Сохранить профиль", "тексты перерисованы")
+	assert_eq(s.notice_text(), "Язык переключён, но не сохранён: после перезапуска может вернуться прежний")
+	assert_true((s.get_node("%NoticeLabel") as Label).visible)
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_true(s.set_locale("en"))
+	assert_eq(s.notice_text(), "", "успешное сохранение снимает предупреждение")
+	assert_false((s.get_node("%NoticeLabel") as Label).visible)
+	assert_eq(AppSettings.load_from(_settings.path()).locale, "en")

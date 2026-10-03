@@ -35,6 +35,8 @@ const API_ERROR_KEYS: Dictionary = {
 	ApiResult.CODE_STORAGE_FAILED: "ui.settings.err_storage_failed",
 }
 const API_ERROR_UNKNOWN_KEY: String = "ui.settings.err_unknown"
+## Notice: the language was applied but `AppSettings` could not be written.
+const LOCALE_SAVE_FAILED_KEY: String = "ui.settings.locale_save_failed"
 ## Human-readable texts for `IntervalsSync.WARN_*` (local_override has its own message).
 const SYNC_WARNING_KEYS: Dictionary = {
 	IntervalsSync.WARN_FTP_MISSING: "ui.settings.warn_ftp_missing",
@@ -99,6 +101,8 @@ var _last_sync_result: ApiResult = null
 var _last_sync_warnings: Array[String] = []
 ## Ждёт подтверждения сброса хранилища секретов («Сбросить привязки»).
 var _reset_pending: bool = false
+## Translation key of the current screen-level notice ("" — none).
+var _notice_key: String = ""
 
 @onready var _locale_option: OptionButton = %LocaleOption
 @onready var _name_edit: LineEdit = %NameEdit
@@ -122,7 +126,8 @@ var _reset_pending: bool = false
 @onready var _store_warning: Control = %StoreWarning
 @onready var _store_warning_label: Label = %StoreWarningLabel
 @onready var _reset_store_button: Button = %ResetStoreButton
-@onready var _store_message_label: Label = %StoreMessageLabel
+## Screen-level notice (store reset result, unsaved language); re-translated on every render.
+@onready var _notice_label: Label = %NoticeLabel
 @onready var _reset_store_dialog: ConfirmationDialog = %ResetStoreDialog
 @onready var _strava_status_label: Label = %StravaStatusLabel
 @onready var _strava_connect_button: StravaConnectButton = %StravaConnectButton
@@ -205,6 +210,7 @@ func refresh_texts() -> void:
 		return
 	_render_static()
 	_render_store_warning()
+	_render_notice()
 	_render_locale()
 	_render_power_source_items()
 	_render_profile_status()
@@ -411,9 +417,15 @@ func api_error_text(code: String) -> String:
 
 ## Apply and persist the interface language through `AppState.set_locale` (the only
 ## place that touches the translation server and settings); false if unsupported.
+## The language is applied even if saving fails; then a notice says it was not saved
+## (`AppState.last_settings_error()`), and a later successful save removes the notice.
 func set_locale(locale: String) -> bool:
 	if _app_state == null or not _app_state.set_locale(locale):
 		return false
+	if _app_state.last_settings_error() != OK:
+		_notice_key = LOCALE_SAVE_FAILED_KEY
+	elif _notice_key == LOCALE_SAVE_FAILED_KEY:
+		_notice_key = ""
 	refresh_texts()
 	return true
 
@@ -622,8 +634,19 @@ func store_warning_text() -> String:
 	return _store_warning_label.text if _store_warning.visible else ""
 
 
-func store_message_text() -> String:
-	return _store_message_label.text
+## Screen-level notice text ("" — none): store reset result or unsaved language.
+func notice_text() -> String:
+	return _notice_label.text
+
+
+func _set_notice(key: String) -> void:
+	_notice_key = key
+	_render_notice()
+
+
+func _render_notice() -> void:
+	_notice_label.text = tr(_notice_key) if not _notice_key.is_empty() else ""
+	_notice_label.visible = not _notice_key.is_empty()
 
 
 func _render_store_warning() -> void:
@@ -659,7 +682,7 @@ func confirm_reset_store() -> void:
 	_last_sync_result = null
 	_last_sync_warnings = []
 	refresh_texts()
-	_store_message_label.text = tr("ui.settings.store_reset_done") if _store.loaded_ok() else tr("ui.settings.store_reset_failed")
+	_set_notice("ui.settings.store_reset_done" if _store.loaded_ok() else "ui.settings.store_reset_failed")
 
 
 func cancel_reset_store() -> void:
