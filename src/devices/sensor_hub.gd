@@ -4,7 +4,8 @@ extends TrainerDevice
 ## (REQ-DEV-03 крит. 3, REQ-DEV-04 крит. 4, REQ-DEV-05 крит. 2, 3, REQ-WRK-08 крит. 4,
 ## REQ-DEV-08 крит. 2; решения 12 и 13).
 ##
-## Команды и состояние подключения делегируются станку; телеметрия агрегируется:
+## Команды (включая SIM, его поддержку и диапазон уклона, REQ-FRD-04) и состояние подключения
+## делегируются станку; телеметрия агрегируется:
 ## - пульс: датчик HRS > пульс станка;
 ## - каденс: датчик CSC > crank data измерителя мощности > станок;
 ## - мощность: `power_source` ("trainer" по умолчанию | "power_meter"), затем другой;
@@ -164,6 +165,21 @@ func is_erg_enabled() -> bool:
 func set_resistance_level(percent: int) -> void:
 	if trainer != null:
 		trainer.set_resistance_level(percent)
+
+
+func set_simulation(grade_pct: float, wind_mps: float = DEFAULT_SIM_WIND_MPS,
+		crr: float = DEFAULT_SIM_CRR, cw: float = DEFAULT_SIM_CW) -> void:
+	if trainer != null:
+		trainer.set_simulation(grade_pct, wind_mps, crr, cw)
+
+
+func simulation_support() -> int:
+	return trainer.simulation_support() if trainer != null else SimulationSupport.UNKNOWN
+
+
+func inclination_range() -> Vector2:
+	return trainer.inclination_range() if trainer != null \
+		else Vector2(DEFAULT_INCLINATION_MIN_PCT, DEFAULT_INCLINATION_MAX_PCT)
 
 
 func get_connection_state() -> int:
