@@ -11,6 +11,8 @@ extends Control
 ## Строки — через ключи `ui.workout.*`; значения HUD берутся из `HudModel.state()`.
 ## После FINISHED показывается сводка-заглушка с кнопкой «На главный»; сохранение
 ## заезда — этап 5, для него есть сигнал `session_finished(session)`.
+## Фон под HUD — `RideScene` в `SubViewportContainer` (REQ-D3D-01); сцена привязывается
+## к сессии в `start()` (`RideScene.bind`) и отвязывается при завершении/перезапуске.
 
 const UNIT_KEY: String = "ui.workout.unit_w"
 const RESISTANCE_STEP: int = 5
@@ -40,6 +42,8 @@ var _hud: HudModel
 var _keep_awake: KeepAwake
 var _stop_pending: bool = false
 
+@onready var _ride_scene: RideScene = %RideScene
+@onready var _viewport_container: SubViewportContainer = %ViewportContainer
 @onready var _hud_root: Control = %HudRoot
 @onready var _summary_root: Control = %SummaryRoot
 @onready var _no_session_label: Label = %NoSessionLabel
@@ -132,6 +136,7 @@ func start() -> bool:
 	if _connections != null:
 		_connections.ticks_devices = false
 	_stop_pending = false
+	_ride_scene.bind(_session, _profile)
 	_session.start()
 	_ticker.start()
 	refresh()
@@ -156,6 +161,11 @@ func keep_awake() -> KeepAwake:
 
 func progress_bar() -> WorkoutProgressBar:
 	return _progress_bar
+
+
+## 3D-фон под HUD.
+func ride_scene() -> RideScene:
+	return _ride_scene
 
 
 ## Уход с экрана тренировки: снимаем запрет гашения (REQ-NFR-04 крит. 1).
@@ -364,7 +374,7 @@ func _render() -> void:
 	_countdown_label.text = s["countdown_text"]
 	_countdown_label.modulate = ZonePalette.COLORS["orange"] if s["about_to_change"] else Color.WHITE
 	_step_label.text = tr("ui.workout.step").format({"step": s["step_text"]})
-	_connection_label.text = s["connection_text"]
+	_connection_label.text = tr(s["connection_key"])
 	_cue_label.text = s["cue_text"]
 	_cue_label.visible = not str(s["cue_text"]).is_empty()
 	_pause_button.text = tr("ui.workout.resume") if s["session_state"] == WorkoutSession.State.PAUSED else tr("ui.workout.pause")
@@ -383,6 +393,8 @@ func _render_summary() -> void:
 		"distance": "%.1f" % (float(m["distance_m"]) / 1000.0),
 		"samples": m["sample_count"],
 		"early": tr("ui.workout.stopped_early") if m["stopped_early"] else "",
+	}) + "\n" + tr("ui.workout.summary_paused").format({
+		"paused": HudModel.format_elapsed(int(round(float(m["paused_total_sec"])))),
 	})
 
 
@@ -396,6 +408,8 @@ func _on_session_state(state: int) -> void:
 			_ticker.stop()
 		if _connections != null:
 			_connections.ticks_devices = true
+		if _ride_scene != null:
+			_ride_scene.unbind()
 		session_finished.emit(_session)
 	refresh()
 
@@ -418,6 +432,8 @@ func _teardown_session() -> void:
 		_session.stop()
 	if _connections != null:
 		_connections.ticks_devices = true
+	if _ride_scene != null:
+		_ride_scene.unbind()
 	_session = null
 	_hud = null
 

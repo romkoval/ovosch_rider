@@ -124,3 +124,5 @@ ui.workout.minus_5,−5,−5
 ui.workout.plus_5,+5,+5
 ui.workout.minus_5pct,−5 %,−5 %
 ui.workout.plus_5pct,+5 %,+5 %
+ui.devices.ble_unavailable,Bluetooth недоступен: нативный модуль не загружен или адаптер выключен,Bluetooth unavailable: native module not loaded or adapter is off
+ui.workout.summary_paused,Пауз: {paused},Paused: {paused}

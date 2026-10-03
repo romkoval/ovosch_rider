@@ -58,7 +58,7 @@ func test_dropout_mid_step_hud_shows_reconnecting_timer_runs_slots_no_data() -> 
 		_second(150)
 	_drop()
 	assert_eq(_trainer.get_connection_state(), TrainerDevice.ConnectionState.RECONNECTING, "REQ-DEV-08 крит. 1")
-	assert_eq(_hud.state()["connection_text"], "Reconnecting…", "HUD показывает переподключение")
+	assert_eq(_hud.state()["connection_key"], "ui.hud.connection.reconnecting", "HUD показывает переподключение")
 	for i in 3:
 		_second(-1)
 	assert_eq(_session.executor.elapsed_sec(), 7, "крит. 2: таймер сессии идёт")
@@ -80,7 +80,7 @@ func test_reconnect_sends_request_control_then_target_in_same_second() -> void:
 	var writes := _cp_writes()
 	assert_eq(writes[0], "00", "Request Control заново")
 	assert_eq(writes[1], "059600", "REQ-DEV-08 крит. 3: цель 150 Вт в ту же секунду после connected")
-	assert_eq(_hud.state()["connection_text"], "Trainer connected")
+	assert_eq(_hud.state()["connection_key"], "ui.hud.connection.connected")
 	assert_eq(_session.executor.elapsed_sec(), 5, "команды ушли без продвижения времени")
 
 
@@ -147,7 +147,7 @@ func test_reconnect_attempts_every_5s_keep_session_alive() -> void:
 	assert_eq(_bridge.calls_of("connect_peripheral").size(), 2, "попытки через 5 с без лимита (решение 12)")
 	assert_eq(_session.get_state(), WorkoutSession.State.RUNNING)
 	assert_eq(_session.executor.elapsed_sec(), 11)
-	assert_eq(_hud.state()["connection_text"], "Reconnecting…")
+	assert_eq(_hud.state()["connection_key"], "ui.hud.connection.reconnecting")
 	assert_eq(_hud.state()["connection_state"], TrainerDevice.ConnectionState.RECONNECTING)
 
 
@@ -156,7 +156,7 @@ func test_user_disconnect_is_final_and_hud_shows_disconnected() -> void:
 	_second(150)
 	_trainer.disconnect_device()
 	assert_eq(_trainer.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED)
-	assert_eq(_hud.state()["connection_text"], "Trainer disconnected")
+	assert_eq(_hud.state()["connection_key"], "ui.hud.connection.disconnected")
 	_bridge.clear_calls()
 	for i in 6:
 		_second(-1)

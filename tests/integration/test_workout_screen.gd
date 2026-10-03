@@ -118,6 +118,10 @@ func test_hud_texts_after_65_seconds() -> void:
 	assert_eq(s.countdown_text(), "00:25", "REQ-HUD-06 крит. 1: 30 − 5")
 	assert_eq(s.step_text(), "Step 2/3")
 	assert_eq(s.connection_text(), "Trainer connected")
+	TranslationServer.set_locale("ru")
+	s.refresh()
+	assert_eq(s.connection_text(), "Станок подключён", "REQ-NFR-08 крит. 1: перевод делает view при каждой отрисовке")
+	TranslationServer.set_locale("en")
 
 
 func test_countdown_accent_in_last_5_seconds() -> void:
@@ -150,6 +154,7 @@ func test_200_seconds_finish_plan_shows_summary_and_emits_hook() -> void:
 	assert_false((s.get_node("%HudRoot") as Control).visible)
 	assert_string_contains(s.summary_text(), "dev-3-steps · 03:00")
 	assert_string_contains(s.summary_text(), "samples 180")
+	assert_string_contains(s.summary_text(), "Paused: 00:00", "общее время пауз в сводке")
 	assert_false(s.summary_text().contains("ended early"))
 	assert_eq(finished.size(), 1, "хук сохранения заезда")
 	assert_eq(_cmds(FakeTrainer.CMD_TARGET_POWER).size(), 3)

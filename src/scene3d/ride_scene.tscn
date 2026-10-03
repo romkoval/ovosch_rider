@@ -1,0 +1,27 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/scene3d/ride_scene.gd" id="1_scene"]
+[ext_resource type="PackedScene" path="res://src/scene3d/rider.tscn" id="2_rider"]
+
+[node name="RideScene" type="Node3D"]
+script = ExtResource("1_scene")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+unique_name_in_owner = true
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+unique_name_in_owner = true
+transform = Transform3D(0.82, 0.37, -0.44, 0, 0.77, 0.64, 0.57, -0.52, 0.63, 0, 20, 0)
+shadow_enabled = true
+
+[node name="EnvironmentRoot" type="Node3D" parent="."]
+unique_name_in_owner = true
+
+[node name="Rider" parent="." instance=ExtResource("2_rider")]
+unique_name_in_owner = true
+
+[node name="Camera" type="Camera3D" parent="."]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 7)
+current = true
+fov = 70.0

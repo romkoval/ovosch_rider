@@ -108,7 +108,7 @@ func _compute() -> Dictionary:
 	return {
 		"session_state": session.get_state(),
 		"connection_state": session.trainer.get_connection_state(),
-		"connection_text": connection_text(session.trainer.get_connection_state()),
+		"connection_key": connection_key(session.trainer.get_connection_state()),
 		"target_w": target if has_target else NO_DATA,
 		"target_text": ("%d" % target) if has_target else NO_DATA_TEXT,
 		"smoothed_power_w": smoothed if has_power else NO_DATA,
@@ -193,9 +193,11 @@ func cursor() -> float:
 # Чистые функции форматирования и правил
 # ---------------------------------------------------------------------------
 
-## Текст состояния подключения станка (REQ-DEV-07 крит. 1, REQ-DEV-08 крит. 5) — ключ `ui.hud.connection.<state>`.
-static func connection_text(state: int) -> String:
-	return TranslationServer.translate("ui.hud.connection." + TrainerDevice.state_name(state))
+## Ключ перевода состояния подключения станка (REQ-DEV-07 крит. 1, REQ-DEV-08 крит. 5):
+## `ui.hud.connection.<state>`. Модель не переводит — это делает view через `tr()` при
+## каждой отрисовке, иначе смена языка не обновит кэш (REQ-NFR-08 крит. 1).
+static func connection_key(state: int) -> String:
+	return "ui.hud.connection." + TrainerDevice.state_name(state)
 
 
 ## Состояние индикации отклонения (HUD-02 крит. 2): «в цели» при |факт − цель| ≤ max(5 % цели, 10 Вт).
