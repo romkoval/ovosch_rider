@@ -1,22 +1,34 @@
 class_name PlanScreen
 extends Control
-## Экран выбора тренировки и предпросмотра (`AppState.Screen.PLAN`):
-## REQ-INT-04 крит. 1–3, REQ-INT-05 крит. 1–4, REQ-INT-07 крит. 2–5, REQ-IMP-03 крит. 2,
-## REQ-IMP-04 крит. 3, REQ-IMP-05 крит. 1, REQ-NFR-03.
+## Экран выбора тренировки и предпросмотра (`AppState.Screen.PLAN`, `docs/game/ui.md` п. 8.3):
+## REQ-UIX-03 крит. 1, 3, 4 (тренировка), REQ-INT-04 крит. 1–3, REQ-INT-05 крит. 1–4,
+## REQ-INT-07 крит. 2–5, REQ-IMP-03 крит. 2, REQ-IMP-04 крит. 3, REQ-IMP-05 крит. 1, REQ-NFR-03.
 ##
-## Секции: «Intervals.icu сегодня» (список событий: название, длительность, нагрузка;
-## статусы загрузки / из кэша с временем / нет тренировки / требуется ключ или повторная
-## авторизация; ключ — общий `IntervalsKeyDialog` (`src/ui/common/`, вместе с экраном настроек)
-## → `verify_key` → `IntervalsSync.sync_profile`),
-## «Библиотека» (импортированные тренировки, «Импортировать файл…» → `FileDialog`
-## с фильтрами `*.zwo, *.erg, *.mrc`; ошибка — `AcceptDialog` с текстом по ключу ошибки
-## `ParseResult` → `ui.plan.import.error.*` на языке интерфейса, REQ-IMP-05 крит. 1),
-## предпросмотр (название, описание, длительность, `WorkoutChart`) и «Начать».
+## Раскладка: `AppBar` «Тренировка по плану» («назад» → `AppState.go_back()`; действия «Импорт
+## файла» и «Обновить»). Слева (40 %) — карточки тренировок (`ListRow` с вариацией `CardButton`:
+## миниатюра `PlanPreview`, название, «38:00 · 12 шагов · макс. 300 Вт», источник) в разделах
+## «Сегодня в Intervals.icu» (статус загрузки; без ключа или при отказе ключа — баннер с действием
+## «Указать ключ» → общий `IntervalsKeyDialog` → `verify_key` → `IntervalsSync.sync_profile`) и
+## «Библиотека» (пусто — пустое состояние с импортом). Справа (60 %) — предпросмотр выбранной:
+## название, описание (3 строки и «Ещё»), крупное превью (`WorkoutChart` = `PlanPreview` с
+## `detailed = true`: шкала времени, пунктир FTP), длительность, шагов, макс. цель, время в зонах
+## и «Начать». Ровно одна карточка «выбрано» (или ни одной, пока выбора нет).
+## Compact (холст уже 1100 lp, телефон): список во всю ширину, предпросмотр — лист снизу по
+## нажатию на карточку (Esc или нажатие вне листа закрывают его). Контент — не шире 1216 lp,
+## отступы безопасной зоны — по `UiScale.safe_margins()`.
+##
+## Импорт: «Импорт файла» → `FileDialog` с фильтрами `*.zwo, *.erg, *.mrc`; ошибка — `AcceptDialog`
+## с текстом по ключу ошибки `ParseResult` → `ui.plan.import.error.*` на языке интерфейса
+## (REQ-IMP-05 крит. 1).
 ## Экран не запускает сессию сам — испускает `workout_chosen(workout)`; владелец (`main.gd`)
 ## решает, какой станок использовать, и при отсутствии станка просит экран показать выбор
 ## «эмулятор / подключить устройства» (`show_trainer_choice()`).
 ## Зависимости — через `setup()`; сетевой транспорт и хранилища инъецируются (тесты — мок).
-## Все строки — ключи `ui.plan.*`.
+## Все строки — ключи `ui.plan.*` (новые ключи T-082 — в `strings_menu_lists.csv`).
+##
+## Совместимость с приёмкой T-040 (до решения tester): скрытый `%WorkoutList` (`ItemList`)
+## повторяет список карточек прежними строками «название · длительность · нагрузка · источник»
+## (тесты читают его тексты и испускают `item_selected`), а `chart()` возвращает `WorkoutChart`.
 
 const SOURCE_INTERVALS: String = "intervals"
 const SOURCE_LIBRARY: String = "library"
@@ -28,6 +40,49 @@ const IMPORT_ERROR_KEY_PREFIX: String = "ui.plan.import.error."
 ## Действие кнопки «Эмулятор» в `%TrainerDialog`.
 const TRAINER_ACTION_EMULATOR: StringName = &"emulator"
 
+const ROW_SCENE: PackedScene = preload("res://src/ui/common/list_row.tscn")
+
+## Ключи строк экрана (T-082, `strings_menu_lists.csv`).
+const KEY_BAR_TITLE: String = "ui.plan.bar.title"
+const KEY_BAR_IMPORT: String = "ui.plan.bar.import"
+const KEY_SECTION_TODAY: String = "ui.plan.section.today"
+const KEY_BANNER_CONNECT: String = "ui.plan.banner.connect"
+const KEY_BANNER_ACTION: String = "ui.plan.banner.key_action"
+const KEY_STEPS: Dictionary = {
+	"one": "ui.plan.card.steps.one",
+	"few": "ui.plan.card.steps.few",
+	"many": "ui.plan.card.steps.many",
+}
+const KEY_MAX_TARGET: String = "ui.plan.card.max_target"
+const KEY_ZONES_TITLE: String = "ui.plan.zones.title"
+const KEY_ZONE_SHARE: String = "ui.plan.zones.share"
+const KEY_ZONE_FREE: String = "ui.plan.zones.free"
+const KEY_MORE: String = "ui.plan.preview.more"
+const KEY_LESS: String = "ui.plan.preview.less"
+const KEY_SHEET_CLOSE: String = "ui.plan.sheet.close"
+const KEY_EMPTY_TITLE: String = "ui.plan.empty.library_title"
+const KEY_EMPTY_TEXT: String = "ui.plan.empty.library_text"
+const KEY_SOURCE_INTERVALS: String = "ui.plan.source_intervals"
+const KEY_SOURCE_LIBRARY: String = "ui.plan.source_library"
+const KEY_UNPARSED: String = "ui.plan.item.unparsed"
+## Разделитель ключевых цифр карточки.
+const DOT: String = " · "
+
+## Брейкпоинт compact и предел ширины контента, lp (`ui.md` п. 3).
+const COMPACT_MAX_WIDTH: float = 1100.0
+const CONTENT_MAX_WIDTH: float = 1216.0
+## Миниатюра в карточке и высоты крупного превью, lp (`ui.md` п. 8.3).
+const THUMB_SIZE: Vector2 = Vector2(120, 44)
+const CHART_HEIGHT: float = 240.0
+const CHART_HEIGHT_COMPACT: float = 140.0
+const CHART_MIN_HEIGHT: float = 140.0
+## Описание в предпросмотре — до 3 строк, дальше «Ещё».
+const DESCRIPTION_LINES: int = 3
+## Полоса «время в зонах», lp.
+const ZONE_BAR_HEIGHT: float = 8.0
+## Промежуток между подписями долей зон, lp.
+const ZONE_CAPTION_GAP: float = 8.0
+
 ## Пользователь выбрал тренировку и нажал «Начать».
 signal workout_chosen(workout: Workout, source: String)
 ## Выбор при отсутствии станка (см. `show_trainer_choice`).
@@ -37,6 +92,34 @@ signal devices_chosen()
 signal plan_loaded(result: ApiResult)
 ## Профиль изменён синхронизацией с Intervals.icu — владелец сохраняет.
 signal profile_updated(profile: Profile)
+
+
+## Полоса «время в зонах» (`ui.md` п. 8.3): доли зон плана цветами `ZonePalette`, «свободно» —
+## цветом `hud.free`. Данные — `PlanScreen.zone_shares()`.
+class ZoneShareBar extends Control:
+	var shares: Array[Dictionary] = []
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		custom_minimum_size = Vector2(0, ZONE_BAR_HEIGHT)
+
+	func set_shares(value: Array[Dictionary]) -> void:
+		shares = value
+		queue_redraw()
+
+	func _draw() -> void:
+		draw_rect(Rect2(Vector2.ZERO, size), UiTokens.INSET)
+		var total := 0.0
+		for s in shares:
+			total += float(s["sec"])
+		if total <= 0.0:
+			return
+		var x := 0.0
+		for s in shares:
+			var w := float(s["sec"]) / total * size.x
+			draw_rect(Rect2(x, 0.0, w, size.y), PlanScreen.share_color(s))
+			x += w
+
 
 ## Дата «сегодня» (YYYY-MM-DD); пусто — локальная дата. Для тестов.
 var today: String = ""
@@ -57,14 +140,27 @@ var _last_result_profile_id: String = ""
 var _load_generation: int = 0
 ## Элементы списка: `{source, name, duration_sec, training_load, workout, error, id}`.
 var _items: Array[Dictionary] = []
+## Карточки по индексам `_items`.
+var _cards: Array[ListRow] = []
 var _selected: int = -1
 var _loading: bool = false
 var _trainer_choice_pending: bool = false
+var _compact: bool = false
+var _description_expanded: bool = false
 ## Кнопка «Эмулятор», добавленная в `%TrainerDialog` из кода (текст обновляется при смене языка).
 var _emulator_button: Button = null
+var _zone_bar: ZoneShareBar = null
 
+@onready var _layout: VBoxContainer = %Layout
+@onready var _app_bar: AppBar = %AppBar
+@onready var _body: MarginContainer = %Body
+@onready var _columns: HBoxContainer = %Columns
 @onready var _status_label: Label = %StatusLabel
-@onready var _key_button: Button = %KeyButton
+@onready var _today_header: Label = %TodayHeader
+@onready var _key_banner: Banner = %KeyBanner
+@onready var _today_cards: VBoxContainer = %TodayCards
+@onready var _library_cards: VBoxContainer = %LibraryCards
+@onready var _library_empty: EmptyState = %LibraryEmpty
 @onready var _reload_button: Button = %ReloadButton
 @onready var _key_dialog: IntervalsKeyDialog = %KeyDialog
 @onready var _list: ItemList = %WorkoutList
@@ -72,12 +168,27 @@ var _emulator_button: Button = null
 @onready var _library_status_label: Label = %LibraryStatusLabel
 @onready var _file_dialog: FileDialog = %ImportDialog
 @onready var _import_error_dialog: AcceptDialog = %ImportErrorDialog
+@onready var _preview_slot: PanelContainer = %PreviewSlot
+@onready var _preview: VBoxContainer = %Preview
 @onready var _preview_name: Label = %PreviewName
 @onready var _preview_description: Label = %PreviewDescription
+@onready var _more_button: Button = %MoreButton
 @onready var _preview_duration: Label = %PreviewDuration
 @onready var _chart: WorkoutChart = %Chart
+@onready var _stats: HBoxContainer = %Stats
+@onready var _stat_duration: StatView = %StatDuration
+@onready var _stat_steps: StatView = %StatSteps
+@onready var _stat_max: StatView = %StatMaxTarget
+@onready var _zones: VBoxContainer = %Zones
+@onready var _zones_title: Label = %ZonesTitle
+@onready var _zone_captions: HFlowContainer = %ZoneCaptions
 @onready var _start_button: Button = %StartButton
-@onready var _back_button: Button = %BackButton
+@onready var _sheet: Control = %Sheet
+@onready var _scrim: ColorRect = %Scrim
+@onready var _sheet_panel: PanelContainer = %SheetPanel
+@onready var _sheet_close: Button = %SheetClose
+@onready var _sheet_scroll: ScrollContainer = %SheetScroll
+@onready var _sheet_footer: HBoxContainer = %SheetFooter
 @onready var _trainer_dialog: ConfirmationDialog = %TrainerDialog
 
 
@@ -90,26 +201,47 @@ func setup(app_state: AppState, repo: ProfileRepository, secure_store: SecureSto
 	_cache = cache
 	_library = library
 	if is_node_ready():
+		_app_bar.setup(app_state)
 		refresh()
 
 
 func _ready() -> void:
-	_key_button.pressed.connect(open_key_form)
-	_reload_button.pressed.connect(func() -> void: load_today())
-	_key_dialog.submitted.connect(func(aid: String, key: String) -> void: submit_key(aid, key))
-	_list.item_selected.connect(select_index)
-	_list.item_activated.connect(func(_i: int) -> void: start_selected())
+	_app_bar.setup(_app_state)
+	# Действия экрана — в слот AppBar (узлы объявлены в сцене экрана, чтобы `%ImportButton` и
+	# `%ReloadButton` оставались уникальными именами экрана).
+	for button: Button in [_import_button, _reload_button]:
+		button.reparent(_app_bar.actions_slot(), false)
+		TouchTarget.attach(button, TouchTarget.Kind.UI)
+	_import_button.icon = UiIcons.icon("upload")
+	_reload_button.icon = UiIcons.icon("refresh-cw")
+	_reload_button.pressed.connect(_on_reload_pressed)
 	_import_button.pressed.connect(open_import_dialog)
+	_key_banner.action_pressed.connect(open_key_form)
+	_library_empty.action_pressed.connect(open_import_dialog)
+	_key_dialog.submitted.connect(_on_key_submitted)
+	_list.item_selected.connect(select_index)
+	_list.item_activated.connect(_on_list_activated)
 	_file_dialog.filters = FILE_FILTERS
 	_file_dialog.file_selected.connect(on_import_file_selected)
+	_more_button.pressed.connect(_on_more_pressed)
 	_start_button.pressed.connect(start_selected)
-	_back_button.pressed.connect(func() -> void: _navigate(AppState.Screen.HOME))
-	_trainer_dialog.confirmed.connect(func() -> void: _choose_devices())
-	_trainer_dialog.custom_action.connect(func(action: StringName) -> void:
-		if action == TRAINER_ACTION_EMULATOR:
-			choose_emulator())
+	TouchTarget.attach(_start_button, TouchTarget.Kind.BUTTON)
+	TouchTarget.attach(_more_button, TouchTarget.Kind.UI)
+	_sheet_close.icon = UiIcons.icon("x")
+	_sheet_close.pressed.connect(close_preview_sheet)
+	TouchTarget.attach(_sheet_close, TouchTarget.Kind.UI)
+	_scrim.color = UiTokens.SCRIM
+	_scrim.gui_input.connect(_on_scrim_input)
+	_trainer_dialog.confirmed.connect(_choose_devices)
+	_trainer_dialog.custom_action.connect(_on_trainer_action)
 	_emulator_button = _trainer_dialog.add_button(tr("ui.plan.trainer_choice.emulator"), true, TRAINER_ACTION_EMULATOR)
+	_zone_bar = ZoneShareBar.new()
+	_zones.add_child(_zone_bar)
+	_zones.move_child(_zone_bar, _zone_captions.get_index())
 	_chart.set_workout(null, 200)
+	resized.connect(_update_layout)
+	_preview_slot.resized.connect(_fit_chart)
+	_update_layout()
 	refresh()
 
 
@@ -117,6 +249,21 @@ func _notification(what: int) -> void:
 	# Смена языка интерфейса: тексты, заданные из кода (а не из сцены), обновляются вручную.
 	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
 		_refresh_texts()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Esc при открытом листе предпросмотра закрывает лист, а не уводит с экрана.
+	if is_visible_in_tree() and _sheet.visible and event.is_action_pressed("ui_cancel", false, true):
+		close_preview_sheet()
+		get_viewport().set_input_as_handled()
+
+
+## «Назад» внутри экрана: открытый лист предпросмотра закрывается. true — обработано.
+func handle_back() -> bool:
+	if _sheet.visible:
+		close_preview_sheet()
+		return true
+	return false
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +294,7 @@ func refresh() -> void:
 		var cached := _service.cached_today(today)
 		if cached.ok:
 			_last_result = cached
+	close_preview_sheet()
 	_rebuild_items()
 	_update_status()
 	_render_preview()
@@ -174,14 +322,17 @@ func load_today() -> ApiResult:
 	_load_generation += 1
 	var generation := _load_generation
 	_loading = true
+	_reload_button.disabled = true
 	_set_status(tr("ui.plan.status.loading"))
 	var result: ApiResult = await service.load_today(today)
 	if generation != _load_generation or not _is_current_profile(profile):
 		# Ответ устарел: профиль сменился (или запущена более новая загрузка).
 		if generation == _load_generation:
 			_loading = false
+			_reload_button.disabled = false
 		return result
 	_loading = false
+	_reload_button.disabled = false
 	_last_result = result
 	_last_result_profile_id = profile.id
 	_rebuild_items()
@@ -240,6 +391,104 @@ func library_status_text() -> String:
 	return _library_status_label.text
 
 
+## Баннер «Подключите Intervals.icu» (без ключа или при отказе ключа).
+func key_banner() -> Banner:
+	return _key_banner
+
+
+## Пустое состояние библиотеки.
+func library_empty_state() -> EmptyState:
+	return _library_empty
+
+
+func app_bar() -> AppBar:
+	return _app_bar
+
+
+# ---------------------------------------------------------------------------
+# Карточки (REQ-UIX-03 крит. 1, 3)
+# ---------------------------------------------------------------------------
+
+## Карточки по индексам `items()`.
+func cards() -> Array[ListRow]:
+	return _cards.duplicate()
+
+
+## Карточки в состоянии «выбрано» (не больше одной).
+func selected_cards() -> Array[ListRow]:
+	var out: Array[ListRow] = []
+	for card in _cards:
+		if card.is_selected():
+			out.append(card)
+	return out
+
+
+## Ключевые цифры тренировки «38:00 · 12 шагов · макс. 300 Вт» (длительность — мм:сс или
+## ч:мм:сс, INT-04 крит. 2; макс. цель с учётом FTP, множителя и зон профиля; без целей — без неё).
+func card_numbers(workout: Workout) -> String:
+	var model := _model_for(workout)
+	var parts: Array[String] = [
+		IntervalsPlanService.format_duration(workout.total_duration_sec()),
+		steps_text(workout.steps.size()),
+	]
+	var top := model.max_target_w()
+	if top > 0:
+		parts.append(tr(KEY_MAX_TARGET).format({"watts": top}))
+	return DOT.join(parts)
+
+
+## «12 шагов» по правилам множественного числа языка интерфейса.
+func steps_text(count: int) -> String:
+	var form := plural_form(count, TranslationServer.get_locale())
+	return tr(str(KEY_STEPS[form])).format({"count": count})
+
+
+## Форма множественного числа: `one` / `few` / `many` (ru — три формы, остальные — две).
+static func plural_form(count: int, locale: String) -> String:
+	var n := absi(count)
+	if locale.begins_with("ru"):
+		var n10 := n % 10
+		var n100 := n % 100
+		if n10 == 1 and n100 != 11:
+			return "one"
+		if n10 >= 2 and n10 <= 4 and (n100 < 12 or n100 > 14):
+			return "few"
+		return "many"
+	return "one" if n == 1 else "many"
+
+
+## Время в зонах плана по кускам модели HUD-10.1 (рампа — по зонам кусков): по возрастанию
+## зоны, «свободно» (`zone = 0`, `free = true`) — последним. `{zone, free, sec, pct}`,
+## `pct` — округлённая доля длительности плана.
+static func zone_shares(model: PlanChartModel) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if model == null or model.total_sec() <= 0:
+		return out
+	var by_zone: Dictionary = {}
+	for piece in model.pieces():
+		var zone := 0 if bool(piece["free"]) else int(piece["zone"])
+		by_zone[zone] = float(by_zone.get(zone, 0.0)) + float(piece["end_sec"]) - float(piece["start_sec"])
+	var zones: Array = by_zone.keys()
+	zones.sort()
+	if zones.has(0):
+		zones.erase(0)
+		zones.append(0)
+	for zone: int in zones:
+		var sec := float(by_zone[zone])
+		if sec <= 0.0:
+			continue
+		out.append({"zone": zone, "free": zone == 0, "sec": sec,
+			"pct": roundi(sec * 100.0 / float(model.total_sec()))})
+	return out
+
+
+## Цвет доли «время в зонах»: зона — `ZonePalette`, «свободно» — `hud.free`.
+static func share_color(share: Dictionary) -> Color:
+	if bool(share.get("free", false)):
+		return UiTokens.HUD_FREE
+	return ZonePalette.color(ZonePalette.power_token(int(share["zone"])))
+
+
 # ---------------------------------------------------------------------------
 # Выбор и предпросмотр
 # ---------------------------------------------------------------------------
@@ -251,6 +500,7 @@ func select_index(index: int) -> void:
 		_selected = index
 		if not _list.is_selected(index) and _list.is_item_selectable(index):
 			_list.select(index)
+	_sync_card_selection()
 	_render_preview()
 
 
@@ -284,6 +534,21 @@ func preview_duration_text() -> String:
 	return _preview_duration.text
 
 
+## Подписи «время в зонах» предпросмотра («Z2 35 %»).
+func zone_caption_texts() -> Array[String]:
+	var out: Array[String] = []
+	for child in _zone_captions.get_children():
+		for label in child.get_children():
+			if label is Label:
+				out.append((label as Label).text)
+	return out
+
+
+## Значения статов предпросмотра: длительность, шагов, макс. цель.
+func preview_stat_values() -> Array[String]:
+	return [_stat_duration.value, _stat_steps.value, _stat_max.value]
+
+
 ## «Начать»: испустить `workout_chosen`. false — ничего не выбрано.
 func start_selected() -> bool:
 	var w := selected_workout()
@@ -291,6 +556,33 @@ func start_selected() -> bool:
 		return false
 	workout_chosen.emit(w, str(_items[_selected]["source"]))
 	return true
+
+
+## Раскладка compact (телефон): предпросмотр — листом снизу.
+func is_compact() -> bool:
+	return _compact
+
+
+## Открыть лист предпросмотра (compact). false — не compact или ничего не выбрано.
+func open_preview_sheet() -> bool:
+	if not _compact or selected_workout() == null:
+		return false
+	_sheet.visible = true
+	_sheet_scroll.scroll_vertical = 0
+	_start_button.grab_focus.call_deferred()
+	return true
+
+
+func close_preview_sheet() -> void:
+	if _sheet == null or not _sheet.visible:
+		return
+	_sheet.visible = false
+	if _selected >= 0 and _selected < _cards.size() and _cards[_selected].is_inside_tree():
+		_cards[_selected].grab_focus.call_deferred()
+
+
+func is_preview_sheet_open() -> bool:
+	return _sheet.visible
 
 
 # ---------------------------------------------------------------------------
@@ -378,13 +670,13 @@ func on_import_file_selected(path: String) -> ParseResult:
 		_import_error_dialog.dialog_text = message
 		if not _import_error_dialog.visible:
 			_import_error_dialog.popup_centered()
-		_library_status_label.text = tr("ui.plan.import.failed")
+		_set_library_status(tr("ui.plan.import.failed"))
 		return result
 	var replaced: bool = false
 	for w in result.warnings:
 		if str(w.get("key", "")) == "duplicate_replaced":
 			replaced = true
-	_library_status_label.text = tr("ui.plan.import.updated") if replaced else tr("ui.plan.import.done").format({"name": result.workout.name})
+	_set_library_status(tr("ui.plan.import.updated") if replaced else tr("ui.plan.import.done").format({"name": result.workout.name}))
 	_rebuild_items()
 	_update_status()
 	# `WorkoutLibrary.import_file` кладёт id записи в `metadata.entry_id` (не `id`).
@@ -475,6 +767,11 @@ func _choose_devices() -> void:
 	_navigate(AppState.Screen.DEVICES)
 
 
+func _on_trainer_action(action: StringName) -> void:
+	if action == TRAINER_ACTION_EMULATOR:
+		choose_emulator()
+
+
 # ---------------------------------------------------------------------------
 # Внутреннее
 # ---------------------------------------------------------------------------
@@ -484,8 +781,44 @@ func _navigate(screen: int) -> void:
 		_app_state.navigate(screen)
 
 
+func _on_reload_pressed() -> void:
+	load_today()
+
+
+func _on_key_submitted(athlete_id: String, key: String) -> void:
+	submit_key(athlete_id, key)
+
+
+func _on_list_activated(_index: int) -> void:
+	start_selected()
+
+
+func _on_card_pressed(index: int) -> void:
+	select_index(index)
+	if _compact:
+		open_preview_sheet()
+
+
+func _on_more_pressed() -> void:
+	_description_expanded = not _description_expanded
+	_update_description()
+
+
+func _on_scrim_input(event: InputEvent) -> void:
+	var mouse := event as InputEventMouseButton
+	if mouse != null and mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
+		close_preview_sheet()
+	elif event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		close_preview_sheet()
+
+
 func _set_status(text: String) -> void:
 	_status_label.text = text
+
+
+func _set_library_status(text: String) -> void:
+	_library_status_label.text = text
+	_library_status_label.visible = not text.is_empty()
 
 
 ## `profile` — по-прежнему активный профиль и профиль экрана (после `await` это не гарантировано).
@@ -496,15 +829,42 @@ func _is_current_profile(profile: Profile) -> bool:
 
 ## Тексты, заданные из кода (сцена переводится движком сама).
 func _refresh_texts() -> void:
+	_app_bar.set_title(KEY_BAR_TITLE)
+	_import_button.text = tr(KEY_BAR_IMPORT)
+	_today_header.text = tr(KEY_SECTION_TODAY)
+	_zones_title.text = tr(KEY_ZONES_TITLE)
+	_sheet_close.tooltip_text = tr(KEY_SHEET_CLOSE)
+	_library_empty.setup("upload", KEY_EMPTY_TITLE, KEY_EMPTY_TEXT, KEY_BAR_IMPORT)
 	if _emulator_button != null:
 		_emulator_button.text = tr("ui.plan.trainer_choice.emulator")
 	if _trainer_choice_pending:
 		_trainer_dialog.dialog_text = tr("ui.plan.trainer_choice.text")
+	if not _items.is_empty():
+		for i in mini(_items.size(), _cards.size()):
+			_apply_card_texts(_cards[i], _items[i])
+		_render_preview()
 
 
 func _show_key_error(text: String) -> void:
 	if not text.is_empty():
 		_key_dialog.show_error(text)
+
+
+## Модель превью с FTP, множителем и зонами профиля (как у сессии и HUD).
+func _model_for(workout: Workout) -> PlanChartModel:
+	return PlanChartModel.new(workout, _ftp(), _intensity(), _zones_of_profile())
+
+
+func _ftp() -> int:
+	return _profile.ftp_w if _profile != null else 200
+
+
+func _intensity() -> float:
+	return float(_profile.intensity_default) / 100.0 if _profile != null else 1.0
+
+
+func _zones_of_profile() -> PowerZones:
+	return _profile.effective_power_zones() if _profile != null else null
 
 
 func _rebuild_items() -> void:
@@ -538,6 +898,7 @@ func _rebuild_items() -> void:
 		if it["workout"] == null:
 			_list.set_item_disabled(idx, true)
 			_list.set_item_tooltip(idx, str(it["error"]))
+	_rebuild_cards()
 	_selected = -1
 	if not previous_id.is_empty():
 		for i in _items.size():
@@ -550,6 +911,61 @@ func _rebuild_items() -> void:
 			_selected = runnable[0]
 	if _selected >= 0 and _list.is_item_selectable(_selected):
 		_list.select(_selected)
+	_sync_card_selection()
+	_library_empty.visible = _profile != null and library_items().is_empty()
+
+
+## Карточки по `_items`: Intervals.icu — в первый раздел, библиотека — во второй.
+func _rebuild_cards() -> void:
+	for container: VBoxContainer in [_today_cards, _library_cards]:
+		for child in container.get_children():
+			container.remove_child(child)
+			child.queue_free()
+	_cards = []
+	for i in _items.size():
+		var it: Dictionary = _items[i]
+		var card: ListRow = ROW_SCENE.instantiate()
+		var container := _today_cards if it["source"] == SOURCE_INTERVALS else _library_cards
+		container.add_child(card)
+		card.theme_type_variation = &"CardButton"
+		card.row_id = str(it["id"])
+		card.selectable = true
+		card.show_chevron = false
+		var workout: Workout = it["workout"]
+		if workout != null:
+			var thumb := PlanPreview.new()
+			thumb.custom_minimum_size = THUMB_SIZE
+			thumb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			thumb.set_workout(workout, _ftp(), _intensity(), _zones_of_profile())
+			card.add_leading(thumb)
+		else:
+			card.disabled = true
+			card.tooltip_text = str(it["error"])
+			card.set_icon("circle-alert")
+		var source := Label.new()
+		source.theme_type_variation = &"CaptionLabel"
+		source.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		source.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		source.name = "Source"
+		card.add_trailing(source)
+		_apply_card_texts(card, it)
+		card.pressed.connect(_on_card_pressed.bind(i))
+		_cards.append(card)
+
+
+func _apply_card_texts(card: ListRow, it: Dictionary) -> void:
+	var workout: Workout = it["workout"]
+	var numbers := card_numbers(workout) if workout != null else tr(KEY_UNPARSED)
+	card.set_texts(str(it["name"]), numbers)
+	var source := card.trailing_slot().get_node_or_null("Source") as Label
+	if source != null:
+		source.text = tr(KEY_SOURCE_LIBRARY if it["source"] == SOURCE_LIBRARY else KEY_SOURCE_INTERVALS)
+
+
+## Ровно одна карточка «выбрано» — выбранная (или ни одной).
+func _sync_card_selection() -> void:
+	for i in _cards.size():
+		_cards[i].set_selected(i == _selected)
 
 
 func _runnable_intervals_indices() -> Array[int]:
@@ -560,6 +976,7 @@ func _runnable_intervals_indices() -> Array[int]:
 	return out
 
 
+## Строка скрытого `%WorkoutList` (совместимость с приёмкой T-040).
 func _item_text(it: Dictionary) -> String:
 	var parts: Array[String] = [str(it["name"]), IntervalsPlanService.format_duration(int(it["duration_sec"]))]
 	if int(it["training_load"]) > 0:
@@ -574,16 +991,20 @@ func _item_text(it: Dictionary) -> String:
 
 
 func _update_status() -> void:
+	_key_banner.visible = false
 	if _profile == null:
 		_set_status(tr("ui.plan.status.no_profile"))
-		_key_button.visible = false
+		_status_label.visible = true
+		_reload_button.visible = false
 		return
-	_key_button.visible = true
+	_reload_button.visible = true
 	if _loading:
 		return
 	if _client != null and not _client.is_configured():
 		_set_status(tr("ui.plan.status.not_configured"))
+		_show_key_banner(Banner.Kind.INFO, KEY_BANNER_CONNECT)
 		return
+	_status_label.visible = true
 	if _last_result == null:
 		_set_status(tr("ui.plan.status.idle"))
 		return
@@ -601,14 +1022,23 @@ func _update_status() -> void:
 	match r.code:
 		ApiResult.CODE_AUTH_FAILED, ApiResult.CODE_REAUTH_REQUIRED:
 			_set_status(tr("ui.plan.status.reauth_required"))
+			_show_key_banner(Banner.Kind.WARN, "ui.plan.status.reauth_required")
 		ApiResult.CODE_NOT_CONFIGURED:
 			_set_status(tr("ui.plan.status.not_configured"))
+			_show_key_banner(Banner.Kind.INFO, KEY_BANNER_CONNECT)
 		ApiResult.CODE_NETWORK:
 			_set_status(tr("ui.plan.status.network_error"))
 		ApiResult.CODE_RATE_LIMITED:
 			_set_status(tr("ui.plan.status.rate_limited"))
 		_:
 			_set_status(tr("ui.plan.status.bad_response"))
+
+
+## Баннер вместо строки статуса: ключ не задан или не принят (`ui.md` п. 8.3).
+func _show_key_banner(kind: Banner.Kind, text_key: String) -> void:
+	_key_banner.show_banner(kind, text_key, KEY_BANNER_ACTION, UiIcons.BANNER_INFO if kind == Banner.Kind.INFO else UiIcons.BANNER_WARN)
+	_key_banner.visible = true
+	_status_label.visible = false
 
 
 ## Время загрузки «ЧЧ:ММ» в локальном часовом поясе устройства (как `PlanCache.local_datetime`).
@@ -621,19 +1051,145 @@ static func _format_time(unix: int) -> String:
 
 func _render_preview() -> void:
 	var w := selected_workout()
-	var ftp: int = _profile.ftp_w if _profile != null else 200
-	var intensity: float = float(_profile.intensity_default) / 100.0 if _profile != null else 1.0
+	var ftp := _ftp()
 	# REQ-INT-05 крит. 3 / REQ-HUD-03 крит. 1: цвета сегментов — по зонам профиля, как в HUD.
-	var zones: PowerZones = _profile.effective_power_zones() if _profile != null else null
+	var zones := _zones_of_profile()
+	_description_expanded = false
 	if w == null:
 		_preview_name.text = tr("ui.plan.preview.empty")
 		_preview_description.text = ""
 		_preview_duration.text = ""
 		_chart.set_workout(null, ftp)
+		_chart.visible = false
+		_preview_duration.visible = false
+		_stats.visible = false
+		_zones.visible = false
 		_start_button.disabled = true
+		_update_description()
+		close_preview_sheet()
 		return
 	_preview_name.text = w.name
 	_preview_description.text = w.description
 	_preview_duration.text = tr("ui.plan.preview.duration").format({"duration": IntervalsPlanService.format_duration(w.total_duration_sec()), "ftp": ftp})
-	_chart.set_workout(w, ftp, intensity, zones)
+	_chart.set_workout(w, ftp, _intensity(), zones)
+	_chart.visible = true
+	_preview_duration.visible = true
+	var model := _chart.plan_model()
+	_stats.visible = true
+	_stat_duration.value = IntervalsPlanService.format_duration(w.total_duration_sec())
+	_stat_steps.value = str(w.steps.size())
+	var top := model.max_target_w() if model != null else 0
+	_stat_max.value = str(top) if top > 0 else "—"
+	_render_zone_shares(zone_shares(model))
 	_start_button.disabled = false
+	_update_description()
+
+
+func _render_zone_shares(shares: Array[Dictionary]) -> void:
+	for child in _zone_captions.get_children():
+		_zone_captions.remove_child(child)
+		child.queue_free()
+	_zones.visible = not shares.is_empty()
+	_zone_bar.set_shares(shares)
+	for s in shares:
+		# Подпись доли: цветная метка зоны и «Z2 35 %»; отступ справа отделяет подписи друг от друга.
+		var item := HBoxContainer.new()
+		item.theme_type_variation = &"Row8"
+		item.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var swatch := ColorRect.new()
+		swatch.color = share_color(s)
+		swatch.custom_minimum_size = Vector2(ZONE_BAR_HEIGHT, ZONE_BAR_HEIGHT)
+		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		item.add_child(swatch)
+		var label := Label.new()
+		label.theme_type_variation = &"CaptionLabel"
+		label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		if bool(s["free"]):
+			label.text = tr(KEY_ZONE_FREE).format({"pct": s["pct"]})
+		else:
+			label.text = tr(KEY_ZONE_SHARE).format({"zone": s["zone"], "pct": s["pct"]})
+		item.add_child(label)
+		var gap := Control.new()
+		gap.custom_minimum_size = Vector2(ZONE_CAPTION_GAP, 0)
+		gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		item.add_child(gap)
+		_zone_captions.add_child(item)
+
+
+## Описание: до 3 строк, длиннее — кнопка «Ещё» / «Свернуть».
+func _update_description() -> void:
+	_preview_description.visible = not _preview_description.text.is_empty()
+	_preview_description.max_lines_visible = -1 if _description_expanded else DESCRIPTION_LINES
+	_more_button.text = tr(KEY_LESS if _description_expanded else KEY_MORE)
+	_check_description_overflow.call_deferred()
+	_fit_chart.call_deferred()
+
+
+func _check_description_overflow() -> void:
+	if not is_inside_tree():
+		return
+	_more_button.visible = _preview_description.visible and \
+		(_description_expanded or _preview_description.get_line_count() > DESCRIPTION_LINES)
+
+
+# ---------------------------------------------------------------------------
+# Раскладка: compact / regular, ширина контента, безопасная зона, высота превью
+# ---------------------------------------------------------------------------
+
+func _update_layout() -> void:
+	if not is_node_ready():
+		return
+	var canvas := get_viewport_rect().size
+	var compact := canvas.x < COMPACT_MAX_WIDTH
+	var safe := _safe_margins()
+	for control: Control in [_layout, _sheet_panel]:
+		control.offset_left = safe.x
+		control.offset_right = -safe.z
+		control.offset_bottom = -safe.w
+	_layout.offset_top = safe.y
+	_body.theme_type_variation = &"ScreenMarginCompact" if compact else &"ScreenMargin"
+	var margin := _body.get_theme_constant("margin_left") + _body.get_theme_constant("margin_right")
+	var inner := size.x - safe.x - safe.z - float(margin)
+	if inner > CONTENT_MAX_WIDTH:
+		_columns.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		_columns.custom_minimum_size.x = CONTENT_MAX_WIDTH
+	else:
+		_columns.size_flags_horizontal = Control.SIZE_FILL
+		_columns.custom_minimum_size.x = 0.0
+	if compact != _compact:
+		_compact = compact
+		if compact:
+			# Лист: прокручиваемый предпросмотр, «Начать» закреплена внизу рядом с «Закрыть».
+			_preview.reparent(_sheet_scroll, false)
+			_start_button.reparent(_sheet_footer, false)
+			_sheet_footer.move_child(_start_button, 0)
+		else:
+			_sheet.visible = false
+			_preview.reparent(_preview_slot, false)
+			_start_button.reparent(_preview, false)
+	_preview_slot.visible = not compact
+	_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fit_chart()
+
+
+## Высота крупного превью: 240 lp (compact — 140), но столько, сколько помещается в панель
+## предпросмотра без переполнения, и не меньше `CHART_MIN_HEIGHT`.
+func _fit_chart() -> void:
+	if not is_node_ready():
+		return
+	var target := CHART_HEIGHT_COMPACT if _compact else CHART_HEIGHT
+	if not _compact and _preview_slot.size.y > 0.0:
+		var panel := _preview_slot.get_theme_stylebox("panel")
+		var inner := _preview_slot.size.y - (panel.get_minimum_size().y if panel != null else 0.0)
+		var others := _preview.get_combined_minimum_size().y - _chart.custom_minimum_size.y
+		target = clampf(inner - others, CHART_MIN_HEIGHT, CHART_HEIGHT)
+	if not is_equal_approx(_chart.custom_minimum_size.y, target):
+		_chart.custom_minimum_size.y = target
+
+
+## Отступы безопасной зоны (lp): `UiScale` из автозагрузки, без неё — нули.
+func _safe_margins() -> Vector4:
+	var runtime := TouchTarget.default_runtime()
+	return runtime.safe_margins() if runtime != null else Vector4.ZERO

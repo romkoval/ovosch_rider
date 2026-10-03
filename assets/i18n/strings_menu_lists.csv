@@ -1,2 +1,22 @@
 keys,ru,en
 meta.area.menu_lists,Списки меню,Menu lists
+ui.plan.bar.title,Тренировка по плану,Planned workout
+ui.plan.bar.import,Импорт файла,Import file
+ui.plan.section.today,Сегодня в Intervals.icu,Today in Intervals.icu
+ui.plan.banner.connect,"Подключите Intervals.icu, чтобы видеть план на сегодня",Connect Intervals.icu to see today's plan
+ui.plan.banner.key_action,Указать ключ,Add key
+ui.plan.card.steps.one,{count} шаг,{count} step
+ui.plan.card.steps.few,{count} шага,{count} steps
+ui.plan.card.steps.many,{count} шагов,{count} steps
+ui.plan.card.max_target,макс. {watts} Вт,max {watts} W
+ui.plan.stat.duration,длительность,duration
+ui.plan.stat.steps,шаги,steps
+ui.plan.stat.max_target,макс. цель,max target
+ui.plan.zones.title,Время в зонах,Time in zones
+ui.plan.zones.share,Z{zone} {pct} %,Z{zone} {pct}%
+ui.plan.zones.free,свободно {pct} %,free {pct}%
+ui.plan.preview.more,Ещё,More
+ui.plan.preview.less,Свернуть,Less
+ui.plan.sheet.close,Закрыть,Close
+ui.plan.empty.library_title,Библиотека пуста,The library is empty
+ui.plan.empty.library_text,"Импортируйте тренировку в формате .zwo, .erg или .mrc","Import a workout in .zwo, .erg or .mrc format"

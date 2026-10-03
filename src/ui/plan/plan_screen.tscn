@@ -1,8 +1,12 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/ui/plan/plan_screen.gd" id="1_script"]
 [ext_resource type="Script" path="res://src/ui/plan/workout_chart.gd" id="2_chart"]
 [ext_resource type="PackedScene" path="res://src/ui/common/intervals_key_dialog.tscn" id="3_key"]
+[ext_resource type="PackedScene" path="res://src/ui/common/app_bar.tscn" id="4_bar"]
+[ext_resource type="PackedScene" path="res://src/ui/common/banner.tscn" id="5_banner"]
+[ext_resource type="PackedScene" path="res://src/ui/common/empty_state.tscn" id="6_empty"]
+[ext_resource type="PackedScene" path="res://src/ui/common/stat_view.tscn" id="7_stat"]
 
 [node name="PlanScreen" type="Control"]
 layout_mode = 3
@@ -13,118 +17,262 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Layout" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 16
+theme_type_variation = &"Stack0"
 
-[node name="Columns" type="HBoxContainer" parent="Margin"]
-layout_mode = 2
-theme_override_constants/separation = 24
-
-[node name="Left" type="VBoxContainer" parent="Margin/Columns"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 8
-
-[node name="Title" type="Label" parent="Margin/Columns/Left"]
-layout_mode = 2
-text = "ui.plan.title"
-
-[node name="IntervalsTitle" type="Label" parent="Margin/Columns/Left"]
-layout_mode = 2
-text = "ui.plan.intervals_title"
-
-[node name="StatusRow" type="HBoxContainer" parent="Margin/Columns/Left"]
-layout_mode = 2
-
-[node name="StatusLabel" type="Label" parent="Margin/Columns/Left/StatusRow"]
+[node name="AppBar" parent="Layout" instance=ExtResource("4_bar")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
-autowrap_mode = 3
 
-[node name="ReloadButton" type="Button" parent="Margin/Columns/Left/StatusRow"]
+[node name="BarActions" type="HBoxContainer" parent="Layout"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="ImportButton" type="Button" parent="Layout/BarActions"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"GhostButton"
+
+[node name="ReloadButton" type="Button" parent="Layout/BarActions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"GhostButton"
 text = "ui.plan.reload"
 
-[node name="KeyButton" type="Button" parent="Margin/Columns/Left/StatusRow"]
+[node name="Body" type="MarginContainer" parent="Layout"]
 unique_name_in_owner = true
-layout_mode = 2
-text = "ui.plan.key.button"
-
-[node name="WorkoutList" type="ItemList" parent="Margin/Columns/Left"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 size_flags_vertical = 3
+theme_type_variation = &"ScreenMargin"
 
-[node name="LibraryTitle" type="Label" parent="Margin/Columns/Left"]
+[node name="Columns" type="HBoxContainer" parent="Layout/Body"]
+unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"Row24"
+
+[node name="ListScroll" type="ScrollContainer" parent="Layout/Body/Columns"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+horizontal_scroll_mode = 0
+
+[node name="ListBox" type="VBoxContainer" parent="Layout/Body/Columns/ListScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"Stack8"
+
+[node name="TodayHeader" type="Label" parent="Layout/Body/Columns/ListScroll/ListBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"OverlineLabel"
+uppercase = true
+
+[node name="StatusLabel" type="Label" parent="Layout/Body/Columns/ListScroll/ListBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+autowrap_mode = 3
+
+[node name="KeyBanner" parent="Layout/Body/Columns/ListScroll/ListBox" instance=ExtResource("5_banner")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="TodayCards" type="VBoxContainer" parent="Layout/Body/Columns/ListScroll/ListBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="LibraryGap" type="Control" parent="Layout/Body/Columns/ListScroll/ListBox"]
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="LibraryHeader" type="Label" parent="Layout/Body/Columns/ListScroll/ListBox"]
+layout_mode = 2
+theme_type_variation = &"OverlineLabel"
 text = "ui.plan.library_title"
+uppercase = true
 
-[node name="LibraryRow" type="HBoxContainer" parent="Margin/Columns/Left"]
-layout_mode = 2
-
-[node name="ImportButton" type="Button" parent="Margin/Columns/Left/LibraryRow"]
+[node name="LibraryStatusLabel" type="Label" parent="Layout/Body/Columns/ListScroll/ListBox"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
-text = "ui.plan.import.button"
-
-[node name="LibraryStatusLabel" type="Label" parent="Margin/Columns/Left/LibraryRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
+theme_type_variation = &"SecondaryLabel"
 autowrap_mode = 3
 
-[node name="BackButton" type="Button" parent="Margin/Columns/Left"]
+[node name="LibraryCards" type="VBoxContainer" parent="Layout/Body/Columns/ListScroll/ListBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.plan.back"
+theme_type_variation = &"Stack8"
 
-[node name="Right" type="VBoxContainer" parent="Margin/Columns"]
+[node name="LibraryEmpty" parent="Layout/Body/Columns/ListScroll/ListBox" instance=ExtResource("6_empty")]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 240)
+layout_mode = 2
+
+[node name="WorkoutList" type="ItemList" parent="Layout/Body/Columns/ListScroll/ListBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+focus_mode = 0
+mouse_filter = 2
+
+[node name="PreviewSlot" type="PanelContainer" parent="Layout/Body/Columns"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 8
+size_flags_stretch_ratio = 3.0
 
-[node name="PreviewTitle" type="Label" parent="Margin/Columns/Right"]
-layout_mode = 2
-text = "ui.plan.preview.title"
-
-[node name="PreviewName" type="Label" parent="Margin/Columns/Right"]
+[node name="Preview" type="VBoxContainer" parent="Layout/Body/Columns/PreviewSlot"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"Stack12"
+
+[node name="PreviewName" type="Label" parent="Layout/Body/Columns/PreviewSlot/Preview"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H2Label"
 text = "ui.plan.preview.empty"
+clip_text = true
+text_overrun_behavior = 3
 
-[node name="PreviewDescription" type="Label" parent="Margin/Columns/Right"]
+[node name="PreviewDescription" type="Label" parent="Layout/Body/Columns/PreviewSlot/Preview"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
 autowrap_mode = 3
+max_lines_visible = 3
 
-[node name="PreviewDuration" type="Label" parent="Margin/Columns/Right"]
+[node name="MoreButton" type="Button" parent="Layout/Body/Columns/PreviewSlot/Preview"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
+size_flags_horizontal = 0
+theme_type_variation = &"GhostButton"
 
-[node name="Chart" type="Control" parent="Margin/Columns/Right"]
+[node name="Chart" type="Control" parent="Layout/Body/Columns/PreviewSlot/Preview"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 220)
+custom_minimum_size = Vector2(0, 240)
 layout_mode = 2
-size_flags_vertical = 3
 script = ExtResource("2_chart")
 
-[node name="StartButton" type="Button" parent="Margin/Columns/Right"]
+[node name="PreviewDuration" type="Label" parent="Layout/Body/Columns/PreviewSlot/Preview"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+
+[node name="Stats" type="HBoxContainer" parent="Layout/Body/Columns/PreviewSlot/Preview"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row24"
+
+[node name="StatDuration" parent="Layout/Body/Columns/PreviewSlot/Preview/Stats" instance=ExtResource("7_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+caption = "ui.plan.stat.duration"
+
+[node name="StatSteps" parent="Layout/Body/Columns/PreviewSlot/Preview/Stats" instance=ExtResource("7_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+caption = "ui.plan.stat.steps"
+
+[node name="StatMaxTarget" parent="Layout/Body/Columns/PreviewSlot/Preview/Stats" instance=ExtResource("7_stat")]
+unique_name_in_owner = true
+layout_mode = 2
+unit = "ui.menu.unit.w"
+caption = "ui.plan.stat.max_target"
+
+[node name="Zones" type="VBoxContainer" parent="Layout/Body/Columns/PreviewSlot/Preview"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="ZonesTitle" type="Label" parent="Layout/Body/Columns/PreviewSlot/Preview/Zones"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+
+[node name="ZoneCaptions" type="HFlowContainer" parent="Layout/Body/Columns/PreviewSlot/Preview/Zones"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="Layout/Body/Columns/PreviewSlot/Preview"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="StartButton" type="Button" parent="Layout/Body/Columns/PreviewSlot/Preview"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
 disabled = true
 text = "ui.plan.start"
+
+[node name="Sheet" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="Sheet"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="SheetPanel" type="PanelContainer" parent="Sheet"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 0.04
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="SheetBox" type="VBoxContainer" parent="Sheet/SheetPanel"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="SheetScroll" type="ScrollContainer" parent="Sheet/SheetPanel/SheetBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="SheetFooter" type="HBoxContainer" parent="Sheet/SheetPanel/SheetBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row12"
+
+[node name="SheetClose" type="Button" parent="Sheet/SheetPanel/SheetBox/SheetFooter"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"IconButton"
+icon_alignment = 1
 
 [node name="KeyDialog" parent="." instance=ExtResource("3_key")]
 unique_name_in_owner = true
