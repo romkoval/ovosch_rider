@@ -126,3 +126,154 @@ ui.workout.minus_5pct,−5 %,−5 %
 ui.workout.plus_5pct,+5 %,+5 %
 ui.devices.ble_unavailable,Bluetooth недоступен: нативный модуль не загружен или адаптер выключен,Bluetooth unavailable: native module not loaded or adapter is off
 ui.workout.summary_paused,Пауз: {paused},Paused: {paused}
+ui.common.ok,ОК,OK
+ui.plan.title,Тренировка на сегодня,Today's workout
+ui.plan.intervals_title,Intervals.icu сегодня,Intervals.icu today
+ui.plan.library_title,Библиотека,Library
+ui.plan.reload,Обновить,Reload
+ui.plan.back,На главный,Back to home
+ui.plan.start,Начать,Start
+ui.plan.status.idle,План не загружен — нажмите «Обновить»,Plan not loaded — press “Reload”
+ui.plan.status.loading,Загрузка плана…,Loading plan…
+ui.plan.status.ok,Загружено тренировок: {count},Workouts loaded: {count}
+ui.plan.status.from_cache,из кэша; загружен {time},from cache; loaded {time}
+ui.plan.status.no_workout_today,На сегодня нет тренировки,No workout today
+ui.plan.status.reauth_required,Требуется повторная авторизация в Intervals.icu — укажите ключ API заново,Re-authorisation with Intervals.icu required — enter the API key again
+ui.plan.status.not_configured,Ключ API Intervals.icu не указан,Intervals.icu API key is not set
+ui.plan.status.network_error,Сеть недоступна; кэшированного плана на сегодня нет,Network unavailable; no cached plan for today
+ui.plan.status.rate_limited,Слишком много запросов к Intervals.icu — попробуйте позже,Too many requests to Intervals.icu — try again later
+ui.plan.status.bad_response,Неожиданный ответ Intervals.icu,Unexpected response from Intervals.icu
+ui.plan.status.no_profile,Профиль не выбран,No profile selected
+ui.plan.key.button,Указать API-ключ,Set API key
+ui.plan.key.title,Ключ API Intervals.icu,Intervals.icu API key
+ui.plan.key.athlete_id,Athlete ID (например i12345),Athlete ID (e.g. i12345)
+ui.plan.key.api_key,Ключ API,API key
+ui.plan.key.save,Проверить и сохранить,Verify and save
+ui.plan.key.rejected,Ключ не принят Intervals.icu (401),Key rejected by Intervals.icu (401)
+ui.plan.key.fill_both,Введите Athlete ID и ключ API,Enter Athlete ID and API key
+ui.plan.key.failed,Не удалось проверить ключ: {reason},Could not verify the key: {reason}
+ui.plan.key.verified,Атлет: {name} — профиль синхронизирован,Athlete: {name} — profile synced
+ui.plan.item.load,нагрузка {load},load {load}
+ui.plan.item.unparsed,не удалось разобрать,could not be parsed
+ui.plan.item.no_plan,В событии нет структуры тренировки,The event has no workout structure
+ui.plan.source_intervals,Intervals.icu,Intervals.icu
+ui.plan.source_library,библиотека,library
+ui.plan.preview.title,Предпросмотр,Preview
+ui.plan.preview.empty,Выберите тренировку,Select a workout
+ui.plan.preview.duration,Длительность {duration} · FTP {ftp} Вт,Duration {duration} · FTP {ftp} W
+ui.plan.import.button,Импортировать файл…,Import file…
+ui.plan.import.dialog_title,Выберите файл тренировки (.zwo; .erg; .mrc),Choose a workout file (.zwo; .erg; .mrc)
+ui.plan.import.open,Открыть,Open
+ui.plan.import.error_title,Ошибка импорта,Import error
+ui.plan.import.failed,Импорт не выполнен,Import failed
+ui.plan.import.done,Импортировано: {name},Imported: {name}
+ui.plan.import.updated,Тренировка уже в библиотеке — обновлена,Workout already in the library — updated
+ui.plan.trainer_choice.title,Станок не подключён,Trainer not connected
+ui.plan.trainer_choice.text,Станок не подключён. Провести тренировку на эмуляторе или подключить устройства?,No trainer is connected. Ride on the emulator or connect devices?
+ui.plan.trainer_choice.emulator,Эмулятор,Emulator
+ui.plan.trainer_choice.devices,Подключить устройства,Connect devices
+error.profile.power_source_invalid,Источник мощности должен быть «станок» или «измеритель мощности»,Power source must be “trainer” or “power meter”
+ui.settings.title,Настройки,Settings
+ui.settings.language,Язык интерфейса,Interface language
+ui.settings.lang_ru,Русский,Russian
+ui.settings.lang_en,Английский,English
+ui.settings.profile_title,Профиль: {name},Profile: {name}
+ui.settings.profile_saved,Профиль «{name}» сохранён,Profile “{name}” saved
+ui.settings.no_profile,Профиль не выбран,No profile selected
+ui.settings.name,Имя,Name
+ui.settings.ftp,FTP (Вт),FTP (W)
+ui.settings.weight,Вес (кг),Weight (kg)
+ui.settings.max_hr,Максимальный пульс (0 — не задан),Max heart rate (0 = not set)
+ui.settings.resistance,Сопротивление вне ERG (%),Resistance outside ERG (%)
+ui.settings.power_source,Источник мощности,Power source
+ui.settings.power_source_trainer,Станок,Trainer
+ui.settings.power_source_power_meter,Измеритель мощности,Power meter
+ui.settings.save_profile,Сохранить профиль,Save profile
+ui.settings.hr_zones_available,Зоны пульса доступны,Heart-rate zones available
+ui.settings.hr_zones_unavailable,Зоны пульса недоступны: задайте максимальный пульс или синхронизируйте зоны,Heart-rate zones unavailable: set max heart rate or sync zones
+ui.settings.intervals_title,Intervals.icu,Intervals.icu
+ui.settings.intervals_linked,Intervals.icu привязан (athlete {athlete_id}),Intervals.icu linked (athlete {athlete_id})
+ui.settings.intervals_not_linked,Intervals.icu не привязан,Intervals.icu not linked
+ui.settings.sources,Источник FTP: {ftp} · источник зон: {zones},FTP source: {ftp} · zones source: {zones}
+ui.settings.source_local,локально,local
+ui.settings.source_intervals,Intervals.icu от {date},Intervals.icu as of {date}
+ui.settings.intervals_override,Переопределить локально (не синхронизировать FTP и зоны),Override locally (do not sync FTP and zones)
+ui.settings.intervals_set_key,Указать ключ…,Set API key…
+ui.settings.intervals_sync,Синхронизировать с Intervals.icu,Sync with Intervals.icu
+ui.settings.intervals_forget,Отвязать Intervals.icu,Unlink Intervals.icu
+ui.settings.intervals_unlinked,Ключ Intervals.icu удалён,Intervals.icu key removed
+ui.settings.key_saved,Ключ сохранён,Key saved
+ui.settings.key_rejected,Ключ не принят ({code}),Key rejected ({code})
+ui.settings.sync_done,Профиль обновлён из Intervals.icu,Profile updated from Intervals.icu
+ui.settings.sync_done_with_warnings,Синхронизировано с замечаниями: {warnings},Synced with warnings: {warnings}
+ui.settings.sync_skipped_override,Синхронизация пропущена: включено локальное переопределение,Sync skipped: local override is enabled
+ui.settings.sync_failed,Синхронизация не удалась ({code}),Sync failed ({code})
+ui.settings.strava_title,Strava,Strava
+ui.settings.strava_not_linked,Strava не привязана,Strava not linked
+ui.settings.strava_connect,Connect with Strava,Connect with Strava
+ui.settings.strava_disconnect,Отвязать Strava,Disconnect Strava
+ui.settings.about_title,О программе,About
+ui.settings.version,ovosch-rider {version},ovosch-rider {version}
+ui.settings.licenses_title,Используемое ПО и лицензии:,Third-party software and licenses:
+ui.settings.license_godot,Godot Engine — MIT,Godot Engine — MIT
+ui.settings.license_gut,GUT (Godot Unit Test) — MIT,GUT (Godot Unit Test) — MIT
+ui.settings.license_godot_cpp,godot-cpp — MIT,godot-cpp — MIT
+ui.settings.licenses_doc,Полный список: {path},Full list: {path}
+ui.settings.switch_profile,Сменить профиль,Switch profile
+ui.settings.back,На главный,Back to home
+ui.intervals_key.title,Ключ API Intervals.icu,Intervals.icu API key
+ui.intervals_key.hint,Athlete ID и ключ API из настроек Intervals.icu. Ключ хранится только в защищённом хранилище.,Athlete ID and API key from Intervals.icu settings. The key is stored only in the secure store.
+ui.intervals_key.athlete_id,Athlete ID (например i12345),Athlete ID (e.g. i12345)
+ui.intervals_key.key,Ключ API,API key
+ui.intervals_key.save,Проверить и сохранить,Verify and save
+ui.history.title,История заездов,Ride history
+ui.history.home,На главный,Back to home
+ui.history.back,К списку,Back to list
+ui.history.empty,Заездов пока нет,No rides yet
+ui.history.untitled,Тренировка,Workout
+ui.history.row,{date} · {name} · {time} · {distance} км · {avg} Вт · NP {np} · {strava} {flags},{date} · {name} · {time} · {distance} km · {avg} W · NP {np} · {strava} {flags}
+ui.history.row.in_progress,(не завершён),(in progress)
+ui.history.detail.no_ride,Заезд не выбран,No ride selected
+ui.history.detail.duration,Время {time} · дистанция {distance} км · пауз {paused},Time {time} · distance {distance} km · paused {paused}
+ui.history.detail.power,Мощность: средняя {avg} Вт · NP {np} Вт · макс {max} Вт · работа {work} кДж,Power: avg {avg} W · NP {np} W · max {max} W · work {work} kJ
+ui.history.detail.hr,Пульс: средний {avg} · макс {max},Heart rate: avg {avg} · max {max}
+ui.history.detail.cadence,Каденс: средний {avg} · макс {max},Cadence: avg {avg} · max {max}
+ui.history.detail.meta,FTP {ftp} Вт · вес {weight} кг · интенсивность {intensity} % · скорость: {speed_source},FTP {ftp} W · weight {weight} kg · intensity {intensity} % · speed: {speed_source}
+ui.history.detail.strava,Strava: {status},Strava: {status}
+ui.history.detail.stopped_early,(завершён досрочно),(ended early)
+ui.history.detail.recovered,(восстановлен после сбоя),(recovered after a crash)
+ui.history.detail.zones_power,Время в зонах мощности,Time in power zones
+ui.history.detail.zones_hr,Время в зонах пульса,Time in heart-rate zones
+ui.history.chart.power,Мощность (и цель плана),Power (and plan target)
+ui.history.chart.hr,Пульс,Heart rate
+ui.history.chart.cadence,Каденс,Cadence
+ui.history.speed_source.trainer,станок,trainer
+ui.history.speed_source.model,модель,model
+ui.history.export,Экспорт FIT,Export FIT
+ui.history.export.dialog_title,Сохранить FIT-файл,Save FIT file
+ui.history.export.save,Сохранить,Save
+ui.history.export.done,Сохранено: {path},Saved: {path}
+ui.history.export.failed,Экспорт не выполнен: {reason},Export failed: {reason}
+ui.history.delete,Удалить заезд,Delete ride
+ui.history.delete_confirm,Удалить заезд «{name}»? Активность в Strava не затрагивается.,Delete ride “{name}”? The Strava activity is not affected.
+ui.history.upload,Выгрузить в Strava,Upload to Strava
+ui.history.strava_not_linked,Strava не привязана,Strava is not linked
+ui.history.strava.none,Не выгружен,Not uploaded
+ui.history.strava.queued,В очереди,Queued
+ui.history.strava.uploading,Обрабатывается,Processing
+ui.history.strava.done,Выгружено,Uploaded
+ui.history.strava.failed,Ошибка,Failed
+ui.history.strava.duplicate,Дубликат,Duplicate
+ui.history.recovery.title,Незавершённый заезд,Unfinished ride
+ui.history.recovery.text,Заезд «{name}» от {date} ({time}) не был завершён. Сохранить как завершённый досрочно или удалить?,Ride “{name}” from {date} ({time}) was not finished. Keep it as ended early or delete it?
+ui.history.recovery.keep,Сохранить досрочно,Keep as ended early
+ui.history.recovery.delete,Удалить,Delete
+ui.strava.open_browser,Открыть страницу входа Strava в браузере,Open the Strava sign-in page in your browser
+ui.strava.default_name,Тренировка %s,Workout %s
+ui.strava.default_description,Записано в ovosch-rider,Recorded in ovosch-rider
+ui.strava.connect,Connect with Strava,Connect with Strava
+ui.strava.powered_by,Powered by Strava,Powered by Strava
+ui.settings.strava_linked,Strava привязана: заезды выгружаются автоматически,Strava linked: rides are uploaded automatically
+ui.settings.strava_connecting,Ожидаем вход в Strava в браузере…,Waiting for the Strava sign-in in the browser…
+ui.settings.strava_unavailable,Привязка Strava недоступна: не заданы client_id/client_secret приложения,Strava link unavailable: the app client_id/client_secret are not configured
+ui.settings.strava_error,Ошибка Strava: {message},Strava error: {message}

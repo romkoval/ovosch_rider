@@ -5,11 +5,11 @@ extends RefCounted
 ## Метрики считаются `compute()` по потоку `SampleStream` и зонам профиля
 ## на момент заезда (REQ-LOC-04 крит. 5):
 ## - средняя мощность — среднее по сэмплам с данными, нули учитываются (крит. 1);
-## - NP по Coggan: скользящее среднее 30 с → 4-я степень → среднее → корень
-##   4-й степени (крит. 2). Первые 29 окон — «растущие» (среднее с начала потока),
-##   чтобы каждый сэмпл участвовал в расчёте; для потоков короче 30 с NP равна
-##   средней. Итог не опускается ниже средней: краевой эффект окон на коротких
-##   заездах не должен нарушать свойство NP ≥ средняя (крит. 2);
+## - NP по Coggan (строгая форма TrainingPeaks/GoldenCheetah): только полные
+##   30-с окна скользящего среднего → 4-я степень → среднее → корень 4-й степени
+##   (крит. 2); для потоков короче 30 с окно одно — весь поток (NP = средней).
+##   Итог не опускается ниже средней: краевой эффект окон на коротких заездах
+##   не должен нарушать свойство NP ≥ средняя (крит. 2);
 ## - работа = Σ P · 1 с / 1000 кДж (крит. 3);
 ## - средний пульс/каденс — по сэмплам с данными, каденс 0 учитывается (крит. 4);
 ## - время в зонах — секунды по зонам профиля; сумма = число сэмплов с данными (крит. 5).
@@ -117,7 +117,8 @@ static func compute(samples: SampleStream, _ftp_w: int, zones: PowerZones, hr_zo
 	return s
 
 
-## Нормализованная мощность по Coggan (REQ-LOC-04 крит. 2) без клампа к средней.
+## Нормализованная мощность по Coggan (REQ-LOC-04 крит. 2) без клампа к средней:
+## только полные 30-с окна; поток короче 30 с — одно окно на весь поток.
 ## Сэмплы без данных мощности в окно не входят (окно — по сэмплам с данными).
 ## `NO_DATA`, если данных нет.
 static func normalized_power(samples: SampleStream) -> int:
@@ -128,16 +129,19 @@ static func normalized_power(samples: SampleStream) -> int:
 	var n: int = values.size()
 	if n == 0:
 		return NO_DATA
+	var window: int = mini(n, NP_WINDOW_SEC)
 	var window_sum: float = 0.0
 	var fourth_sum: float = 0.0
+	var windows: int = 0
 	for i in n:
 		window_sum += float(values[i])
-		if i >= NP_WINDOW_SEC:
-			window_sum -= float(values[i - NP_WINDOW_SEC])
-		var window_len: int = mini(i + 1, NP_WINDOW_SEC)
-		var avg: float = window_sum / float(window_len)
-		fourth_sum += avg * avg * avg * avg
-	return roundi(pow(fourth_sum / float(n), 0.25))
+		if i >= window:
+			window_sum -= float(values[i - window])
+		if i >= window - 1:
+			var avg: float = window_sum / float(window)
+			fourth_sum += avg * avg * avg * avg
+			windows += 1
+	return roundi(pow(fourth_sum / float(windows), 0.25))
 
 
 func has_power() -> bool:

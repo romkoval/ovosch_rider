@@ -1,0 +1,222 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/settings/settings_screen.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://src/ui/common/intervals_key_dialog.tscn" id="2_dialog"]
+[ext_resource type="PackedScene" path="res://src/ui/common/strava_connect_button.tscn" id="3_strava"]
+
+[node name="SettingsScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="Scroll" type="ScrollContainer" parent="Margin"]
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Margin/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.settings.title"
+horizontal_alignment = 1
+
+[node name="LanguageTitle" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.settings.language"
+
+[node name="LocaleOption" type="OptionButton" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ProfileStatusLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.profile_title"
+
+[node name="Grid" type="GridContainer" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+columns = 2
+
+[node name="NameLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "ui.settings.name"
+
+[node name="NameEdit" type="LineEdit" parent="Margin/Scroll/VBox/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_length = 40
+
+[node name="FtpLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "ui.settings.ftp"
+
+[node name="FtpSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 2000.0
+value = 200.0
+
+[node name="WeightLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "ui.settings.weight"
+
+[node name="WeightSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 500.0
+step = 0.1
+value = 75.0
+
+[node name="MaxHrLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "ui.settings.max_hr"
+
+[node name="MaxHrSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 300.0
+
+[node name="ResistanceLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "ui.settings.resistance"
+
+[node name="ResistanceSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 100.0
+step = 5.0
+value = 50.0
+
+[node name="PowerSourceLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "ui.settings.power_source"
+
+[node name="PowerSourceOption" type="OptionButton" parent="Margin/Scroll/VBox/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ProfileErrorLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+autowrap_mode = 3
+
+[node name="SaveProfileButton" type="Button" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.save_profile"
+
+[node name="HrZonesLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.hr_zones_unavailable"
+
+[node name="IntervalsTitle" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.settings.intervals_title"
+
+[node name="IntervalsStatusLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.intervals_not_linked"
+
+[node name="SourcesLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.sources"
+autowrap_mode = 3
+
+[node name="OverrideCheck" type="CheckButton" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.intervals_override"
+
+[node name="IntervalsButtons" type="HBoxContainer" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+
+[node name="IntervalsKeyButton" type="Button" parent="Margin/Scroll/VBox/IntervalsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.intervals_set_key"
+
+[node name="IntervalsSyncButton" type="Button" parent="Margin/Scroll/VBox/IntervalsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.intervals_sync"
+
+[node name="IntervalsForgetButton" type="Button" parent="Margin/Scroll/VBox/IntervalsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.intervals_forget"
+
+[node name="IntervalsMessageLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="StravaTitle" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.settings.strava_title"
+
+[node name="StravaStatusLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.strava_not_linked"
+
+[node name="StravaButtons" type="HBoxContainer" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+
+[node name="StravaConnectButton" parent="Margin/Scroll/VBox/StravaButtons" instance=ExtResource("3_strava")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AboutTitle" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.settings.about_title"
+
+[node name="VersionLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.version"
+
+[node name="LicensesLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.licenses_title"
+autowrap_mode = 3
+
+[node name="Footer" type="HBoxContainer" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+alignment = 1
+
+[node name="SwitchProfileButton" type="Button" parent="Margin/Scroll/VBox/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.switch_profile"
+
+[node name="BackButton" type="Button" parent="Margin/Scroll/VBox/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.settings.back"
+
+[node name="IntervalsKeyDialog" parent="." instance=ExtResource("2_dialog")]
+unique_name_in_owner = true

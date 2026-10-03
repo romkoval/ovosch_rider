@@ -73,6 +73,11 @@ func has_api_key() -> bool:
 	return _store.has_secret(secret_key())
 
 
+## Привязка к Intervals.icu есть (ключ сохранён) — синоним для UI без упоминания секретов (REQ-NFR-05).
+func is_linked() -> bool:
+	return has_api_key()
+
+
 ## Клиент готов к запросам: есть ключ и Athlete ID.
 func is_configured() -> bool:
 	return has_api_key() and not athlete_id.strip_edges().is_empty()

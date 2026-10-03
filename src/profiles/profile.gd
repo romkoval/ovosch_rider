@@ -47,6 +47,12 @@ const ERR_RESISTANCE_OUT_OF_RANGE: String = "resistance_out_of_range"
 const ERR_POWER_ZONES_INVALID: String = "power_zones_invalid"
 const ERR_HR_ZONES_INVALID: String = "hr_zones_invalid"
 const ERR_SOURCE_INVALID: String = "source_invalid"
+const ERR_POWER_SOURCE_INVALID: String = "power_source_invalid"
+
+## Источник мощности для сессии (REQ-DEV-05 крит. 2, Н-8): станок или измеритель мощности.
+const POWER_SOURCE_TRAINER: String = "trainer"
+const POWER_SOURCE_POWER_METER: String = "power_meter"
+const POWER_SOURCES: Array[String] = [POWER_SOURCE_TRAINER, POWER_SOURCE_POWER_METER]
 
 ## Источник FTP/зон (REQ-INT-06 крит. 6): `"local"` или `"intervals:<YYYY-MM-DD>"`.
 const SOURCE_LOCAL: String = "local"
@@ -80,6 +86,10 @@ var zones_source: String = SOURCE_LOCAL
 var intervals_athlete_id: String = ""
 ## «Переопределить локально»: синхронизация не трогает FTP и зоны (REQ-INT-06 крит. 4).
 var intervals_override_local: bool = false
+## Автовыгрузка завершённых заездов в Strava при наличии привязки (REQ-STR-02 крит. 1, T-049).
+var strava_auto_upload: bool = true
+## Источник мощности по умолчанию: `POWER_SOURCE_TRAINER` | `POWER_SOURCE_POWER_METER`.
+var power_source: String = POWER_SOURCE_TRAINER
 
 
 ## Новый профиль с именем, свежим id и временем создания.
@@ -107,6 +117,25 @@ static func normalized_name(raw: String) -> String:
 
 func has_max_hr() -> bool:
 	return max_hr > MAX_HR_NOT_SET
+
+
+## Ручная правка FTP (REQ-INT-06 крит. 4): значение и `ftp_source = "local"`.
+## Синхронизация с Intervals.icu пишет `intervals:<дата>` напрямую (`IntervalsSync`).
+func set_ftp_local(new_ftp_w: int) -> void:
+	ftp_w = new_ftp_w
+	ftp_source = SOURCE_LOCAL
+
+
+## Ручная правка зон мощности (null — Coggan от FTP): `zones_source = "local"`.
+func set_power_zones_local(zones: PowerZones) -> void:
+	power_zones = zones
+	zones_source = SOURCE_LOCAL
+
+
+## Ручная правка зон пульса (null — 5 зон от max_hr): `zones_source = "local"`.
+func set_hr_zones_local(zones: HrZones) -> void:
+	hr_zones = zones
+	zones_source = SOURCE_LOCAL
 
 
 ## Доступны ли зоны пульса (REQ-PRF-02 крит. 4): задан `max_hr` или переопределены абсолютные границы.
@@ -187,6 +216,8 @@ func validate() -> Array[String]:
 			errors.append(ERR_HR_ZONES_INVALID)
 	if not is_valid_source(ftp_source) or not is_valid_source(zones_source):
 		errors.append(ERR_SOURCE_INVALID)
+	if not POWER_SOURCES.has(power_source):
+		errors.append(ERR_POWER_SOURCE_INVALID)
 	return errors
 
 
@@ -219,6 +250,8 @@ func to_dict() -> Dictionary:
 		"zones_source": zones_source,
 		"intervals_athlete_id": intervals_athlete_id,
 		"intervals_override_local": intervals_override_local,
+		"strava_auto_upload": strava_auto_upload,
+		"power_source": power_source,
 	}
 
 
@@ -244,6 +277,10 @@ static func from_dict(data: Dictionary) -> Profile:
 		p.zones_source = SOURCE_LOCAL
 	p.intervals_athlete_id = _to_text(data.get("intervals_athlete_id", ""))
 	p.intervals_override_local = _to_int(data.get("intervals_override_local", null), 0) != 0
+	p.strava_auto_upload = _to_int(data.get("strava_auto_upload", null), 1) != 0
+	p.power_source = _to_text(data.get("power_source", POWER_SOURCE_TRAINER))
+	if p.power_source.is_empty():
+		p.power_source = POWER_SOURCE_TRAINER
 	var pz: Variant = data.get("power_zone_bounds_pct", null)
 	if pz is Array:
 		p.power_zones = PowerZones.custom(p.ftp_w, _array_to_bounds(pz))

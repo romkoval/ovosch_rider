@@ -1,0 +1,152 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/history/ride_detail.gd" id="1_script"]
+[ext_resource type="Script" path="res://src/ui/history/ride_chart.gd" id="2_chart"]
+[ext_resource type="Script" path="res://src/ui/history/zone_bar.gd" id="3_zone_bar"]
+
+[node name="RideDetail" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Scroll" type="ScrollContainer" parent="Margin"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="VBox" type="VBoxContainer" parent="Margin/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="Header" type="HBoxContainer" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="BackButton" type="Button" parent="Margin/Scroll/VBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.history.back"
+
+[node name="TitleLabel" type="Label" parent="Margin/Scroll/VBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+autowrap_mode = 3
+
+[node name="SummaryLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="StatusLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="PowerZonesLabel" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.history.detail.zones_power"
+
+[node name="PowerZoneBar" type="Control" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+script = ExtResource("3_zone_bar")
+
+[node name="HrZonesLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.history.detail.zones_hr"
+
+[node name="HrZoneBar" type="Control" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+script = ExtResource("3_zone_bar")
+
+[node name="PowerChartLabel" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.history.chart.power"
+
+[node name="PowerChart" type="Control" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+script = ExtResource("2_chart")
+
+[node name="HrChartLabel" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.history.chart.hr"
+
+[node name="HrChart" type="Control" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+script = ExtResource("2_chart")
+
+[node name="CadenceChartLabel" type="Label" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+text = "ui.history.chart.cadence"
+
+[node name="CadenceChart" type="Control" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+script = ExtResource("2_chart")
+
+[node name="Buttons" type="HBoxContainer" parent="Margin/Scroll/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ExportButton" type="Button" parent="Margin/Scroll/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.history.export"
+
+[node name="DeleteButton" type="Button" parent="Margin/Scroll/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.history.delete"
+
+[node name="UploadButton" type="Button" parent="Margin/Scroll/VBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "ui.history.upload"
+
+[node name="ExportStatusLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="ExportDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.history.export.dialog_title"
+ok_button_text = "ui.history.export.save"
+cancel_button_text = "ui.common.cancel"
+file_mode = 4
+access = 2
+use_native_dialog = true
+
+[node name="DeleteDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.history.delete"
+ok_button_text = "ui.common.delete"
+cancel_button_text = "ui.common.cancel"

@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/common/intervals_key_dialog.gd" id="1_script"]
+
+[node name="IntervalsKeyDialog" type="ConfirmationDialog"]
+title = "ui.intervals_key.title"
+size = Vector2i(420, 220)
+ok_button_text = "ui.intervals_key.save"
+cancel_button_text = "ui.common.cancel"
+script = ExtResource("1_script")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 412.0
+offset_bottom = 170.0
+
+[node name="Hint" type="Label" parent="VBox"]
+layout_mode = 2
+text = "ui.intervals_key.hint"
+autowrap_mode = 3
+
+[node name="AthleteIdEdit" type="LineEdit" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "ui.intervals_key.athlete_id"
+
+[node name="KeyEdit" type="LineEdit" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "ui.intervals_key.key"
+secret = true
+
+[node name="ErrorLabel" type="Label" parent="VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+autowrap_mode = 3

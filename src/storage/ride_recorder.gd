@@ -2,8 +2,9 @@ class_name RideRecorder
 extends RefCounted
 ## Потоковая запись заезда на диск во время тренировки (REQ-LOC-07).
 ##
-## Подключается к `WorkoutSession` до старта. При переходе в RUNNING создаёт
-## заезд (`Ride.from_session`) с `metadata.in_progress = true` и сохраняет его.
+## Подключается к `WorkoutSession` до старта (при переходе в RUNNING создаёт
+## заезд `Ride.from_session` с `metadata.in_progress = true` и сохраняет его)
+## или к уже идущей сессии — тогда заезд создаётся сразу с накопленными сэмплами.
 ## Каждые `FLUSH_INTERVAL_SEC` секунд сессионного времени (по `second_elapsed`
 ## исполнителя — на паузе время не идёт) дозаписывает новые сэмплы в поток
 ## (`RideRepository.append_samples`) и переписывает метаданные с событиями
@@ -45,6 +46,8 @@ func _init(repo: RideRepository, rider_profile: Profile, workout_session: Workou
 	session.state_changed.connect(_on_state_changed)
 	session.event_logged.connect(_on_event_logged)
 	session.executor.second_elapsed.connect(_on_second_elapsed)
+	if session.get_state() in [WorkoutSession.State.RUNNING, WorkoutSession.State.PAUSED]:
+		_begin()
 
 
 ## Отписаться от сессии (цикл ссылок разрывается; на диск ничего не пишется).

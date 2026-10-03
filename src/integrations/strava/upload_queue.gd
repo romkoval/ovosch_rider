@@ -243,13 +243,16 @@ func _apply_result(item: Dictionary, result: UploadResult, now: int) -> void:
 			_finish(item, result, now)
 		UploadResult.STATUS_UPLOADING:
 			item["upload_id"] = result.upload_id
-			item["next_attempt_at"] = now + poll_retry_sec
+			item["last_error"] = result.error
+			item["next_attempt_at"] = now + maxi(poll_retry_sec, result.retry_after_sec)
 			_set_status(ride_id, result, int(item["attempts"]))
 			save()
 		_:
 			if not result.can_retry:
 				_finish(item, result, now)
 				return
+			if not result.upload_id.is_empty():
+				item["upload_id"] = result.upload_id
 			item["attempts"] = int(item["attempts"]) + 1
 			item["last_error"] = result.error
 			var delay := result.retry_after_sec if result.code == ApiResult.CODE_RATE_LIMITED and result.retry_after_sec > 0 \

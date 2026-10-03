@@ -21,6 +21,8 @@ const INTENSITY_STEP: float = 0.05
 const TARGET_FONT_SIZE: int = 96
 const METRIC_FONT_SIZE: int = 40
 
+## Сессия создана и сейчас стартует — владелец подключает запись заезда (`RideRecorder`, REQ-LOC-07).
+signal session_created(session: WorkoutSession)
 ## Сессия завершена (по плану или досрочно) — хук для сохранения заезда (этап 5).
 signal session_finished(session: WorkoutSession)
 ## Профиль изменён экраном (уровень сопротивления) — владелец сохраняет.
@@ -137,6 +139,7 @@ func start() -> bool:
 		_connections.ticks_devices = false
 	_stop_pending = false
 	_ride_scene.bind(_session, _profile)
+	session_created.emit(_session)
 	_session.start()
 	_ticker.start()
 	refresh()

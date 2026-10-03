@@ -1,0 +1,61 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/history/history_screen.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://src/ui/history/ride_detail.tscn" id="2_detail"]
+
+[node name="HistoryScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="ListPanel" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="VBox" type="VBoxContainer" parent="ListPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="HBoxContainer" parent="ListPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HomeButton" type="Button" parent="ListPanel/VBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.history.home"
+
+[node name="Title" type="Label" parent="ListPanel/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ui.history.title"
+horizontal_alignment = 1
+
+[node name="EmptyLabel" type="Label" parent="ListPanel/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.history.empty"
+horizontal_alignment = 1
+
+[node name="RideList" type="ItemList" parent="ListPanel/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Detail" parent="." instance=ExtResource("2_detail")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1

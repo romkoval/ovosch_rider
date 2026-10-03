@@ -75,8 +75,9 @@ func unavailable_message() -> String:
 
 
 func _assign(id: String, secret: String, config_source: String) -> StravaConfig:
-	client_id = id
-	_client_secret = secret
+	# Плейсхолдеры из примера не считаются значениями независимо от источника (REQ-STR-01 крит. 6).
+	client_id = id if _usable(id) else ""
+	_client_secret = secret if _usable(secret) else ""
 	source = config_source if is_configured() else SOURCE_NONE
 	return self
 

@@ -27,7 +27,7 @@ func setup(repo: ProfileRepository, app_state: AppState) -> void:
 
 
 func _ready() -> void:
-	_workout_button.pressed.connect(func() -> void: _navigate(AppState.Screen.WORKOUT))
+	_workout_button.pressed.connect(func() -> void: _navigate(AppState.Screen.PLAN))
 	_history_button.pressed.connect(func() -> void: _navigate(AppState.Screen.HISTORY))
 	_settings_button.pressed.connect(func() -> void: _navigate(AppState.Screen.SETTINGS))
 	_devices_button.pressed.connect(func() -> void: _navigate(AppState.Screen.DEVICES))

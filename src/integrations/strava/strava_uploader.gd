@@ -98,10 +98,15 @@ func poll_upload(upload_id: String, token: String = "") -> UploadResult:
 		var failure := _http_failure(response)
 		if failure != null:
 			failure.upload_id = upload_id
-			return failure
+			if failure.code == ApiResult.CODE_REAUTH_REQUIRED:
+				return failure
+			# Выгрузка уже принята (201 с `id`): ошибка HTTP при опросе — не вердикт Strava,
+			# заезд остаётся «обрабатывается», очередь опросит по `upload_id` позже
+			# (REQ-STR-02 крит. 3, REQ-STR-05 крит. 1); повторного POST не будет.
+			return _still_processing(upload_id, failure.error, failure.retry_after_sec)
 		var payload: Variant = response.json()
 		if not (payload is Dictionary):
-			return UploadResult.failed("неожиданный ответ Strava о статусе загрузки", ApiResult.CODE_BAD_RESPONSE, false, upload_id)
+			return _still_processing(upload_id, "неожиданный ответ Strava о статусе загрузки", 0)
 		var result := interpret_upload_status(payload)
 		if result.is_final():
 			return result
@@ -183,6 +188,14 @@ static func _http_failure(response: HttpResponse) -> UploadResult:
 			text += ": " + str((payload as Dictionary)["message"])
 		return UploadResult.failed(text, ApiResult.CODE_BAD_RESPONSE)
 	return null
+
+
+## `uploading` с текстом последней ошибки опроса и паузой по `Retry-After` (429).
+static func _still_processing(upload_id: String, error: String, retry_after_sec: int) -> UploadResult:
+	var r := UploadResult.uploading(upload_id)
+	r.error = error
+	r.retry_after_sec = retry_after_sec
+	return r
 
 
 static func _id_text(v: Variant) -> String:

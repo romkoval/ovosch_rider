@@ -74,6 +74,7 @@ func save(ride: Ride) -> String:
 	_locations[ride.id] = ride.profile_id
 	_index_put(ride)
 	rides_changed.emit(ride.profile_id)
+	ride_saved.emit(ride.id)
 	return ride.id
 
 

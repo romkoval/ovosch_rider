@@ -137,8 +137,9 @@ func test_req_prf_05_c2_main_with_two_profiles_shows_select_and_blocks_home_unti
 	assert_eq(main.repo.active_profile_id, a.id)
 	assert_true(main.visible_screen_node() is HomeScreen)
 	assert_eq(_home_screen(main).active_profile_text(), "Profile: Alice")
-	assert_true(main.app_state.navigate(AppState.Screen.HISTORY))
-	assert_eq(main.visible_screen_node().name, "Placeholder_history")
+	assert_true(main.app_state.navigate(AppState.Screen.HISTORY), "после выбора профиля остальные экраны доступны")
+	assert_true(main.visible_screen_node() is HistoryScreen, "показан реальный экран истории (класс HistoryScreen)")
+	assert_eq(_visible_screen_count(main), 1, "виден ровно один экран")
 
 
 func test_req_prf_05_c2_switch_profile_from_home_returns_to_select_and_locks() -> void:
@@ -466,28 +467,90 @@ func test_req_nfr_08_c3_main_applies_supported_locale_on_boot() -> void:
 		"после старта локаль — одна из поддерживаемых (система → ru/en, иначе en): %s" % TranslationServer.get_locale())
 
 
-func test_req_prf_05_placeholders_use_translation_keys_and_return_home() -> void:
+## Ожидаемый `class_name` сцены экрана по `AppState.Screen` (заглушек `Placeholder_*` больше нет).
+static func _expected_screen_class(screen: int) -> String:
+	match screen:
+		AppState.Screen.PROFILE_SELECT: return "ProfileSelectScreen"
+		AppState.Screen.HOME: return "HomeScreen"
+		AppState.Screen.WORKOUT: return "WorkoutScreen"
+		AppState.Screen.HISTORY: return "HistoryScreen"
+		AppState.Screen.SETTINGS: return "SettingsScreen"
+		AppState.Screen.DEV: return "DevScreen"
+		AppState.Screen.DEVICES: return "DevicesScreen"
+		AppState.Screen.PLAN: return "PlanScreen"
+	return ""
+
+
+static func _script_class(node: Node) -> String:
+	var script: Script = node.get_script() as Script
+	return script.get_global_name() if script != null else ""
+
+
+static func _visible_screen_count(main: AppMain) -> int:
+	var count := 0
+	for screen in AppState.Screen.values():
+		var node := main.screen_node(screen)
+		if node != null and node.visible:
+			count += 1
+	return count
+
+
+## Все Button/Label в поддереве экрана (без привязки к именам узлов).
+static func _collect_texts(node: Node, out: Array[Node]) -> void:
+	if node is Button or node is Label:
+		out.append(node)
+	for child in node.get_children():
+		_collect_texts(child, out)
+
+
+## Возврат на главный: видимой пользователю кнопкой `%HomeButton`/`%BackButton`, если экран её показывает
+## (у WorkoutScreen кнопка живёт в сводке и до финиша тренировки скрыта), иначе через `AppState.navigate(HOME)` —
+## критерий REQ-PRF-05 о состоянии навигации, не о кнопке.
+func _return_home(main: AppMain, screen_node: Control) -> void:
+	var back: Button = null
+	for unique_name in ["%HomeButton", "%BackButton"]:
+		var candidate := screen_node.get_node_or_null(unique_name) as Button
+		if candidate != null and candidate.is_visible_in_tree():
+			back = candidate
+			break
+	if back != null:
+		back.pressed.emit()
+	else:
+		assert_true(main.app_state.navigate(AppState.Screen.HOME), "%s: навигация на HOME" % screen_node.name)
+	assert_eq(main.app_state.current_screen, AppState.Screen.HOME, "%s: состояние навигации — HOME" % screen_node.name)
+	assert_true(main.visible_screen_node() is HomeScreen, "%s: возврат на главный экран" % screen_node.name)
+
+
+func test_req_prf_05_real_screens_switch_by_class_use_translation_keys_and_return_home() -> void:
 	_repo().create("Solo")
 	var main := _main()
-	var placeholders_checked := 0
-	for screen in [AppState.Screen.WORKOUT, AppState.Screen.HISTORY, AppState.Screen.SETTINGS, AppState.Screen.DEV]:
-		assert_true(main.app_state.navigate(screen))
+	assert_true(main.visible_screen_node() is HomeScreen, "один профиль → сразу HOME")
+	var screens_checked := 0
+	for screen in [AppState.Screen.WORKOUT, AppState.Screen.HISTORY, AppState.Screen.SETTINGS,
+			AppState.Screen.PLAN, AppState.Screen.DEVICES, AppState.Screen.DEV]:
+		var screen_label := AppState.screen_name(screen)
+		assert_true(main.app_state.navigate(screen), "%s: доступен после выбора профиля" % screen_label)
+		assert_eq(main.app_state.current_screen, screen)
 		var node := main.visible_screen_node()
-		assert_not_null(node, "экран %s показан" % AppState.screen_name(screen))
-		if not str(node.name).begins_with("Placeholder_"):
-			continue # экран уже реализован отдельной сценой (например, DEV)
-		placeholders_checked += 1
-		assert_eq(node.name, "Placeholder_" + AppState.screen_name(screen))
-		var back: Button = null
-		var label: Label = null
-		for child in node.get_child(0).get_children():
-			if child is Button:
-				back = child
-			elif child is Label:
-				label = child
-		assert_not_null(back)
-		assert_not_null(label)
-		assert_eq(label.tr(label.text), "This screen is coming soon")
-		back.pressed.emit()
-		assert_true(main.visible_screen_node() is HomeScreen, "кнопка возвращает на главный")
-	assert_gte(placeholders_checked, 2, "на этапе 1 хотя бы WORKOUT/HISTORY/SETTINGS — заглушки")
+		assert_not_null(node, "%s: экран показан" % screen_label)
+		if node == null:
+			continue
+		screens_checked += 1
+		assert_eq(_script_class(node), _expected_screen_class(screen), "%s: реальная сцена экрана, не заглушка" % screen_label)
+		assert_false(str(node.name).begins_with("Placeholder_"), "%s: заглушки больше нет" % screen_label)
+		assert_eq(_visible_screen_count(main), 1, "%s: виден ровно один экран" % screen_label)
+		var labelled: Array[Node] = []
+		_collect_texts(node, labelled)
+		for item in labelled:
+			var raw: String = item.text
+			if raw.strip_edges().is_empty():
+				continue
+			var shown: String = item.tr(raw)
+			assert_false(shown.begins_with("ui.") or shown.begins_with("error."),
+				"%s/%s: текст «%s» — ключ без перевода" % [screen_label, item.name, shown])
+		_return_home(main, node)
+	assert_eq(screens_checked, 6, "все экраны оболочки проверены")
+	main.app_state.switch_profile()
+	assert_true(main.visible_screen_node() is ProfileSelectScreen)
+	assert_false(main.app_state.navigate(AppState.Screen.HISTORY), "без выбранного профиля экраны недоступны")
+	assert_true(main.visible_screen_node() is ProfileSelectScreen)

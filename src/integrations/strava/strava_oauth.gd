@@ -215,6 +215,10 @@ func poll_listener() -> Dictionary:
 ## `/callback?code=…` и `ovoschrider://strava?code=…`.
 static func parse_redirect(url: String) -> Dictionary:
 	var rest := url
+	# Фрагмент (`#…`) не входит ни в путь, ни в параметры (RFC 3986) — отрезаем заранее.
+	var frag_idx := rest.find("#")
+	if frag_idx != -1:
+		rest = rest.substr(0, frag_idx)
 	var scheme_idx := rest.find("://")
 	if scheme_idx != -1:
 		rest = rest.substr(scheme_idx + 3)
@@ -234,9 +238,6 @@ static func parse_redirect(url: String) -> Dictionary:
 			var k := pair.substr(0, eq).uri_decode() if eq != -1 else pair.uri_decode()
 			var v := pair.substr(eq + 1).uri_decode() if eq != -1 else ""
 			query[k] = v
-	var hash_idx := path.find("#")
-	if hash_idx != -1:
-		path = path.substr(0, hash_idx)
 	return {"path": path, "query": query}
 
 

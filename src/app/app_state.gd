@@ -16,23 +16,32 @@ enum Screen {
 	SETTINGS,
 	DEV,
 	DEVICES,
+	PLAN,
 }
 
 ## Экран сменился.
 signal screen_changed(screen: int)
 ## Профиль выбран в этой сессии (id).
 signal profile_selected(id: String)
+## Язык интерфейса сменён (REQ-NFR-08 крит. 3, 4): экраны перерисовывают тексты.
+signal locale_changed(locale: String)
 
 var current_screen: int = Screen.PROFILE_SELECT
 ## Экран выбора открыт в режиме создания первого профиля (0 профилей).
 var create_mode: bool = false
 
+## Поддерживаемые языки интерфейса (UI берёт список отсюда, не из `AppLocale`).
+const SUPPORTED_LOCALES: Array[String] = AppLocale.SUPPORTED_LOCALES
+
 var _repo: ProfileRepository
+var _settings: AppSettings = null
 var _profile_chosen: bool = false
 
 
-func _init(repo: ProfileRepository) -> void:
+## `settings` — хранилище настроек приложения (язык); null — язык не сохраняется.
+func _init(repo: ProfileRepository, settings: AppSettings = null) -> void:
 	_repo = repo
+	_settings = settings
 
 
 func repository() -> ProfileRepository:
@@ -47,6 +56,29 @@ static func initial_screen(repo: ProfileRepository) -> int:
 ## Язык интерфейса по языку системы (делегирует `AppLocale.pick`).
 static func pick_locale(system_language: String) -> String:
 	return AppLocale.pick(system_language)
+
+
+## Применить язык без перезапуска (REQ-NFR-08 крит. 3, 4): сохранить в `AppSettings`,
+## `TranslationServer.set_locale`, `locale_changed` для перерисовки экранов.
+## Неподдерживаемый язык → false. Единственная точка смены языка для UI (Н-5).
+func set_locale(locale: String) -> bool:
+	if not SUPPORTED_LOCALES.has(locale):
+		return false
+	if _settings != null:
+		_settings.locale = locale
+		_settings.save()
+	TranslationServer.set_locale(locale)
+	locale_changed.emit(locale)
+	return true
+
+
+## Текущий язык интерфейса ("en"/"ru").
+func locale() -> String:
+	return TranslationServer.get_locale().substr(0, 2)
+
+
+func settings() -> AppSettings:
+	return _settings
 
 
 ## Применить правило старта: единственный профиль выбирается автоматически.

@@ -115,6 +115,13 @@ static func create_default(dir_path: String = DEFAULT_DIR) -> SecureStore:
 	return EncryptedFileSecureStore.new(dir_path, derive_device_password())
 
 
+## Переменная окружения (пустая строка — не задана). Единственное разрешённое место
+## платформенного вызова для чтения окружения (REQ-NFR-06 крит. 1): используется
+## `StravaConfig.load(..., SecureStore.read_env)` для `client_id`/`client_secret` в dev-сборках.
+static func read_env(name: String) -> String:
+	return OS.get_environment(name)
+
+
 ## Пароль файла из идентификатора устройства и соли (SHA-256, hex).
 ## `OS.get_unique_id()` может быть пустым на некоторых платформах — тогда
 ## используется только соль (ещё слабее; задокументировано как временное).
