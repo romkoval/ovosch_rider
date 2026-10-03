@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://src/ui/tracks/route_select_screen.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://src/ui/common/app_bar.tscn" id="2_appbar"]
+[ext_resource type="Script" path="res://src/ui/tracks/route_preview.gd" id="3_preview"]
 
 [node name="RouteSelectScreen" type="Control"]
 layout_mode = 3
@@ -11,23 +13,179 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Root" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_type_variation = &"Stack0"
 
-[node name="VBox" type="VBoxContainer" parent="Center"]
-layout_mode = 2
-
-[node name="ComingSoonLabel" type="Label" parent="Center/VBox"]
-layout_mode = 2
-text = "ui.common.coming_soon"
-horizontal_alignment = 1
-
-[node name="BackButton" type="Button" parent="Center/VBox"]
+[node name="AppBar" parent="Root" instance=ExtResource("2_appbar")]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.plan.back"
+title = "ui.tracks.title"
+
+[node name="Margin" type="MarginContainer" parent="Root"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"ScreenMargin"
+
+[node name="Body" type="HBoxContainer" parent="Root/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"Row24"
+
+[node name="CardsScroll" type="ScrollContainer" parent="Root/Margin/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.0
+focus_mode = 0
+horizontal_scroll_mode = 0
+
+[node name="Grid" type="VBoxContainer" parent="Root/Margin/Body/CardsScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_type_variation = &"Stack16"
+
+[node name="Detail" type="PanelContainer" parent="Root/Margin/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+size_flags_stretch_ratio = 2.0
+
+[node name="DetailBox" type="VBoxContainer" parent="Root/Margin/Body/Detail"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack16"
+
+[node name="Header" type="VBoxContainer" parent="Root/Margin/Body/Detail/DetailBox"]
+layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="RouteName" type="Label" parent="Root/Margin/Body/Detail/DetailBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H2Label"
+auto_translate_mode = 2
+text_overrun_behavior = 3
+clip_text = true
+
+[node name="RouteSubtitle" type="Label" parent="Root/Margin/Body/Detail/DetailBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+text_overrun_behavior = 3
+clip_text = true
+
+[node name="DetailScroll" type="ScrollContainer" parent="Root/Margin/Body/Detail/DetailBox"]
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+horizontal_scroll_mode = 0
+
+[node name="DetailContent" type="VBoxContainer" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_type_variation = &"Stack16"
+
+[node name="LargePreview" type="Control" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3_preview")
+mode = 1
+
+[node name="Info" type="BoxContainer" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack16"
+vertical = true
+
+[node name="DetailStats" type="HBoxContainer" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent/Info"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row24"
+
+[node name="Steepness" type="VBoxContainer" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent/Info"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"Stack8"
+
+[node name="SteepnessRow" type="HBoxContainer" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent/Info/Steepness"]
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="SteepnessTitle" type="Label" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent/Info/Steepness/SteepnessRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"BodyStrongLabel"
+auto_translate_mode = 2
+
+[node name="SteepnessValue" type="Label" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent/Info/Steepness/SteepnessRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"NumLabel"
+auto_translate_mode = 2
+horizontal_alignment = 2
+
+[node name="SteepnessSlider" type="HSlider" parent="Root/Margin/Body/Detail/DetailBox/DetailScroll/DetailContent/Info/Steepness"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 100.0
+step = 5.0
+value = 50.0
+
+[node name="StartButton" type="Button" parent="Root/Margin/Body/Detail/DetailBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+auto_translate_mode = 2
+text = "ui.tracks.start"
+
+[node name="Sheet" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Scrim" type="ColorRect" parent="Sheet"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="SheetSlot" type="VBoxContainer" parent="Sheet"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_type_variation = &"Stack0"

@@ -16,3 +16,6 @@ track.stat.ascent,набор,ascent
 track.stat.max_grade,макс. уклон,max grade
 track.climb,подъём {value},climb {value}
 track.bridge,мост,bridge
+ui.tracks.title,Свободная езда,Free ride
+ui.tracks.steepness,Крутизна SIM,SIM steepness
+ui.tracks.start,Поехать,Ride
