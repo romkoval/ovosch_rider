@@ -40,7 +40,7 @@ list_files() {
   if [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$(pwd -P)" ]; then
     git ls-files -z --cached --others --exclude-standard
   else
-    find . -type f -not -path './.git/*' -not -path './.godot/*' -print0 | sed -z 's#^\./##'
+    find . -type f -not -path './.git/*' -not -path './.godot/*' -print0 | perl -0pe 's#^\./##'
   fi
 }
 
