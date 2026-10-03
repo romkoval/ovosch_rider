@@ -1,5 +1,5 @@
 extends GutTest
-## Тесты AppSettings (REQ-NFR-08 крит. 3): сохранение языка между запусками.
+## Тесты AppSettings (REQ-NFR-08 крит. 3): сохранение языка между запусками; атомарная запись.
 
 var _path: String
 
@@ -9,6 +9,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	AtomicFile.simulate_write_error_prefix = ""
 	var dir := ProjectSettings.globalize_path(_path.get_base_dir())
 	if DirAccess.dir_exists_absolute(dir):
 		for f in DirAccess.open(dir).get_files():
@@ -47,3 +48,19 @@ func test_unsupported_or_corrupted_values_fall_back() -> void:
 	var broken := AppSettings.load_from(_path)
 	assert_eq(broken.locale, "", "повреждённый файл — значения по умолчанию")
 	assert_eq(broken.effective_locale(), AppLocale.detect())
+
+
+func test_save_is_atomic_write_error_keeps_previous_file() -> void:
+	var s := AppSettings.new(_path)
+	s.locale = "ru"
+	assert_true(s.save())
+	var before := FileAccess.get_file_as_string(_path)
+	s.locale = "en"
+	AtomicFile.simulate_write_error_prefix = _path
+	assert_false(s.save(), "ошибка записи видна вызывающему")
+	assert_push_error("AtomicFile")
+	assert_push_error("AppSettings")
+	assert_eq(FileAccess.get_file_as_string(_path), before, "прежний settings.json цел")
+	assert_false(FileAccess.file_exists(AtomicFile.tmp_path(_path)), "временный файл удалён")
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_eq(AppSettings.load_from(_path).locale, "ru")

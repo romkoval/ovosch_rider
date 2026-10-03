@@ -14,6 +14,9 @@ extends RefCounted
 ## - `save()` валидирует профиль (`Profile.validate()`) и уникальность имени без
 ##   учёта регистра (REQ-PRF-01 крит. 1, 2); при ошибках ничего не пишет.
 ## - `delete()` отказывает удалять последний профиль (REQ-PRF-01 крит. 5).
+## - `delete()` и `set_active()` меняют состояние в памяти только после успешной записи на
+##   диск: при сбое возвращают `storage_write_failed`, список и активный профиль прежние,
+##   сигналы и каскадные хуки не вызываются.
 ## - Удаление каскадно: сначала вызываются хуки `add_on_delete_hook`, затем
 ##   испускается `profile_deleted(id)` — на них подписываются хранилища секретов,
 ##   датчиков и заездов (T-010/T-011/T-041), сам модуль профилей о них не знает.
@@ -41,10 +44,11 @@ signal profile_deleted(id: String)
 ## Сменился активный профиль (пустая строка — активного нет).
 signal active_profile_changed(id: String)
 
-## Идентификатор активного профиля. Присвоение несуществующего id игнорируется с ошибкой.
+## Идентификатор активного профиля. Присвоение несуществующего id или неудачная запись
+## игнорируются с ошибкой в `last_errors`; код ошибки возвращает `set_active()`.
 var active_profile_id: String = "":
 	set(value):
-		_set_active(value)
+		set_active(value)
 	get:
 		return _active_id
 
@@ -141,7 +145,9 @@ func save(profile: Profile) -> Array[String]:
 
 
 ## Удалить профиль. Возвращает "" при успехе или код ошибки
-## (`profile_not_found`, `last_profile`). Каскад: хуки, затем `profile_deleted`.
+## (`profile_not_found`, `last_profile`, `storage_write_failed`). Каскад: хуки, затем
+## `profile_deleted`. Если файл не записан — профиль остаётся в памяти, активный не меняется,
+## каскад не запускается (иначе секреты и заезды удалились бы у «живого» после перезапуска профиля).
 func delete(id: String) -> String:
 	var p := _find_stored(id)
 	if p == null:
@@ -150,11 +156,18 @@ func delete(id: String) -> String:
 	if _profiles.size() <= 1:
 		last_errors = [ERR_LAST_PROFILE]
 		return ERR_LAST_PROFILE
+	var previous_profiles := _profiles.duplicate()
+	var previous_active := _active_id
 	_profiles.erase(p)
 	if _active_id == id:
 		_active_id = list()[0].id
+	if not _persist():
+		_profiles = previous_profiles
+		_active_id = previous_active
+		last_errors = [ERR_STORAGE_WRITE_FAILED]
+		return ERR_STORAGE_WRITE_FAILED
+	if _active_id != previous_active:
 		active_profile_changed.emit(_active_id)
-	_persist()
 	for hook in _on_delete_hooks:
 		if hook.is_valid():
 			hook.call(id)
@@ -208,16 +221,24 @@ func load_from_disk() -> void:
 		_active_id = list()[0].id
 
 
-func _set_active(id: String) -> void:
+## Сделать профиль активным и записать это на диск. "" — успех (или профиль уже активен),
+## иначе код: `profile_not_found` или `storage_write_failed` (активный профиль прежний).
+func set_active(id: String) -> String:
 	if id == _active_id:
-		return
+		return ""
 	if _find_stored(id) == null:
 		push_error("ProfileRepository: профиль '%s' не найден, активный не изменён" % id)
 		last_errors = [ERR_PROFILE_NOT_FOUND]
-		return
+		return ERR_PROFILE_NOT_FOUND
+	var previous := _active_id
 	_active_id = id
-	_persist()
+	if not _persist():
+		_active_id = previous
+		last_errors = [ERR_STORAGE_WRITE_FAILED]
+		return ERR_STORAGE_WRITE_FAILED
+	last_errors = []
 	active_profile_changed.emit(id)
+	return ""
 
 
 func _is_name_unique(profile_name: String, exclude_id: String) -> bool:

@@ -35,6 +35,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	AtomicFile.simulate_write_error_prefix = ""
 	_remove_tree(ProjectSettings.globalize_path(_dir))
 
 
@@ -342,11 +343,45 @@ func test_export_to_unwritable_path_reports_failure() -> void:
 	var s := _screen()
 	s.select_index(0)
 	assert_false(s.detail().export_to_path(ProjectSettings.globalize_path(_dir).path_join("no_such_dir/x.fit")))
+	assert_push_error("AtomicFile", "запись через AtomicFile: ошибка открытия временного файла в журнале")
 	var err := FileAccess.get_open_error()
 	assert_string_contains(s.detail().export_status_text(), "Export failed")
 	assert_eq(s.detail().export_status_text(), tr("ui.history.export.failed").format({"reason": s.detail().export_error_text(err)}),
 		"причина — переведённый ключ, не error_string()")
 	assert_false(s.detail().export_status_text().contains(error_string(err)), "текст движка не показывается")
+
+
+func test_export_is_atomic_write_error_keeps_existing_file() -> void:
+	var rides := _three_rides()
+	var s := _screen()
+	s.show_ride(rides[2].id)
+	var path := ProjectSettings.globalize_path(_dir).path_join("export.fit")
+	assert_true(s.detail().export_to_path(path))
+	var before := FileAccess.get_file_as_bytes(path)
+	s.show_ride(rides[0].id)
+	AtomicFile.simulate_write_error_prefix = path
+	assert_false(s.detail().export_to_path(path), "сбой записи — экспорт не удался")
+	assert_push_error("AtomicFile")
+	assert_eq(FileAccess.get_file_as_bytes(path), before, "прежний файл по этому пути цел")
+	assert_false(FileAccess.file_exists(AtomicFile.tmp_path(path)), "временный файл удалён")
+	assert_eq(s.detail().export_status_text(),
+		tr("ui.history.export.failed").format({"reason": tr("ui.history.export.error.cant_write")}))
+
+
+func test_strava_storage_failed_error_is_translated_in_detail() -> void:
+	var r := _ride(_pa, 1700000000, 60, "Token lost")
+	r.upload["strava_status"] = Ride.UPLOAD_FAILED
+	r.upload["last_error_code"] = ApiResult.CODE_STORAGE_FAILED
+	r.upload["last_error"] = "не удалось сохранить токены Strava в защищённое хранилище"
+	_rides.save(r)
+	var s := _screen()
+	s.select_index(0)
+	assert_string_contains(s.detail().status_text(), "could not save to secure storage", "REQ-NFR-08: причина по коду")
+	assert_false(s.detail().status_text().contains(ApiResult.CODE_STORAGE_FAILED), "без сырого кода")
+	assert_false(s.detail().status_text().contains(tr("ui.history.strava.error.unknown")), "не «неизвестная ошибка»")
+	TranslationServer.set_locale("ru")
+	assert_string_contains(s.detail().strava_error_text(ApiResult.CODE_STORAGE_FAILED), "защищённое хранилище")
+	TranslationServer.set_locale("en")
 
 
 # ---------------------------------------------------------------------------

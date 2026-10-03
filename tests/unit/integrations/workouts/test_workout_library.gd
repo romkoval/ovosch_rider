@@ -1,5 +1,6 @@
 extends GutTest
-## Тесты WorkoutLibrary и WorkoutSerializer (REQ-IMP-03 крит. 1, REQ-IMP-04 крит. 1, 2, 4, 5, REQ-IMP-05 крит. 1, 3, 4).
+## Тесты WorkoutLibrary и WorkoutSerializer (REQ-IMP-03 крит. 1, REQ-IMP-04 крит. 1, 2, 4, 5, REQ-IMP-05 крит. 1, 3, 4);
+## атомарная запись записей библиотеки.
 
 const FIXTURES: String = "res://tests/fixtures/workouts/"
 const A: String = "profile-a"
@@ -18,6 +19,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	AtomicFile.simulate_write_error_prefix = ""
 	_remove_tree(ProjectSettings.globalize_path(_dir))
 
 
@@ -305,3 +307,30 @@ func test_serializer_rejects_garbage() -> void:
 	assert_eq(w.steps.size(), 1, "битые элементы пропущены")
 	assert_eq(w.steps[0].target_kind, WorkoutStep.TargetKind.NONE)
 	assert_eq(w.steps[0].kind, WorkoutStep.StepKind.STEADY)
+
+
+# ---------------------------------------------------------------------------
+# Атомарная запись записи библиотеки (финальное ревью, REQ-IMP-05 крит. 4)
+# ---------------------------------------------------------------------------
+
+func test_write_error_keeps_previous_record_and_reports_storage_write_failed() -> void:
+	var text := FileAccess.get_file_as_string(FIXTURES + "simple.zwo")
+	var first := _lib.import_text(A, text, "simple.zwo")
+	assert_true(first.ok(), str(first.error_messages()))
+	var entry_id := str(first.metadata["entry_id"])
+	var path := _lib.profile_dir(A) + entry_id + ".json"
+	var before := FileAccess.get_file_as_string(path)
+	_changed = []
+	AtomicFile.simulate_write_error_prefix = path
+	var again := _lib.import_text(A, text, "simple_again.zwo")  # тот же хэш — перезапись той же записи
+	assert_false(again.ok())
+	assert_push_error("AtomicFile")
+	assert_push_error("WorkoutLibrary")
+	assert_eq(str(again.errors[0].get("key", "")), "storage_write_failed")
+	assert_eq(FileAccess.get_file_as_string(path), before, "прежняя запись цела")
+	assert_false(FileAccess.file_exists(AtomicFile.tmp_path(path)), "временный файл удалён")
+	assert_eq(_changed, [] as Array[String], "без library_changed при сбое")
+	AtomicFile.simulate_write_error_prefix = ""
+	var entries := WorkoutLibrary.new(_dir).list(A)
+	assert_eq(entries.size(), 1)
+	assert_eq(str(entries[0]["source_file"]), "simple.zwo", "на диске — прежняя запись")

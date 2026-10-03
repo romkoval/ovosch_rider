@@ -274,12 +274,10 @@ func _write_record(profile_id: String, record: Dictionary) -> bool:
 		push_error("WorkoutLibrary: не удалось создать каталог %s (%s)" % [dir, error_string(err)])
 		return false
 	var path := _record_path(profile_id, str(record["id"]))
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		push_error("WorkoutLibrary: не удалось записать %s (%s)" % [path, error_string(FileAccess.get_open_error())])
+	var write_err := AtomicFile.write_text(path, JSON.stringify(record, "\t"))
+	if write_err != OK:
+		push_error("WorkoutLibrary: не удалось записать %s (%s)" % [path, error_string(write_err)])
 		return false
-	file.store_string(JSON.stringify(record, "\t"))
-	file.close()
 	return true
 
 

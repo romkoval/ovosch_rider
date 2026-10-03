@@ -27,6 +27,7 @@ const STRAVA_ERROR_KEYS: Dictionary = {
 	ApiResult.CODE_AUTH_FAILED: "ui.history.strava.error.reauth_required",
 	ApiResult.CODE_NOT_CONFIGURED: "ui.history.strava.error.not_configured",
 	ApiResult.CODE_BAD_RESPONSE: "ui.history.strava.error.bad_response",
+	ApiResult.CODE_STORAGE_FAILED: "ui.history.strava.error.storage_failed",
 }
 const STRAVA_ERROR_UNKNOWN_KEY: String = "ui.history.strava.error.unknown"
 ## Причина неудачного экспорта FIT по коду `Error` (вместо `error_string()` движка).
@@ -165,17 +166,16 @@ func request_export() -> void:
 	_export_dialog.popup_centered_ratio(0.8)
 
 
-## Записать FIT по пути. true — файл записан.
+## Записать FIT по пути атомарно (`AtomicFile`: временный файл → rename). true — файл записан;
+## при ошибке прежний файл по этому пути не тронут, причина — в статусе экспорта.
 func export_to_path(path: String) -> bool:
 	if _ride == null:
 		return false
 	var bytes := FitEncoder.encode(_ride)
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		_export_status_label.text = tr("ui.history.export.failed").format({"reason": export_error_text(FileAccess.get_open_error())})
+	var err := AtomicFile.write_bytes(path, bytes)
+	if err != OK:
+		_export_status_label.text = tr("ui.history.export.failed").format({"reason": export_error_text(err)})
 		return false
-	file.store_buffer(bytes)
-	file.close()
 	_export_status_label.text = tr("ui.history.export.done").format({"path": path})
 	return true
 

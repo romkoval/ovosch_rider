@@ -41,6 +41,7 @@ static func load_from(path: String = DEFAULT_PATH) -> AppSettings:
 	return s
 
 
+## Атомарная запись (`AtomicFile`): при ошибке прежний файл не тронут, возвращается false.
 func save() -> bool:
 	var dir := _path.get_base_dir()
 	if not dir.is_empty():
@@ -48,12 +49,10 @@ func save() -> bool:
 		if err != OK and err != ERR_ALREADY_EXISTS:
 			push_error("AppSettings: cannot create directory %s (%s)" % [dir, error_string(err)])
 			return false
-	var file := FileAccess.open(_path, FileAccess.WRITE)
-	if file == null:
-		push_error("AppSettings: cannot write %s (%s)" % [_path, error_string(FileAccess.get_open_error())])
+	var write_err := AtomicFile.write_text(_path, JSON.stringify({"schema": SCHEMA_VERSION, "locale": locale}, "\t"))
+	if write_err != OK:
+		push_error("AppSettings: cannot write %s (%s)" % [_path, error_string(write_err)])
 		return false
-	file.store_string(JSON.stringify({"schema": SCHEMA_VERSION, "locale": locale}, "\t"))
-	file.close()
 	return true
 
 

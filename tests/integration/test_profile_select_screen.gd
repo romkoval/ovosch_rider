@@ -1,5 +1,5 @@
 extends GutTest
-## Интеграционные тесты экрана выбора профиля и корневой сцены (REQ-PRF-01 крит. 1, 2, 4, 5; REQ-PRF-05).
+## Интеграционные тесты экрана выбора профиля и корневой сцены (REQ-PRF-01 крит. 1, 2, 4, 5, 6; REQ-PRF-05).
 ## Сцены инстанцируются headless и добавляются в дерево через add_child_autofree.
 
 const SCENE: String = "res://src/ui/profile_select/profile_select.tscn"
@@ -18,6 +18,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	AtomicFile.simulate_write_error_prefix = ""
 	_remove_tree(ProjectSettings.globalize_path(_dir))
 	assert_false(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_dir)))
 
@@ -230,3 +231,48 @@ func test_main_scene_cascades_profile_deletion_to_secrets_and_devices() -> void:
 	assert_eq(main.devices.sensors(b.id), [])
 	assert_true(main.devices.has_trainer())
 	assert_not_null(main.repo.get_by_id(a.id))
+
+
+# ---------------------------------------------------------------------------
+# Сбой записи profiles.json при выборе и удалении (финальное ревью)
+# ---------------------------------------------------------------------------
+
+func test_select_write_failure_shows_profile_error_and_stays_on_select() -> void:
+	var a := _repo.create("Аня")
+	var b := _repo.create("Борис")
+	_state.start()
+	var s := _screen()
+	var chosen: Array[String] = []
+	s.profile_chosen.connect(func(id: String) -> void: chosen.append(id))
+	s.select_index(1)
+	assert_eq(s.selected_profile_id(), b.id)
+	AtomicFile.simulate_write_error_prefix = _repo.file_path()
+	assert_false(s.select_current(), "выбор не удался")
+	assert_push_error("AtomicFile")
+	assert_push_error("ProfileRepository")
+	assert_eq(s.error_text(), "Could not save profiles to disk", "сообщение через error.profile.<code>")
+	assert_eq(chosen, [] as Array[String])
+	assert_eq(_state.current_screen, AppState.Screen.PROFILE_SELECT)
+	assert_eq(_repo.active_profile_id, a.id)
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_true(s.select_current())
+	assert_eq(s.error_text(), "", "ошибка снята после успешного выбора")
+	assert_eq(chosen, [b.id] as Array[String])
+
+
+func test_delete_write_failure_shows_profile_error_and_keeps_profile() -> void:
+	var a := _repo.create("Аня")
+	_repo.create("Борис")
+	var s := _screen()
+	var deleted: Array[String] = []
+	s.profile_deleted.connect(func(id: String) -> void: deleted.append(id))
+	s.select_index(0)
+	assert_true(s.request_delete())
+	AtomicFile.simulate_write_error_prefix = _repo.file_path()
+	assert_eq(s.confirm_delete(), ProfileRepository.ERR_STORAGE_WRITE_FAILED)
+	assert_push_error("AtomicFile")
+	assert_push_error("ProfileRepository")
+	assert_eq(s.error_text(), "Could not save profiles to disk")
+	assert_eq(deleted, [] as Array[String])
+	assert_eq(s.profile_count(), 2, "профиль остался в списке")
+	assert_not_null(_repo.get_by_id(a.id))

@@ -309,10 +309,8 @@ func _write_json(path: String, data: Dictionary) -> bool:
 	if err != OK and err != ERR_ALREADY_EXISTS:
 		push_error("RememberedDevices: не удалось создать каталог %s (%s)" % [_dir_path, error_string(err)])
 		return false
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		push_error("RememberedDevices: не удалось записать %s (%s)" % [path, error_string(FileAccess.get_open_error())])
+	var write_err := AtomicFile.write_text(path, JSON.stringify(data, "\t"))
+	if write_err != OK:
+		push_error("RememberedDevices: не удалось записать %s (%s)" % [path, error_string(write_err)])
 		return false
-	file.store_string(JSON.stringify(data, "\t"))
-	file.close()
 	return true

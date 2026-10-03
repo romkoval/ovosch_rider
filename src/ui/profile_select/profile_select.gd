@@ -72,6 +72,9 @@ func refresh() -> void:
 	_empty_hint.visible = empty
 	if empty:
 		open_create_form()
+	# Автовыбор единственного профиля при старте не удался (например, сбой записи) — показать причину.
+	if _app_state != null and not _app_state.last_select_error().is_empty():
+		_show_error([_app_state.last_select_error()])
 	_update_buttons()
 
 
@@ -94,15 +97,24 @@ func selected_profile_id() -> String:
 	return _ids[selected[0]]
 
 
-## Подтвердить выбор выделенного профиля. false — ничего не выделено.
+## Подтвердить выбор выделенного профиля. false — ничего не выделено или выбор не удался
+## (например, не записан активный профиль) — причина показана в `error_text()`.
 func select_current() -> bool:
 	var id := selected_profile_id()
 	if id.is_empty():
 		return false
+	var err := ""
 	if _app_state != null:
-		_app_state.select_profile(id)
+		if not _app_state.select_profile(id):
+			err = _app_state.last_select_error()
+			if err.is_empty():
+				err = ProfileRepository.ERR_PROFILE_NOT_FOUND
 	else:
-		_repo.active_profile_id = id
+		err = _repo.set_active(id)
+	if not err.is_empty():
+		_show_error([err])
+		return false
+	_show_error([])
 	profile_chosen.emit(id)
 	return true
 

@@ -1,5 +1,6 @@
 extends GutTest
-## Тесты модели навигации AppState (REQ-PRF-05 крит. 1–3, REQ-NFR-08 крит. 3).
+## Тесты модели навигации AppState (REQ-PRF-05 крит. 1–3, REQ-NFR-08 крит. 3); сбой записи
+## активного профиля при выборе (REQ-PRF-01 крит. 6).
 
 var _dir: String
 var _repo: ProfileRepository
@@ -15,6 +16,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	AtomicFile.simulate_write_error_prefix = ""
 	_remove_tree(ProjectSettings.globalize_path(_dir))
 
 
@@ -149,3 +151,23 @@ func test_screen_name() -> void:
 	assert_eq(AppState.screen_name(AppState.Screen.PROFILE_SELECT), "profile_select")
 	assert_eq(AppState.screen_name(AppState.Screen.DEV), "dev")
 	assert_eq(AppState.screen_name(99), "unknown")
+
+
+func test_select_profile_fails_when_active_profile_not_persisted() -> void:
+	var a := _repo.create("A")
+	var b := _repo.create("B")
+	var s := _state()
+	s.start()
+	AtomicFile.simulate_write_error_prefix = _repo.file_path()
+	assert_false(s.select_profile(b.id), "выбор не удался")
+	assert_push_error("AtomicFile")
+	assert_push_error("ProfileRepository")
+	assert_eq(s.last_select_error(), ProfileRepository.ERR_STORAGE_WRITE_FAILED)
+	assert_false(s.is_profile_chosen())
+	assert_eq(s.current_screen, AppState.Screen.PROFILE_SELECT, "главный экран не открыт")
+	assert_eq(_selected, [] as Array[String])
+	assert_eq(_repo.active_profile_id, a.id)
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_true(s.select_profile(b.id))
+	assert_eq(s.last_select_error(), "")
+	assert_eq(s.current_screen, AppState.Screen.HOME)

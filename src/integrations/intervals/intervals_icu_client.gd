@@ -103,7 +103,8 @@ static func local_date() -> String:
 
 ## Проверить ключ запросом профиля атлета. Успех → ключ сохранён в `SecureStore`,
 ## `data` — разобранный атлет (`IntervalsSync.parse_athlete`). 401/403 → `auth_failed`,
-## ключ не сохраняется (REQ-INT-01 крит. 3).
+## ключ не сохраняется (REQ-INT-01 крит. 3). Ключ принят, но `SecureStore` отказал в записи →
+## `storage_failed` (ключ не сохранён, `athlete_id` не меняется).
 func verify_key(new_athlete_id: String, key: String) -> ApiResult:
 	var aid := new_athlete_id.strip_edges()
 	var k := key.strip_edges()
@@ -118,7 +119,9 @@ func verify_key(new_athlete_id: String, key: String) -> ApiResult:
 	if not (result.data is Dictionary):
 		return ApiResult.failure(ApiResult.CODE_BAD_RESPONSE, "неожиданный ответ сервера", result.status)
 	if not _store.set_secret(secret_key(), k):
-		return ApiResult.failure(ApiResult.CODE_BAD_RESPONSE, "не удалось сохранить ключ в защищённое хранилище")
+		var why := "хранилище не прочитано" if not _store.loaded_ok() else error_string(_store.last_error())
+		return ApiResult.failure(ApiResult.CODE_STORAGE_FAILED,
+				"не удалось сохранить ключ в защищённое хранилище (%s)" % why, result.status)
 	athlete_id = aid
 	result.data = IntervalsSync.parse_athlete(result.data)
 	return result

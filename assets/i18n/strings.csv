@@ -238,6 +238,7 @@ ui.settings.intervals_unlinked,Ключ Intervals.icu удалён,Intervals.icu
 ui.settings.key_saved,Ключ сохранён: {name},Key saved: {name}
 ui.settings.key_rejected,Ключ не принят Intervals.icu: проверьте Athlete ID и ключ API,Key rejected by Intervals.icu: check the Athlete ID and API key
 ui.settings.key_fill_both,Введите Athlete ID и ключ API,Enter Athlete ID and API key
+ui.settings.key_save_failed,"Ключ принят, но не сохранён: {reason}","The key was accepted but not saved: {reason}"
 ui.settings.key_check_failed,Не удалось проверить ключ: {reason},Could not verify the key: {reason}
 ui.settings.sync_done,Профиль обновлён из Intervals.icu,Profile updated from Intervals.icu
 ui.settings.sync_done_with_warnings,Синхронизировано с замечаниями: {warnings},Synced with warnings: {warnings}
@@ -249,6 +250,13 @@ ui.settings.err_network,нет связи с Intervals.icu,no connection to Inte
 ui.settings.err_rate_limited,слишком много запросов к Intervals.icu — повторите позже,too many requests to Intervals.icu — try again later
 ui.settings.err_not_configured,ключ Intervals.icu не задан,Intervals.icu key is not set
 ui.settings.err_bad_response,неожиданный ответ Intervals.icu,unexpected response from Intervals.icu
+ui.settings.store_unreadable,"Не удалось прочитать защищённое хранилище (например, после смены ключа устройства). Привязки Strava и Intervals.icu недоступны, пока хранилище не сброшено.","Secure storage could not be read (for example, after the device key changed). Strava and Intervals.icu links are unavailable until the storage is reset."
+ui.settings.store_reset,Сбросить привязки,Reset links
+ui.settings.store_reset_confirm,"Удалить все сохранённые привязки Strava и Intervals.icu для всех профилей? Профили и заезды останутся, сервисы нужно будет привязать заново.","Delete all saved Strava and Intervals.icu links for every profile? Profiles and rides are kept; you will need to link the services again."
+ui.settings.store_reset_confirm_ok,Сбросить,Reset
+ui.settings.store_reset_done,Привязки сброшены — привяжите сервисы заново,Links have been reset — link the services again
+ui.settings.store_reset_failed,Не удалось сбросить защищённое хранилище,Could not reset secure storage
+ui.settings.err_storage_failed,не удалось сохранить в защищённое хранилище,could not save to secure storage
 ui.settings.err_unknown,неизвестная ошибка,unknown error
 ui.settings.warn_ftp_missing,FTP не задан в Intervals.icu,FTP is not set in Intervals.icu
 ui.settings.warn_ftp_out_of_range,FTP из Intervals.icu вне допустимого диапазона,FTP from Intervals.icu is out of range
@@ -329,6 +337,7 @@ ui.history.strava.error.rate_limited,слишком много запросов 
 ui.history.strava.error.reauth_required,нужно заново войти в Strava в настройках,sign in to Strava again in Settings
 ui.history.strava.error.not_configured,привязка Strava недоступна в этой сборке,Strava linking is not available in this build
 ui.history.strava.error.bad_response,Strava не приняла файл,Strava did not accept the file
+ui.history.strava.error.storage_failed,не удалось сохранить в защищённое хранилище — войдите в Strava заново в настройках,could not save to secure storage — sign in to Strava again in Settings
 ui.history.strava.error.unknown,неизвестная ошибка выгрузки,unknown upload error
 ui.history.recovery.title,Незавершённый заезд,Unfinished ride
 ui.history.recovery.text,Заезд «{name}» от {date} ({time}) не был завершён. Сохранить как завершённый досрочно или удалить?,Ride “{name}” from {date} ({time}) was not finished. Keep it as ended early or delete it?
@@ -347,6 +356,7 @@ ui.settings.strava_err_auth_failed,Strava не приняла вход — по�
 ui.settings.strava_err_network,нет связи со Strava,no connection to Strava
 ui.settings.strava_err_rate_limited,слишком много запросов к Strava — повторите позже,too many requests to Strava — try again later
 ui.settings.strava_err_bad_response,неожиданный ответ Strava,unexpected response from Strava
+ui.settings.strava_err_storage_failed,не удалось сохранить вход Strava в защищённое хранилище,could not save the Strava sign-in to secure storage
 ui.settings.strava_err_timeout,вход не завершён вовремя — начните заново,sign-in timed out — start again
 ui.settings.strava_err_access_denied,доступ в Strava не разрешён,access was not granted in Strava
 ui.settings.strava_err_bad_redirect,некорректный ответ страницы входа — начните заново,invalid sign-in response — start again

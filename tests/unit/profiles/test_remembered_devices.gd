@@ -1,5 +1,6 @@
 extends GutTest
-## Тесты реестра запомненных устройств (REQ-PRF-04 крит. 2–4, REQ-PRF-01 крит. 4, REQ-DEV-06 крит. 1).
+## Тесты реестра запомненных устройств (REQ-PRF-04 крит. 2–4, REQ-PRF-01 крит. 4, REQ-DEV-06 крит. 1);
+## атомарная запись файлов реестра (REQ-PRF-01 крит. 6).
 
 const A: String = "aaaaaaaa-0000-4000-8000-000000000001"
 const B: String = "bbbbbbbb-0000-4000-8000-000000000002"
@@ -16,6 +17,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	AtomicFile.simulate_write_error_prefix = ""
 	_remove_tree(ProjectSettings.globalize_path(_dir))
 	assert_false(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_dir)))
 
@@ -213,3 +215,35 @@ func test_corrupted_files_are_ignored() -> void:
 	assert_false(broken.has_trainer())
 	assert_eq(broken.sensors(A), [])
 	assert_true(broken.remember(A, _hr()), "после повреждения можно писать дальше")
+
+
+# ---------------------------------------------------------------------------
+# Атомарная запись (финальное ревью): сбой записи не портит прежний файл
+# ---------------------------------------------------------------------------
+
+func test_write_error_keeps_previous_sensors_file_and_reports_failure() -> void:
+	assert_true(_dev.remember("p1", _hr("hr-1", "Garmin HRM")))
+	var path := _dev.profile_file_path("p1")
+	var before := FileAccess.get_file_as_string(path)
+	AtomicFile.simulate_write_error_prefix = path
+	assert_false(_dev.remember("p1", _hr("hr-2", "Polar H10")), "ошибка записи видна вызывающему")
+	assert_push_error("AtomicFile")
+	assert_push_error("RememberedDevices")
+	assert_eq(FileAccess.get_file_as_string(path), before, "прежний файл датчиков цел")
+	assert_false(FileAccess.file_exists(AtomicFile.tmp_path(path)), "временный файл удалён")
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_eq(_open().list("p1").size(), 1, "на диске — состояние до неудачной записи")
+
+
+func test_write_error_keeps_previous_trainer_file() -> void:
+	assert_true(_dev.set_trainer(_trainer()))
+	var path := _dev.trainer_file_path()
+	var before := FileAccess.get_file_as_string(path)
+	AtomicFile.simulate_write_error_prefix = path
+	assert_false(_dev.set_trainer(RememberedDevices.make_device("kickr-1", "Wahoo KICKR", RememberedDevices.KIND_TRAINER)))
+	assert_push_error("AtomicFile")
+	assert_push_error("RememberedDevices")
+	assert_eq(FileAccess.get_file_as_string(path), before, "прежний файл станка цел")
+	assert_false(FileAccess.file_exists(AtomicFile.tmp_path(path)))
+	AtomicFile.simulate_write_error_prefix = ""
+	assert_eq(str(_open().trainer().get("id", "")), "neo-1")

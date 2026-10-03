@@ -4,6 +4,8 @@ extends Control
 ## profile (REQ-PRF-02 crit. 1, REQ-WRK-04 crit. 1, REQ-DEV-05 crit. 2), Intervals.icu link,
 ## sync and FTP/zone sources (REQ-INT-06 crit. 5-7, REQ-PRF-03 crit. 2), Strava placeholder
 ## (T-049), about. All strings are translation keys; profile errors via `error.profile.<code>`.
+## An unreadable `SecureStore` (`loaded_ok() == false`) shows a warning with a confirmed
+## "reset links" action (`SecureStore.reset_store()`).
 ##
 ## FTP is written only through `Profile.set_ftp_local()` (source resets to "local",
 ## REQ-INT-06 crit. 4); zones are not edited here. Power source goes to the profile and to
@@ -30,6 +32,7 @@ const API_ERROR_KEYS: Dictionary = {
 	ApiResult.CODE_RATE_LIMITED: "ui.settings.err_rate_limited",
 	ApiResult.CODE_NOT_CONFIGURED: "ui.settings.err_not_configured",
 	ApiResult.CODE_BAD_RESPONSE: "ui.settings.err_bad_response",
+	ApiResult.CODE_STORAGE_FAILED: "ui.settings.err_storage_failed",
 }
 const API_ERROR_UNKNOWN_KEY: String = "ui.settings.err_unknown"
 ## Human-readable texts for `IntervalsSync.WARN_*` (local_override has its own message).
@@ -55,6 +58,7 @@ const STRAVA_ERROR_KEYS: Dictionary = {
 	ApiResult.CODE_NETWORK: "ui.settings.strava_err_network",
 	ApiResult.CODE_RATE_LIMITED: "ui.settings.strava_err_rate_limited",
 	ApiResult.CODE_BAD_RESPONSE: "ui.settings.strava_err_bad_response",
+	ApiResult.CODE_STORAGE_FAILED: "ui.settings.strava_err_storage_failed",
 	"timeout": "ui.settings.strava_err_timeout",
 	"access_denied": "ui.settings.strava_err_access_denied",
 	"bad_request": "ui.settings.strava_err_bad_redirect",
@@ -65,6 +69,8 @@ const STRAVA_ERROR_KEYS: Dictionary = {
 ## this is what makes the language switch take effect without a restart (REQ-NFR-08 crit. 4).
 const STATIC_TEXTS: Dictionary = {
 	"Margin/Scroll/VBox/Title": "ui.settings.title",
+	"Margin/Scroll/VBox/StoreWarning/StoreWarningLabel": "ui.settings.store_unreadable",
+	"Margin/Scroll/VBox/StoreWarning/ResetStoreButton": "ui.settings.store_reset",
 	"Margin/Scroll/VBox/LanguageTitle": "ui.settings.language",
 	"Margin/Scroll/VBox/Grid/NameLabel": "ui.settings.name",
 	"Margin/Scroll/VBox/Grid/FtpLabel": "ui.settings.ftp",
@@ -91,6 +97,8 @@ var _transport: HttpTransport
 var _connections: ConnectionManager
 var _last_sync_result: ApiResult = null
 var _last_sync_warnings: Array[String] = []
+## Ждёт подтверждения сброса хранилища секретов («Сбросить привязки»).
+var _reset_pending: bool = false
 
 @onready var _locale_option: OptionButton = %LocaleOption
 @onready var _name_edit: LineEdit = %NameEdit
@@ -111,6 +119,11 @@ var _last_sync_warnings: Array[String] = []
 @onready var _intervals_forget_button: Button = %IntervalsForgetButton
 @onready var _intervals_message_label: Label = %IntervalsMessageLabel
 @onready var _key_dialog: IntervalsKeyDialog = %IntervalsKeyDialog
+@onready var _store_warning: Control = %StoreWarning
+@onready var _store_warning_label: Label = %StoreWarningLabel
+@onready var _reset_store_button: Button = %ResetStoreButton
+@onready var _store_message_label: Label = %StoreMessageLabel
+@onready var _reset_store_dialog: ConfirmationDialog = %ResetStoreDialog
 @onready var _strava_status_label: Label = %StravaStatusLabel
 @onready var _strava_connect_button: StravaConnectButton = %StravaConnectButton
 ## Сервис Strava активного профиля (T-049); null — привязка недоступна.
@@ -151,6 +164,9 @@ func _ready() -> void:
 	_strava_connect_button.connect_requested.connect(start_strava_connect)
 	_strava_connect_button.disconnect_requested.connect(disconnect_strava)
 	_strava_connect_button.set_available(false)
+	_reset_store_button.pressed.connect(request_reset_store)
+	_reset_store_dialog.confirmed.connect(confirm_reset_store)
+	_reset_store_dialog.canceled.connect(cancel_reset_store)
 	if _repo != null:
 		refresh()
 
@@ -188,6 +204,7 @@ func refresh_texts() -> void:
 	if _repo == null or not is_node_ready():
 		return
 	_render_static()
+	_render_store_warning()
 	_render_locale()
 	_render_power_source_items()
 	_render_profile_status()
@@ -529,6 +546,8 @@ func key_error_text(code: String) -> String:
 			return tr("ui.settings.key_rejected")
 		ApiResult.CODE_NOT_CONFIGURED:
 			return tr("ui.settings.key_fill_both")
+		ApiResult.CODE_STORAGE_FAILED:
+			return tr("ui.settings.key_save_failed").format({"reason": api_error_text(code)})
 		_:
 			return tr("ui.settings.key_check_failed").format({"reason": api_error_text(code)})
 
@@ -583,6 +602,74 @@ func intervals_message_text() -> String:
 
 func key_dialog() -> IntervalsKeyDialog:
 	return _key_dialog
+
+
+# ---------------------------------------------------------------------------
+# Secure store (REQ-NFR-05): unreadable store -> warning and "reset links"
+# ---------------------------------------------------------------------------
+
+## The secret store exists but could not be read (e.g. the device key changed): reads give
+## empty values and writes are refused, so links look missing and cannot be re-created.
+func is_store_unreadable() -> bool:
+	return _store != null and not _store.loaded_ok()
+
+
+func is_store_warning_visible() -> bool:
+	return _store_warning.visible
+
+
+func store_warning_text() -> String:
+	return _store_warning_label.text if _store_warning.visible else ""
+
+
+func store_message_text() -> String:
+	return _store_message_label.text
+
+
+func _render_store_warning() -> void:
+	_store_warning.visible = is_store_unreadable()
+	_reset_store_button.disabled = not is_store_unreadable()
+	_reset_store_dialog.title = tr("ui.settings.store_reset")
+	_reset_store_dialog.dialog_text = tr("ui.settings.store_reset_confirm")
+	_reset_store_dialog.ok_button_text = tr("ui.settings.store_reset_confirm_ok")
+	_reset_store_dialog.cancel_button_text = tr("ui.common.cancel")
+
+
+## "Reset links": ask for confirmation first. false — nothing to reset.
+func request_reset_store() -> bool:
+	if not is_store_unreadable():
+		return false
+	_reset_pending = true
+	_render_store_warning()
+	_reset_store_dialog.popup_centered()
+	return true
+
+
+## Confirmed reset: wipe the store (`SecureStore.reset_store`) and re-render; Strava and
+## Intervals.icu then show as not linked. The local profile data are untouched.
+func confirm_reset_store() -> void:
+	if not _reset_pending:
+		return
+	_reset_pending = false
+	if _reset_store_dialog.visible:
+		_reset_store_dialog.hide()
+	if _store == null:
+		return
+	_store.reset_store()
+	_last_sync_result = null
+	_last_sync_warnings = []
+	refresh_texts()
+	_store_message_label.text = tr("ui.settings.store_reset_done") if _store.loaded_ok() else tr("ui.settings.store_reset_failed")
+
+
+func cancel_reset_store() -> void:
+	_reset_pending = false
+	if _reset_store_dialog.visible:
+		_reset_store_dialog.hide()
+
+
+func is_reset_store_pending() -> bool:
+	return _reset_pending
 
 
 # ---------------------------------------------------------------------------

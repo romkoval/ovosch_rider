@@ -1,7 +1,8 @@
 extends GutTest
 ## Интеграционные тесты экрана настроек (REQ-NFR-08 крит. 3, 4; REQ-PRF-02 крит. 1;
 ## REQ-INT-06 крит. 4–6 (крит. 7 — ручная проверка; источник значений на экране проверяется попутно);
-## REQ-WRK-04 крит. 1; REQ-DEV-05 крит. 2; REQ-PRF-03 крит. 2).
+## REQ-WRK-04 крит. 1; REQ-DEV-05 крит. 2; REQ-PRF-03 крит. 2; REQ-NFR-05 — сбой и сброс
+## защищённого хранилища).
 
 const SCENE: String = "res://src/ui/settings/settings_screen.tscn"
 const MAIN_SCENE: String = "res://src/app/main.tscn"
@@ -18,6 +19,37 @@ var _devices: RememberedDevices
 var _cm: ConnectionManager
 var _profile: Profile
 var _previous_locale: String
+var _strava: StravaService = null
+
+
+## Хранилище, которое «не прочиталось» (например, сменился ключ устройства): `loaded_ok() == false`
+## до `reset_store()`. Чтение оставлено рабочим, чтобы проверить, что сброс стирает привязки.
+class UnreadableStore:
+	extends MemorySecureStore
+	var readable: bool = false
+	var reset_calls: int = 0
+
+	func loaded_ok() -> bool:
+		return readable
+
+	func last_error() -> Error:
+		return OK if readable else ERR_FILE_CORRUPT
+
+	func reset_store() -> void:
+		reset_calls += 1
+		super.reset_store()
+		readable = true
+
+
+## Хранилище, отказывающее в записи.
+class RejectingStore:
+	extends MemorySecureStore
+
+	func set_secret(_key: String, _value: String) -> bool:
+		return false
+
+	func last_error() -> Error:
+		return ERR_FILE_CANT_WRITE
 
 
 func before_each() -> void:
@@ -38,6 +70,9 @@ func before_each() -> void:
 
 func after_each() -> void:
 	TranslationServer.set_locale(_previous_locale)
+	if _strava != null:
+		_strava.dispose()
+		_strava = null
 	if _cm != null:
 		_cm.dispose()
 	_remove_tree(ProjectSettings.globalize_path(_dir))
@@ -511,3 +546,110 @@ func test_back_and_switch_profile_navigation() -> void:
 	assert_eq(_state.current_screen, AppState.Screen.HOME)
 	(s.get_node("%SwitchProfileButton") as Button).pressed.emit()
 	assert_eq(_state.current_screen, AppState.Screen.PROFILE_SELECT, "REQ-PRF-01 крит. 4: удаление — на экране выбора")
+
+
+# ---------------------------------------------------------------------------
+# Защищённое хранилище: сбой записи и сброс нечитаемого хранилища (финальное ревью)
+# ---------------------------------------------------------------------------
+
+func test_storage_failed_code_has_readable_text_in_api_and_strava_errors() -> void:
+	var s := _screen()
+	assert_eq(s.api_error_text(ApiResult.CODE_STORAGE_FAILED), "could not save to secure storage")
+	assert_ne(s.api_error_text(ApiResult.CODE_STORAGE_FAILED), tr(SettingsScreen.API_ERROR_UNKNOWN_KEY))
+	var strava_text := s.strava_error_text(ApiResult.CODE_STORAGE_FAILED)
+	assert_eq(strava_text, "Strava error: could not save the Strava sign-in to secure storage")
+	assert_false(strava_text.contains(ApiResult.CODE_STORAGE_FAILED), "без сырого кода")
+	s.set_locale("ru")
+	assert_eq(s.api_error_text(ApiResult.CODE_STORAGE_FAILED), "не удалось сохранить в защищённое хранилище")
+	assert_string_contains(s.strava_error_text(ApiResult.CODE_STORAGE_FAILED), "защищённое хранилище")
+
+
+func test_strava_sign_in_with_rejecting_store_shows_storage_text() -> void:
+	var store := RejectingStore.new()
+	_store = store
+	var s := _screen()
+	_strava = _strava_service(store)
+	s.set_strava_service(_strava)
+	_transport.enqueue_json("POST", "/oauth/token", 200, {"token_type": "Bearer", "access_token": "fixture-access",
+		"refresh_token": "fixture-refresh", "expires_at": 4102444800, "athlete": {"id": 5, "firstname": "H", "lastname": "R"}})
+	_strava.oauth.authorize_url("fixture-state")
+	_strava.handle_redirect_url("ovoschrider://strava?state=fixture-state&code=c1")
+	for i in 5:
+		await get_tree().process_frame
+	assert_eq(_strava.flow_state(), "failed")
+	assert_eq(_strava.flow_error_code(), ApiResult.CODE_STORAGE_FAILED)
+	assert_eq(s.strava_status_text(), "Strava error: could not save the Strava sign-in to secure storage")
+	assert_false(s.strava_status_text().contains("fixture-"), "токены не на экране")
+
+
+func test_key_accepted_but_store_rejects_write_shows_storage_message() -> void:
+	_store = RejectingStore.new()
+	_transport.enqueue_json("GET", "api/v1/athlete/i12345", 200, _athlete_json())
+	var s := _screen()
+	s.open_key_dialog()
+	var result: ApiResult = await s.submit_key("i12345", "my-secret")
+	assert_false(result.ok)
+	assert_eq(result.code, ApiResult.CODE_STORAGE_FAILED)
+	assert_eq(s.key_dialog().error_text(), "The key was accepted but not saved: could not save to secure storage")
+	assert_true(s.key_dialog().visible, "диалог остаётся открытым")
+	assert_eq(_repo.get_active().intervals_athlete_id, "", "профиль не меняется")
+	assert_eq(s.intervals_status_text(), "Intervals.icu not linked")
+
+
+func test_readable_store_shows_no_warning() -> void:
+	var s := _screen()
+	assert_false(s.is_store_unreadable())
+	assert_false(s.is_store_warning_visible())
+	assert_false(s.request_reset_store(), "сбрасывать нечего")
+	assert_false(s.is_reset_store_pending())
+
+
+func test_unreadable_store_shows_warning_and_reset_with_confirmation_unlinks_services() -> void:
+	var store := UnreadableStore.new()
+	_store = store
+	_link()
+	_strava = _strava_service(store)
+	store.set_secret(_strava.oauth.secret_key(SecureStore.ITEM_REFRESH_TOKEN), "fixture-refresh")
+	var s := _screen()
+	s.set_strava_service(_strava)
+	assert_true(s.is_store_warning_visible(), "предупреждение о нечитаемом хранилище")
+	assert_string_contains(s.store_warning_text(), "Secure storage could not be read")
+	var button := s.get_node("%ResetStoreButton") as Button
+	assert_eq(button.text, "Reset links")
+	assert_false(button.disabled)
+	# Кнопка только спрашивает подтверждение; отмена ничего не стирает.
+	button.pressed.emit()
+	assert_true(s.is_reset_store_pending())
+	assert_true((s.get_node("%ResetStoreDialog") as ConfirmationDialog).visible, "диалог подтверждения")
+	(s.get_node("%ResetStoreDialog") as ConfirmationDialog).canceled.emit()
+	assert_false(s.is_reset_store_pending())
+	assert_eq(store.reset_calls, 0, "без подтверждения хранилище не сбрасывается")
+	assert_true(store.size() > 0)
+	# Подтверждение: reset_store(), экран перерисован.
+	assert_true(s.request_reset_store())
+	(s.get_node("%ResetStoreDialog") as ConfirmationDialog).confirmed.emit()
+	assert_eq(store.reset_calls, 1)
+	assert_eq(store.size(), 0, "все привязки стёрты")
+	assert_false(s.is_reset_store_pending())
+	assert_false(s.is_store_warning_visible(), "после сброса предупреждения нет")
+	assert_eq(s.store_message_text(), "Links have been reset — link the services again")
+	assert_eq(s.intervals_status_text(), "Intervals.icu not linked")
+	assert_true((s.get_node("%IntervalsForgetButton") as Button).disabled)
+	assert_eq(s.strava_status_text(), "Strava not linked")
+	assert_false(s.strava_button().is_authorized())
+	assert_eq(_repo.count(), 1, "профили не трогаются")
+
+
+func test_unreadable_store_warning_translated_on_locale_switch() -> void:
+	_store = UnreadableStore.new()
+	var s := _screen()
+	s.set_locale("ru")
+	assert_string_contains(s.store_warning_text(), "защищённое хранилище")
+	assert_eq((s.get_node("%ResetStoreButton") as Button).text, "Сбросить привязки")
+
+
+func _strava_service(store: SecureStore) -> StravaService:
+	var rides := FileRideRepository.new(_dir + "rides/")
+	var service := StravaService.new(_repo.get_active(), _transport, store, rides,
+		StravaConfig.from_values("1", "fixture-secret"), Callable(), _dir)
+	return service

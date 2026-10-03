@@ -38,6 +38,29 @@ layout_mode = 2
 text = "ui.settings.title"
 horizontal_alignment = 1
 
+[node name="StoreWarning" type="VBoxContainer" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="StoreWarningLabel" type="Label" parent="Margin/Scroll/VBox/StoreWarning"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.6, 0.3, 1)
+text = "ui.settings.store_unreadable"
+autowrap_mode = 3
+
+[node name="ResetStoreButton" type="Button" parent="Margin/Scroll/VBox/StoreWarning"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "ui.settings.store_reset"
+
+[node name="StoreMessageLabel" type="Label" parent="Margin/Scroll/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
 [node name="LanguageTitle" type="Label" parent="Margin/Scroll/VBox"]
 layout_mode = 2
 text = "ui.settings.language"
@@ -220,3 +243,11 @@ text = "ui.settings.back"
 
 [node name="IntervalsKeyDialog" parent="." instance=ExtResource("2_dialog")]
 unique_name_in_owner = true
+
+[node name="ResetStoreDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.settings.store_reset"
+ok_button_text = "ui.settings.store_reset_confirm_ok"
+cancel_button_text = "ui.common.cancel"
+dialog_text = "ui.settings.store_reset_confirm"
+dialog_autowrap = true

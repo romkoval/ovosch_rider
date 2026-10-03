@@ -36,6 +36,10 @@ const SUPPORTED_LOCALES: Array[String] = AppLocale.SUPPORTED_LOCALES
 var _repo: ProfileRepository
 var _settings: AppSettings = null
 var _profile_chosen: bool = false
+## Код ошибки последнего `select_profile` ("" — успех): `profile_not_found` или
+## `storage_write_failed` (`ProfileRepository.ERR_*`); экран выбора показывает его как
+## `error.profile.<code>`.
+var _last_select_error: String = ""
 
 
 ## `settings` — хранилище настроек приложения (язык); null — язык не сохраняется.
@@ -81,14 +85,15 @@ func settings() -> AppSettings:
 	return _settings
 
 
-## Применить правило старта: единственный профиль выбирается автоматически.
+## Применить правило старта: единственный профиль выбирается автоматически. Если выбор
+## не удался (не записан активный профиль) — остаётся экран выбора с ошибкой в `last_select_error()`.
 func start() -> void:
 	_profile_chosen = false
 	create_mode = _repo.count() == 0
 	if _repo.count() == 1:
 		var only: Profile = _repo.list()[0]
-		select_profile(only.id)
-		return
+		if select_profile(only.id):
+			return
 	_set_screen(Screen.PROFILE_SELECT)
 
 
@@ -101,11 +106,21 @@ func is_profile_chosen() -> bool:
 	return _profile_chosen
 
 
-## Выбрать профиль: делает его активным и открывает HOME. false — профиль не найден.
+## Код ошибки последнего `select_profile` ("" — успех).
+func last_select_error() -> String:
+	return _last_select_error
+
+
+## Выбрать профиль: делает его активным и открывает HOME. false — профиль не найден или
+## активный профиль не записан на диск; код — в `last_select_error()`, экран не меняется.
 func select_profile(id: String) -> bool:
 	if _repo.get_by_id(id) == null:
+		_last_select_error = ProfileRepository.ERR_PROFILE_NOT_FOUND
 		return false
-	_repo.active_profile_id = id
+	var err := _repo.set_active(id)
+	_last_select_error = err
+	if not err.is_empty():
+		return false
 	_profile_chosen = true
 	create_mode = false
 	profile_selected.emit(id)
