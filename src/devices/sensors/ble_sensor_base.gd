@@ -6,10 +6,15 @@ extends SensorDevice
 ## подписка на характеристику измерения → при наличии Battery Service 180F (или
 ## неизвестном списке сервисов) чтение 2A19 и подписка на него → CONNECTED.
 ## Обрыв не по запросу → RECONNECTING с попытками сразу и каждые 5 с через `tick`
-## (`BleReconnectPolicy`). Наследники задают `_service_uuid()`, `_measurement_uuid()`,
+## (`BleReconnectPolicy`). CONNECTING длится не дольше `CONNECT_TIMEOUT_SEC` по часам
+## `tick`; по тайм-ауту, а также при ошибках моста `SUBSCRIBE_FAILED`, `SERVICE_NOT_FOUND`,
+## `NOT_CONNECTED` в CONNECTING — отмена подключения в мосте (`disconnect_peripheral`),
+## DISCONNECTED и `error(CONNECTION_FAILED)` (REQ-DEV-07 крит. 1). Наследники задают `_service_uuid()`, `_measurement_uuid()`,
 ## `_on_measurement(bytes)` и при необходимости `_on_time(now_sec)`.
 
 const RECONNECT_INTERVAL_SEC: float = 5.0
+## Предельная длительность CONNECTING, с (REQ-DEV-07 крит. 1).
+const CONNECT_TIMEOUT_SEC: float = 15.0
 
 var bridge: BleBridge
 var device_id: String = ""
@@ -20,6 +25,8 @@ var _state: int = TrainerDevice.ConnectionState.DISCONNECTED
 var _time_sec: float = 0.0
 var _reconnect := BleReconnectPolicy.new(RECONNECT_INTERVAL_SEC)
 var _disconnect_requested: bool = false
+## Момент входа в CONNECTING по часам `tick`.
+var _connecting_since_sec: float = 0.0
 
 
 func _init(ble_bridge: BleBridge) -> void:
@@ -68,6 +75,7 @@ func connect_device(id: String) -> void:
 	device_id = id
 	_disconnect_requested = false
 	_reconnect.stop()
+	_connecting_since_sec = _time_sec
 	_set_state(TrainerDevice.ConnectionState.CONNECTING)
 	bridge.connect_peripheral(id)
 
@@ -102,6 +110,9 @@ func tick(delta_sec: float) -> void:
 	_time_sec += delta_sec
 	if bridge != null and _state == TrainerDevice.ConnectionState.RECONNECTING and _reconnect.due(_time_sec):
 		bridge.connect_peripheral(device_id)
+	if bridge != null and _state == TrainerDevice.ConnectionState.CONNECTING \
+			and _time_sec - _connecting_since_sec >= CONNECT_TIMEOUT_SEC - BleReconnectPolicy.TIME_EPSILON:
+		_fail_connecting("%s: датчик не подключился за %d с" % [kind(), int(CONNECT_TIMEOUT_SEC)])
 	_on_time(_time_sec)
 
 
@@ -184,13 +195,20 @@ func _on_bridge_error(id: String, code: int, message: String) -> void:
 		BleBridge.ErrorCode.CONNECTION_FAILED, BleBridge.ErrorCode.DEVICE_NOT_FOUND, \
 		BleBridge.ErrorCode.TIMEOUT, BleBridge.ErrorCode.ADAPTER_UNAVAILABLE:
 			if _state == TrainerDevice.ConnectionState.CONNECTING:
-				_set_state(TrainerDevice.ConnectionState.DISCONNECTED)
-				error.emit(ErrorCode.CONNECTION_FAILED, message)
+				_fail_connecting(message, false)  # попытка в мосте уже завершилась
 		BleBridge.ErrorCode.READ_FAILED, BleBridge.ErrorCode.CHARACTERISTIC_NOT_FOUND:
 			# Батареи может не быть — это «—», не ошибка (REQ-DEV-07 крит. 3).
 			pass
 		BleBridge.ErrorCode.SUBSCRIBE_FAILED, BleBridge.ErrorCode.SERVICE_NOT_FOUND:
-			error.emit(ErrorCode.SUBSCRIBE_FAILED, message)
+			if _state == TrainerDevice.ConnectionState.CONNECTING:
+				_fail_connecting(message)
+			else:
+				error.emit(ErrorCode.SUBSCRIBE_FAILED, message)
+		BleBridge.ErrorCode.NOT_CONNECTED:
+			if _state == TrainerDevice.ConnectionState.CONNECTING:
+				_fail_connecting(message)
+			else:
+				push_warning("%s: %s" % [kind(), message])
 		_:
 			push_warning("%s: ошибка моста %d: %s" % [kind(), code, message])
 
@@ -204,6 +222,15 @@ func _set_state(state: int) -> void:
 		return
 	_state = state
 	connection_state_changed.emit(state)
+
+
+## Срыв подключения в CONNECTING: отмена в мосте, DISCONNECTED, `error(CONNECTION_FAILED)`.
+func _fail_connecting(message: String, cancel_in_bridge: bool = true) -> void:
+	_disconnect_requested = true
+	if cancel_in_bridge and bridge != null and device_id != "":
+		bridge.disconnect_peripheral(device_id)
+	_set_state(TrainerDevice.ConnectionState.DISCONNECTED)
+	error.emit(ErrorCode.CONNECTION_FAILED, message)
 
 
 func _has_service(service_uuid: String) -> bool:

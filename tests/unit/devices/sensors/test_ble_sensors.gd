@@ -18,6 +18,8 @@ func after_each() -> void:
 		if s.has_method("dispose"):
 			s.call("dispose")
 	_created = []
+	if _bridge != null:
+		_bridge.dispose()
 
 
 func _connect(sensor: SensorDevice) -> void:
@@ -254,3 +256,38 @@ func test_sensor_dispose_detaches_from_bridge() -> void:
 	s.connect_device(ID)
 	s.tick(10.0)
 	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED)
+
+
+# ---------------------------------------------------------------------------
+# Регрессии финального ревью (п.5: CONNECTING без тайм-аута)
+# ---------------------------------------------------------------------------
+
+func test_sensor_connecting_times_out_after_15s_and_cancels_in_bridge() -> void:
+	var s := BleHeartRateSensor.new(_bridge)
+	_created.append(s)
+	var errors: Array[int] = []
+	s.error.connect(func(c: int, _m: String) -> void: errors.append(c))
+	_bridge.auto_connect = false
+	s.tick(3.0)
+	s.connect_device(ID)
+	s.tick(14.5)
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.CONNECTING)
+	s.tick(0.5)
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED, "REQ-DEV-07 крит. 1")
+	assert_eq(errors, [SensorDevice.ErrorCode.CONNECTION_FAILED] as Array[int])
+	assert_eq(_bridge.calls_of("disconnect_peripheral").size(), 1, "подключение отменено в мосте")
+	_bridge.emit_connected(ID)
+	assert_eq(_bridge.calls_of("discover_services").size(), 0, "запоздалый connected игнорируется")
+
+
+func test_sensor_not_connected_error_in_connecting_disconnects() -> void:
+	var s := BleCadenceSensor.new(_bridge)
+	_created.append(s)
+	var errors: Array[int] = []
+	s.error.connect(func(c: int, _m: String) -> void: errors.append(c))
+	_bridge.auto_connect = false
+	s.connect_device(ID)
+	_bridge.emit_error(ID, BleBridge.ErrorCode.NOT_CONNECTED, "peripheral is not connected")
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED)
+	assert_eq(errors, [SensorDevice.ErrorCode.CONNECTION_FAILED] as Array[int])
+	assert_eq(_bridge.calls_of("disconnect_peripheral").size(), 1)

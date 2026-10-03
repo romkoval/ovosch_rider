@@ -38,6 +38,26 @@ func before_each() -> void:
 	_t.heart_rate.connect(func(b: int) -> void: _hr.append(b))
 
 
+## Разрыв циклов станок ↔ мост ↔ замыкания очереди заглушки (иначе утечка ObjectDB).
+func after_each() -> void:
+	if _t != null:
+		_t.dispose()
+	if _bridge != null:
+		_bridge.dispose()
+
+
+## Новый станок и мост посреди теста: старые сначала освобождаются.
+func _reset() -> void:
+	after_each()
+	before_each()
+
+
+## Доставить отложенные ответы моста, в том числе индикацию Control Point `80 <opcode> 01`:
+## она освобождает очередь Control Point для следующей команды.
+func _ack() -> void:
+	_bridge.pump()
+
+
 func _hex(s: String) -> PackedByteArray:
 	var clean := s.replace(" ", "")
 	var out := PackedByteArray()
@@ -206,11 +226,18 @@ func test_req_dev_02_c4_set_target_power_writes_05_fa_00_with_response() -> void
 	assert_eq(w[0]["service"], "1826")
 	assert_true(w[0]["with_response"])
 	assert_eq(_t.target_power_w, 250)
+	# Очередь Control Point: каждая следующая цель — после индикации 80 05 01 по предыдущей.
+	_ack()
 	_t.set_target_power(130)
+	_ack()
 	_t.set_target_power(0)
+	_ack()
 	_t.set_target_power(3000)
+	_ack()
 	assert_eq(_cp_writes(), ["05 FA 00", "05 82 00", "05 00 00", "05 D0 07"] as Array[String], "0 допустим, 3000 клампится к 2000")
-	_bridge.pump()
+	for x in _bridge.writes_to("2AD9"):
+		assert_true(x["with_response"], "все команды — Write Request")
+	assert_false(_t.has_control_point_in_flight(), "все команды подтверждены")
 	assert_eq(_errors.size(), 0)
 
 
@@ -221,13 +248,19 @@ func test_req_dev_02_c5_set_resistance_level_writes_04_32_by_default_mapping() -
 	assert_true(_t.resistance_range.is_empty())
 	_t.set_erg_enabled(false)
 	assert_eq(_cp_writes(), ["04 00"] as Array[String], "выключение ERG шлёт текущий уровень (0 %)")
+	_ack()
 	_t.set_resistance_level(50)
 	assert_eq(_cp_writes().back(), "04 32", "50 % без 2AD6 → 5.0 → 04 32")
+	_ack()
 	_t.set_resistance_level(100)
 	assert_eq(_cp_writes().back(), "04 64")
+	_ack()
 	_t.set_resistance_level(-10)
 	assert_eq(_cp_writes().back(), "04 00", "клампится к 0")
 	assert_eq(_t.resistance_percent, 0)
+	_ack()
+	assert_eq(_cp_writes(), ["04 00", "04 32", "04 64", "04 00"] as Array[String])
+	assert_eq(_errors.size(), 0)
 
 
 func test_req_dev_02_c2_indoor_bike_data_becomes_sample_truncated_ignored_other_id_ignored() -> void:
@@ -335,8 +368,10 @@ func test_req_nfr_01_c2_bridge_error_write_failed_also_triggers_one_retry() -> v
 func test_req_wrk_03_c3_erg_on_mid_interval_sends_current_target_immediately() -> void:
 	_connect()
 	_t.set_target_power(130)
+	_ack()
 	_t.set_erg_enabled(false)
 	assert_eq(_cp_writes(), ["05 82 00", "04 00"] as Array[String])
+	_ack()
 	_t.set_target_power(200)
 	assert_eq(_cp_writes().size(), 2, "вне ERG цель запоминается, не пишется")
 	assert_eq(_t.target_power_w, 200)
@@ -345,44 +380,57 @@ func test_req_wrk_03_c3_erg_on_mid_interval_sends_current_target_immediately() -
 	assert_eq(_cp_writes().back(), "05 C8 00", "включение ERG → Set Target Power текущей цели (200)")
 	assert_almost_eq(_t.get_time_sec(), t0, 1e-9, "без задержки (≤ 1 с)")
 	assert_true(_t.erg_enabled)
+	_ack()
 	# Включение ERG при цели 0 — команды нет (нечего слать).
 	_t.set_erg_enabled(false)
+	_ack()
 	_t.set_target_power(0)
 	var n := _cp_writes().size()
 	_t.set_erg_enabled(true)
 	assert_eq(_cp_writes().size(), n, "цель 0 → Set Target Power не шлётся")
+	assert_eq(_errors.size(), 0)
 
 
 func test_req_wrk_04_c2_resistance_percent_mapped_via_2ad6_range() -> void:
 	_connect("00 00 E8 03 01 00")  # Neo: 0..100.0 шаг 0.1 → кодируемый 0..25.5
 	assert_true(_t.resistance_range["ok"])
 	_t.set_erg_enabled(false)
+	assert_eq(_cp_writes(), ["04 00"] as Array[String], "0 % → 04 00")
+	_ack()
 	_t.set_resistance_level(50)
 	assert_eq(_cp_writes().back(), "04 80", "50 % → 12.8 → 04 80")
+	_ack()
 	_t.set_resistance_level(100)
 	assert_eq(_cp_writes().back(), "04 FF")
+	_ack()
 	_t.set_resistance_level(0)
 	assert_eq(_cp_writes().back(), "04 00")
+	_ack()
 	_t.set_resistance_level(25)
 	assert_eq(_cp_writes().back(), "04 40", "25 % → 6.4 → 04 40")
+	_ack()
+	assert_eq(_cp_writes(), ["04 00", "04 80", "04 FF", "04 00", "04 40"] as Array[String])
 
 
 func test_req_wrk_04_c2_narrow_range_and_invalid_range_fallback() -> void:
 	_connect("00 00 C8 00 0A 00")  # 0..20.0 шаг 1.0
 	_t.set_erg_enabled(false)
+	_ack()
 	_t.set_resistance_level(50)
 	assert_eq(_cp_writes().back(), "04 64", "50 % от 0..20.0 → 10.0 → 04 64")
+	_ack()
 	_t.set_resistance_level(33)
 	assert_eq(_cp_writes().back(), "04 46", "33 % → 6.6 → привязка к шагу 1.0 → 7.0 → 04 46")
 	# Невалидный 2AD6 (обрезан) — диапазон не принят, запасное отображение.
-	before_each()
+	_reset()
 	_connect("00 00 C8")
 	assert_true(_t.resistance_range.is_empty(), "обрезанный 2AD6 отвергнут")
 	_t.set_erg_enabled(false)
+	_ack()
 	_t.set_resistance_level(50)
 	assert_eq(_cp_writes().back(), "04 32")
 	# Ошибка чтения 2AD6 — не ошибка станка.
-	before_each()
+	_reset()
 	_bridge.fail_next_read()
 	_connect()
 	assert_eq(_errors.size(), 0, "READ_FAILED по необязательному 2AD6 — не ошибка станка")
@@ -392,15 +440,146 @@ func test_req_wrk_04_c2_narrow_range_and_invalid_range_fallback() -> void:
 func test_req_wrk_04_c3_resistance_level_stored_in_erg_and_sent_when_erg_off() -> void:
 	_connect()
 	_t.set_target_power(130)
+	_ack()
 	_t.set_resistance_level(60)
 	assert_eq(_cp_writes(), ["05 82 00"] as Array[String], "в ERG уровень не отправляется")
 	assert_eq(_t.resistance_percent, 60, "но сохранён")
+	assert_eq(_t.pending_control_point_commands().size(), 0, "и не ждёт в очереди Control Point")
 	_t.set_resistance_level(70)
 	assert_eq(_cp_writes().size(), 1)
 	_t.set_erg_enabled(false)
 	assert_eq(_cp_writes().back(), "04 46", "при выключении ERG уходит сохранённый уровень 70 % → 7.0")
+	_ack()
 	_t.set_resistance_level(20)
 	assert_eq(_cp_writes().back(), "04 14", "вне ERG — сразу")
+	_ack()
+	assert_eq(_cp_writes(), ["05 82 00", "04 46", "04 14"] as Array[String])
+
+
+# ===========================================================================
+# BleTrainer — очередь Control Point (REQ-DEV-02, REQ-NFR-01 крит. 2)
+# FTMS: одна процедура за раз. Следующая команда — после индикации 80 <opcode> по
+# предыдущей или через 1 с без ответа; неотправленная команда того же опкода заменяется.
+# ===========================================================================
+
+## Подключение, после которого станок перестаёт присылать индикации Control Point
+## (запись подтверждается write_done(ok), ответ 80 … теряется) — индикации шлёт тест.
+func _connect_silent() -> void:
+	_connect()
+	_bridge.auto_control_point_response = false
+
+
+func test_req_dev_02_nfr_01_c2_cp_queue_next_command_waits_for_response_to_previous() -> void:
+	_connect_silent()
+	_t.set_target_power(250)
+	_t.set_erg_enabled(false)
+	_bridge.pump()  # write_done(ok) по 05 FA 00, индикации нет
+	assert_eq(_cp_writes(), ["05 FA 00"] as Array[String], "уровень ждёт ответа на Set Target Power")
+	assert_true(_t.has_control_point_in_flight())
+	assert_eq(_t.pending_control_point_commands().size(), 1)
+	_t.tick(0.5)
+	assert_eq(_cp_writes().size(), 1, "0.5 с без ответа — следующая ещё не ушла")
+	# Индикация по другому опкоду — не ответ на команду в полёте.
+	_bridge.emit_notification(DEV, "2AD9", _hex("80 04 01"))
+	assert_eq(_cp_writes().size(), 1, "80 04 01 не освобождает Set Target Power (05) в полёте")
+	# Ответ по предыдущей — следующая уходит сразу, без ожидания.
+	var t0 := _t.get_time_sec()
+	_bridge.emit_notification(DEV, "2AD9", _hex("80 05 01"))
+	assert_eq(_cp_writes(), ["05 FA 00", "04 00"] as Array[String], "после 80 05 01 — следующая команда")
+	assert_almost_eq(_t.get_time_sec(), t0, 1e-9, "в тот же момент")
+	assert_true(_bridge.writes_to("2AD9")[1]["with_response"])
+	# Отказ (result ≠ 01) — тоже ответ: ошибка пользователю, очередь идёт дальше.
+	_t.set_erg_enabled(true)
+	assert_eq(_cp_writes().size(), 2, "цель ждёт ответа на уровень")
+	_bridge.emit_notification(DEV, "2AD9", _hex("80 04 04"))
+	assert_eq(_cp_writes(), ["05 FA 00", "04 00", "05 FA 00"] as Array[String])
+	assert_eq(_error_codes(), [TrainerDevice.ErrorCode.CONTROL_POINT_REJECTED] as Array[int])
+	assert_eq(_t.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED)
+
+
+func test_req_dev_02_nfr_01_c2_cp_queue_next_command_after_1s_without_response() -> void:
+	_connect_silent()
+	_t.set_target_power(250)
+	_t.set_erg_enabled(false)
+	_bridge.pump()
+	_tick_n(_t, 9, 0.1)  # 0.9 с
+	assert_eq(_cp_writes(), ["05 FA 00"] as Array[String], "до 1 с без ответа — ждём")
+	_t.tick(0.1)  # 1.0 с
+	assert_eq(_cp_writes(), ["05 FA 00", "04 00"] as Array[String], "через 1 с без ответа следующая уходит")
+	assert_eq(_errors.size(), 0, "тайм-аут ответа — не ошибка пользователю")
+	assert_eq(_t.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED)
+	# Запоздалый ответ на 05 не освобождает 04 в полёте.
+	_bridge.emit_notification(DEV, "2AD9", _hex("80 05 01"))
+	assert_true(_t.has_control_point_in_flight(), "80 05 01 — не ответ на 04")
+	# Тайм-аут следующей отсчитывается от её отправки.
+	_t.set_resistance_level(50)
+	_bridge.pump()
+	_tick_n(_t, 9, 0.1)
+	assert_eq(_cp_writes().size(), 2, "04 00 в полёте 0.9 с — 04 32 ждёт")
+	_t.tick(0.1)
+	assert_eq(_cp_writes(), ["05 FA 00", "04 00", "04 32"] as Array[String])
+
+
+func test_req_dev_02_nfr_01_c2_cp_queue_two_targets_before_response_give_one_write_of_last() -> void:
+	_connect_silent()
+	_t.set_target_power(100)
+	_bridge.pump()
+	_t.set_target_power(150)
+	_t.set_target_power(250)
+	assert_eq(_cp_writes(), ["05 64 00"] as Array[String], "до ответа — только первая")
+	var q := _t.pending_control_point_commands()
+	assert_eq(q.size(), 1, "в очереди одна цель")
+	if q.size() == 1:
+		assert_eq(_hex_of(q[0]), "05 FA 00", "и это последняя (250 Вт)")
+	_bridge.emit_notification(DEV, "2AD9", _hex("80 05 01"))
+	assert_eq(_cp_writes(), ["05 64 00", "05 FA 00"] as Array[String], "одна запись последней цели; 150 Вт не уходила")
+	_bridge.emit_notification(DEV, "2AD9", _hex("80 05 01"))
+	_tick_n(_t, 3)
+	assert_eq(_cp_writes().size(), 2, "лишних записей нет ни по ответу, ни по тайм-ауту")
+	assert_eq(_t.target_power_w, 250)
+	assert_eq(_errors.size(), 0)
+
+
+func test_req_nfr_01_c2_cp_queue_retry_of_failed_write_precedes_queued_command() -> void:
+	_connect()
+	var t0 := _t.get_time_sec()
+	_bridge.fail_next_write()
+	_t.set_target_power(250)
+	_t.set_erg_enabled(false)
+	assert_eq(_cp_writes(), ["05 FA 00"] as Array[String])
+	_bridge.pump()
+	assert_eq(_cp_writes(), ["05 FA 00", "05 FA 00", "04 00"] as Array[String],
+		"повтор отказавшей записи — немедленно и раньше следующей команды очереди")
+	assert_almost_eq(_t.get_time_sec(), t0, 1e-9, "в ту же секунду")
+	assert_eq(_errors.size(), 0)
+
+
+## Граница REQ-WRK-03 крит. 3 при потере индикаций: ERG выключили и снова включили,
+## пока предыдущая команда ждёт ответа. Set Target Power должна уйти не позже 1 с
+## после включения ERG.
+func test_req_wrk_03_c3_erg_off_on_while_command_unanswered_target_within_1s() -> void:
+	_connect_silent()
+	_t.set_target_power(130)  # t = 0, в полёте, индикация потеряна
+	_bridge.pump()
+	_t.tick(0.2)
+	_t.set_erg_enabled(false)
+	_t.tick(0.1)
+	_t.set_erg_enabled(true)  # t = 0.3: ERG снова включён посреди интервала
+	var t_on := _t.get_time_sec()
+	var before := _cp_writes().size()
+	var sent_at := -1.0
+	for i in 40:  # до 4 с шагом 0.1
+		var w := _cp_writes()
+		if w.size() > before and w.slice(before).has("05 82 00"):
+			sent_at = _t.get_time_sec()
+			break
+		_t.tick(0.1)
+		_bridge.pump()
+	gut.p("WRK-03.3/очередь: записи %s; Set Target Power через %.1f с после включения ERG" % [
+		str(_cp_writes()), sent_at - t_on])
+	assert_true(sent_at >= 0.0, "Set Target Power после включения ERG ушла")
+	assert_true(sent_at - t_on <= 1.0 + 1e-6,
+		"не позже 1 с после включения ERG (факт: %.1f с)" % (sent_at - t_on))
 
 
 # ===========================================================================

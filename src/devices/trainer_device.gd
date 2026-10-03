@@ -84,6 +84,14 @@ func set_erg_enabled(_enabled: bool) -> void:
 	push_error("TrainerDevice.set_erg_enabled: not implemented")
 
 
+## Режим ERG, в котором находится устройство по последней принятой команде
+## (по умолчанию — включён). Устройство живёт дольше сессии тренировки: сессия
+## сверяется с этим значением на старте и при расхождении отправляет режим заново.
+func is_erg_enabled() -> bool:
+	push_error("TrainerDevice.is_erg_enabled: not implemented")
+	return true
+
+
 ## Установить уровень сопротивления в процентах 0..100 (REQ-WRK-04). Перевод
 ## в единицы станка (FTMS Set Target Resistance Level 0x04, единицы 0.1) —
 ## забота реализации. При включённом ERG значение запоминается, но не применяется.

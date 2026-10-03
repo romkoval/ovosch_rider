@@ -16,6 +16,13 @@ extends RefCounted
 ##   иначе (`"fake"`) — эмулятор для режима разработки.
 ## - REQ-DEV-01 крит. 7: при `bridge.is_available() == false` или адаптере не POWERED_ON
 ##   сканирование и автоподключение не стартуют (`start_scan()` → false, `is_ble_available()`).
+##   Автоподключение, запрошенное до готовности адаптера (на macOS при запуске состояние
+##   UNKNOWN), запоминается (`is_auto_connect_deferred()`) и выполняется при переходе
+##   адаптера в POWERED_ON (REQ-DEV-06 крит. 2, 5). Отменяется `cancel_auto_connect()`,
+##   сменой профиля и `dispose()`.
+## - Устройство, рекламировавшееся в текущем сеансе сканирования, считается доступным
+##   для автоподключения, даже если сканер уже пометил его недоступным или убрал из списка
+##   (`BleScanner.seen_in_session`).
 ## - `stop_scan()` гасит только ручное сканирование: если идёт автоподключение, сканер
 ##   остаётся у него и остановится сам по успеху/таймауту (D-5).
 ## - `tick(delta)` продвигает сканер, таймер автоподключения и — пока `ticks_devices`
@@ -53,6 +60,11 @@ var _auto_pending: Dictionary = {}
 var _auto_deadline_sec: float = -1.0
 var _auto_started_scan: bool = false
 var _battery: Dictionary = {}
+## Профиль, автоподключение которого ждёт POWERED_ON ("" — не ждёт).
+var _deferred_auto_profile: String = ""
+var _auto_connect_deferred: bool = false
+## kind → [Callable состояния, Callable батареи] — связанные обработчики датчика.
+var _sensor_handlers: Dictionary = {}
 
 
 func _init(ble_bridge: BleBridge, remembered_devices: RememberedDevices,
@@ -99,9 +111,18 @@ func dispose() -> void:
 			trainer.call("dispose")
 	for kind in sensors:
 		var s: SensorDevice = sensors[kind]
+		if _sensor_handlers.has(kind):
+			var cbs: Array = _sensor_handlers[kind]
+			if s.connection_state_changed.is_connected(cbs[0]):
+				s.connection_state_changed.disconnect(cbs[0])
+			if s.battery_level.is_connected(cbs[1]):
+				s.battery_level.disconnect(cbs[1])
 		if s.has_method("dispose"):
 			s.call("dispose")
 	sensors.clear()
+	_sensor_handlers.clear()
+	if bridge is StubBleBridge:
+		(bridge as StubBleBridge).dispose()
 	trainer = null
 	hub = null
 	scanner = null
@@ -113,8 +134,16 @@ func _forward_devices_changed() -> void:
 
 func _on_adapter_state_changed(_state: int) -> void:
 	if not is_ble_available():
+		var deferred: bool = _auto_connect_deferred
+		var deferred_profile: String = _deferred_auto_profile
 		cancel_auto_connect()
+		# Ожидание POWERED_ON переживает промежуточные состояния (UNKNOWN → POWERED_OFF → …).
+		_auto_connect_deferred = deferred
+		_deferred_auto_profile = deferred_profile
 		scanner.stop()
+	elif _auto_connect_deferred:
+		_auto_connect_deferred = false
+		auto_connect(_deferred_auto_profile)
 	devices_changed.emit()
 
 
@@ -245,8 +274,14 @@ func forget(for_profile_id: String, id: String) -> bool:
 ## Уже видимые в сканере — подключаются сразу, остальные — по мере рекламы.
 func auto_connect(for_profile_id: String) -> void:
 	profile_id = for_profile_id
-	if not auto_connect_enabled or not is_ble_available():
+	if not auto_connect_enabled:
 		return
+	if not is_ble_available():
+		# Адаптер ещё не готов (UNKNOWN при запуске) — выполнить при POWERED_ON.
+		_auto_connect_deferred = bridge != null
+		_deferred_auto_profile = for_profile_id
+		return
+	_auto_connect_deferred = false
 	var candidates := remembered.auto_connect_candidates(profile_id)
 	if candidates.is_empty():
 		return
@@ -263,11 +298,13 @@ func auto_connect(for_profile_id: String) -> void:
 		scanner.start()
 	for id in _auto_pending.keys():
 		var seen := scanner.find(id)
-		if not seen.is_empty() and seen["available"]:
+		if (not seen.is_empty() and seen["available"]) or scanner.seen_in_session(id):
 			_connect_pending(id)
 
 
 func cancel_auto_connect() -> void:
+	_auto_connect_deferred = false
+	_deferred_auto_profile = ""
 	_auto_pending.clear()
 	_auto_deadline_sec = -1.0
 	if _auto_started_scan:
@@ -277,6 +314,11 @@ func cancel_auto_connect() -> void:
 
 func is_auto_connecting() -> bool:
 	return not _auto_pending.is_empty()
+
+
+## Автоподключение запрошено до готовности адаптера и ждёт POWERED_ON.
+func is_auto_connect_deferred() -> bool:
+	return _auto_connect_deferred
 
 
 func pending_auto_connect_ids() -> Array[String]:
@@ -358,8 +400,13 @@ func _sensor(kind: String) -> SensorDevice:
 			s = BlePowerMeter.new(bridge)
 			hub.set_power_meter(s)
 	sensors[kind] = s
-	s.connection_state_changed.connect(func(state: int) -> void: _on_sensor_state(kind, state))
-	s.battery_level.connect(func(p: int) -> void: _on_battery(str(sensor_ids.get(kind, "")), p))
+	# Связанные методы, не лямбды: лямбда держала бы менеджер сильной ссылкой
+	# (цикл менеджер → датчик → сигнал → лямбда → менеджер).
+	var on_state: Callable = _on_sensor_state.bind(kind)
+	var on_battery: Callable = _on_sensor_battery.bind(kind)
+	_sensor_handlers[kind] = [on_state, on_battery]
+	s.connection_state_changed.connect(on_state)
+	s.battery_level.connect(on_battery)
 	return s
 
 
@@ -396,7 +443,11 @@ func _on_trainer_state(state: int) -> void:
 	state_changed.emit(trainer_id)
 
 
-func _on_sensor_state(kind: String, state: int) -> void:
+func _on_sensor_battery(percent: int, kind: String) -> void:
+	_on_battery(str(sensor_ids.get(kind, "")), percent)
+
+
+func _on_sensor_state(state: int, kind: String) -> void:
 	var id: String = str(sensor_ids.get(kind, ""))
 	if id.is_empty():
 		return

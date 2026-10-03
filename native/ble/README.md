@@ -101,8 +101,13 @@ scons platform=ios     target=template_release arch=arm64
 линкует `CoreBluetooth` и `Foundation`, компилирует `.mm` с ARC.
 
 Поведение:
-- сканирование — `scanForPeripheralsWithServices:` с `AllowDuplicates = NO`; если адаптер ещё
-  не `poweredOn`, запрос откладывается и стартует в `centralManagerDidUpdateState`;
+- сканирование — `scanForPeripheralsWithServices:` с `AllowDuplicates = YES` (иначе устройство
+  сообщается один раз за сеанс и GDScript-сканер через 10 с считает его пропавшим); поток
+  `device_found` прореживает общий слой `OvoschBle` (`src/scan_throttle.*`): одно событие на
+  устройство не чаще раза в секунду, сразу — первое в сеансе и с новым именем/сервисами; если
+  адаптер ещё не `poweredOn`, запрос откладывается и стартует в `centralManagerDidUpdateState`;
+- отказ записи с ответом — только `write_done(ok=false)` (текст ошибки — в `NSLog`), без
+  `error(WRITE_FAILED)`: один отказ — одно событие, повтор решает `BleTrainer`;
 - `is_available()` — состояние `poweredOn`; `adapter_state_changed` — из `didUpdateState`;
 - идентификатор устройства — `peripheral.identifier.UUIDString`; `connect_peripheral` для
   запомненного id, не виденного в рекламе, пробует `retrievePeripheralsWithIdentifiers:`;

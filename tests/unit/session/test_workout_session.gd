@@ -447,3 +447,122 @@ func test_sample_stream_append_null_sample() -> void:
 	assert_true(s.is_monotonic())
 	s.append(5, null, -1, 0, -1, false)
 	assert_false(s.is_monotonic())
+
+
+# ---------------------------------------------------------------------------
+# Регрессии финального ревью
+# ---------------------------------------------------------------------------
+
+## П.1: станок живёт дольше сессии. Тренировка 1 закончилась с ERG выкл — тренировка 2
+## с ERG вкл обязана вернуть станок в ERG (иначе HUD «ERG вкл», а станок в сопротивлении).
+func test_start_restores_erg_left_off_by_previous_session_fake() -> void:
+	var first := _make(_plan_60_30_90())
+	first.set_erg_enabled(false)
+	first.start()
+	_tick_n(first, 5)
+	first.stop()
+	assert_false(_trainer.erg_enabled, "после первой тренировки станок вне ERG")
+	var before := _trainer.commands.size()
+	_session = _make(_plan_60_30_90())
+	_session.start()
+	var cmds := _trainer.commands.slice(before)
+	var types: Array[String] = []
+	for c in cmds:
+		types.append(c["type"])
+	assert_eq(types, [FakeTrainer.CMD_TARGET_POWER, FakeTrainer.CMD_ERG, FakeTrainer.CMD_TARGET_POWER] as Array[String],
+		"цель шага, затем ERG вкл и текущая цель")
+	assert_eq(cmds[1]["value"], true)
+	assert_eq(cmds[2]["value"], 130)
+	assert_true(_trainer.erg_enabled, "станок снова в ERG")
+	assert_true(_session.is_erg_active_on_trainer())
+
+
+## П.1 на BLE: без синхронизации режима на Control Point не уходило ни одной команды.
+func test_start_restores_erg_left_off_by_previous_session_ble() -> void:
+	var bridge := StubBleBridge.new()
+	var ble := BleTrainer.new(bridge)
+	ble.connect_device("neo")
+	bridge.pump()
+	var first := WorkoutSession.new(_plan_60_30_90(), ble, FTP)
+	first.set_erg_enabled(false)
+	first.start()
+	bridge.pump()
+	first.stop()
+	assert_false(ble.erg_enabled)
+	bridge.clear_calls()
+	var second := WorkoutSession.new(_plan_60_30_90(), ble, FTP)
+	second.start()
+	bridge.pump()
+	var hex: Array[String] = []
+	for w in bridge.writes_to("2AD9"):
+		hex.append(BleBytes.to_hex(w["bytes"]))
+	assert_eq(hex, ["05 82 00"] as Array[String], "ERG вкл → Set Target Power 130 на станок, один раз")
+	assert_true(ble.erg_enabled)
+	ble.dispose()
+	bridge.dispose()
+
+
+## П.1: синхронизация не плодит команд, если станок уже в нужном режиме.
+func test_start_does_not_resend_mode_when_trainer_already_matches() -> void:
+	_trainer.set_erg_enabled(false)
+	_trainer.set_erg_enabled(true)
+	var before := _trainer.commands.size()
+	_session = _make(_plan_60_30_90())
+	_session.start()
+	assert_eq(_trainer.commands.size() - before, 1, "только цель первого шага")
+
+
+## П.7: пропуск последнего шага на паузе завершает тренировку и закрывает паузу.
+func test_skip_last_step_while_paused_closes_pause() -> void:
+	var steps: Array[WorkoutStep] = [WorkoutStep.percent(60, 50.0)]
+	_session = _make(Workout.make("one", steps))
+	_session.start()
+	_tick_n(_session, 10)
+	_session.pause()
+	_tick_n(_session, 4)
+	_session.skip_step()
+	assert_eq(_session.get_state(), WorkoutSession.State.FINISHED)
+	assert_almost_eq(float(_session.metadata()["paused_total_sec"]), 4.0, 1e-6, "время паузы учтено")
+	var pause_events := _session.events.filter(func(e: Dictionary) -> bool: return e["type"] == WorkoutSession.EVENT_PAUSE)
+	assert_eq(pause_events.size(), 1)
+	assert_almost_eq(float(pause_events[0].get("duration_sec", -1.0)), 4.0, 1e-6, "у события паузы есть длительность")
+
+
+## П.11: цель ровно 0 Вт уходит на станок (иначе он держит прежнюю цель).
+func test_zero_watt_target_is_sent_and_resent_on_resume() -> void:
+	var steps: Array[WorkoutStep] = [WorkoutStep.watts(10, 150.0), WorkoutStep.watts(10, 0.0)]
+	_session = _make(Workout.make("zero", steps))
+	_session.start()
+	_tick_n(_session, 10)
+	var targets := _commands(FakeTrainer.CMD_TARGET_POWER)
+	assert_eq(targets.size(), 2)
+	assert_eq(targets[1]["value"], 0, "Set Target Power 0")
+	assert_almost_eq(float(targets[1]["at_sec"]), 10.0, 1e-6)
+	assert_eq(_trainer.target_power_w, 0)
+	_session.pause()
+	_session.resume()
+	targets = _commands(FakeTrainer.CMD_TARGET_POWER)
+	assert_eq(targets.size(), 3, "при возобновлении цель 0 тоже уходит")
+	assert_eq(targets[2]["value"], 0)
+
+
+## П.2 на уровне сессии: старый мост слал на один отказ write_done(false) и
+## error(WRITE_FAILED). Повтор устройства удался — сессия не делает лишней записи.
+func test_legacy_double_write_failure_event_causes_no_session_retry() -> void:
+	var bridge := StubBleBridge.new()
+	bridge.legacy_double_write_failure = true
+	var ble := BleTrainer.new(bridge)
+	ble.connect_device("neo")
+	bridge.pump()
+	_session = WorkoutSession.new(_plan_60_30_90(), ble, FTP)
+	bridge.fail_next_write()
+	_session.start()
+	bridge.pump()
+	var hex: Array[String] = []
+	for w in bridge.writes_to("2AD9"):
+		hex.append(BleBytes.to_hex(w["bytes"]))
+	assert_eq(hex, ["00", "05 82 00", "05 82 00"] as Array[String], "Request Control, цель и один повтор")
+	var retries := _session.events.filter(func(e: Dictionary) -> bool: return e["type"] == WorkoutSession.EVENT_RETRY)
+	assert_eq(retries.size(), 0, "ошибки записи не было — сессия не повторяет")
+	ble.dispose()
+	bridge.dispose()

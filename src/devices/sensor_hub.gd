@@ -157,6 +157,10 @@ func set_erg_enabled(enabled: bool) -> void:
 		trainer.set_erg_enabled(enabled)
 
 
+func is_erg_enabled() -> bool:
+	return trainer.is_erg_enabled() if trainer != null else true
+
+
 func set_resistance_level(percent: int) -> void:
 	if trainer != null:
 		trainer.set_resistance_level(percent)

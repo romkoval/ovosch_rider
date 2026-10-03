@@ -5,6 +5,8 @@
 #include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <chrono>
+
 using namespace godot;
 
 namespace ovosch {
@@ -64,6 +66,11 @@ int OvoschBle::get_adapter_state() const {
 }
 
 void OvoschBle::start_scan(const PackedStringArray &service_uuids) {
+	{
+		// Новый сеанс: первое событие каждого устройства доставляется сразу.
+		std::lock_guard<std::mutex> lock(scan_throttle_mutex_);
+		scan_throttle_.reset();
+	}
 	if (backend_) {
 		backend_->start_scan(to_std(service_uuids));
 	}
@@ -141,6 +148,16 @@ void OvoschBle::on_adapter_state_changed(AdapterState state) {
 
 void OvoschBle::on_device_found(const std::string &id, const std::string &name, int rssi,
 		const std::vector<std::string> &service_uuids) {
+	{
+		// Не чаще раза в секунду на устройство (кроме нового имени/сервисов).
+		const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now().time_since_epoch())
+									   .count();
+		std::lock_guard<std::mutex> lock(scan_throttle_mutex_);
+		if (!scan_throttle_.should_emit(id, name, service_uuids, now_ms)) {
+			return;
+		}
+	}
 	PackedStringArray uuids;
 	for (const auto &u : service_uuids) {
 		uuids.push_back(to_gd(u));

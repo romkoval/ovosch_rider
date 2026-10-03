@@ -28,6 +28,8 @@ func before_each() -> void:
 func after_each() -> void:
 	if _cm != null:
 		_cm.dispose()
+	if _bridge != null:
+		_bridge.dispose()
 	_remove_tree(ProjectSettings.globalize_path(_dir))
 
 
@@ -362,3 +364,86 @@ func test_stop_scan_keeps_auto_connect_scan_running() -> void:
 	assert_true(_cm.is_auto_connecting())
 	_bridge.emit_device_found("neo", "Neo", -50, PackedStringArray(["1826"]))
 	assert_false(_cm.scanner.is_scanning(), "автоподключение само остановило сканер")
+
+
+# ---------------------------------------------------------------------------
+# Регрессии финального ревью
+# ---------------------------------------------------------------------------
+
+## П.3: на macOS при запуске адаптер в UNKNOWN — автоподключение не теряется,
+## а выполняется при переходе в POWERED_ON (REQ-DEV-06 крит. 2, 5).
+func test_auto_connect_requested_before_powered_on_runs_on_powered_on() -> void:
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	_bridge.set_adapter_state(BleBridge.AdapterState.UNKNOWN)
+	_cm.auto_connect(A)
+	assert_false(_cm.is_auto_connecting())
+	assert_true(_cm.is_auto_connect_deferred(), "запрос запомнен")
+	assert_eq(_bridge.calls_of("start_scan").size(), 0, "до POWERED_ON не сканируем")
+	_bridge.set_adapter_state(BleBridge.AdapterState.POWERED_OFF)
+	assert_true(_cm.is_auto_connect_deferred(), "промежуточные состояния не отменяют ожидание")
+	_bridge.set_adapter_state(BleBridge.AdapterState.POWERED_ON)
+	assert_false(_cm.is_auto_connect_deferred())
+	assert_true(_cm.is_auto_connecting(), "автоподключение запущено")
+	assert_true(_cm.scanner.is_scanning())
+	_adv("neo", "Neo", ["1826"])
+	assert_eq(_bridge.calls_of("connect_peripheral").size(), 1, "подключение без действий пользователя")
+
+
+func test_deferred_auto_connect_cancelled_explicitly_and_by_profile_change() -> void:
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	_bridge.set_adapter_state(BleBridge.AdapterState.UNKNOWN)
+	_cm.auto_connect(A)
+	_cm.cancel_auto_connect()
+	assert_false(_cm.is_auto_connect_deferred())
+	_bridge.set_adapter_state(BleBridge.AdapterState.POWERED_ON)
+	assert_eq(_bridge.calls_of("start_scan").size(), 0, "отменённое ожидание не срабатывает")
+	_bridge.set_adapter_state(BleBridge.AdapterState.UNKNOWN)
+	_cm.auto_connect(A)
+	_cm.set_profile(B)
+	_bridge.set_adapter_state(BleBridge.AdapterState.POWERED_ON)
+	assert_eq(_bridge.calls_of("start_scan").size(), 0, "смена профиля отменяет ожидание")
+	_cm.auto_connect_enabled = false
+	_bridge.set_adapter_state(BleBridge.AdapterState.UNKNOWN)
+	_cm.auto_connect(A)
+	assert_false(_cm.is_auto_connect_deferred(), "выключенное автоподключение не откладывается")
+
+
+## П.4: устройство, найденное в текущем сеансе сканирования, доступно для автоподключения,
+## даже если сканер уже пометил его недоступным/убрал (реклама без дубликатов приходила один раз).
+func test_auto_connect_uses_device_seen_earlier_in_current_scan_session() -> void:
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	_cm.start_scan()
+	_adv("neo", "Neo", ["1826"])
+	for i in 35:
+		_cm.tick(1.0)
+	assert_true(_cm.scanner.find("neo").is_empty(), "сканер убрал запись через 30 с")
+	_cm.auto_connect(A)
+	assert_eq(_bridge.calls_of("connect_peripheral").size(), 1, "подключение сразу, без ожидания device_found")
+	assert_eq(_bridge.calls_of("connect_peripheral")[0]["id"], "neo")
+
+
+## П.10: подписка на сигналы датчика — связанными методами: без dispose() менеджер
+## освобождается (лямбда держала бы его сильной ссылкой — цикл и утечка).
+func test_manager_with_sensor_is_freed_without_dispose() -> void:
+	var cm := ConnectionManager.new(_bridge, _remembered)
+	cm.connect_sensor("hrm", RememberedDevices.KIND_HR)
+	_bridge.pump()
+	var states: Array[String] = []
+	cm.state_changed.connect(func(id: String) -> void: states.append(id))
+	var sensor: SensorDevice = cm.sensor(RememberedDevices.KIND_HR)
+	_bridge.emit_disconnected("hrm", BleBridge.DisconnectReason.LINK_LOSS)
+	assert_eq(states, ["hrm"] as Array[String], "связанный обработчик получает kind")
+	var ref: WeakRef = weakref(cm)
+	cm = null
+	assert_null(ref.get_ref(), "менеджер освобождён — цикла через датчик нет")
+	if sensor.has_method("dispose"):
+		sensor.call("dispose")
+
+
+## П.12: dispose менеджера сбрасывает очередь заглушки (её замыкания держат мост).
+func test_dispose_clears_stub_bridge_pending_queue() -> void:
+	_cm.connect_trainer("neo")
+	assert_gt(_bridge.pending.size(), 0)
+	_cm.dispose()
+	_cm = null
+	assert_eq(_bridge.pending.size(), 0)

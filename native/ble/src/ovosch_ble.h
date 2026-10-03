@@ -10,8 +10,10 @@
 #include <godot_cpp/variant/string.hpp>
 
 #include <memory>
+#include <mutex>
 
 #include "ble_backend.h"
+#include "scan_throttle.h"
 
 namespace ovosch {
 
@@ -62,6 +64,10 @@ private:
 	static std::vector<std::string> to_std(const godot::PackedStringArray &strings);
 
 	std::unique_ptr<BleBackend> backend_;
+	// Прореживание device_found (backend сканирует с дубликатами рекламы). on_device_found
+	// приходит из потока backend'а, start_scan — из главного: доступ под мьютексом.
+	ScanThrottle scan_throttle_;
+	std::mutex scan_throttle_mutex_;
 };
 
 } // namespace ovosch

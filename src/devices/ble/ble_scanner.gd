@@ -9,6 +9,10 @@ extends RefCounted
 ## Время подаётся через `tick(delta)`: без рекламы 10 с → `available = false`,
 ## 30 с → запись удаляется. События после `stop()` игнорируются.
 ## Сортировка: сначала станки, затем по убыванию RSSI, затем по имени.
+## Нативный мост сканирует с дубликатами рекламы, прореженными до одного события на
+## устройство в секунду, поэтому живое устройство не «протухает». Дополнительно
+## сканер помнит id, рекламировавшиеся в текущем сеансе (`seen_in_session`, сброс при
+## `start()`/`stop()`), — для автоподключения это «устройство доступно» (REQ-DEV-06 крит. 2).
 
 const UNAVAILABLE_AFTER_SEC: float = 10.0
 const REMOVE_AFTER_SEC: float = 30.0
@@ -24,6 +28,8 @@ var devices: Array[Dictionary] = []
 var scanning: bool = false
 
 var _time_sec: float = 0.0
+## id → true: реклама приходила в текущем сеансе сканирования.
+var _session_seen: Dictionary = {}
 
 
 func _init(ble_bridge: BleBridge) -> void:
@@ -49,6 +55,7 @@ func start() -> void:
 	if scanning:
 		return
 	scanning = true
+	_session_seen.clear()
 	bridge.start_scan(BleUuids.SCAN_SERVICES)
 
 
@@ -56,11 +63,17 @@ func stop() -> void:
 	if not scanning:
 		return
 	scanning = false
+	_session_seen.clear()
 	bridge.stop_scan()
 
 
 func is_scanning() -> bool:
 	return scanning
+
+
+## Рекламировалось ли устройство в текущем (идущем) сеансе сканирования.
+func seen_in_session(id: String) -> bool:
+	return scanning and _session_seen.has(id)
 
 
 func get_time_sec() -> float:
@@ -112,12 +125,14 @@ func dispose() -> void:
 	if bridge.device_found.is_connected(_on_device_found):
 		bridge.device_found.disconnect(_on_device_found)
 	scanning = false
+	_session_seen.clear()
 	bridge = null
 
 
 func _on_device_found(id: String, name: String, rssi: int, service_uuids: PackedStringArray) -> void:
 	if not scanning or id.is_empty():
 		return
+	_session_seen[id] = true
 	var kind: String = kind_from_services(service_uuids)
 	var entry: Dictionary = {}
 	for d in devices:

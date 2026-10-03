@@ -11,7 +11,12 @@ extends RefCounted
 ## цель уйдёт при `resume()` (уточнение DEV-08.3, приоритет В-4).
 ##
 ## Команды на станок (все — в ту же секунду, что и событие, REQ-NFR-01):
-## - `target_changed(w)` исполнителя при действующем ERG и w > 0 → `set_target_power(w)`;
+## - старт: станок живёт дольше сессии и мог остаться в режиме прошлой тренировки,
+##   поэтому режим сверяется с `trainer.is_erg_enabled()`: ERG выкл пользователем —
+##   `erg=false` + уровень до запуска исполнителя; после входа в первый шаг при
+##   расхождении действующего ERG со станком — `erg` + текущая цель/уровень;
+## - `target_changed(w)` исполнителя при действующем ERG → `set_target_power(w)`,
+##   в том числе 0 Вт (иначе станок держал бы прежнюю цель);
 ## - шаг FreeRide при включённом пользователем ERG (решение В-10, REQ-WRK-02 крит. 5):
 ##   ERG на станке приостанавливается — `set_erg_enabled(false)` + `set_resistance_level(level)`;
 ##   на следующем шаге с целью — `set_erg_enabled(true)` + цель. Флаг пользователя
@@ -127,6 +132,9 @@ func _init(workout: Workout, device: TrainerDevice, ftp_w: int, intensity: float
 
 ## Старт: если ERG выключен пользователем — на станок уходят `erg=false` и уровень;
 ## затем стартует исполнитель (первая цель/режим шага уходит из его событий).
+## Если после этого режим станка (`is_erg_enabled()`) расходится с действующим ERG
+## сессии — станок остался в режиме прошлой тренировки — режим и текущая
+## цель/уровень отправляются заново.
 func start() -> void:
 	if _state != State.IDLE:
 		push_warning("WorkoutSession.start: сессия уже запущена")
@@ -138,6 +146,10 @@ func start() -> void:
 		trainer.set_erg_enabled(false)
 		trainer.set_resistance_level(resistance_level)
 	executor.start()
+	# Не подключён — режим и цель уйдут при CONNECTED (_on_connection_state_changed).
+	if _state == State.RUNNING and trainer.get_connection_state() == TrainerDevice.ConnectionState.CONNECTED \
+			and trainer.is_erg_enabled() != _effective_erg():
+		_resend(true)
 
 
 ## Продвигает время. Большая дельта (заморозка кадра) нарезается по границам
@@ -360,14 +372,13 @@ func _current_step_is_free_ride() -> bool:
 
 
 ## Повторная отправка текущего режима на станок: при `with_erg` — сначала
-## действующее состояние ERG; затем цель (ERG, если > 0) или уровень (не ERG).
+## действующее состояние ERG; затем цель (ERG, в том числе 0 Вт) или уровень (не ERG).
 func _resend(with_erg: bool) -> void:
 	var erg_now: bool = _effective_erg()
 	if with_erg:
 		trainer.set_erg_enabled(erg_now)
 	if erg_now:
-		if _current_target_w > 0:
-			trainer.set_target_power(_current_target_w)
+		trainer.set_target_power(_current_target_w)
 	else:
 		trainer.set_resistance_level(resistance_level)
 
@@ -395,7 +406,8 @@ func _on_step_changed(_index: int, step: WorkoutStep) -> void:
 func _on_target_changed(watts: int) -> void:
 	_current_target_w = watts
 	# На паузе ничего не шлём; цель уйдёт при resume() (REQ-WRK-05 крит. 5).
-	if _state == State.RUNNING and _effective_erg() and watts > 0:
+	# Цель 0 Вт тоже уходит: иначе станок держал бы прежнюю цель.
+	if _state == State.RUNNING and _effective_erg():
 		trainer.set_target_power(watts)
 
 
@@ -418,7 +430,10 @@ func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec:
 	_latest_hr_bpm = -1
 
 
+## Финиш (в том числе пропуском последнего шага на паузе): открытая пауза
+## закрывается так же, как при `stop()` — её время идёт в `paused_total_sec`.
 func _on_executor_finished() -> void:
+	_close_pause()
 	if samples.speed_source.is_empty():
 		samples.speed_source = SampleStream.SPEED_SOURCE_MODEL
 	_log(EVENT_FINISH, executor.elapsed_sec())

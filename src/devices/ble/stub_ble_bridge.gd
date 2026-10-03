@@ -11,6 +11,9 @@ extends BleBridge
 ## - `connect_peripheral` → `connected(id)` (или ошибка после `fail_next_connect()`);
 ## - `discover_services` → `services_discovered(id, services)` из `set_device_services`;
 ## - `write` → `write_done(id, char, ok)` (ok, пока не вызван `fail_next_write()`);
+##   отказ записи, как у нативного моста, — только `write_done(ok = false)`, без `error`;
+##   `legacy_double_write_failure = true` воспроизводит старый нативный мост, который на
+##   один отказ слал и `write_done(false)`, и следом `error(WRITE_FAILED)`;
 ##   запись в FTMS Control Point `2AD9` при `auto_control_point_response` дополнительно
 ##   даёт индикацию `notification(id, "2AD9", [0x80, opcode, result])`, где result —
 ##   0x01 (успех) или код из `fail_next_control_point(result)`;
@@ -18,6 +21,8 @@ extends BleBridge
 ##   иначе `error(CHARACTERISTIC_NOT_FOUND)`; `fail_next_read()` → `error(READ_FAILED)`;
 ## - `emit_*` хелперы испускают сигналы сразу — для сценариев «устройство найдено»,
 ##   «обрыв», «пришла нотификация».
+## - `dispose()` очищает очередь `pending`: её замыкания держат заглушку, и без
+##   `pump()` объект не освобождается (утечка ObjectDB при выходе).
 
 var calls: Array[Dictionary] = []
 var pending: Array[Callable] = []
@@ -37,6 +42,8 @@ var device_services: Dictionary = {}
 var read_values: Dictionary = {}
 var auto_connect: bool = true
 var auto_control_point_response: bool = true
+## Старое поведение нативного моста: отказ записи → `write_done(false)` и `error(WRITE_FAILED)`.
+var legacy_double_write_failure: bool = false
 
 var _fail_next_write: bool = false
 var _fail_next_connect: bool = false
@@ -116,6 +123,9 @@ func write(id: String, service_uuid: String, char_uuid: String, bytes: PackedByt
 	var ok: bool = not _fail_next_write
 	_fail_next_write = false
 	pending.append(func() -> void: write_done.emit(id, ch, ok))
+	if not ok and legacy_double_write_failure:
+		pending.append(func() -> void:
+			error.emit(id, ErrorCode.WRITE_FAILED, "StubBleBridge: writeValue %s failed (дубль write_done)" % ch))
 	if ok and auto_control_point_response and ch == BleUuids.FTMS_CONTROL_POINT and bytes.size() > 0:
 		var opcode: int = bytes[0]
 		var result: int = _next_cp_result
@@ -156,6 +166,11 @@ func pump() -> int:
 		cb.call()
 		n += 1
 	return n
+
+
+## Сбросить недоставленные ответы (разрыв цикла заглушка ↔ замыкания очереди).
+func dispose() -> void:
+	pending.clear()
 
 
 func set_adapter_state(state: int) -> void:

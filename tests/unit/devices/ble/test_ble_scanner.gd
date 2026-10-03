@@ -134,3 +134,18 @@ func test_tick_without_devices_and_negative_delta_are_harmless() -> void:
 	_scanner.tick(-1.0)
 	assert_eq(_changed, 0)
 	assert_almost_eq(_scanner.get_time_sec(), 100.0, 1e-9)
+
+
+## Регрессия п.4 финального ревью: id, рекламировавшиеся в текущем сеансе, помнятся до
+## stop()/нового start(), даже когда запись уже «протухла».
+func test_seen_in_session_survives_expiry_and_resets_on_new_session() -> void:
+	_scanner.start()
+	_adv("neo", "Neo", -50, ["1826"])
+	_scanner.tick(31.0)
+	assert_false(_scanner.has("neo"), "запись удалена")
+	assert_true(_scanner.seen_in_session("neo"), "но в текущем сеансе устройство видели")
+	assert_false(_scanner.seen_in_session("other"))
+	_scanner.stop()
+	assert_false(_scanner.seen_in_session("neo"), "сеанс закончился")
+	_scanner.start()
+	assert_false(_scanner.seen_in_session("neo"), "новый сеанс — с чистого листа")

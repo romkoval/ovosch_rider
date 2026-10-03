@@ -201,7 +201,9 @@ func test_apple_backend_implements_every_ble_backend_method() -> void:
 	assert_true(text.contains("class AppleBackend final : public BleBackend"))
 	assert_true(text.contains("#ifdef OVOSCH_BLE_HAS_PLATFORM_BACKEND"), "фабрика под макросом")
 	assert_true(text.contains("std::unique_ptr<BleBackend> create_platform_backend()"))
-	assert_true(text.contains("CBCentralManagerScanOptionAllowDuplicatesKey : @NO"), "без дубликатов рекламы")
+	assert_true(text.contains("CBCentralManagerScanOptionAllowDuplicatesKey : @YES"),
+		"сканирование с дубликатами рекламы: иначе устройство сообщается один раз за сеанс")
+	assert_false(text.contains("AllowDuplicatesKey : @NO"))
 	assert_true(text.contains("retrievePeripheralsWithIdentifiers"), "запомненные устройства по id")
 	assert_true(text.contains("pendingReads"), "чтение отличается от нотификации по флагу ожидания")
 	for cb in ["centralManagerDidUpdateState", "didDiscoverPeripheral", "didConnectPeripheral",
@@ -274,3 +276,34 @@ func test_sconstruct_wires_apple_backend_and_ci_builds_both_platforms() -> void:
 	assert_true(readme.contains("NSBluetoothAlwaysUsageDescription"), "README: Info.plist")
 	assert_true(readme.contains("com.apple.security.device.bluetooth"), "README: entitlement")
 	assert_true(readme.contains("bluetooth-central"), "README: фоновый режим iOS (вопрос владельцу)")
+
+
+# ---------------------------------------------------------------------------
+# Регрессии финального ревью (дубли событий, прореживание рекламы)
+# ---------------------------------------------------------------------------
+
+## Отказ записи — ровно одно событие `write_done(false)`: второе (`error(WRITE_FAILED)`)
+## BleTrainer принимал за отказ повтора.
+func test_apple_write_failure_is_single_write_done_event() -> void:
+	var text := _read(APPLE_MM)
+	var start := text.find("void AppleBackend::handle_write_done(")
+	assert_gt(start, -1)
+	var body := text.substr(start, text.find("\n}\n", start) - start)
+	assert_true(body.contains("on_write_done(id, ch, ok)"))
+	assert_false(body.contains("ErrorCode::WRITE_FAILED"), "в handle_write_done нет error(WRITE_FAILED)")
+	assert_false(body.contains("emit_error"), "в handle_write_done нет второго события")
+
+
+## Дубликаты рекламы прореживаются в общем слое: не чаще раза в секунду на устройство,
+## сброс на новом сеансе сканирования.
+func test_ovosch_ble_throttles_device_found_and_resets_on_start_scan() -> void:
+	var cpp := _read(OVOSCH_CPP)
+	var header := _read("res://native/ble/src/scan_throttle.h")
+	assert_true(header.contains("DEFAULT_INTERVAL_MS = 1000"), "интервал 1 с")
+	assert_true(_read(OVOSCH_H).contains("ScanThrottle scan_throttle_"))
+	var found := cpp.substr(cpp.find("void OvoschBle::on_device_found("))
+	found = found.substr(0, found.find("\n}\n"))
+	assert_true(found.contains("scan_throttle_.should_emit("), "on_device_found проходит через прореживание")
+	var scan := cpp.substr(cpp.find("void OvoschBle::start_scan("))
+	scan = scan.substr(0, scan.find("\n}\n"))
+	assert_true(scan.contains("scan_throttle_.reset()"), "новый сеанс — устройства снова «первые»")

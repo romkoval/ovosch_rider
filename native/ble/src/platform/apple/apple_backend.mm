@@ -80,6 +80,13 @@ static std::vector<uint8_t> ovosch_bytes_from(NSData *data) {
 	return std::vector<uint8_t>(ptr, ptr + [data length]);
 }
 
+// Параметры сканирования: с дубликатами рекламы. Без них CoreBluetooth сообщает устройство
+// один раз за сеанс, и GDScript-сканер через 10 с считает его пропавшим, а автоподключение
+// ждёт device_found, которого не будет. Поток событий прореживает OvoschBle (ScanThrottle).
+static NSDictionary<NSString *, id> *ovosch_scan_options() {
+	return @{ CBCentralManagerScanOptionAllowDuplicatesKey : @YES };
+}
+
 static NSString *ovosch_read_key(CBPeripheral *peripheral, CBCharacteristic *characteristic) {
 	return [NSString stringWithFormat:@"%@/%@", [[peripheral identifier] UUIDString], ovosch_cbuuid_string([characteristic UUID])];
 }
@@ -236,7 +243,7 @@ void AppleBackend::start_scan(const std::vector<std::string> &service_uuids) {
 		[delegate setPendingScanServices:([filter count] > 0 ? filter : nil)];
 		if ([[delegate central] state] == CBManagerStatePoweredOn) {
 			[[delegate central] scanForPeripheralsWithServices:[delegate pendingScanServices]
-													   options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @NO }];
+													   options:ovosch_scan_options()];
 		}
 		// Иначе сканирование стартует в centralManagerDidUpdateState при poweredOn.
 	});
@@ -400,7 +407,7 @@ void AppleBackend::handle_adapter_state(CBManagerState state) {
 	if (mapped == AdapterState::POWERED_ON) {
 		if ([delegate scanRequested] && ![[delegate central] isScanning]) {
 			[[delegate central] scanForPeripheralsWithServices:[delegate pendingScanServices]
-													   options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @NO }];
+													   options:ovosch_scan_options()];
 		}
 	} else if (mapped == AdapterState::UNSUPPORTED || mapped == AdapterState::UNAUTHORIZED || mapped == AdapterState::POWERED_OFF) {
 		if ([delegate scanRequested]) {
@@ -532,11 +539,12 @@ void AppleBackend::handle_write_done(CBPeripheral *peripheral, CBCharacteristic 
 	std::string id = ovosch_to_std([[peripheral identifier] UUIDString]);
 	std::string ch = ovosch_to_std(ovosch_cbuuid_string([characteristic UUID]));
 	bool ok = error == nil;
-	notify([&](BleListener *l) { l->on_write_done(id, ch, ok); });
-	// Текст ошибки записи — отдельным сообщением для журнала; повтор решает GDScript (REQ-NFR-01 крит. 2).
+	// Один отказ — одно событие write_done(false); повтор решает GDScript (REQ-NFR-01 крит. 2).
+	// Сигнал error(WRITE_FAILED) здесь не шлётся: BleTrainer считал бы его вторым отказом.
 	if (!ok) {
-		emit_error(id, ErrorCode::WRITE_FAILED, describe(error, "writeValue"));
+		NSLog(@"ovosch_ble: %@", ovosch_to_ns(describe(error, "writeValue")));
 	}
+	notify([&](BleListener *l) { l->on_write_done(id, ch, ok); });
 }
 
 void AppleBackend::handle_notify_state(CBPeripheral *peripheral, CBCharacteristic *characteristic, NSError *error) {

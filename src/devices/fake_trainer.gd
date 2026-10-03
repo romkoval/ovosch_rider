@@ -149,6 +149,10 @@ func set_erg_enabled(enabled: bool) -> void:
 		erg_enabled = enabled
 
 
+func is_erg_enabled() -> bool:
+	return erg_enabled
+
+
 func set_resistance_level(percent: int) -> void:
 	var value: int = clampi(percent, MIN_RESISTANCE_PERCENT, MAX_RESISTANCE_PERCENT)
 	if percent != value:
