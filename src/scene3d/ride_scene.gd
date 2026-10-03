@@ -1,28 +1,48 @@
 class_name RideScene
 extends Node3D
-## 3D-сцена заезда (REQ-D3D-01..06): велосипедист едет по `Track`, камера от третьего
-## лица следует с запаздыванием, педалирование — по каденсу, окружение — из `EnvironmentSet`.
+## 3D-сцена заезда (REQ-D3D-01..07): велосипедист едет по `Track`, камера от третьего
+## лица следует с запаздыванием, педалирование — по каденсу, окружение — из `EnvironmentSet`:
+## стилизованный «нарисованный» мир (тун-свет, контуры) — дорога с разметкой, обочина с
+## бордюром и отбойником, рельеф с холмами, деревья и трава, небо с облаками.
 ##
 ## Привязка к телеметрии — `bind(session, profile)`: на каждом закрытом слоте потока
 ## (`second_elapsed`) читается последняя строка `samples`: скорость — станка, если
 ## `speed_source == "trainer"`, иначе `SpeedModel.step(power, weight, 1 с)`; каденс → `Rider`.
 ## Дистанция интегрируется в кадре по текущей скорости и переводится в позицию через
 ## `Track.sample_into` (без аллокаций в `_process`, REQ-D3D-05 крит. 4). Всё «тяжёлое»
-## (дорога, объекты окружения, свет, небо) строится в `set_track()`/`_ready()`.
+## (дорога, обочина, рельеф, растительность, свет, небо) строится в `set_track()`/`_ready()`.
+## В поворотах велосипедист наклоняется на угол atan(v²·κ/g), κ — кривизна трассы.
 ## Трасса и окружение подменяются через интерфейсы `Track`/`EnvironmentSet` — цикл и
 ## привязка не знают конкретной сцены (REQ-D3D-06).
 
 const DEFAULT_ENVIRONMENT: String = "res://src/scene3d/default_environment.tres"
 const RIDER_SCENE: String = "res://src/scene3d/rider.tscn"
+const DEFAULT_ROAD_MATERIAL: String = "res://src/scene3d/materials/road.tres"
+const DEFAULT_WORLD_MATERIAL: String = "res://src/scene3d/materials/world_toon.tres"
+const DEFAULT_TERRAIN_MATERIAL: String = "res://src/scene3d/materials/grass.tres"
+const DEFAULT_SKY_MATERIAL: String = "res://src/scene3d/materials/sky.tres"
 ## Камера: позади (по горизонтальному направлению движения) и сверху от велосипедиста.
 ## Сглаживается УГОЛ направления (yaw), а не вектор смещения: расстояние и высота
 ## постоянны при любой скорости и на любых поворотах (D3D-01 крит. 1), повороты
-## трассы камера догоняет с запаздыванием τ.
-const CAMERA_BACK_M: float = 7.0
-const CAMERA_UP_M: float = 3.0
-const CAMERA_LOOK_UP_M: float = 1.0
+## трассы камера догоняет с запаздыванием τ. Камера смотрит не в велосипедиста, а на
+## точку дороги впереди него (`CAMERA_LOOK_AHEAD_M`): гонщик — в нижней трети кадра,
+## дорога уходит к горизонту над ним. Камера чуть смещена влево от линии движения
+## (`CAMERA_SIDE_RAD`, к середине дороги): вид в три четверти — читаются руки, руль, рама;
+## горизонтальное расстояние до велосипедиста при этом остаётся ровно `CAMERA_BACK_M`.
+const CAMERA_BACK_M: float = 3.8
+const CAMERA_UP_M: float = 2.1
+const CAMERA_SIDE_RAD: float = -0.13
+const CAMERA_LOOK_UP_M: float = 0.6
+const CAMERA_LOOK_AHEAD_M: float = 6.0
 const CAMERA_TAU_SEC: float = 0.25
 const MAX_FRAME_DELTA_SEC: float = 0.25
+## Наклон в повороте: шаг оценки кривизны, усиление (немного больше физического — чтобы
+## читался на пологих поворотах), предел и сглаживание.
+const LEAN_PROBE_M: float = 6.0
+const LEAN_GAIN: float = 1.6
+const LEAN_MAX_RAD: float = 0.45
+const LEAN_TAU_SEC: float = 0.35
+const GRAVITY: float = 9.81
 
 @export var environment_set: EnvironmentSet = null
 ## Seed процедурной трассы по умолчанию.
@@ -37,9 +57,14 @@ var weight_kg: float = SpeedModel.BIKE_MASS_KG + 67.0
 var _session: WorkoutSession = null
 var _speed_model := SpeedModel.new()
 var _sample := TrackSample.new()
+var _ahead := TrackSample.new()
 var _camera_yaw: float = 0.0
+var _lean: float = 0.0
 var _road: MeshInstance3D = null
 var _props: MultiMeshInstance3D = null
+## Прочие узлы мира, построенные по трассе (обочина, рельеф, растительность).
+var _world_nodes: Array[Node] = []
+var _terrain: TerrainField = null
 var _env_instance: Node = null
 
 @onready var _rider: Rider = %Rider
@@ -73,14 +98,23 @@ func set_track(new_track: Track) -> void:
 	if _props != null:
 		_props.queue_free()
 		_props = null
+	for node in _world_nodes:
+		node.queue_free()
+	_world_nodes.clear()
+	_terrain = null
 	if not is_node_ready():
 		return
-	_road = RoadBuilder.build(track, environment_set.road_material if environment_set != null else null)
+	var env: EnvironmentSet = environment_set
+	_road = RoadBuilder.build(track, _material_or(env.road_material, DEFAULT_ROAD_MATERIAL), env.road_width_m,
+		-1, env.road_center_offset_m)
+	_road.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_environment_root.add_child(_road)
+	_build_world()
 	_props = _build_props()
 	if _props != null:
 		_environment_root.add_child(_props)
 	distance_m = 0.0
+	_lean = 0.0
 	_place_rider(true)
 
 
@@ -98,6 +132,16 @@ func road() -> MeshInstance3D:
 
 func props() -> MultiMeshInstance3D:
 	return _props
+
+
+## Узлы мира, построенные по трассе: обочина, полоса травы, рельеф, растительность.
+func world_nodes() -> Array[Node]:
+	return _world_nodes
+
+
+## Поле высот рельефа (null — рельеф выключен в `EnvironmentSet`).
+func terrain() -> TerrainField:
+	return _terrain
 
 
 func rider_position() -> Vector3:
@@ -175,7 +219,9 @@ func advance(delta: float) -> void:
 	var alpha: float = 1.0 - exp(-dt / CAMERA_TAU_SEC)
 	_camera_yaw = lerp_angle(_camera_yaw, _desired_yaw(), alpha)
 	_camera.global_position = _rider.global_position + _camera_offset_for(_camera_yaw)
-	_camera.look_at(_rider.global_position + Vector3.UP * CAMERA_LOOK_UP_M, Vector3.UP)
+	_camera.look_at(_camera_target(_camera_yaw), Vector3.UP)
+	_lean += (_lean_target() - _lean) * (1.0 - exp(-dt / LEAN_TAU_SEC))
+	_rider.set_lean(_lean)
 	_rider.advance(dt)
 
 
@@ -187,9 +233,32 @@ func _desired_yaw() -> float:
 	return atan2(flat.x, flat.y)
 
 
-## Смещение камеры для курса `yaw`: ровно CAMERA_BACK_M назад и CAMERA_UP_M вверх.
+## Смещение камеры для курса `yaw`: ровно CAMERA_BACK_M назад (с поворотом на
+## `CAMERA_SIDE_RAD`) и CAMERA_UP_M вверх.
 func _camera_offset_for(yaw: float) -> Vector3:
-	return Vector3(-sin(yaw) * CAMERA_BACK_M, CAMERA_UP_M, -cos(yaw) * CAMERA_BACK_M)
+	var a: float = yaw + CAMERA_SIDE_RAD
+	return Vector3(-sin(a) * CAMERA_BACK_M, CAMERA_UP_M, -cos(a) * CAMERA_BACK_M)
+
+
+## Точка взгляда камеры: на дороге впереди велосипедиста по курсу камеры.
+func _camera_target(yaw: float) -> Vector3:
+	return _rider.global_position + Vector3(sin(yaw) * CAMERA_LOOK_AHEAD_M, CAMERA_LOOK_UP_M, cos(yaw) * CAMERA_LOOK_AHEAD_M)
+
+
+## Угол наклона в повороте: atan(v²·κ/g) с усилением и пределом (> 0 — влево).
+func _lean_target() -> float:
+	if speed_kmh <= 0.0 or track == null:
+		return 0.0
+	track.sample_into(distance_m + LEAN_PROBE_M, _ahead)
+	var cross_y: float = _sample.forward.z * _ahead.forward.x - _sample.forward.x * _ahead.forward.z
+	var kappa: float = cross_y / LEAN_PROBE_M
+	var v: float = speed_kmh / 3.6
+	return clampf(atan(v * v * kappa / GRAVITY) * LEAN_GAIN, -LEAN_MAX_RAD, LEAN_MAX_RAD)
+
+
+## Текущий наклон велосипедиста, рад.
+func lean_rad() -> float:
+	return _lean
 
 
 func _process(delta: float) -> void:
@@ -203,7 +272,7 @@ func _place_rider(snap_camera: bool) -> void:
 	if snap_camera:
 		_camera_yaw = _desired_yaw()
 		_camera.global_position = _sample.position + _camera_offset_for(_camera_yaw)
-		_camera.look_at(_sample.position + Vector3.UP * CAMERA_LOOK_UP_M, Vector3.UP)
+		_camera.look_at(_camera_target(_camera_yaw), Vector3.UP)
 
 
 func _on_second_elapsed(_elapsed: int, _offset: int, _remaining: int) -> void:
@@ -237,48 +306,101 @@ func _on_session_state(state: int) -> void:
 # ---------------------------------------------------------------------------
 
 func _apply_environment() -> void:
+	var e: EnvironmentSet = environment_set
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = environment_set.sky_color
+	env.background_mode = Environment.BG_SKY
+	env.background_color = e.sky_color
+	var sky_mat: Material = e.sky_material
+	if sky_mat == null:
+		var sm := (load(DEFAULT_SKY_MATERIAL) as ShaderMaterial).duplicate() as ShaderMaterial
+		sm.set_shader_parameter("top_color", e.sky_color)
+		sm.set_shader_parameter("horizon_color", e.horizon_color)
+		sky_mat = sm
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = environment_set.ambient_color
+	env.ambient_light_color = e.ambient_color
+	env.ambient_light_energy = e.ambient_energy
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	env.fog_enabled = true
-	env.fog_light_color = environment_set.fog_color
-	env.fog_density = environment_set.fog_density
+	env.fog_light_color = e.fog_color
+	env.fog_density = e.fog_density
+	env.fog_sky_affect = 0.0
 	_world_env.environment = env
-	_sun.light_energy = environment_set.sun_energy
-	_sun.rotation_degrees = environment_set.sun_rotation_deg
+	_sun.light_color = e.sun_color
+	_sun.light_energy = e.sun_energy
+	_sun.rotation_degrees = e.sun_rotation_deg
 	if _env_instance != null:
 		_env_instance.queue_free()
 		_env_instance = null
-	if environment_set.environment_scene != null:
-		_env_instance = environment_set.environment_scene.instantiate()
+	if e.environment_scene != null:
+		_env_instance = e.environment_scene.instantiate()
 		_environment_root.add_child(_env_instance)
+
+
+func _material_or(material: Material, fallback_path: String) -> Material:
+	return material if material != null else load(fallback_path) as Material
+
+
+## Обочина, полоса травы, рельеф и растительность — по трассе, один раз.
+func _build_world() -> void:
+	var e: EnvironmentSet = environment_set
+	var world_mat: Material = _material_or(e.world_material, DEFAULT_WORLD_MATERIAL)
+	var grass_mat: Material = _material_or(e.terrain_material, DEFAULT_TERRAIN_MATERIAL)
+	if e.roadside_enabled:
+		var side: Dictionary = RoadsideBuilder.build(track, e.road_width_m, e.road_center_offset_m, world_mat, grass_mat,
+			e.guardrail_enabled, e.scenery_seed)
+		_add_world_node(side["roadside"])
+		_add_world_node(_no_shadow(side["verge"]))
+	if e.terrain_enabled:
+		_terrain = TerrainField.build(track, e.rolling_height_m, e.hills_height_m, e.scenery_seed)
+		_add_world_node(_no_shadow(_terrain.build_mesh(grass_mat)))
+	var props_count: int = _props_count()
+	for node in SceneryBuilder.build(track, e, _terrain, world_mat, PerfBudget.MAX_MULTIMESH_INSTANCES - props_count):
+		_add_world_node(node)
+
+
+## Земля тени не отбрасывает: её габарит — весь мир, он растянул бы глубину карты теней
+## и съел точность (дыры и «грязь» в тени велосипедиста).
+func _no_shadow(node: GeometryInstance3D) -> GeometryInstance3D:
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return node
+
+
+func _add_world_node(node: Node) -> void:
+	_world_nodes.append(node)
+	_environment_root.add_child(node)
+
+
+func _props_count() -> int:
+	if environment_set == null or environment_set.prop_spacing_m <= 0.0:
+		return 0
+	return mini(int(track.length_m() / environment_set.prop_spacing_m) * 2, PerfBudget.MAX_MULTIMESH_INSTANCES)
 
 
 func _build_props() -> MultiMeshInstance3D:
 	if environment_set == null or environment_set.prop_spacing_m <= 0.0:
 		return null
-	var per_side: int = int(track.length_m() / environment_set.prop_spacing_m)
-	var count: int = mini(per_side * 2, PerfBudget.MAX_MULTIMESH_INSTANCES)
+	var count: int = _props_count()
 	if count <= 0:
 		return null
-	var mesh := BoxMesh.new()
-	mesh.size = environment_set.prop_size
-	if environment_set.prop_material != null:
-		mesh.material = environment_set.prop_material
+	var e: EnvironmentSet = environment_set
+	var mesh := SceneryBuilder.delineator_mesh(e.prop_size, _material_or(e.prop_material, DEFAULT_WORLD_MATERIAL))
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mesh
 	mm.instance_count = count
 	var sample := TrackSample.new()
-	var half_height: float = environment_set.prop_size.y * 0.5
+	var ground: float = RoadsideBuilder.verge_height(e.prop_offset_m, e.road_width_m) - 0.05
 	for i in count:
-		var s: float = float(i / 2) * environment_set.prop_spacing_m
+		var s: float = float(i / 2) * e.prop_spacing_m
 		track.sample_into(s, sample)
 		var side: float = -1.0 if i % 2 == 0 else 1.0
-		var pos: Vector3 = sample.position + sample.right() * side * environment_set.prop_offset_m + Vector3.UP * half_height
-		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, pos))
+		var right: Vector3 = sample.right()
+		var pos: Vector3 = sample.position + right * (e.road_center_offset_m + side * e.prop_offset_m) + sample.up * ground
+		mm.set_instance_transform(i, Transform3D(Basis.looking_at(sample.forward, sample.up), pos))
 	var node := MultiMeshInstance3D.new()
 	node.name = "Props"
 	node.multimesh = mm

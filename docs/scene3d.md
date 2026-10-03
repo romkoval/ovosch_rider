@@ -1,4 +1,4 @@
-# 3D-сцена заезда: архитектура (REQ-D3D-01..06)
+# 3D-сцена заезда: архитектура (REQ-D3D-01..07)
 
 Игровой цикл не знает ни конкретной трассы, ни конкретного окружения. `RideScene` получает
 телеметрию от `WorkoutSession` (закрытые слоты потока 1 Гц), превращает её в скорость
@@ -29,8 +29,31 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
 - `EnvironmentSet` (`Resource`): материалы дороги и объектов, цвета неба/тумана, свет, шаг объектов,
   `environment_scene: PackedScene` (опционально).
 - `RideScene`: `set_track(track)`, `bind(session, profile)`, `unbind()`, `apply_telemetry(...)`, `advance(dt)`.
-- `RoadBuilder.build(track, material, width, segments)` — один `MeshInstance3D`, число сегментов
-  фиксировано (`MAX_SEGMENTS`), не растёт со временем (D3D-03 крит. 2).
+- `RoadBuilder.build(track, material, width, segments, center_offset)` — один `MeshInstance3D`, число
+  сегментов фиксировано (`MAX_SEGMENTS`), не растёт со временем (D3D-03 крит. 2); ось дороги может
+  быть сдвинута от линии трассы (`center_offset`) — велосипедист едет в правой полосе.
+
+## Мир (REQ-D3D-07)
+
+Стиль и цифры — `docs/game/art-bible.md`. Всё строится по `Track` в `RideScene.set_track()` один раз
+и работает с любой трассой (петля, прямая, GPX); каждую часть можно выключить в `EnvironmentSet`.
+
+- `RoadsideBuilder.build(...)` → `{roadside, verge}`: кромка, бордюр, отбойник (материал мира) и
+  полоса травы с кюветом (материал травы); на внутренней стороне крутых поворотов ширина
+  ограничена радиусом.
+- `TerrainField.build(track, …)` — сетка высот вокруг габарита трассы: у дороги ниже полотна,
+  дальше увалы, на краю холмы; `height_at`/`road_distance_at` — для расстановки объектов.
+- `SceneryBuilder.build(track, env, field, material, budget)` — деревья, ели, кусты, трава
+  (`MultiMeshInstance3D` на тип), урезается под остаток бюджета MultiMesh; сигнальные столбики —
+  `RideScene.props()`.
+- `MeshKit` — процедурные меши с цветом вершин (альфа — вес контура); `RiderModel` — меши и
+  геометрия велосипедиста (IK ног `two_bone_joint`, `bone_transform`).
+- Материалы — `src/scene3d/materials/`, шейдеры — `src/scene3d/shaders/` (общий тун-свет
+  `toon_light.gdshaderinc`; контур — `next_pass`). Пустой материал в `EnvironmentSet` заменяется
+  материалом по умолчанию.
+- В кадре (`advance`, без аллокаций): велосипедист ставится по трассе, камера в три четверти
+  (`CAMERA_SIDE_RAD`) смотрит на точку впереди, наклон в повороте — atan(v²·κ/g) по кривизне
+  между `s` и `s + LEAN_PROBE_M`, сглаженный; `Rider.advance` ставит ноги по углу шатуна.
 
 ## Как добавить маршрут GPX (без правки игрового цикла)
 

@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://src/scene3d/shaders/toon.gdshader" id="1_toon"]
+[ext_resource type="Material" path="res://src/scene3d/materials/outline_rider.tres" id="2_outline"]
+
+[resource]
+next_pass = ExtResource("2_outline")
+shader = ExtResource("1_toon")
+shader_parameter/toon_threshold = 0.0
+shader_parameter/toon_softness = 0.04
+shader_parameter/toon_sun_gain = 1.0
+shader_parameter/toon_rim = 0.35
+shader_parameter/toon_receive_shadow = 0.0
+shader_parameter/tint = Color(1, 1, 1, 1)

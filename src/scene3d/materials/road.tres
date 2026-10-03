@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://src/scene3d/shaders/road.gdshader" id="1_road"]
+
+[resource]
+shader = ExtResource("1_road")
+shader_parameter/toon_threshold = 0.0
+shader_parameter/toon_softness = 0.05
+shader_parameter/toon_sun_gain = 1.0
+shader_parameter/toon_rim = 0.0
+shader_parameter/road_width = 6.5

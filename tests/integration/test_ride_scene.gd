@@ -438,5 +438,6 @@ func test_rider_is_advanced_only_by_scene_once_per_frame() -> void:
 	assert_true(before.is_equal_approx(wheel.transform.basis), "без кадра сцены колёса не крутятся")
 	assert_eq(s.rider().speed_scale, scale_before, "без кадра сцены сглаживание не идёт")
 	s.advance(FRAME)
-	var angle := 36.0 / 3.6 / Rider.WHEEL_RADIUS_M * FRAME
+	# Колесо катится вперёд (−Z): верх обода уходит вперёд — поворот вокруг X отрицательный.
+	var angle := -36.0 / 3.6 / Rider.WHEEL_RADIUS_M * FRAME
 	assert_true((before * Basis(Vector3.RIGHT, angle)).is_equal_approx(wheel.transform.basis), "один кадр сцены — один поворот колеса")
