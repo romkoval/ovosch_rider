@@ -19,6 +19,15 @@ extends RefCounted
 ## активное + паузы (сумма пауз копится в мс без промежуточного округления и
 ## сверяется с `paused_total_sec` заезда). Скорость — из потока согласно `speed_source` заезда (В-8),
 ## дистанция — интеграл скорости (`SampleStream.distance_m`).
+##
+## Свободная езда (REQ-FRD-07 крит. 5): если заезд — `free_ride` или в потоке есть
+## позиция на трассе, определение `record` дополнительно несёт `altitude` (поле 2),
+## `enhanced_altitude` (78) и `grade` (9); у сэмпла без позиции они invalid.
+## `session` дополнительно несёт `total_ascent` (22, по `Ride.total_ascent_m`),
+## `total_distance` (9) пишется у всех заездов. `lap` у свободной езды — по одному на
+## каждый полный круг трассы (длина — `RouteCatalog`) плюс неполный последний, по
+## накопленной `distance_m`, вместо шагов плана. Заезд по плану кодируется
+## побайтно так же, как до T-069 (регрессия REQ-LOC-05).
 
 const PRODUCT_ID: int = 1
 const SOFTWARE_VERSION: int = 100
@@ -33,6 +42,10 @@ const LOCAL_RECORD: int = 4
 const LOCAL_LAP: int = 5
 const LOCAL_SESSION: int = 6
 const LOCAL_ACTIVITY: int = 7
+
+## Допуск на границе круга, м: дистанция в пределах допуска от k·L ещё в круге k
+## (погрешность float32 накопленной дистанции).
+const LAP_EPS_M: float = 0.01
 
 
 ## Собранный поток сообщений: определения и данные.
@@ -119,17 +132,21 @@ static func encode(ride: Ride) -> PackedByteArray:
 	if n > 0:
 		end_unix = maxi(end_unix, int(timestamps[n - 1]) + 1)
 
+	var with_route: bool = ride.is_free_ride() or samples.has_route_data()
+	var lap_keys: PackedInt32Array = _circuit_lap_keys(samples, ride.route_id()) if ride.is_free_ride() \
+			else samples.step_index
+
 	var w := Writer.new()
 	_write_file_id(w, started)
 	_write_file_creator(w)
 	_write_device_info(w, started)
 	_define_event(w)
 	_event(w, started, FitDefinitions.EVENT_TYPE_START)
-	_define_record(w)
-	_write_records_with_pauses(w, samples, timestamps, started, pauses, pause_cum_ms)
+	_define_record(w, with_route)
+	_write_records_with_pauses(w, samples, timestamps, started, pauses, pause_cum_ms, with_route)
 	_event(w, end_unix, FitDefinitions.EVENT_TYPE_STOP_ALL)
-	var laps: int = _write_laps(w, samples, timestamps, started, end_unix)
-	_write_session(w, ride, summary, started, end_unix, n, laps)
+	var laps: int = _write_laps(w, samples, timestamps, started, end_unix, lap_keys, ride.is_free_ride())
+	_write_session(w, ride, summary, started, end_unix, n, laps, with_route)
 	_write_activity(w, end_unix, n)
 
 	var body: PackedByteArray = w.bytes()
@@ -180,6 +197,34 @@ static func _record_timestamps(samples: SampleStream, started: int, pauses: Arra
 	return out
 
 
+## Номер круга трассы для каждого сэмпла свободной езды (REQ-FRD-07 крит. 5): сэмпл
+## относится к кругу, на котором заканчивается его секунда; секунда, в которую
+## пересечена отметка k·L, закрывает круг k. Ровно k·L (с допуском `LAP_EPS_M`)
+## остаётся в круге k, поэтому заезд ровно в N кругов даёт N `lap`, а 2.5 круга — 3.
+## Неизвестная трасса или нулевая длина — один круг на весь заезд.
+static func _circuit_lap_keys(s: SampleStream, route_id: String) -> PackedInt32Array:
+	var keys := PackedInt32Array()
+	keys.resize(s.size())
+	keys.fill(0)
+	var length_m: float = _route_length_m(route_id)
+	if length_m <= 0.0:
+		return keys
+	var prev: int = 0
+	for i in s.size():
+		var k: int = maxi(ceili((float(s.distance_m[i]) - LAP_EPS_M) / length_m) - 1, 0)
+		prev = maxi(prev, k)
+		keys[i] = prev
+	return keys
+
+
+## Длина круга трассы, м (0 — трасса неизвестна).
+static func _route_length_m(route_id: String) -> float:
+	var route: RouteCatalog.RouteDef = RouteCatalog.get_route(route_id)
+	if route == null or route.profile == null or not route.profile.is_valid():
+		return 0.0
+	return route.profile.length_m()
+
+
 static func _write_file_id(w: Writer, started: int) -> void:
 	w.define(LOCAL_FILE_ID, FitDefinitions.MSG_FILE_ID, [
 		[FitDefinitions.FILE_ID_TYPE, 1, FitDefinitions.T_ENUM],
@@ -226,20 +271,26 @@ static func _event(w: Writer, unix: int, event_type: int) -> void:
 	w.data(LOCAL_EVENT, [FitDefinitions.to_fit_time(unix), FitDefinitions.EVENT_TIMER, event_type, 0])
 
 
-static func _define_record(w: Writer) -> void:
-	w.define(LOCAL_RECORD, FitDefinitions.MSG_RECORD, [
+## `with_route` — добавить высоту и уклон (свободная езда, REQ-FRD-07 крит. 5).
+static func _define_record(w: Writer, with_route: bool) -> void:
+	var fields: Array = [
 		[FitDefinitions.F_TIMESTAMP, 4, FitDefinitions.T_UINT32],
 		[FitDefinitions.RECORD_POWER, 2, FitDefinitions.T_UINT16],
 		[FitDefinitions.RECORD_HEART_RATE, 1, FitDefinitions.T_UINT8],
 		[FitDefinitions.RECORD_CADENCE, 1, FitDefinitions.T_UINT8],
 		[FitDefinitions.RECORD_SPEED, 2, FitDefinitions.T_UINT16],
 		[FitDefinitions.RECORD_DISTANCE, 4, FitDefinitions.T_UINT32],
-	])
+	]
+	if with_route:
+		fields.append([FitDefinitions.RECORD_ALTITUDE, 2, FitDefinitions.T_UINT16])
+		fields.append([FitDefinitions.RECORD_ENHANCED_ALTITUDE, 4, FitDefinitions.T_UINT32])
+		fields.append([FitDefinitions.RECORD_GRADE, 2, FitDefinitions.T_SINT16])
+	w.define(LOCAL_RECORD, FitDefinitions.MSG_RECORD, fields)
 
 
 ## Записи с вкраплёнными событиями пауз (stop_all / start) в хронологическом порядке.
 static func _write_records_with_pauses(w: Writer, s: SampleStream, timestamps: PackedInt64Array,
-		started: int, pauses: Array[Dictionary], pause_cum_ms: PackedInt64Array) -> void:
+		started: int, pauses: Array[Dictionary], pause_cum_ms: PackedInt64Array, with_route: bool) -> void:
 	var k: int = 0
 	var paused: int = 0
 	for i in s.size():
@@ -247,14 +298,21 @@ static func _write_records_with_pauses(w: Writer, s: SampleStream, timestamps: P
 		while k < pauses.size() and int(floor(float(pauses[k]["at_sec"]))) <= t:
 			paused = _emit_pause(w, pauses[k], started, paused, _ms_to_sec(int(pause_cum_ms[k])))
 			k += 1
-		w.data(LOCAL_RECORD, [
+		var values: Array = [
 			FitDefinitions.to_fit_time(int(timestamps[i])),
 			s.power_w[i] if s.has_power[i] else null,
 			s.heart_rate_bpm[i] if s.has_heart_rate[i] else null,
 			s.cadence_rpm[i] if s.has_cadence[i] else null,
 			roundi(s.speed_kmh[i] / 3.6 * 1000.0) if s.has_speed[i] else null,
-			roundi(s.distance_m[i] * 100.0),
-		])
+			FitDefinitions.distance_to_raw(s.distance_m[i]),
+		]
+		if with_route:
+			var on_route: bool = s.has_route[i]
+			var altitude_raw: Variant = FitDefinitions.altitude_to_raw(s.altitude_m[i]) if on_route else null
+			values.append(altitude_raw)
+			values.append(altitude_raw)
+			values.append(FitDefinitions.grade_to_raw(s.grade_pct[i]) if on_route else null)
+		w.data(LOCAL_RECORD, values)
 	# Паузы после последнего сэмпла (например, завершение на паузе).
 	while k < pauses.size():
 		paused = _emit_pause(w, pauses[k], started, paused, _ms_to_sec(int(pause_cum_ms[k])))
@@ -272,8 +330,12 @@ static func _emit_pause(w: Writer, pause: Dictionary, started: int, paused_befor
 	return paused_after
 
 
-## `lap` на каждый шаг плана по `step_index` потока; без сэмплов — один пустой lap.
-static func _write_laps(w: Writer, s: SampleStream, timestamps: PackedInt64Array, started: int, end_unix: int) -> int:
+## `lap` на каждую непрерывную группу сэмплов с одинаковым ключом `lap_keys`: у заезда по
+## плану это `step_index` (lap на шаг), у свободной езды — номер круга трассы
+## (`_circuit_lap_keys`, триггер position_lap, последний — session_end). Без сэмплов —
+## один пустой lap.
+static func _write_laps(w: Writer, s: SampleStream, timestamps: PackedInt64Array, started: int, end_unix: int,
+		lap_keys: PackedInt32Array, circuit_laps: bool) -> int:
 	w.define(LOCAL_LAP, FitDefinitions.MSG_LAP, [
 		[FitDefinitions.F_TIMESTAMP, 4, FitDefinitions.T_UINT32],
 		[FitDefinitions.F_MESSAGE_INDEX, 2, FitDefinitions.T_UINT16],
@@ -301,7 +363,7 @@ static func _write_laps(w: Writer, s: SampleStream, timestamps: PackedInt64Array
 	var first: int = 0
 	while first < n:
 		var last: int = first
-		while last + 1 < n and s.step_index[last + 1] == s.step_index[first]:
+		while last + 1 < n and lap_keys[last + 1] == lap_keys[first]:
 			last += 1
 		var count: int = last - first + 1
 		var power_sum: int = 0
@@ -327,6 +389,9 @@ static func _write_laps(w: Writer, s: SampleStream, timestamps: PackedInt64Array
 		var start_unix: int = int(timestamps[first])
 		var lap_end_unix: int = int(timestamps[last]) + 1
 		var dist_before: float = s.distance_m[first - 1] if first > 0 else 0.0
+		var trigger: int = FitDefinitions.LAP_TRIGGER_MANUAL
+		if circuit_laps:
+			trigger = FitDefinitions.LAP_TRIGGER_SESSION_END if last == n - 1 else FitDefinitions.LAP_TRIGGER_POSITION_LAP
 		w.data(LOCAL_LAP, [
 			FitDefinitions.to_fit_time(lap_end_unix),
 			laps,
@@ -339,7 +404,7 @@ static func _write_laps(w: Writer, s: SampleStream, timestamps: PackedInt64Array
 			roundi(float(hr_sum) / float(hr_n)) if hr_n > 0 else null,
 			max_h if hr_n > 0 else null,
 			roundi(float(cad_sum) / float(cad_n)) if cad_n > 0 else null,
-			FitDefinitions.EVENT_LAP, FitDefinitions.EVENT_TYPE_STOP, FitDefinitions.LAP_TRIGGER_MANUAL,
+			FitDefinitions.EVENT_LAP, FitDefinitions.EVENT_TYPE_STOP, trigger,
 			FitDefinitions.SPORT_CYCLING,
 		])
 		laps += 1
@@ -347,9 +412,10 @@ static func _write_laps(w: Writer, s: SampleStream, timestamps: PackedInt64Array
 	return laps
 
 
+## `with_route` — добавить `total_ascent` (свободная езда, REQ-FRD-07 крит. 5).
 static func _write_session(w: Writer, ride: Ride, summary: RideSummary, started: int, end_unix: int,
-		n: int, laps: int) -> void:
-	w.define(LOCAL_SESSION, FitDefinitions.MSG_SESSION, [
+		n: int, laps: int, with_route: bool) -> void:
+	var fields: Array = [
 		[FitDefinitions.F_TIMESTAMP, 4, FitDefinitions.T_UINT32],
 		[FitDefinitions.F_MESSAGE_INDEX, 2, FitDefinitions.T_UINT16],
 		[FitDefinitions.SESSION_START_TIME, 4, FitDefinitions.T_UINT32],
@@ -373,9 +439,12 @@ static func _write_session(w: Writer, ride: Ride, summary: RideSummary, started:
 		[FitDefinitions.SESSION_FIRST_LAP_INDEX, 2, FitDefinitions.T_UINT16],
 		[FitDefinitions.SESSION_NUM_LAPS, 2, FitDefinitions.T_UINT16],
 		[FitDefinitions.SESSION_TRIGGER, 1, FitDefinitions.T_ENUM],
-	])
+	]
+	if with_route:
+		fields.append([FitDefinitions.SESSION_TOTAL_ASCENT, 2, FitDefinitions.T_UINT16])
+	w.define(LOCAL_SESSION, FitDefinitions.MSG_SESSION, fields)
 	var avg_speed: Variant = roundi(summary.distance_m / float(n) * 1000.0) if n > 0 else null
-	w.data(LOCAL_SESSION, [
+	var values: Array = [
 		FitDefinitions.to_fit_time(end_unix),
 		0,
 		FitDefinitions.to_fit_time(started),
@@ -399,7 +468,10 @@ static func _write_session(w: Writer, ride: Ride, summary: RideSummary, started:
 		0,
 		laps,
 		FitDefinitions.SESSION_TRIGGER_ACTIVITY_END,
-	])
+	]
+	if with_route:
+		values.append(maxi(roundi(ride.total_ascent_m()), 0))
+	w.data(LOCAL_SESSION, values)
 
 
 static func _write_activity(w: Writer, end_unix: int, n: int) -> void:

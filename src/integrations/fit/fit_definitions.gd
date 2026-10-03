@@ -103,11 +103,23 @@ const EVENT_TYPE_STOP: int = 1
 const EVENT_TYPE_STOP_ALL: int = 4
 
 # record
+const RECORD_ALTITUDE: int = 2
 const RECORD_HEART_RATE: int = 3
 const RECORD_CADENCE: int = 4
 const RECORD_DISTANCE: int = 5
 const RECORD_SPEED: int = 6
 const RECORD_POWER: int = 7
+## Поле 9 `grade` (sint16, % × 100) — уклон трассы свободной езды (REQ-FRD-07 крит. 5).
+const RECORD_GRADE: int = 9
+## Поле 78 `enhanced_altitude` (uint32) — та же шкала, что у `altitude` (поле 2, uint16).
+const RECORD_ENHANCED_ALTITUDE: int = 78
+
+## Масштабы профиля FIT: `distance` — м × 100; `altitude`/`enhanced_altitude` —
+## (м + 500) × 5; `grade` — % × 100.
+const DISTANCE_SCALE: float = 100.0
+const ALTITUDE_SCALE: float = 5.0
+const ALTITUDE_OFFSET_M: float = 500.0
+const GRADE_SCALE: float = 100.0
 
 # lap
 const LAP_EVENT: int = 0
@@ -124,6 +136,10 @@ const LAP_MAX_POWER: int = 20
 const LAP_LAP_TRIGGER: int = 24
 const LAP_SPORT: int = 25
 const LAP_TRIGGER_MANUAL: int = 0
+## Круг трассы пройден (enum `lap_trigger` профиля FIT: position_lap = 4).
+const LAP_TRIGGER_POSITION_LAP: int = 4
+## Последний (неполный) круг закрыт завершением заезда (session_end = 7).
+const LAP_TRIGGER_SESSION_END: int = 7
 
 # session
 const SESSION_EVENT: int = 0
@@ -141,6 +157,8 @@ const SESSION_AVG_CADENCE: int = 18
 const SESSION_MAX_CADENCE: int = 19
 const SESSION_AVG_POWER: int = 20
 const SESSION_MAX_POWER: int = 21
+## Поле 22 `total_ascent` (uint16, м) — набор высоты свободной езды (REQ-FRD-07 крит. 5).
+const SESSION_TOTAL_ASCENT: int = 22
 const SESSION_FIRST_LAP_INDEX: int = 25
 const SESSION_NUM_LAPS: int = 26
 const SESSION_TRIGGER: int = 28
@@ -170,3 +188,33 @@ static func to_fit_time(unix_sec: int) -> int:
 ## Метка времени FIT → unix-секунды.
 static func from_fit_time(fit_sec: int) -> int:
 	return fit_sec + FIT_EPOCH_UNIX
+
+
+## Дистанция, м → сырое значение поля `distance`.
+static func distance_to_raw(m: float) -> int:
+	return roundi(m * DISTANCE_SCALE)
+
+
+## Сырое значение `distance` → м.
+static func distance_from_raw(raw: int) -> float:
+	return float(raw) / DISTANCE_SCALE
+
+
+## Высота, м → сырое значение `altitude`/`enhanced_altitude`.
+static func altitude_to_raw(m: float) -> int:
+	return roundi((m + ALTITUDE_OFFSET_M) * ALTITUDE_SCALE)
+
+
+## Сырое значение `altitude`/`enhanced_altitude` → м.
+static func altitude_from_raw(raw: int) -> float:
+	return float(raw) / ALTITUDE_SCALE - ALTITUDE_OFFSET_M
+
+
+## Уклон, % → сырое значение `grade`.
+static func grade_to_raw(pct: float) -> int:
+	return roundi(pct * GRADE_SCALE)
+
+
+## Сырое значение `grade` → %.
+static func grade_from_raw(raw: int) -> float:
+	return float(raw) / GRADE_SCALE

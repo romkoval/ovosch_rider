@@ -8,6 +8,9 @@ extends RefCounted
 ## пропускаются) и отдаёт сообщения словарями `{global, local, fields}`, где
 ## `fields` — `{field_num: value}`; invalid-значения → null, строки обрезаются
 ## по нулевому байту. Поля с несколькими значениями одного базового типа — Array.
+## Определения сохраняются в `Result.definitions` (проверка размеров и типов полей);
+## `distance_m`, `altitude_m`, `grade_pct`, `total_ascent_m` переводят сырые поля
+## свободной езды в единицы заезда (REQ-FRD-07 крит. 5).
 
 ## Результат разбора.
 class Result:
@@ -24,6 +27,19 @@ class Result:
 	var file_crc: int = 0
 	var file_crc_ok: bool = false
 	var messages: Array[Dictionary] = []
+	## Определения в порядке появления: `{global, local, fields}`, где `fields` —
+	## Array of `[field_num, size, base_type]` (проверка типов полей профиля).
+	var definitions: Array[Dictionary] = []
+
+	## Первое определение с данным глобальным номером: `{field_num: [size, base_type]}`.
+	func definition_of(global_num: int) -> Dictionary:
+		for d in definitions:
+			if int(d["global"]) == global_num:
+				var out: Dictionary = {}
+				for f in d["fields"]:
+					out[int(f[0])] = [int(f[1]), int(f[2])]
+				return out
+		return {}
 
 	## Сообщения с данным глобальным номером.
 	func messages_of(global_num: int) -> Array[Dictionary]:
@@ -42,6 +58,40 @@ class Result:
 		if list.is_empty():
 			return null
 		return (list[0]["fields"] as Dictionary).get(field_num, null)
+
+
+## Значения полей в единицах заезда (REQ-FRD-07 крит. 5): `msg` — сообщение из
+## `Result.messages`; NAN — поля нет или оно invalid.
+
+## `distance` (`record`, `lap.total_distance`, `session.total_distance`), м.
+static func distance_m(msg: Dictionary, field_num: int = FitDefinitions.RECORD_DISTANCE) -> float:
+	var raw: Variant = _field(msg, field_num)
+	return FitDefinitions.distance_from_raw(int(raw)) if raw != null else NAN
+
+
+## Высота `record`, м: `enhanced_altitude` (поле 78), иначе `altitude` (поле 2).
+static func altitude_m(msg: Dictionary) -> float:
+	var raw: Variant = _field(msg, FitDefinitions.RECORD_ENHANCED_ALTITUDE)
+	if raw == null:
+		raw = _field(msg, FitDefinitions.RECORD_ALTITUDE)
+	return FitDefinitions.altitude_from_raw(int(raw)) if raw != null else NAN
+
+
+## Уклон `record` (поле 9), %.
+static func grade_pct(msg: Dictionary) -> float:
+	var raw: Variant = _field(msg, FitDefinitions.RECORD_GRADE)
+	return FitDefinitions.grade_from_raw(int(raw)) if raw != null else NAN
+
+
+## Набор высоты `session` (поле 22), м.
+static func total_ascent_m(msg: Dictionary) -> float:
+	var raw: Variant = _field(msg, FitDefinitions.SESSION_TOTAL_ASCENT)
+	return float(raw) if raw != null else NAN
+
+
+static func _field(msg: Dictionary, field_num: int) -> Variant:
+	var fields: Variant = msg.get("fields")
+	return (fields as Dictionary).get(field_num, null) if fields is Dictionary else null
 
 
 static func decode(bytes: PackedByteArray) -> Result:
@@ -111,6 +161,7 @@ static func decode(bytes: PackedByteArray) -> Result:
 					dev_len += bytes[pos + 1]
 					pos += 3
 			defs[local] = {"global": global_num, "big": big, "fields": fields, "len": record_len, "dev_len": dev_len}
+			r.definitions.append({"global": global_num, "local": local, "fields": fields})
 		else:
 			if not defs.has(local):
 				r.error = "данные без определения (локальный тип %d, смещение %d)" % [local, pos - 1]
