@@ -6,10 +6,23 @@
 
 ## Чекпоинт
 
-Дата: 2026-10-03. Ветка `claude/festive-mayer-w41i04`. Дерево чистое после коммита проверок NFR-06 п.3.
-Полный прогон: 101 скрипт, 2073/2073. `check_secrets.sh` — OK.
+Дата: 2026-10-03. Ветка `claude/festive-mayer-w41i04`. Дерево чистое. CI зелёный на be94e5e
+(run 37127085285): GUT 2206/2206, BLE linux, BLE macOS universal debug/release, экспорт macOS.
+Артефакт macOS: `ovosch-rider-macos` — https://github.com/romkoval/ovosch_rider/actions/runs/37127085285
 
 Модели агентов: developer — Opus, effort high; manager, requirements, tester — Opus.
+
+### Финальное ревью (выполнено)
+Четыре ревью по слоям → исправления закоммичены: 9a248d9, c0ce71d, 30df302, 2fd5e50, 6fc56a4, 5ab4478.
+Критичное: ERG не отправлялся станку после тренировки с ERG выкл (исправлено). Высокие: loopback OAuth,
+неатомарные записи профилей и секретов, FIT threshold_power = поле 45, автоподключение до POWERED_ON,
+двойное событие отказа записи, план чужого профиля, CI на PR (merge-коммит), сканер секретов.
+
+### Сборка macOS (CI)
+- `native-macos`: фреймворк `libovosch_ble.macos.<target>.framework` (universal) с Info.plist.
+- `macos-app`: проверка загрузки расширения и контракта BleBridge, экспорт без подписи Godot,
+  ad-hoc подпись системным codesign (без hardened runtime), проверка plist/архитектур/подписи.
+- Для arm64/universal в project.godot включён импорт ETC2/ASTC.
 
 ### Этапы
 - 0–4 — `done`.
