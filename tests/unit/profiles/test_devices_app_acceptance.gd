@@ -574,11 +574,26 @@ func test_req_nfr_08_c3_project_declares_both_translations_and_en_fallback() -> 
 # ===========================================================================
 
 func _load_csv() -> Dictionary:
+	# Все файлы переводов: strings.csv и файлы по областям strings_<область>.csv (T-060).
 	var table: Dictionary = {}
-	var f := FileAccess.open(CSV_PATH, FileAccess.READ)
-	assert_not_null(f, "strings.csv открывается")
-	if f == null:
+	var dir := DirAccess.open(CSV_PATH.get_base_dir())
+	assert_not_null(dir, "каталог переводов открывается")
+	if dir == null:
 		return table
+	var paths: Array[String] = [CSV_PATH]
+	for name in dir.get_files():
+		if name.begins_with("strings_") and name.ends_with(".csv"):
+			paths.append(CSV_PATH.get_base_dir().path_join(name))
+	for path in paths:
+		_load_csv_file(path, table)
+	return table
+
+
+func _load_csv_file(path: String, table: Dictionary) -> void:
+	var f := FileAccess.open(path, FileAccess.READ)
+	assert_not_null(f, "%s открывается" % path)
+	if f == null:
+		return
 	var header := f.get_csv_line()
 	assert_eq(header[0], "keys")
 	assert_has(header, "ru")
@@ -593,7 +608,6 @@ func _load_csv() -> Dictionary:
 		assert_false(table.has(line[0]), "дубликат ключа %s" % line[0])
 		table[line[0]] = row
 	f.close()
-	return table
 
 
 func _files_recursive(dir_path: String, exts: Array[String]) -> Array[String]:
