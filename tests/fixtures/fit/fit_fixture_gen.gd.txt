@@ -1,0 +1,113 @@
+extends SceneTree
+## Генератор эталона FIT заезда по плану на коде ДО T-069 (коммит 356b940) — приёмка T-069,
+## регрессия REQ-LOC-05 (`tests/unit/integrations/test_fit_free_ride_acceptance.gd`).
+## Хранится как .txt, чтобы текущий проект его не компилировал. Как получены эталоны:
+##   git archive 356b940 | tar -x -C <дерево>; godot --headless --path <дерево> --import
+##   cp fit_fixture_gen.gd.txt <дерево>/fit_fixture_gen.gd
+##   TZ=UTC godot --headless --path <дерево> -s fit_fixture_gen.gd -- <tests/fixtures/fit>
+## Запуск: godot --headless --path <старое дерево> -s fit_fixture_gen.gd -- <каталог вывода>
+
+const STARTED: int = 1_790_000_000
+
+
+func _init() -> void:
+	var args := OS.get_cmdline_user_args()
+	var out_dir: String = args[0]
+	var rides: Array = [_workout_600(), _workout_short_no_pauses(), _workout_empty()]
+	var json := JSON.stringify({"rides": rides}, "\t", true)
+	var f := FileAccess.open(out_dir.path_join("fit_workout_rides.json"), FileAccess.WRITE)
+	f.store_string(json)
+	f.close()
+	var parsed: Dictionary = JSON.parse_string(json)
+	var k: int = 0
+	for d in parsed["rides"]:
+		var ride := _ride_from(d)
+		var bytes: PackedByteArray = FitEncoder.encode(ride)
+		var fb := FileAccess.open(out_dir.path_join("fit_workout_%s.fit" % str(d["key"])), FileAccess.WRITE)
+		fb.store_buffer(bytes)
+		fb.close()
+		print("fixture %s: %d bytes" % [d["key"], bytes.size()])
+		k += 1
+	quit()
+
+
+static func _ride_from(d: Dictionary) -> Ride:
+	var r := Ride.new()
+	r.id = str(d["id"])
+	r.profile_id = "p"
+	r.name = str(d["name"])
+	r.started_at_unix = int(d["started_at_unix"])
+	r.metadata = (d["metadata"] as Dictionary).duplicate(true)
+	var ev: Array[Dictionary] = []
+	for e in d["events"]:
+		ev.append((e as Dictionary).duplicate(true))
+	r.events = ev
+	r.samples = SampleStream.from_dict(d["samples"])
+	return r
+
+
+static func _samples(n: int, with_pause_gap: bool) -> Dictionary:
+	var s := {
+		"schema": 1, "speed_source": "trainer", "time_sec": [], "power_w": [], "has_power": [],
+		"cadence_rpm": [], "has_cadence": [], "speed_kmh": [], "has_speed": [], "heart_rate_bpm": [],
+		"has_heart_rate": [], "target_w": [], "step_index": [], "erg_enabled": [],
+	}
+	for i in n:
+		var step: int = 0 if i < n * 3 / 10 else (1 if i < n * 7 / 10 else 2)
+		s["time_sec"].append(i)
+		var hp: bool = i % 97 != 50
+		s["power_w"].append(150 + (i * 37) % 120 if hp else 0)
+		s["has_power"].append(hp)
+		var hc: bool = i % 53 != 7
+		s["cadence_rpm"].append(80 + i % 11 if hc else 0)
+		s["has_cadence"].append(hc)
+		var hs: bool = not (with_pause_gap and i % 71 == 3)
+		s["speed_kmh"].append(25.0 + float(i % 13) * 0.7 if hs else 0.0)
+		s["has_speed"].append(hs)
+		var hh: bool = i >= 30
+		s["heart_rate_bpm"].append(120 + i % 40 if hh else 0)
+		s["has_heart_rate"].append(hh)
+		s["target_w"].append([200, 250, 180][step])
+		s["step_index"].append(step)
+		s["erg_enabled"].append(true)
+	return s
+
+
+static func _meta(n: int, paused: float) -> Dictionary:
+	return {"ftp_w": 250, "max_hr": 185, "weight_kg": 75.0, "speed_source": "trainer",
+		"stopped_early": false, "elapsed_sec": n, "paused_total_sec": paused,
+		"in_progress": false, "recovered": false}
+
+
+static func _workout_600() -> Dictionary:
+	return {
+		"key": "600", "id": "fixture-600", "name": "Fixture plan", "started_at_unix": STARTED,
+		"metadata": _meta(600, 7.5),
+		"events": [
+			{"type": "start", "at_sec": 0.0, "value": 0},
+			{"type": "pause", "at_sec": 120.0, "value": 120, "duration_sec": 5.0, "until_sec": 125.0},
+			{"type": "resume", "at_sec": 120.0, "value": 120},
+			{"type": "pause", "at_sec": 300.4, "value": 300, "duration_sec": 2.5, "until_sec": 302.9},
+			{"type": "resume", "at_sec": 300.4, "value": 300},
+			{"type": "finish", "at_sec": 600.0, "value": 600},
+		],
+		"samples": _samples(600, true),
+	}
+
+
+static func _workout_short_no_pauses() -> Dictionary:
+	return {
+		"key": "short", "id": "fixture-short", "name": "Short", "started_at_unix": STARTED + 86400,
+		"metadata": _meta(40, 0.0),
+		"events": [{"type": "start", "at_sec": 0.0, "value": 0}],
+		"samples": _samples(40, false),
+	}
+
+
+static func _workout_empty() -> Dictionary:
+	return {
+		"key": "empty", "id": "fixture-empty", "name": "Empty", "started_at_unix": STARTED,
+		"metadata": _meta(0, 0.0),
+		"events": [{"type": "start", "at_sec": 0.0, "value": 0}],
+		"samples": _samples(0, false),
+	}
