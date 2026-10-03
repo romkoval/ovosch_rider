@@ -77,7 +77,8 @@ func test_upload_request_headers_fields_and_virtual_ride() -> void:
 	for pair in [["data_type", "fit"], ["external_id", "ride-42"], ["name", "Sweet Spot"], ["description", "Описание"], ["trainer", "1"], ["sport_type", "VirtualRide"], ["activity_type", "VirtualRide"]]:
 		assert_string_contains(text, "name=\"%s\"\r\n\r\n%s\r\n" % [pair[0], pair[1]], "REQ-STR-02 крит. 1 / REQ-STR-03 крит. 3: поле %s" % pair[0])
 	assert_string_contains(text, "filename=\"ride-42.fit\"")
-	assert_eq(float(post["timeout_sec"]), 30.0)
+	assert_eq(float(post["timeout_sec"]), StravaUploader.UPLOAD_TIMEOUT_SEC, "загрузка файла — увеличенный тайм-аут")
+	assert_eq(StravaUploader.UPLOAD_TIMEOUT_SEC, 120.0)
 
 
 # ---------------------------------------------------------------------------

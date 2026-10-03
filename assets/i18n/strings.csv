@@ -189,6 +189,8 @@ ui.plan.import.error.bad_number,ожидалось число,a number was expec
 ui.plan.import.error.missing_attribute,у элемента {element} нет обязательного атрибута,element {element} is missing a required attribute
 ui.plan.import.error.bad_duration,длительность шага должна быть больше 0 с,step duration must be greater than 0 s
 ui.plan.import.error.bad_repeat,число повторов должно быть не меньше 1,repeat count must be at least 1
+ui.plan.import.error.too_many_repeats,слишком много повторов (не больше 1000),too many repeats (1000 at most)
+ui.plan.import.error.too_many_steps,слишком много шагов после разворачивания повторов (не больше 10 000),too many steps after expanding repeats (10000 at most)
 ui.plan.import.error.bad_step,шаг должен быть объектом,a step must be an object
 ui.plan.import.error.unsupported_target,тип цели не поддерживается (только мощность),target type is not supported (power only)
 ui.plan.import.error.bad_power,поле мощности имеет неподдерживаемый вид,unsupported power field format

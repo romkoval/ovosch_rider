@@ -18,10 +18,15 @@ extends RefCounted
 ##   испускается `profile_deleted(id)` — на них подписываются хранилища секретов,
 ##   датчиков и заездов (T-010/T-011/T-041), сам модуль профилей о них не знает.
 ## - Секреты (токены, ключи API) в этом файле не хранятся — только в `SecureStore`.
+## - Запись атомарная (`AtomicFile`: временный файл → rename). Повреждённый файл при
+##   загрузке не затирается: он переименовывается в `profiles.json.<метка>.corrupt`
+##   (см. `_quarantine_corrupted`), в журнал уходит предупреждение, хранилище пустое.
 
 const FILE_NAME: String = "profiles.json"
 const SCHEMA_VERSION: int = 1
 const DEFAULT_DIR: String = "user://profiles/"
+## Суффикс копии повреждённого файла (`profiles.json.<метка времени>.corrupt`).
+const CORRUPT_SUFFIX: String = ".corrupt"
 
 ## Коды ошибок операций хранилища (в дополнение к кодам `Profile.validate()`).
 const ERR_NAME_NOT_UNIQUE: String = "name_not_unique"
@@ -183,7 +188,10 @@ func load_from_disk() -> void:
 	var parse_err := json.parse(file.get_as_text())
 	file.close()
 	if parse_err != OK or not (json.data is Dictionary):
-		push_warning("ProfileRepository: файл %s повреждён (%s), начинаем с пустого списка" % [path, json.get_error_message()])
+		var why := json.get_error_message() if parse_err != OK else "ожидался JSON-объект"
+		var backup := _quarantine_corrupted(path)
+		push_warning("ProfileRepository: файл %s повреждён (%s), начинаем с пустого списка; копия: %s" \
+				% [path, why, backup if not backup.is_empty() else "не сохранена"])
 		return
 	var data: Dictionary = json.data
 	var raw_profiles: Variant = data.get("profiles", [])
@@ -233,10 +241,24 @@ func _persist() -> bool:
 		"active_profile_id": _active_id,
 		"profiles": items,
 	}
-	var file := FileAccess.open(file_path(), FileAccess.WRITE)
-	if file == null:
-		push_error("ProfileRepository: не удалось записать %s (%s)" % [file_path(), error_string(FileAccess.get_open_error())])
+	var write_err := AtomicFile.write_text(file_path(), JSON.stringify(data, "\t"))
+	if write_err != OK:
+		push_error("ProfileRepository: не удалось записать %s (%s)" % [file_path(), error_string(write_err)])
 		return false
-	file.store_string(JSON.stringify(data, "\t"))
-	file.close()
 	return true
+
+
+## Повреждённый файл не затирается: переименовывается в `<file>.<ГГГГММДД-ЧЧММСС>.corrupt`
+## (при совпадении имени добавляется номер). Возвращает новый путь или "" при неудаче.
+func _quarantine_corrupted(path: String) -> String:
+	var stamp := Time.get_datetime_string_from_system(false, false).replace("-", "").replace(":", "").replace("T", "-")
+	var target := "%s.%s%s" % [path, stamp, CORRUPT_SUFFIX]
+	var n := 1
+	while FileAccess.file_exists(target):
+		target = "%s.%s-%d%s" % [path, stamp, n, CORRUPT_SUFFIX]
+		n += 1
+	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(target))
+	if err != OK:
+		push_error("ProfileRepository: не удалось отложить повреждённый %s (%s)" % [path, error_string(err)])
+		return ""
+	return target

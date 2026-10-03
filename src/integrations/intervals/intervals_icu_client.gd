@@ -16,7 +16,8 @@ extends RefCounted
 ## Ошибки без падений (REQ-INT-02 крит. 4, 5): транспортная ошибка/таймаут/5xx →
 ## `network` с `can_retry`; 429 → ожидание `Retry-After` (нет заголовка — 60 с,
 ## открытое решение 19) и один повтор, повторный 429 → `rate_limited`
-## с `retry_after_sec`. Ожидание — через `wait_fn(sec)` (в тестах подменяется).
+## с `retry_after_sec`. `Retry-After` больше 60 с — без ожидания сразу `rate_limited`.
+## Ожидание — через `wait_fn(sec)` (в тестах подменяется).
 ## Таймаут запроса 15 с.
 ##
 ## Формат ответов — по публичной документации API (синтетические фикстуры до
@@ -25,6 +26,9 @@ extends RefCounted
 const DEFAULT_BASE_URL: String = "https://intervals.icu"
 const TIMEOUT_SEC: float = 15.0
 const RETRY_AFTER_DEFAULT_SEC: int = 60
+## Дольше этого (с) по `Retry-After` внутри запроса не ждём: сразу `rate_limited`
+## с `retry_after_sec`, повтор — решение вызывающего (экран не «висит» минутами).
+const MAX_RETRY_WAIT_SEC: int = 60
 const CATEGORY_WORKOUT: String = "WORKOUT"
 ## Велосипедные типы событий Intervals.icu (REQ-INT-02 крит. 2).
 const BIKE_TYPES: Array[String] = ["Ride", "VirtualRide", "GravelRide", "MountainBikeRide", "EBikeRide", "EMountainBikeRide", "Velomobile", "Handcycle"]
@@ -217,6 +221,10 @@ func _request_get(path: String, query: Dictionary = {}, key_override: String = "
 	var response: HttpResponse = await _transport.request("GET", url, headers, PackedByteArray(), TIMEOUT_SEC)
 	if response.status == 429:
 		var wait_sec := _retry_after(response)
+		if wait_sec > MAX_RETRY_WAIT_SEC:
+			var limited_now := _fail(ApiResult.CODE_RATE_LIMITED, "слишком много запросов, повторите через %d с" % wait_sec, 429, true)
+			limited_now.retry_after_sec = wait_sec
+			return limited_now
 		waits.append(wait_sec)
 		await wait_fn.call(float(wait_sec))
 		response = await _transport.request("GET", url, headers, PackedByteArray(), TIMEOUT_SEC)

@@ -1,6 +1,6 @@
 extends GutTest
 ## Тесты HttpResponse, HttpTransport, MockHttpTransport, GodotHttpTransport
-## (T-032; основа REQ-NFR-03 крит. 1, 2; REQ-INT-07 крит. 4 — мок считает запросы).
+## (T-032; основа REQ-NFR-03 крит. 1, 2; REQ-INT-07 крит. 6 — мок считает запросы).
 
 
 func test_response_make_lowercases_headers_and_ok() -> void:

@@ -249,7 +249,10 @@ func test_session_times_and_metrics_equal_summary() -> void:
 	assert_eq(res.first_field(D.MSG_SESSION, D.SESSION_MAX_HEART_RATE), s.max_hr)
 	assert_eq(res.first_field(D.MSG_SESSION, D.SESSION_AVG_CADENCE), s.avg_cadence)
 	assert_eq(res.first_field(D.MSG_SESSION, D.SESSION_TOTAL_DISTANCE), roundi(s.distance_m * 100.0))
-	assert_eq(res.first_field(D.MSG_SESSION, D.SESSION_THRESHOLD_POWER), FTP)
+	# Номер поля — литерал из профиля FIT SDK: session.threshold_power = 45 (62 — max_pos_vertical_speed).
+	assert_eq(D.SESSION_THRESHOLD_POWER, 45, "session.threshold_power — поле 45 профиля FIT")
+	assert_eq(res.first_field(D.MSG_SESSION, 45), FTP, "FTP в session.threshold_power (поле 45)")
+	assert_null(res.first_field(D.MSG_SESSION, 62), "поле 62 (max_pos_vertical_speed) не пишется")
 	assert_eq(res.first_field(D.MSG_SESSION, D.SESSION_NUM_LAPS), res.count(D.MSG_LAP))
 
 

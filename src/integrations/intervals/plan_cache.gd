@@ -9,7 +9,7 @@ extends RefCounted
 ## других дат удаляются (крит. 3 — кэш другой даты никогда не предлагается:
 ## `get_today()` читает только файл сегодняшней даты). Пустой список тренировок
 ## тоже кэшируется — без сети статус «на сегодня тренировок нет» воспроизводится.
-## Чтение из кэша не делает сетевых запросов (крит. 4).
+## Чтение из кэша не делает сетевых запросов (крит. 4). Запись атомарная (`AtomicFile`).
 
 const DEFAULT_DIR: String = "user://plans/"
 const SCHEMA_VERSION: int = 1
@@ -65,11 +65,8 @@ func save(profile_id: String, date: String, workouts: Array, loaded_at: int = 0)
 	var err := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
 	if err != OK and err != ERR_ALREADY_EXISTS:
 		return false
-	var file := FileAccess.open(file_path(profile_id, date), FileAccess.WRITE)
-	if file == null:
+	if AtomicFile.write_text(file_path(profile_id, date), JSON.stringify(record, "\t")) != OK:
 		return false
-	file.store_string(JSON.stringify(record, "\t"))
-	file.close()
 	_prune_other_dates(profile_id, date)
 	return true
 

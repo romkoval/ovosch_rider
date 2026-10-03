@@ -146,7 +146,8 @@ const SESSION_NUM_LAPS: int = 26
 const SESSION_TRIGGER: int = 28
 const SESSION_NORMALIZED_POWER: int = 34
 const SESSION_TOTAL_WORK: int = 48
-const SESSION_THRESHOLD_POWER: int = 62
+## Поле 45 `threshold_power` (uint16, Вт) по профилю FIT SDK; 62 — `max_pos_vertical_speed`.
+const SESSION_THRESHOLD_POWER: int = 45
 const SPORT_CYCLING: int = 2
 const SUB_SPORT_VIRTUAL_ACTIVITY: int = 58
 const SESSION_TRIGGER_ACTIVITY_END: int = 0

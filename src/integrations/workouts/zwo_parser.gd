@@ -8,7 +8,9 @@ extends RefCounted
 ## - `Warmup`, `Cooldown`, `Ramp` → рампа `PowerLow→PowerHigh` (крит. 1);
 ## - `SteadyState` → постоянная цель `Power` (крит. 1);
 ## - `IntervalsT` → `Repeat` × (`OnDuration`/`OnPower`, `OffDuration`/`OffPower`),
-##   раскрывается в плоский список через `Workout.expand_repeat` (крит. 1);
+##   раскрывается в плоский список через `Workout.expand_repeat` (крит. 1); `Repeat` не больше
+##   `ParseResult.MAX_REPEAT_COUNT`, шагов после разворачивания не больше
+##   `ParseResult.MAX_TOTAL_STEPS` — иначе ошибка `too_many_repeats`/`too_many_steps`;
 ## - `FreeRide` → шаг без цели (крит. 2); `MaxEffort` → как `FreeRide`, с предупреждением;
 ## - `Cadence`, `CadenceLow`/`CadenceHigh` (середина), `CadenceResting` (крит. 3);
 ## - `textevent` (`timeoffset`, `message`) → `TextCue` шага; `duration` игнорируется
@@ -106,7 +108,7 @@ static func parse(xml_text: String) -> ParseResult:
 				# Глубже (например, <tags><tag/>) — метаданные, молча пропускаем.
 				if self_closing:
 					if depth == 2 and stack[depth - 1] == WORKOUT_ELEMENT and STEP_ELEMENTS.has(lname):
-						_flush_pending(steps, pending, pending_repeat, pending_is_intervals)
+						_flush_pending(steps, pending, pending_repeat, pending_is_intervals, result, line, name)
 						pending = []
 					elif depth == 1 and lname != WORKOUT_ELEMENT:
 						_store_meta(workout, result, lname, "")
@@ -128,7 +130,7 @@ static func parse(xml_text: String) -> ParseResult:
 				if depth == 0:
 					root_closed = true
 				if depth == 2 and stack[1] == WORKOUT_ELEMENT and STEP_ELEMENTS.has(lname):
-					_flush_pending(steps, pending, pending_repeat, pending_is_intervals)
+					_flush_pending(steps, pending, pending_repeat, pending_is_intervals, result, line, parser.get_node_name())
 					pending = []
 				elif depth == 1 and lname != WORKOUT_ELEMENT:
 					_store_meta(workout, result, lname, meta_text.strip_edges())
@@ -270,9 +272,12 @@ static func _build_step(lname: String, attrs: Dictionary, element: String, line:
 				out.append(s)
 		"intervalst":
 			var rep: Variant = _number(attrs, "repeat", element, line, result)
-			repeat = roundi(float(rep)) if rep != null else 1
+			# Ограничение во float: огромные значения (1e30) не переполняют int до проверки предела.
+			repeat = roundi(clampf(float(rep), -1.0e9, 1.0e9)) if rep != null else 1
 			if repeat <= 0:
 				result.add_error("атрибут Repeat должен быть ≥ 1 (сейчас %d)" % repeat, line, 0, element, "bad_repeat")
+			elif not result.check_repeat_count(repeat, line, 0, element):
+				repeat = 0  # шаги не строятся, разворачивания не будет
 			var on_dur := _duration(attrs, "onduration", element, line, result)
 			var off_dur := _duration(attrs, "offduration", element, line, result)
 			var on_pow: Variant = _number(attrs, "onpower", element, line, result)
@@ -319,13 +324,28 @@ static func _attach_cue(pending: Array[WorkoutStep], attrs: Dictionary, element:
 			line, 0, element, "cue_out_of_step")
 
 
-static func _flush_pending(steps: Array[WorkoutStep], pending: Array[WorkoutStep], repeat: int, is_intervals: bool) -> void:
+## Шаги элемента → в план. Повтор `IntervalsT` разворачивается только после проверки
+## пределов (`ParseResult.check_repeat`); превышение — ошибка, шаги не добавляются.
+static func _flush_pending(steps: Array[WorkoutStep], pending: Array[WorkoutStep], repeat: int, is_intervals: bool,
+		result: ParseResult, line: int, element: String) -> void:
 	if pending.is_empty():
+		return
+	var reps := repeat if is_intervals else 1
+	if _has_error_key(result, ParseResult.KEY_TOO_MANY_STEPS):
+		return  # одной ошибки о размере достаточно
+	if not result.check_repeat(reps, pending.size(), steps.size(), line, 0, element):
 		return
 	if is_intervals:
 		steps.append_array(Workout.expand_repeat(pending, repeat))
 	else:
 		steps.append_array(pending)
+
+
+static func _has_error_key(result: ParseResult, key: String) -> bool:
+	for e in result.errors:
+		if str(e.get("key", "")) == key:
+			return true
+	return false
 
 
 static func _store_meta(workout: Workout, result: ParseResult, lname: String, text: String) -> void:

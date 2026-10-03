@@ -1,5 +1,5 @@
 extends GutTest
-## Тесты IntervalsSync и расширения Profile (REQ-INT-06 крит. 1–5, 7; REQ-PRF-02 крит. 6).
+## Тесты IntervalsSync и расширения Profile (REQ-INT-06 крит. 1–5, 8; REQ-PRF-02 крит. 6).
 
 const FIXTURES: String = "res://tests/fixtures/intervals/"
 const DATE: String = "2026-10-02"
@@ -160,7 +160,7 @@ func test_apply_without_hr_zones_uses_max_hr() -> void:
 
 
 # ---------------------------------------------------------------------------
-# FTP, источники, переопределение (REQ-INT-06 крит. 1, 4, 5, 7)
+# FTP, источники, переопределение (REQ-INT-06 крит. 1, 4, 5, 8)
 # ---------------------------------------------------------------------------
 
 func test_apply_writes_ftp_zones_sources_and_athlete_id() -> void:
@@ -210,7 +210,7 @@ func test_resync_without_override_updates_values() -> void:
 func test_missing_or_out_of_range_ftp_keeps_local_value_with_warning() -> void:
 	var p := _profile()
 	var w := IntervalsSync.apply_athlete_to_profile(p, {"ftp": 0, "power_zones_pct": [55.0, 75.0]}, false, DATE)
-	assert_has(w, IntervalsSync.WARN_FTP_MISSING, "REQ-INT-06 крит. 7")
+	assert_has(w, IntervalsSync.WARN_FTP_MISSING, "REQ-INT-06 крит. 8")
 	assert_eq(p.ftp_w, 200, "локальное значение сохранено")
 	assert_eq(p.ftp_source, Profile.SOURCE_LOCAL)
 	assert_eq(p.power_zones.boundaries_pct, [55.0, 75.0], "зоны в % применяются и без FTP")

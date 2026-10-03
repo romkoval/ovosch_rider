@@ -23,6 +23,9 @@ const CODE_NOT_CONFIGURED: String = "not_configured"
 const CODE_BAD_RESPONSE: String = "bad_response"
 ## Привязка требует повторного входа: обновление токена отклонено (REQ-STR-01 крит. 4).
 const CODE_REAUTH_REQUIRED: String = "reauth_required"
+## Защищённое хранилище не приняло секрет (не прочитано — `SecureStore.loaded_ok() == false`,
+## или ошибка записи на диск — `SecureStore.last_error()`). Привязка не состоялась.
+const CODE_STORAGE_FAILED: String = "storage_failed"
 
 var ok: bool = false
 var code: String = CODE_OK

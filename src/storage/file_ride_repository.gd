@@ -19,7 +19,8 @@ extends RideRepository
 ## cadence_age i16, heart_rate_age i16, flags u8 (бит 0 has_power, 1 has_cadence,
 ## 2 has_speed, 3 has_heart_rate, 4 erg_enabled), 1 байт выравнивания.
 ##
-## Устойчивость: JSON пишется во временный файл и переименовывается; повреждённый
+## Устойчивость: JSON и полная перезапись `samples.bin` идут через временный файл и
+## переименование (`AtomicFile`), дозапись — в конец существующего файла; повреждённый
 ## `index.json` перестраивается по `meta.json` заездов; повреждённый `meta.json`
 ## исключает заезд из списка; повреждённый `samples.bin` даёт заезд с пустым потоком.
 
@@ -297,19 +298,9 @@ func _read_meta(path: String) -> Ride:
 	return Ride.from_meta_dict(json.data)
 
 
+## Временный файл → проверка ошибки записи → rename (см. `AtomicFile`).
 static func _write_text_atomic(path: String, text: String) -> bool:
-	var tmp := path + ".tmp"
-	var file := FileAccess.open(tmp, FileAccess.WRITE)
-	if file == null:
-		push_error("FileRideRepository: не удалось записать %s (%s)" % [tmp, error_string(FileAccess.get_open_error())])
-		return false
-	file.store_string(text)
-	file.close()
-	var err := DirAccess.rename_absolute(tmp, path)
-	if err != OK:
-		push_error("FileRideRepository: не удалось переименовать %s → %s (%s)" % [tmp, path, error_string(err)])
-		return false
-	return true
+	return AtomicFile.write_text(path, text) == OK
 
 
 # ---------------------------------------------------------------------------
@@ -451,15 +442,11 @@ static func _encode_records(s: SampleStream, from_index: int, to_index: int) -> 
 	return buf.data_array
 
 
+## Полная перезапись потока: временный файл и rename, прежний `samples.bin` при сбое цел.
 static func _write_samples_file(path: String, samples: SampleStream) -> bool:
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		push_error("FileRideRepository: не удалось записать %s (%s)" % [path, error_string(FileAccess.get_open_error())])
-		return false
-	file.store_buffer(_encode_header(samples.speed_source))
-	file.store_buffer(_encode_records(samples, 0, samples.size()))
-	file.close()
-	return true
+	var bytes := _encode_header(samples.speed_source)
+	bytes.append_array(_encode_records(samples, 0, samples.size()))
+	return AtomicFile.write_bytes(path, bytes) == OK
 
 
 ## Число целых записей в файле; -1 — файла нет или заголовок повреждён.

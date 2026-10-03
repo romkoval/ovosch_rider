@@ -32,7 +32,36 @@ const DEFAULT_DIR: String = "user://secure/"
 const DEVICE_KEY_SALT: String = "ovosch-rider/secure-store/v1"
 
 
+## Платформы, где на файл секретов ставятся права 0600, а на его каталог — 0700.
+const OWNER_ONLY_PLATFORMS: Array[String] = ["Linux", "macOS"]
+## Права файла секретов: rw------- (0600).
+const FILE_MODE_OWNER_ONLY: int = FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER
+## Права каталога секретов: rwx------ (0700).
+const DIR_MODE_OWNER_ONLY: int = FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER | FileAccess.UNIX_EXECUTE_OWNER
+
+
+## Хранилище прочитано и доступно для записи. false — файл существует, но не расшифрован
+## (другой ключ устройства, повреждение): чтение даёт пустые значения, запись отклоняется,
+## чтобы не уничтожить секреты. Выход — `reset_store()` по явному действию пользователя.
+func loaded_ok() -> bool:
+	return true
+
+
+## Код последней неудачной операции записи/удаления (`OK` — ошибок не было или последняя
+## операция удалась). `ERR_FILE_CORRUPT` — хранилище не прочитано (`loaded_ok() == false`);
+## `ERR_FILE_CANT_WRITE`/`ERR_FILE_CANT_OPEN`/… — сбой записи на диск.
+func last_error() -> Error:
+	return OK
+
+
+## Стереть все секреты (и файл хранилища, если он есть) и начать с пустого; после этого
+## `loaded_ok() == true`. Действие «сбросить привязки» в UI.
+func reset_store() -> void:
+	delete_prefix("")
+
+
 ## Сохранить секрет. Пустой ключ или пустое значение → false (пустое значение = удаление через `delete_secret`).
+## false при сбое хранилища — причина в `last_error()`.
 func set_secret(_key: String, _value: String) -> bool:
 	push_error("SecureStore.set_secret: not implemented")
 	return false
@@ -85,8 +114,20 @@ func delete_service_secrets(profile_id: String, service: String) -> int:
 
 
 ## Подписать хранилище на удаление профилей: `repo.profile_deleted` → `delete_profile_secrets`.
+## Связанный метод, не лямбда (лямбда держала бы хранилище сильной ссылкой); повторный вызов — no-op.
 func attach_to_profiles(repo: ProfileRepository) -> void:
-	repo.profile_deleted.connect(func(id: String) -> void: delete_profile_secrets(id))
+	if not repo.profile_deleted.is_connected(_on_profile_deleted):
+		repo.profile_deleted.connect(_on_profile_deleted)
+
+
+## Отписаться от удаления профилей.
+func detach_from_profiles(repo: ProfileRepository) -> void:
+	if repo.profile_deleted.is_connected(_on_profile_deleted):
+		repo.profile_deleted.disconnect(_on_profile_deleted)
+
+
+func _on_profile_deleted(profile_id: String) -> void:
+	delete_profile_secrets(profile_id)
 
 
 ## Ключ вида `"<profile_id>/<service>/<item>"`.
@@ -130,3 +171,21 @@ static func derive_device_password() -> String:
 	ctx.start(HashingContext.HASH_SHA256)
 	ctx.update((OS.get_unique_id() + "|" + DEVICE_KEY_SALT).to_utf8_buffer())
 	return ctx.finish().hex_encode()
+
+
+## Права «только владелец» на файл (0600) или каталог (0700) секретов — на Linux и macOS
+## (REQ-NFR-05; платформенная проверка допустима только здесь, REQ-NFR-06 крит. 1).
+## На остальных платформах — `OK` без действий (там изоляцию даёт песочница/ACL).
+static func restrict_to_owner(path: String, is_dir: bool) -> Error:
+	if not (OS.get_name() in OWNER_ONLY_PLATFORMS):
+		return OK
+	var target := ProjectSettings.globalize_path(path).trim_suffix("/") if is_dir else ProjectSettings.globalize_path(path)
+	var err := FileAccess.set_unix_permissions(target, DIR_MODE_OWNER_ONLY if is_dir else FILE_MODE_OWNER_ONLY)
+	if err != OK:
+		push_warning("SecureStore: не удалось ограничить права %s (%s)" % [target, error_string(err)])
+	return err
+
+
+## Применяются ли права «только владелец» на текущей платформе.
+static func owner_only_permissions_supported() -> bool:
+	return OS.get_name() in OWNER_ONLY_PLATFORMS

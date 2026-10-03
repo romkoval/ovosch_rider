@@ -23,6 +23,9 @@ const DATA_TYPE_FIT: String = "fit"
 const SPORT_TYPE: String = "VirtualRide"
 const APP_NAME: String = "ovosch-rider"
 const TIMEOUT_SEC: float = 30.0
+## Тайм-аут `POST /uploads` с файлом: FIT многочасового заезда на медленном канале
+## отправляется дольше обычного запроса.
+const UPLOAD_TIMEOUT_SEC: float = 120.0
 const DEFAULT_MAX_POLLS: int = 10
 const DEFAULT_POLL_INTERVAL_SEC: float = 2.0
 
@@ -62,13 +65,13 @@ func upload_fit(fit_bytes: PackedByteArray, name: String, description: String, e
 	}
 	var body := build_multipart(fields, "file", external_id + ".fit", fit_bytes, boundary)
 	var url := HttpTransport.build_url(api_base, UPLOADS_PATH)
-	var response: HttpResponse = await _transport.request("POST", url, _upload_headers(access, boundary), body, TIMEOUT_SEC)
+	var response: HttpResponse = await _transport.request("POST", url, _upload_headers(access, boundary), body, UPLOAD_TIMEOUT_SEC)
 	if response.status == 401:
 		var refreshed: ApiResult = await _oauth.ensure_fresh_token(true)
 		if not refreshed.ok:
 			return _token_failure(refreshed)
 		access = str(refreshed.data)
-		response = await _transport.request("POST", url, _upload_headers(access, boundary), body, TIMEOUT_SEC)
+		response = await _transport.request("POST", url, _upload_headers(access, boundary), body, UPLOAD_TIMEOUT_SEC)
 		if response.status == 401:
 			return UploadResult.failed("требуется повторный вход в Strava", ApiResult.CODE_REAUTH_REQUIRED)
 	var failure := _http_failure(response)
@@ -114,6 +117,10 @@ func poll_upload(upload_id: String, token: String = "") -> UploadResult:
 			failure.upload_id = upload_id
 			if failure.code == ApiResult.CODE_REAUTH_REQUIRED:
 				return failure
+			if not failure.can_retry:
+				# 404 и прочие 4xx (кроме 401 и 429): загрузки с таким id нет или запрос
+				# отклонён — повтор опроса ничего не изменит, ошибка окончательная.
+				return failure
 			# Выгрузка уже принята (201 с `id`): ошибка HTTP при опросе — не вердикт Strava,
 			# заезд остаётся «обрабатывается», очередь опросит по `upload_id` позже
 			# (REQ-STR-02 крит. 3, REQ-STR-05 крит. 1); повторного POST не будет.
@@ -137,11 +144,21 @@ static func interpret_upload_status(payload: Dictionary) -> UploadResult:
 		return UploadResult.done(_id_text(activity), upload_id)
 	if not error.is_empty():
 		if error.to_lower().contains("duplicate"):
-			return UploadResult.duplicate_of(error, upload_id)
+			var dup := UploadResult.duplicate_of(error, upload_id)
+			dup.activity_id = duplicate_activity_id(error)
+			return dup
 		var rejected := UploadResult.failed(error, ApiResult.CODE_BAD_RESPONSE, false, upload_id)
 		rejected.detail = error
 		return rejected
 	return UploadResult.uploading(upload_id)
+
+
+## Идентификатор существующей активности из текста ошибки Strava о дубликате
+## (`"… duplicate of <a href='/activities/123'>…"`, также `duplicate of activity 123`); "" — не найден.
+static func duplicate_activity_id(error_text: String) -> String:
+	var re := RegEx.create_from_string("(?i)duplicate\\s+of\\s+(?:<a\\s+href=['\"]?[^'\">]*?/activities/|activity\\s+)(\\d+)")
+	var m := re.search(error_text)
+	return m.get_string(1) if m != null else ""
 
 
 ## Тело multipart/form-data: текстовые поля, затем файл (REQ-STR-02 крит. 1).

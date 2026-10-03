@@ -9,15 +9,26 @@ extends RefCounted
 ##
 ## Redirect (решение В-6): на десктопе — loopback `http://127.0.0.1:<port>/callback` через
 ## временный сервер на `TCPServer` (`start_loopback_listener` → `poll_listener` раз в кадр →
-## `stop_listener`); он принимает один запрос `GET /callback?code=&state=`, отвечает страницей
-## «можно закрыть окно», проверяет `state` и останавливается сразу после кода или через 60 с.
+## `stop_listener`); он принимает один запрос `GET /callback?code=&state=`, проверяет `state`,
+## отвечает страницей по результату («Strava подключена» только при успехе) и
+## останавливается сразу после `/callback` или через 60 с. Соединения обслуживаются
+## параллельно: «зависшее» (не дослало заголовки, закрылось, молчит дольше 5 с) сбрасывается
+## и не мешает настоящему `GET /callback` от браузера (предварительные соединения, favicon).
 ## На мобильных — схема `ovoschrider://strava`; URL из системы передаётся в
 ## `handle_redirect_url(url)`.
+##
+## `state` обязателен: пустой `expected_state` (вход не начинали) — отказ `state_mismatch`;
+## после принятого кода или отказа провайдера `state` очищается (повтор того же redirect — отказ).
 ##
 ## Обновление токена: если до `expires_at` меньше 60 с (решение 18) — `grant_type=refresh_token`,
 ## новые токены перезаписывают старые. 401 при обновлении → `reauth_required`
 ## (привязка «требуется повторный вход»), токены остаются до отзыва/повторного входа.
 ## `is_connected` занят `Object`, поэтому состояние привязки — `is_authorized()`.
+##
+## Сбой `SecureStore` при сохранении токенов — `CODE_STORAGE_FAILED` (не success): привязка не
+## считается состоявшейся; `SecureStore.loaded_ok()`/`reset_store()` — для UI.
+## Отвязка увеличивает поколение (`_unlink_generation`): ответ обмена/обновления токена,
+## пришедший после начала `revoke()`, токены не записывает.
 
 const DEFAULT_BASE_URL: String = "https://www.strava.com"
 const AUTHORIZE_PATH: String = "oauth/authorize"
@@ -34,6 +45,10 @@ const DEFAULT_PORT_TO: int = 49252
 const REFRESH_MARGIN_SEC: int = 60
 const TIMEOUT_SEC: float = 15.0
 const MAX_REQUEST_BYTES: int = 16384
+## Соединение loopback, не приславшее полный запрос за это время (с), сбрасывается.
+const PEER_IDLE_TIMEOUT_SEC: int = 5
+## Не больше стольких незавершённых соединений одновременно (при переполнении сбрасывается старейшее).
+const MAX_PENDING_PEERS: int = 8
 
 ## Код авторизации принят loopback-сервером или из URL схемы.
 signal authorization_code_received(code: String)
@@ -51,10 +66,12 @@ var _store: SecureStore
 var _profile_id: String
 var _config: StravaConfig
 var _server: TCPServer = null
-var _peer: StreamPeerTCP = null
-var _buffer: PackedByteArray = PackedByteArray()
+## Незавершённые соединения: `{peer: StreamPeerTCP, buffer: PackedByteArray, last_activity: int}`.
+var _peers: Array[Dictionary] = []
 var _port: int = 0
 var _listener_started_at: int = 0
+## Поколение отвязки: растёт в `revoke()`; ответы, начатые в прошлом поколении, не пишут токены.
+var _unlink_generation: int = 0
 
 
 func _init(transport: HttpTransport, secure_store: SecureStore, profile_id: String, config: StravaConfig) -> void:
@@ -159,19 +176,24 @@ func listener_port() -> int:
 
 
 func stop_listener() -> void:
-	if _peer != null:
-		_peer.disconnect_from_host()
-		_peer = null
+	for entry in _peers:
+		(entry["peer"] as StreamPeerTCP).disconnect_from_host()
+	_peers.clear()
 	if _server != null:
 		_server.stop()
 		_server = null
 	_port = 0
-	_buffer = PackedByteArray()
+
+
+## Число принятых соединений, ещё не приславших полный запрос (диагностика и тесты).
+func pending_connection_count() -> int:
+	return _peers.size()
 
 
 ## Опрос слушателя (вызывать каждый кадр). Пустой словарь — ждём; `{code, state}` — код
 ## принят (сервер остановлен); `{error}` — отказ (`timeout`, `state_mismatch`,
-## `access_denied`, `bad_request`), сервер остановлен.
+## `access_denied`, `bad_request`), сервер остановлен. Чужие пути (`/favicon.ico`) получают
+## 404, не-GET — 400; слушатель при этом продолжает ждать.
 func poll_listener() -> Dictionary:
 	if _server == null:
 		return {}
@@ -180,35 +202,71 @@ func poll_listener() -> Dictionary:
 		stop_listener()
 		authorization_failed.emit("timeout")
 		return {"error": "timeout"}
-	if _peer == null:
-		if not _server.is_connection_available():
-			return {}
-		_peer = _server.take_connection()
-		_buffer = PackedByteArray()
-	_peer.poll()
-	var available := _peer.get_available_bytes()
+	_take_new_connections(now)
+	for entry in _peers.duplicate():
+		var request := _read_request(entry, now)
+		if request.is_empty():
+			continue
+		_peers.erase(entry)
+		var peer: StreamPeerTCP = entry["peer"]
+		var request_line := request.split("\n")[0].strip_edges()
+		var parts := request_line.split(" ")
+		if parts.size() < 2 or parts[0] != "GET":
+			_respond(peer, 400, _message_page("Неверный запрос."))
+			continue
+		var parsed := parse_redirect(parts[1])
+		if str(parsed["path"]) != LOOPBACK_PATH:
+			_respond(peer, 404, _message_page("Не найдено."))
+			continue
+		var result := _evaluate(parsed["query"])
+		_respond(peer, 200 if result.has("code") or str(result.get("error", "")) == "access_denied" else 400,
+				_result_page(result))
+		stop_listener()
+		_finish_accept(result)
+		return result
+	return {}
+
+
+## Принять все ожидающие соединения; при переполнении сбрасывается самое старое.
+func _take_new_connections(now: int) -> void:
+	while _server.is_connection_available():
+		var peer := _server.take_connection()
+		if peer == null:
+			break
+		if _peers.size() >= MAX_PENDING_PEERS:
+			_drop_peer(_peers[0])
+		_peers.append({"peer": peer, "buffer": PackedByteArray(), "last_activity": now})
+
+
+## Дочитать соединение. Полный запрос (заголовки до пустой строки) — его текст; иначе "".
+## Закрытое клиентом, ошибочное (`get_available_bytes() < 0`), переполненное или молчащее
+## дольше `PEER_IDLE_TIMEOUT_SEC` соединение сбрасывается.
+func _read_request(entry: Dictionary, now: int) -> String:
+	var peer: StreamPeerTCP = entry["peer"]
+	peer.poll()
+	# Закрытое клиентом соединение ядро закрывает в `poll()` только когда непрочитанных данных
+	# не осталось, поэтому читать его уже нечего (и `get_available_bytes()` на нём — ошибка).
+	var available := peer.get_available_bytes() if peer.get_status() == StreamPeerTCP.STATUS_CONNECTED else -1
+	var buffer: PackedByteArray = entry["buffer"]
 	if available > 0:
-		var chunk: Array = _peer.get_data(available)
-		if int(chunk[0]) == OK:
-			_buffer.append_array(chunk[1])
-	var text := _buffer.get_string_from_utf8()
-	if not text.contains("\r\n\r\n") and not text.contains("\n\n"):
-		if _buffer.size() > MAX_REQUEST_BYTES or _peer.get_status() != StreamPeerTCP.STATUS_CONNECTED and available == 0:
-			_peer.disconnect_from_host()
-			_peer = null
-		return {}
-	var request_line := text.split("\n")[0].strip_edges()
-	var parts := request_line.split(" ")
-	if parts.size() < 2 or parts[0] != "GET":
-		_respond(400, "<html><body><p>Неверный запрос.</p></body></html>")
-		return {}
-	var parsed := parse_redirect(parts[1])
-	if str(parsed["path"]) != LOOPBACK_PATH:
-		_respond(404, "<html><body><p>Не найдено.</p></body></html>")
-		return {}
-	_respond(200, _success_page())
-	stop_listener()
-	return _accept(parsed["query"])
+		var chunk: Array = peer.get_data(available)
+		if int(chunk[0]) == OK and (chunk[1] as PackedByteArray).size() > 0:
+			buffer.append_array(chunk[1])
+			entry["buffer"] = buffer
+			entry["last_activity"] = now
+	# Запрос — ASCII (параметры URL-кодированы): без разбора UTF-8 по частичным байтам.
+	var text := buffer.get_string_from_ascii()
+	if text.contains("\r\n\r\n") or text.contains("\n\n"):
+		return text
+	var dead := available < 0 or peer.get_status() != StreamPeerTCP.STATUS_CONNECTED
+	if dead or buffer.size() > MAX_REQUEST_BYTES or now - int(entry["last_activity"]) >= PEER_IDLE_TIMEOUT_SEC:
+		_drop_peer(entry)
+	return ""
+
+
+func _drop_peer(entry: Dictionary) -> void:
+	(entry["peer"] as StreamPeerTCP).disconnect_from_host()
+	_peers.erase(entry)
 
 
 ## Разбор URL/пути redirect: `{path, query: Dictionary}`. Понимает `http://…/callback?code=…`,
@@ -243,44 +301,68 @@ static func parse_redirect(url: String) -> Dictionary:
 
 ## Redirect из системы (мобильная схема или вставленный вручную URL): `{code, state}` или `{error}`.
 func handle_redirect_url(url: String) -> Dictionary:
-	return _accept(parse_redirect(url)["query"])
+	var result := _evaluate(parse_redirect(url)["query"])
+	_finish_accept(result)
+	return result
 
 
-func _accept(query: Dictionary) -> Dictionary:
+## Решение по параметрам redirect без побочных эффектов: `{code, state}` или `{error}`.
+## Пустой `expected_state` (вход не начинали или `state` уже использован) — `state_mismatch`.
+func _evaluate(query: Dictionary) -> Dictionary:
 	if query.has("error"):
-		var reason := str(query["error"])
-		authorization_failed.emit(reason)
-		return {"error": reason}
+		return {"error": str(query["error"])}
 	var code := str(query.get("code", "")).strip_edges()
 	var state := str(query.get("state", ""))
 	if code.is_empty():
-		authorization_failed.emit("bad_request")
 		return {"error": "bad_request"}
-	if not expected_state.is_empty() and state != expected_state:
-		authorization_failed.emit("state_mismatch")
+	if expected_state.is_empty() or state != expected_state:
 		return {"error": "state_mismatch"}
-	authorization_code_received.emit(code)
 	return {"code": code, "state": state}
 
 
-func _respond(status: int, html: String) -> void:
-	if _peer == null:
+## Сигналы и одноразовость `state`: после принятого кода или отказа провайдера `state` очищается.
+func _finish_accept(result: Dictionary) -> void:
+	if result.has("code"):
+		expected_state = ""
+		authorization_code_received.emit(str(result["code"]))
 		return
+	var reason := str(result.get("error", "bad_request"))
+	if reason != "state_mismatch" and reason != "bad_request":
+		expected_state = ""
+	authorization_failed.emit(reason)
+
+
+func _respond(peer: StreamPeerTCP, status: int, html: String) -> void:
 	var reason := "OK" if status == 200 else ("Not Found" if status == 404 else "Bad Request")
 	var body := html.to_utf8_buffer()
 	var head := "HTTP/1.1 %d %s\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % [status, reason, body.size()]
-	_peer.put_data(head.to_utf8_buffer())
-	_peer.put_data(body)
-	_peer.poll()
-	_peer.disconnect_from_host()
-	_peer = null
-	_buffer = PackedByteArray()
+	peer.put_data(head.to_utf8_buffer())
+	peer.put_data(body)
+	peer.poll()
+	peer.disconnect_from_host()
 
 
-static func _success_page() -> String:
+## Страница браузеру по результату `/callback`: «Strava подключена» — только при принятом коде.
+static func _result_page(result: Dictionary) -> String:
+	if result.has("code"):
+		return _page("Strava подключена", "Можно закрыть это окно и вернуться в ovosch-rider.")
+	match str(result.get("error", "")):
+		"access_denied":
+			return _page("Вход в Strava отменён", "Strava не подключена. Можно закрыть это окно и вернуться в ovosch-rider.")
+		"state_mismatch":
+			return _page("Strava не подключена", "Ответ не относится к текущему входу. Можно закрыть это окно и начать вход в ovosch-rider заново.")
+		_:
+			return _page("Strava не подключена", "Ответ Strava не распознан. Можно закрыть это окно и начать вход в ovosch-rider заново.")
+
+
+static func _message_page(text: String) -> String:
+	return "<html><body><p>%s</p></body></html>" % text
+
+
+static func _page(title: String, text: String) -> String:
 	return "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>ovosch-rider</title></head>" \
 			+ "<body style=\"font-family:sans-serif;text-align:center;padding:3em\">" \
-			+ "<h1>Strava подключена</h1><p>Можно закрыть это окно и вернуться в ovosch-rider.</p></body></html>"
+			+ "<h1>%s</h1><p>%s</p></body></html>" % [title, text]
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +375,7 @@ func exchange_code(code: String) -> ApiResult:
 		return ApiResult.failure(ApiResult.CODE_NOT_CONFIGURED, _config.unavailable_message())
 	if code.strip_edges().is_empty():
 		return ApiResult.failure(ApiResult.CODE_BAD_RESPONSE, "пустой код авторизации")
+	var generation := _unlink_generation
 	var result: ApiResult = await _post_form(TOKEN_PATH, {
 		"client_id": _config.client_id,
 		"client_secret": _config.client_secret(),
@@ -303,8 +386,15 @@ func exchange_code(code: String) -> ApiResult:
 		if result.code == ApiResult.CODE_AUTH_FAILED or result.status == 400:
 			return ApiResult.failure(ApiResult.CODE_AUTH_FAILED, "Strava не приняла код авторизации", result.status)
 		return result
-	if not _store_tokens(result.data):
+	if generation != _unlink_generation:
+		return ApiResult.failure(ApiResult.CODE_REAUTH_REQUIRED, "вход прерван отвязкой Strava", result.status)
+	var stored := _store_tokens(result.data)
+	if stored == STORE_BAD_PAYLOAD:
 		return ApiResult.failure(ApiResult.CODE_BAD_RESPONSE, "в ответе Strava нет токенов", result.status)
+	if stored == STORE_FAILED:
+		# Частично записанные токены не должны изображать привязку.
+		_store.delete_service_secrets(_profile_id, SecureStore.SERVICE_STRAVA)
+		return _storage_failure(result.status)
 	var payload: Dictionary = result.data
 	var athlete: Variant = payload.get("athlete", {})
 	var info := {
@@ -336,29 +426,40 @@ func refresh_token() -> ApiResult:
 	var refresh := _store.get_secret(secret_key(SecureStore.ITEM_REFRESH_TOKEN))
 	if refresh.is_empty():
 		return ApiResult.failure(ApiResult.CODE_REAUTH_REQUIRED, "Strava не привязана — выполните вход")
+	var generation := _unlink_generation
 	var result: ApiResult = await _post_form(TOKEN_PATH, {
 		"client_id": _config.client_id,
 		"client_secret": _config.client_secret(),
 		"grant_type": "refresh_token",
 		"refresh_token": refresh,
 	})
+	if generation != _unlink_generation:
+		# Пока шёл запрос, привязку сняли (`revoke`): новые токены не записываются.
+		return ApiResult.failure(ApiResult.CODE_REAUTH_REQUIRED, "Strava отвязана — выполните вход", result.status)
 	if not result.ok:
 		if result.code == ApiResult.CODE_AUTH_FAILED or result.status == 400:
 			return ApiResult.failure(ApiResult.CODE_REAUTH_REQUIRED, "требуется повторный вход в Strava", result.status)
 		return result
-	if not _store_tokens(result.data):
+	var stored := _store_tokens(result.data)
+	if stored == STORE_BAD_PAYLOAD:
 		return ApiResult.failure(ApiResult.CODE_BAD_RESPONSE, "в ответе Strava нет токенов", result.status)
+	if stored == STORE_FAILED:
+		return _storage_failure(result.status)
 	return ApiResult.success(access_token())
 
 
 ## Отвязка (REQ-STR-01 крит. 8): `POST /oauth/deauthorize`, затем удаление всех токенов
 ## профиля независимо от ответа сети (локально привязка снимается всегда).
 func revoke() -> ApiResult:
+	# Новое поколение до сетевого запроса: обмен/обновление, начатые раньше, токены не запишут.
+	_unlink_generation += 1
 	var token := access_token()
 	var result := ApiResult.success(null)
 	if not token.is_empty():
 		result = await _post_form(DEAUTHORIZE_PATH, {"access_token": token})
 	_store.delete_service_secrets(_profile_id, SecureStore.SERVICE_STRAVA)
+	# И после удаления: обновление, начатое во время запроса отзыва, тоже не воскресит токены.
+	_unlink_generation += 1
 	if result.ok or result.code == ApiResult.CODE_AUTH_FAILED:
 		return ApiResult.success(null)
 	return result
@@ -368,20 +469,38 @@ func revoke() -> ApiResult:
 # Внутреннее
 # ---------------------------------------------------------------------------
 
-func _store_tokens(payload: Variant) -> bool:
+## Результат `_store_tokens`.
+const STORE_OK: int = 0
+const STORE_BAD_PAYLOAD: int = 1
+const STORE_FAILED: int = 2
+
+
+## Записать токены из ответа Strava. `STORE_FAILED` — `SecureStore` отказал (не прочитан,
+## ошибка диска; код — `_store.last_error()`).
+func _store_tokens(payload: Variant) -> int:
 	if not (payload is Dictionary):
-		return false
+		return STORE_BAD_PAYLOAD
 	var p: Dictionary = payload
 	var access := str(p.get("access_token", ""))
 	var refresh := str(p.get("refresh_token", ""))
 	var exp: Variant = p.get("expires_at", 0)
 	if access.is_empty() or refresh.is_empty():
-		return false
+		return STORE_BAD_PAYLOAD
 	var exp_sec := roundi(float(exp)) if (exp is float or exp is int) else (str(exp).to_int() if str(exp).is_valid_int() else 0)
-	_store.set_secret(secret_key(SecureStore.ITEM_ACCESS_TOKEN), access)
-	_store.set_secret(secret_key(SecureStore.ITEM_REFRESH_TOKEN), refresh)
-	_store.set_secret(secret_key(SecureStore.ITEM_EXPIRES_AT), str(exp_sec))
-	return true
+	if not _store.set_secret(secret_key(SecureStore.ITEM_ACCESS_TOKEN), access):
+		return STORE_FAILED
+	if not _store.set_secret(secret_key(SecureStore.ITEM_REFRESH_TOKEN), refresh):
+		return STORE_FAILED
+	if not _store.set_secret(secret_key(SecureStore.ITEM_EXPIRES_AT), str(exp_sec)):
+		return STORE_FAILED
+	return STORE_OK
+
+
+## Ошибка сохранения токенов: код `storage_failed`, текст с кодом ошибки хранилища.
+func _storage_failure(status: int) -> ApiResult:
+	var why := "хранилище не прочитано" if not _store.loaded_ok() else error_string(_store.last_error())
+	return ApiResult.failure(ApiResult.CODE_STORAGE_FAILED,
+			"не удалось сохранить токены Strava в защищённое хранилище (%s)" % why, status)
 
 
 func _post_form(path: String, fields: Dictionary) -> ApiResult:

@@ -108,8 +108,9 @@ func retry_now(ride_id: String) -> bool:
 
 
 ## Удалить элемент (ручная отмена, удаление заезда). Заезд, ожидавший выгрузки
-## (`queued`/`failed`), становится «не выгружен» (`none`) — он больше не в очереди
-## (REQ-STR-04 крит. 2, REQ-STR-05 крит. 1); `done`/`duplicate` не трогаются.
+## (`queued`/`failed`/`uploading`), становится «не выгружен» (`none`) — он больше не в очереди
+## (REQ-STR-04 крит. 2, REQ-STR-05 крит. 1); `done`/`duplicate` не трогаются. Если элемент
+## убран во время идущей выгрузки, её результат отбрасывается (см. `tick`).
 func remove(ride_id: String) -> bool:
 	var item := _find(ride_id)
 	if item.is_empty():
@@ -117,7 +118,7 @@ func remove(ride_id: String) -> bool:
 	_items.erase(item)
 	_providers.erase(ride_id)
 	var current := str(_status_store.get_upload_status(ride_id).get("status", UploadResult.STATUS_NONE))
-	if current == UploadResult.STATUS_QUEUED or current == UploadResult.STATUS_FAILED:
+	if current == UploadResult.STATUS_QUEUED or current == UploadResult.STATUS_FAILED or current == UploadResult.STATUS_UPLOADING:
 		_set_status(ride_id, UploadResult.new(), int(item["attempts"]))
 	save()
 	return true
@@ -178,6 +179,10 @@ func tick(now_sec: int = -1) -> String:
 	else:
 		result = await _uploader.upload_fit(fit, str(item["name"]), str(item["description"]), ride_id)
 	_busy = false
+	if not _contains(item):
+		# Пока шла выгрузка, элемент убрали (`remove`, удаление заезда, отвязка Strava):
+		# статус заезда уже выставлен тем, кто убрал, — результат устаревшей попытки не пишется.
+		return ride_id
 	_apply_result(item, result, now)
 	return ride_id
 
@@ -192,16 +197,17 @@ static func retry_delay_sec(attempt: int) -> int:
 # Персистентность (REQ-STR-04 крит. 1)
 # ---------------------------------------------------------------------------
 
+## Атомарная запись очереди (`AtomicFile`: временный файл → rename): сбой не портит прежний файл.
 func save() -> bool:
 	var err := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_dir_path))
 	if err != OK and err != ERR_ALREADY_EXISTS:
 		return false
-	var file := FileAccess.open(file_path(), FileAccess.WRITE)
+	var path := file_path()
+	var file := FileAccess.open(AtomicFile.tmp_path(path), FileAccess.WRITE)
 	if file == null:
 		return false
-	file.store_string(JSON.stringify({"schema": SCHEMA_VERSION, "profile_id": _profile_id, "items": _items}, "\t"))
-	file.close()
-	return true
+	var text := JSON.stringify({"schema": SCHEMA_VERSION, "profile_id": _profile_id, "items": _items}, "\t")
+	return AtomicFile.commit(file, file.store_string(text), path) == OK
 
 
 func load_from_disk() -> void:
@@ -298,6 +304,14 @@ func _fit_for(ride_id: String) -> PackedByteArray:
 		return PackedByteArray()
 	var v: Variant = provider.call(ride_id)
 	return v if v is PackedByteArray else PackedByteArray()
+
+
+## Тот же объект элемента всё ещё в очереди (сравнение по ссылке, не по содержимому).
+func _contains(item: Dictionary) -> bool:
+	for i in _items:
+		if is_same(i, item):
+			return true
+	return false
 
 
 func _find(ride_id: String) -> Dictionary:

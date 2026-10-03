@@ -20,6 +20,9 @@ extends RefCounted
 ##      - 4m 105% 95rpm      → каденс 95 (крит. 6; `80-90rpm` → середина)
 ##      Строка без дефиса → текстовая подсказка следующего шага (крит. 7).
 ##      Слова после целей внутри шага (например `- 10m 65% Spin easy`) — подсказка шага.
+##    Повторов в блоке не больше `ParseResult.MAX_REPEAT_COUNT`, шагов после разворачивания не
+##    больше `ParseResult.MAX_TOTAL_STEPS` (проверка до разворачивания) — иначе ошибка
+##    `too_many_repeats`/`too_many_steps` (то же для `reps` в `workout_doc`).
 ##    Неподдерживаемые цели → ошибка с номером строки и позицией (крит. 9): только токены,
 ##    похожие на цель — пульс `140bpm`/`140-150bpm`/`80%hr`, зона `Z2`, темп `4:30/km`,
 ##    `press lap` у шага без цели по мощности. Свободные слова (`Keep HR low`) после валидной
@@ -105,17 +108,32 @@ static func _parse_doc_steps(items: Array, path: String, top_line: int, result: 
 			continue
 		var step: Dictionary = item
 		if step.get("steps") is Array:
-			var reps := int(step.get("reps", 1))
+			var reps := _int_reps(step.get("reps", 1))
 			if reps <= 0:
 				result.add_error("число повторов должно быть ≥ 1 (сейчас %d)" % reps, line, 0, step_path + ".reps", "bad_repeat")
 				continue
+			if not result.check_repeat_count(reps, line, 0, step_path + ".reps"):
+				continue
 			var block := _parse_doc_steps(step["steps"], step_path + ".steps", line, result)
+			# Пределы — до разворачивания (вложенные повторы перемножаются).
+			if not result.check_repeat(reps, block.size(), out.size(), line, 0, step_path + ".reps"):
+				continue
 			out.append_array(Workout.expand_repeat(block, reps))
 			continue
 		var s := _parse_doc_step(step, step_path, line, result)
 		if s != null:
 			out.append(s)
 	return out
+
+
+## `reps` из JSON (float/int/строка) → int без переполнения: огромные значения упираются в 1e9.
+static func _int_reps(v: Variant) -> int:
+	if v is float or v is int:
+		return roundi(clampf(float(v), -1.0e9, 1.0e9))
+	var text := str(v).strip_edges()
+	if text.is_valid_float():
+		return roundi(clampf(text.to_float(), -1.0e9, 1.0e9))
+	return 0
 
 
 static func _parse_doc_step(step: Dictionary, path: String, line: int, result: ParseResult) -> WorkoutStep:
@@ -227,6 +245,8 @@ static func parse_description_text(text: String) -> ParseResult:
 	var steps: Array[WorkoutStep] = []
 	var block: Array[WorkoutStep] = []  # шаги текущего повтора
 	var block_reps: int = 0  # 0 — вне повтора
+	var block_line: int = 0  # строка «Nx» текущего повтора (для ошибки предела)
+	var block_text: String = ""
 	var pending_cues: Array[String] = []
 	var repeat_re := RegEx.create_from_string(REPEAT_LINE_RE)
 	var line_no: int = 0
@@ -235,18 +255,23 @@ static func parse_description_text(text: String) -> ParseResult:
 		var line := raw.strip_edges()
 		if line.is_empty():
 			if block_reps > 0:
-				steps.append_array(Workout.expand_repeat(block, block_reps))
+				_flush_block(steps, block, block_reps, result, block_line, block_text)
 				block = []
 				block_reps = 0
 			continue
 		var rm := repeat_re.search(line)
 		if rm != null:
 			if block_reps > 0:
-				steps.append_array(Workout.expand_repeat(block, block_reps))
+				_flush_block(steps, block, block_reps, result, block_line, block_text)
 				block = []
-			var reps := int(rm.get_string(1))
+				block_reps = 0
+			var digits := rm.get_string(1)
+			# Длинная строка цифр не переполняет int: сравнение по длине до преобразования.
+			var reps := int(digits) if digits.length() <= 9 else ParseResult.MAX_REPEAT_COUNT + 1
 			if reps <= 0:
 				result.add_error("число повторов должно быть ≥ 1 (сейчас %d)" % reps, line_no, 1, line, "bad_repeat")
+				continue
+			if not result.check_repeat_count(reps, line_no, 1, line):
 				continue
 			var inline := rm.get_string(2).strip_edges()
 			if not inline.is_empty():
@@ -257,10 +282,12 @@ static func parse_description_text(text: String) -> ParseResult:
 					col_base += part.length() + 1
 					if s != null:
 						inline_block.append(s)
-				steps.append_array(Workout.expand_repeat(inline_block, reps))
+				_flush_block(steps, inline_block, reps, result, line_no, line)
 				block_reps = 0
 			else:
 				block_reps = reps
+				block_line = line_no
+				block_text = line
 			continue
 		if line.begins_with("-") or line.begins_with("•") or line.begins_with("*"):
 			var body := line.substr(1).strip_edges()
@@ -274,7 +301,7 @@ static func parse_description_text(text: String) -> ParseResult:
 			continue
 		pending_cues.append(line)
 	if block_reps > 0:
-		steps.append_array(Workout.expand_repeat(block, block_reps))
+		_flush_block(steps, block, block_reps, result, block_line, block_text)
 	if not pending_cues.is_empty():
 		result.add_warning("текст без шага после него не привязан к подсказкам: '%s'" % " / ".join(pending_cues), line_no, 0, "", "dangling_text")
 	if not result.errors.is_empty():
@@ -289,6 +316,13 @@ static func parse_description_text(text: String) -> ParseResult:
 		result.add_error(e, 0, 0, "description", "invalid_workout")
 	result.set_workout(w)
 	return result
+
+
+## Развернуть блок повтора в `steps`, если не превышены пределы (`ParseResult.check_repeat`).
+static func _flush_block(steps: Array[WorkoutStep], block: Array[WorkoutStep], reps: int, result: ParseResult,
+		line_no: int, element: String) -> void:
+	if result.check_repeat(reps, block.size(), steps.size(), line_no, 1, element):
+		steps.append_array(Workout.expand_repeat(block, reps))
 
 
 ## Один шаг из текста вида `10m 65% 90rpm Some text`. `col` — позиция начала текста в строке (1-based).

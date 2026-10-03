@@ -223,8 +223,20 @@ func delete_profile_devices(profile_id: String) -> void:
 
 
 ## Подписаться на удаление профилей: `repo.profile_deleted` → `delete_profile_devices`.
+## Связанный метод, не лямбда (лямбда держала бы реестр сильной ссылкой); повторный вызов — no-op.
 func attach_to_profiles(repo: ProfileRepository) -> void:
-	repo.profile_deleted.connect(func(id: String) -> void: delete_profile_devices(id))
+	if not repo.profile_deleted.is_connected(_on_profile_deleted):
+		repo.profile_deleted.connect(_on_profile_deleted)
+
+
+## Отписаться от удаления профилей.
+func detach_from_profiles(repo: ProfileRepository) -> void:
+	if repo.profile_deleted.is_connected(_on_profile_deleted):
+		repo.profile_deleted.disconnect(_on_profile_deleted)
+
+
+func _on_profile_deleted(profile_id: String) -> void:
+	delete_profile_devices(profile_id)
 
 
 # ---------------------------------------------------------------------------

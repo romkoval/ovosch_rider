@@ -16,6 +16,13 @@ extends RefCounted
 ##   (ключ `ui.plan.import.error.<key>` в `strings.csv`, REQ-IMP-05 крит. 1; например
 ##   `unknown_element`). Новый `key` в парсере → новая строка в `strings.csv`.
 
+## Предел числа повторов одного блока (`IntervalsT Repeat`, `reps`, `Nx`).
+const MAX_REPEAT_COUNT: int = 1000
+## Предел общего числа шагов плана после разворачивания повторов.
+const MAX_TOTAL_STEPS: int = 10000
+const KEY_TOO_MANY_REPEATS: String = "too_many_repeats"
+const KEY_TOO_MANY_STEPS: String = "too_many_steps"
+
 var workout: Workout = null
 var errors: Array[Dictionary] = []
 var warnings: Array[Dictionary] = []
@@ -43,6 +50,28 @@ func add_warning(message: String, line: int = 0, column: int = 0, element: Strin
 ## Присвоить план; игнорируется, если уже есть ошибки (инвариант).
 func set_workout(w: Workout) -> void:
 	workout = w if errors.is_empty() else null
+
+
+## Проверка повтора ДО `Workout.expand_repeat` (защита от «бомбы» вида 10^6 × 10^6 шагов):
+## `reps` > `MAX_REPEAT_COUNT` → ошибка `too_many_repeats`; `steps_so_far + block_size × reps` >
+## `MAX_TOTAL_STEPS` → ошибка `too_many_steps`. true — разворачивать можно.
+func check_repeat(reps: int, block_size: int, steps_so_far: int, line: int = 0, column: int = 0,
+		element: String = "") -> bool:
+	if not check_repeat_count(reps, line, column, element):
+		return false
+	if steps_so_far + block_size * reps > MAX_TOTAL_STEPS:
+		add_error("после разворачивания повторов шагов больше %d (%d + %d × %d)" % [MAX_TOTAL_STEPS, steps_so_far, block_size, reps],
+				line, column, element, KEY_TOO_MANY_STEPS)
+		return false
+	return true
+
+
+## Только предел числа повторов (`too_many_repeats`); true — в пределах.
+func check_repeat_count(reps: int, line: int = 0, column: int = 0, element: String = "") -> bool:
+	if reps > MAX_REPEAT_COUNT:
+		add_error("число повторов больше %d (сейчас %d)" % [MAX_REPEAT_COUNT, reps], line, column, element, KEY_TOO_MANY_REPEATS)
+		return false
+	return true
 
 
 ## Перенести ошибки и предупреждения из другого результата (вложенный разбор).
