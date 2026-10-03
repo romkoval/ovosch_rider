@@ -7,6 +7,7 @@
 - Тесты: `./scripts/test.sh` (нужен Godot 4.7; локально бинарник `/opt/godot/godot`, в CI качается сам).
 - Проверка, что проект открывается: `godot --headless --path . --import`.
 - Один тестовый файл: `./scripts/test.sh -gselect=test_x` (фильтр по имени файла; `-gtest=` не ограничивает запуск, т.к. каталоги заданы в `.gutconfig.json`).
+- Снимки 3D-сцены заезда: `./scripts/screenshot.sh [каталог] [км/ч] [каденс] [дистанции]` (без дисплея — через `xvfb-run`, рендер gl_compatibility). Любая визуальная правка сдаётся со снимками «до/после» (скилл `ride-visual-review`).
 
 ## Структура
 - `src/domain/` — модель тренировки, исполнитель интервалов, зоны, расчёты. Без Node, без сцен, чистый GDScript (RefCounted).
@@ -18,6 +19,11 @@
 - `native/ble/` — GDExtension (C++/Objective-C++). Только задачи `[native-ble]`.
 - `tests/unit/`, `tests/integration/`, `tests/fixtures/` — GUT. Файлы `test_*.gd`, `extends GutTest`.
 - `docs/tz.md` — ТЗ владельца (не менять). `docs/requirements.md` — требования с критериями. `docs/backlog.md` — задачи.
+- `docs/game/` — дизайн-документ, арт-библия, реестр ассетов, эталонные снимки (ведёт game-designer).
+
+## Агенты и скиллы
+- `.claude/agents/`: requirements (критерии), manager (бэклог), game-designer (мир, игровой UI, стиль — без кода), developer (`[game]`, `[integration]`, `[native-ble]`), technical-artist (`[visual]` — 3D-мир), tester (приёмка).
+- `.claude/skills/`: `ride-visual-review` (снимки + чек-лист кадра), `indoor-cycling-game-design` (предметная база геймдизайна).
 
 ## Правила
 - Доменная логика не зависит от цикла отрисовки и от сцен: тестируется headless без `SceneTree`-зависимостей, где возможно.
