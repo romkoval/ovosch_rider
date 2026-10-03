@@ -28,17 +28,48 @@ const DEFAULT_ID: String = FLAT
 static var _profiles: Dictionary = {}
 
 
-## Ориентир у дороги или на горизонте (`tracks.md` п. 4).
+## Ориентир у дороги или на горизонте (`tracks.md` п. 4.5, REQ-D3D-08 крит. 12).
+## Сторона и план нужны миру для расстановки (T-083, T-087, T-088).
 class Landmark:
 	extends RefCounted
-	## Положение по s, м.
-	var s_m: float = 0.0
-	## Тип ориентира (snake_case, английский): по нему T-070 выбирает сцену или меш.
-	var type: String = ""
+	## Сторона по ходу движения: слева.
+	const SIDE_LEFT: String = "left"
+	## Справа.
+	const SIDE_RIGHT: String = "right"
+	## Над дорогой или дорога через него (мост, галерея, канатка).
+	const SIDE_ROAD: String = "road"
+	## По обе стороны дороги (лес).
+	const SIDE_BOTH: String = "both"
+	## Допустимые значения `side`.
+	const SIDES: Array[String] = [SIDE_LEFT, SIDE_RIGHT, SIDE_ROAD, SIDE_BOTH]
+	## План «у дороги»: до 60 м от полотна.
+	const PLANE_NEAR: String = "near"
+	## Средний план: 60–400 м.
+	const PLANE_MID: String = "mid"
+	## Дальний план: горизонт, небо.
+	const PLANE_FAR: String = "far"
+	## Допустимые значения `plane`.
+	const PLANES: Array[String] = [PLANE_NEAR, PLANE_MID, PLANE_FAR]
 
-	func _init(at_m: float = 0.0, landmark_type: String = "") -> void:
+	## Положение по s, м: точка, где ориентир ближе всего к дороге (у моста и галереи — въезд).
+	var s_m: float = 0.0
+	## Тип ориентира (snake_case, английский): по нему мир выбирает сцену или меш.
+	var type: String = ""
+	## Сторона по ходу движения — одно из `SIDES`.
+	var side: String = SIDE_RIGHT
+	## План (удаление от дороги) — одно из `PLANES`.
+	var plane: String = PLANE_NEAR
+
+	func _init(
+		at_m: float = 0.0,
+		landmark_type: String = "",
+		landmark_side: String = SIDE_RIGHT,
+		landmark_plane: String = PLANE_NEAR,
+	) -> void:
 		s_m = at_m
 		type = landmark_type
+		side = landmark_side
+		plane = landmark_plane
 
 
 ## Описание одной трассы.
@@ -138,10 +169,11 @@ static func _make(route_id: String, points: PackedVector2Array) -> RouteDef:
 	return r
 
 
+## Ориентиры из строк `[s_m, type, side, plane]` таблиц `tracks.md` п. 4.5.
 static func _landmarks(items: Array) -> Array[Landmark]:
 	var out: Array[Landmark] = []
 	for item: Array in items:
-		out.append(Landmark.new(float(item[0]), String(item[1])))
+		out.append(Landmark.new(float(item[0]), String(item[1]), String(item[2]), String(item[3])))
 	return out
 
 
@@ -165,9 +197,15 @@ static func _flat() -> RouteDef:
 		"straight_share": 0.5,
 	}
 	r.landmarks = _landmarks([
-		[800, "water_tower"], [1900, "wind_turbines_far"], [3000, "haystacks"],
-		[4200, "village"], [5400, "grain_elevator"], [6400, "sunflower_field"],
-		[7500, "creek_footbridge"], [8600, "wind_turbines_near"], [9500, "farm_silo"],
+		[800, "water_tower", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[1900, "wind_turbines_far", Landmark.SIDE_LEFT, Landmark.PLANE_FAR],
+		[3000, "haystacks", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
+		[4200, "village", Landmark.SIDE_RIGHT, Landmark.PLANE_MID],
+		[5400, "grain_elevator", Landmark.SIDE_LEFT, Landmark.PLANE_MID],
+		[6400, "sunflower_field", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[7500, "creek_footbridge", Landmark.SIDE_ROAD, Landmark.PLANE_NEAR],
+		[8600, "wind_turbines_near", Landmark.SIDE_RIGHT, Landmark.PLANE_MID],
+		[9500, "farm_silo", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
 	])
 	return r
 
@@ -193,9 +231,20 @@ static func _hills() -> RouteDef:
 		"max_straight_m": 600.0,
 	}
 	r.landmarks = _landmarks([
-		[500, "stone_bridge"], [1500, "chapel"], [2600, "sheep"], [3600, "farmstead"],
-		[5400, "lone_tree_bench"], [6800, "windmill"], [8000, "lake_view"],
-		[9800, "village"], [12200, "tv_tower"], [13400, "vineyard"],
+		[500, "stone_bridge", Landmark.SIDE_ROAD, Landmark.PLANE_NEAR],
+		[1500, "chapel", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
+		[2600, "sheep", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[3600, "farmstead", Landmark.SIDE_LEFT, Landmark.PLANE_MID],
+		[4500, "hay_bales", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[5400, "lone_tree_bench", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[6800, "windmill", Landmark.SIDE_LEFT, Landmark.PLANE_MID],
+		[8000, "lake_view", Landmark.SIDE_RIGHT, Landmark.PLANE_FAR],
+		[8900, "horse_paddock", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
+		[9800, "village", Landmark.SIDE_RIGHT, Landmark.PLANE_MID],
+		[11000, "castle_ruins", Landmark.SIDE_LEFT, Landmark.PLANE_FAR],
+		[12200, "tv_tower", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[13400, "vineyard", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
+		[14400, "hot_air_balloon", Landmark.SIDE_RIGHT, Landmark.PLANE_FAR],
 	])
 	return r
 
@@ -231,12 +280,28 @@ static func _mountains() -> RouteDef:
 		"min_climb_descent_gap_m": 30.0,
 	}
 	r.landmarks = _landmarks([
-		[500, "valley_village"], [2000, "stone_bridge"], [3000, "pass_sign"],
-		[4000, "summit_km_sign"], [5000, "summit_km_sign"], [5200, "waterfall"],
-		[6000, "summit_km_sign"], [7000, "summit_km_sign"], [7600, "switchbacks_view"],
-		[8000, "summit_km_sign"], [9000, "summit_km_sign"], [9000, "clouds_below"],
-		[10400, "pass_summit"], [12000, "mountain_lake"], [14500, "avalanche_gallery"],
-		[16500, "cow_pasture"], [18500, "valley_village"],
+		[500, "valley_village", Landmark.SIDE_RIGHT, Landmark.PLANE_MID],
+		[2000, "stone_bridge", Landmark.SIDE_ROAD, Landmark.PLANE_NEAR],
+		[3000, "pass_sign", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[4000, "summit_km_sign", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[5000, "summit_km_sign", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[5200, "waterfall", Landmark.SIDE_LEFT, Landmark.PLANE_MID],
+		[6000, "summit_km_sign", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[7000, "summit_km_sign", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[7600, "switchbacks_view", Landmark.SIDE_RIGHT, Landmark.PLANE_FAR],
+		[8000, "summit_km_sign", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[9000, "summit_km_sign", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[9600, "clouds_below", Landmark.SIDE_RIGHT, Landmark.PLANE_FAR],
+		[10400, "pass_summit", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
+		[11200, "snow_patch", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
+		[12000, "mountain_lake", Landmark.SIDE_RIGHT, Landmark.PLANE_FAR],
+		[13300, "shepherd_hut", Landmark.SIDE_LEFT, Landmark.PLANE_MID],
+		[14500, "avalanche_gallery", Landmark.SIDE_ROAD, Landmark.PLANE_NEAR],
+		[15500, "cable_car", Landmark.SIDE_ROAD, Landmark.PLANE_MID],
+		[16500, "cow_pasture", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[17500, "sawmill", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
+		[18500, "valley_village", Landmark.SIDE_RIGHT, Landmark.PLANE_MID],
+		[19500, "campsite", Landmark.SIDE_LEFT, Landmark.PLANE_NEAR],
 	])
 	return r
 
@@ -268,8 +333,17 @@ static func _seaside() -> RouteDef:
 		"river_crossings": 1,
 	}
 	r.landmarks = _landmarks([
-		[600, "fishing_pier"], [1800, "beach_umbrellas"], [3000, "white_houses"],
-		[4200, "sailboat"], [5000, "river_mouth"], [5800, "bridge"], [7000, "pine_forest"],
-		[8600, "lighthouse"], [9800, "cliffs_spray"], [11000, "promenade"],
+		[600, "fishing_pier", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[1800, "beach_umbrellas", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[3000, "white_houses", Landmark.SIDE_LEFT, Landmark.PLANE_MID],
+		[4200, "sailboat", Landmark.SIDE_RIGHT, Landmark.PLANE_FAR],
+		[5000, "river_mouth", Landmark.SIDE_RIGHT, Landmark.PLANE_MID],
+		[5800, "bridge", Landmark.SIDE_ROAD, Landmark.PLANE_NEAR],
+		[7000, "pine_forest", Landmark.SIDE_BOTH, Landmark.PLANE_NEAR],
+		[7800, "olive_terraces", Landmark.SIDE_LEFT, Landmark.PLANE_MID],
+		[8600, "lighthouse", Landmark.SIDE_RIGHT, Landmark.PLANE_MID],
+		[9800, "cliffs_spray", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[11000, "promenade", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
+		[11800, "lifeguard_tower", Landmark.SIDE_RIGHT, Landmark.PLANE_NEAR],
 	])
 	return r
