@@ -10,7 +10,8 @@
 (run 37127085285): GUT 2206/2206, BLE linux, BLE macOS universal debug/release, экспорт macOS.
 Артефакт macOS: `ovosch-rider-macos` — https://github.com/romkoval/ovosch_rider/actions/runs/37127085285
 
-Модели агентов: developer — Opus, effort high; manager, requirements, tester — Opus.
+Модели агентов: developer, game-designer, technical-artist — Opus, effort high; manager, requirements, tester — Opus.
+Новые агенты (2026-10-03): game-designer (зона `docs/game/`), technical-artist (зона `[visual]`, `src/scene3d/`). Скиллы — `.claude/skills/`. Базовые снимки мира «до» — `docs/game/shots/2026-10-03-baseline/`.
 
 ### Финальное ревью (выполнено)
 Четыре ревью по слоям → исправления закоммичены: 9a248d9, c0ce71d, 30df302, 2fd5e50, 6fc56a4, 5ab4478.

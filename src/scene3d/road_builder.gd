@@ -18,7 +18,7 @@ static func segment_count(track: Track, max_segments: int = MAX_SEGMENTS) -> int
 
 ## Построить узел дороги. `segments` ≤ `MAX_SEGMENTS`; для петли последний сегмент замыкается на первый.
 static func build(track: Track, material: Material = null, width_m: float = DEFAULT_WIDTH_M,
-		segments: int = -1) -> MeshInstance3D:
+		segments: int = -1, center_offset_m: float = 0.0) -> MeshInstance3D:
 	var n: int = segment_count(track) if segments <= 0 else clampi(segments, 1, MAX_SEGMENTS)
 	var length: float = track.length_m()
 	var step: float = length / float(n)
@@ -33,8 +33,9 @@ static func build(track: Track, material: Material = null, width_m: float = DEFA
 		var s: float = minf(float(i) * step, length)
 		track.sample_into(s if not (track.is_loop() and i == n) else 0.0, sample)
 		var right: Vector3 = sample.right()
-		vertices.append(sample.position - right * half)
-		vertices.append(sample.position + right * half)
+		var center: Vector3 = sample.position + right * center_offset_m
+		vertices.append(center - right * half)
+		vertices.append(center + right * half)
 		normals.append(sample.up)
 		normals.append(sample.up)
 		var v: float = s / width_m

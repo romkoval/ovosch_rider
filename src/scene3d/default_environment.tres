@@ -1,26 +1,29 @@
-[gd_resource type="Resource" script_class="EnvironmentSet" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="EnvironmentSet" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://src/scene3d/environment_set.gd" id="1_env"]
 
-[sub_resource type="StandardMaterial3D" id="road_mat"]
-albedo_color = Color(0.22, 0.22, 0.24, 1)
-roughness = 0.95
-
-[sub_resource type="StandardMaterial3D" id="prop_mat"]
-albedo_color = Color(0.35, 0.5, 0.3, 1)
-roughness = 0.9
-
 [resource]
 script = ExtResource("1_env")
-road_material = SubResource("road_mat")
-sky_color = Color(0.55, 0.72, 0.92, 1)
-horizon_color = Color(0.8, 0.85, 0.9, 1)
-fog_color = Color(0.75, 0.82, 0.9, 1)
-fog_density = 0.004
-ambient_color = Color(0.6, 0.65, 0.7, 1)
-sun_energy = 1.2
-sun_rotation_deg = Vector3(-50, 35, 0)
-prop_material = SubResource("prop_mat")
-prop_size = Vector3(0.3, 4, 0.3)
+sky_color = Color(0.32, 0.57, 0.89, 1)
+horizon_color = Color(0.72, 0.82, 0.94, 1)
+fog_color = Color(0.72, 0.82, 0.94, 1)
+fog_density = 0.0007
+ambient_color = Color(0.56, 0.63, 0.82, 1)
+ambient_energy = 0.9
+sun_color = Color(1, 0.96, 0.88, 1)
+sun_energy = 0.8
+sun_rotation_deg = Vector3(-48, 150, 0)
+road_width_m = 6.5
+road_center_offset_m = -1.4
+roadside_enabled = true
+guardrail_enabled = true
+terrain_enabled = true
+hills_height_m = 120.0
+rolling_height_m = 5.0
+tree_count = 380
+bush_count = 220
+tuft_count = 900
+scenery_seed = 11
+prop_size = Vector3(0.12, 1.0, 0.12)
 prop_spacing_m = 25.0
-prop_offset_m = 5.0
+prop_offset_m = 4.6
