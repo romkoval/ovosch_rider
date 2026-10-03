@@ -3,6 +3,8 @@ extends ConfirmationDialog
 ## Mini-form for the Intervals.icu API key (REQ-INT-01 crit. 1-3, REQ-PRF-03): Athlete ID + key.
 ## Shared by the settings screen and the plan screen (T-040). The dialog only collects
 ## input and emits `submitted`; the owner verifies the key and calls `show_error()` or `hide()`.
+## OK does not close the dialog (`dialog_hide_on_ok = false`): the verification request is
+## asynchronous, and a rejected key must stay visible to the user (REQ-INT-01 crit. 3).
 
 signal submitted(athlete_id: String, key: String)
 
@@ -12,6 +14,7 @@ signal submitted(athlete_id: String, key: String)
 
 
 func _ready() -> void:
+	dialog_hide_on_ok = false
 	confirmed.connect(submit)
 
 
@@ -37,7 +40,9 @@ func key() -> String:
 	return _key_edit.text.strip_edges()
 
 
+## Emit the entered values; the previous error is cleared so a new attempt starts clean.
 func submit() -> void:
+	show_error("")
 	submitted.emit(athlete_id(), key())
 
 

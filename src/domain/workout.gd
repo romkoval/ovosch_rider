@@ -186,12 +186,13 @@ func power_points(ftp_w: int, intensity: float = 1.0) -> PackedVector2Array:
 	return points
 
 
-## Сегменты полосы прогресса (REQ-HUD-07 крит. 1, 2): словари
-## `{index, start_sec, duration_sec, start_watts, end_watts, zone}`.
-## `zone` — зона мощности `start_watts` по Coggan (`Zones.power_zone`);
-## пересчитывается при другом множителе. Сумма `duration_sec` равна
-## `total_duration_sec()`.
-func segments(ftp_w: int, intensity: float = 1.0) -> Array[Dictionary]:
+## Сегменты полосы прогресса и графика предпросмотра (REQ-HUD-07 крит. 1, 2;
+## REQ-INT-05 крит. 3): словари `{index, start_sec, duration_sec, start_watts, end_watts, zone}`.
+## `zone` — зона мощности `start_watts` по `zones` (границы профиля, REQ-HUD-03 крит. 1);
+## при `zones == null` — 7 зон Coggan от `ftp_w` (`Zones.power_zone`). Домен не знает
+## о профиле: вызывающий передаёт `Profile.effective_power_zones()`. Пересчитывается
+## при другом множителе. Сумма `duration_sec` равна `total_duration_sec()`.
+func segments(ftp_w: int, intensity: float = 1.0, zones: PowerZones = null) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var start: int = 0
 	for i in steps.size():
@@ -203,7 +204,7 @@ func segments(ftp_w: int, intensity: float = 1.0) -> Array[Dictionary]:
 			"duration_sec": step.duration_sec,
 			"start_watts": start_w,
 			"end_watts": step.end_watts(ftp_w, intensity),
-			"zone": Zones.power_zone(start_w, ftp_w),
+			"zone": zones.zone_of(start_w) if zones != null else Zones.power_zone(start_w, ftp_w),
 		})
 		start += step.duration_sec
 	return out

@@ -22,6 +22,30 @@ const POWER_SOURCE_KEYS: Dictionary = {
 	Profile.POWER_SOURCE_TRAINER: "ui.settings.power_source_trainer",
 	Profile.POWER_SOURCE_POWER_METER: "ui.settings.power_source_power_meter",
 }
+## Human-readable texts for `ApiResult` failure codes (REQ-NFR-08 crit. 1: no raw codes in UI).
+const API_ERROR_KEYS: Dictionary = {
+	ApiResult.CODE_AUTH_FAILED: "ui.settings.err_auth_failed",
+	ApiResult.CODE_REAUTH_REQUIRED: "ui.settings.err_reauth_required",
+	ApiResult.CODE_NETWORK: "ui.settings.err_network",
+	ApiResult.CODE_RATE_LIMITED: "ui.settings.err_rate_limited",
+	ApiResult.CODE_NOT_CONFIGURED: "ui.settings.err_not_configured",
+	ApiResult.CODE_BAD_RESPONSE: "ui.settings.err_bad_response",
+}
+const API_ERROR_UNKNOWN_KEY: String = "ui.settings.err_unknown"
+## Human-readable texts for `IntervalsSync.WARN_*` (local_override has its own message).
+const SYNC_WARNING_KEYS: Dictionary = {
+	IntervalsSync.WARN_FTP_MISSING: "ui.settings.warn_ftp_missing",
+	IntervalsSync.WARN_FTP_OUT_OF_RANGE: "ui.settings.warn_ftp_out_of_range",
+	IntervalsSync.WARN_POWER_ZONES_MISSING: "ui.settings.warn_power_zones_missing",
+	IntervalsSync.WARN_POWER_ZONES_COUNT: "ui.settings.warn_power_zones_count",
+	IntervalsSync.WARN_POWER_ZONES_INVALID: "ui.settings.warn_power_zones_invalid",
+	IntervalsSync.WARN_HR_ZONES_MISSING: "ui.settings.warn_hr_zones_missing",
+	IntervalsSync.WARN_HR_ZONES_INVALID: "ui.settings.warn_hr_zones_invalid",
+	IntervalsSync.WARN_HR_ZONES_COUNT: "ui.settings.warn_hr_zones_count",
+	IntervalsSync.WARN_MAX_HR_MISSING: "ui.settings.warn_max_hr_missing",
+	IntervalsSync.WARN_NO_BIKE_SETTINGS: "ui.settings.warn_no_bike_settings",
+}
+const SYNC_WARNING_UNKNOWN_KEY: String = "ui.settings.warn_unknown"
 ## Static labels/buttons: node path -> key. `Control.text` keeps the raw key (auto-translate
 ## applies only at draw time), so they are re-applied with `tr()` on every `refresh()` —
 ## this is what makes the language switch take effect without a restart (REQ-NFR-08 crit. 4).
@@ -134,13 +158,25 @@ func _on_key_submitted(athlete_id: String, key: String) -> void:
 # Rendering
 # ---------------------------------------------------------------------------
 
-## Re-render everything from the repository, settings and store (also after locale change).
+## Full re-render from the repository, settings and store, including the profile form fields.
+## Call on entering the screen, after saving the profile and after a sync — i.e. only when the
+## form must reflect the stored profile. Unsaved form input is overwritten here by design.
 func refresh() -> void:
+	if _repo == null or not is_node_ready():
+		return
+	refresh_texts()
+	_render_profile_form()
+
+
+## Re-render labels, buttons, statuses and option texts without touching the values the user
+## typed into the profile form (language switch, override toggle, key/unlink actions).
+func refresh_texts() -> void:
 	if _repo == null or not is_node_ready():
 		return
 	_render_static()
 	_render_locale()
-	_render_profile_form()
+	_render_power_source_items()
+	_render_profile_status()
 	_render_sources()
 	_render_intervals()
 	_render_strava()
@@ -163,14 +199,22 @@ func _render_locale() -> void:
 		_locale_option.select(idx)
 
 
-func _render_profile_form() -> void:
-	var p := _active()
+func _render_power_source_items() -> void:
 	for i in POWER_SOURCE_IDS.size():
 		_power_source_option.set_item_text(i, tr(str(POWER_SOURCE_KEYS.get(POWER_SOURCE_IDS[i], POWER_SOURCE_IDS[i]))))
+
+
+func _render_profile_status() -> void:
+	var p := _active()
 	_save_button.disabled = p == null
+	_profile_status_label.text = tr("ui.settings.no_profile") if p == null else tr("ui.settings.profile_title").format({"name": p.name})
+
+
+## Fill the form fields from the active profile (overwrites unsaved input).
+func _render_profile_form() -> void:
+	var p := _active()
 	if p == null:
 		_name_edit.text = ""
-		_profile_status_label.text = tr("ui.settings.no_profile")
 		return
 	_name_edit.text = p.name
 	_ftp_spin.value = p.ftp_w
@@ -181,7 +225,6 @@ func _render_profile_form() -> void:
 	_override_check.set_pressed_no_signal(p.intervals_override_local)
 	_profile_error_label.visible = false
 	_profile_error_label.text = ""
-	_profile_status_label.text = tr("ui.settings.profile_title").format({"name": p.name})
 
 
 func _render_sources() -> void:
@@ -313,8 +356,16 @@ func _sync_message() -> String:
 			return tr("ui.settings.sync_skipped_override")
 		if _last_sync_warnings.is_empty():
 			return tr("ui.settings.sync_done")
-		return tr("ui.settings.sync_done_with_warnings").format({"warnings": ", ".join(_last_sync_warnings)})
-	return tr("ui.settings.sync_failed").format({"code": _last_sync_result.code})
+		var texts: PackedStringArray = []
+		for code in _last_sync_warnings:
+			texts.append(tr(str(SYNC_WARNING_KEYS.get(code, SYNC_WARNING_UNKNOWN_KEY))))
+		return tr("ui.settings.sync_done_with_warnings").format({"warnings": "; ".join(texts)})
+	return tr("ui.settings.sync_failed").format({"reason": api_error_text(_last_sync_result.code)})
+
+
+## Translated reason for an `ApiResult` failure code (never the raw code).
+func api_error_text(code: String) -> String:
+	return tr(str(API_ERROR_KEYS.get(code, API_ERROR_UNKNOWN_KEY)))
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +377,7 @@ func _sync_message() -> String:
 func set_locale(locale: String) -> bool:
 	if _app_state == null or not _app_state.set_locale(locale):
 		return false
-	refresh()
+	refresh_texts()
 	return true
 
 
@@ -384,7 +435,8 @@ func set_override_local(enabled: bool) -> void:
 	var errors := _repo.save(p)
 	if not errors.is_empty():
 		_show_profile_errors(errors)
-	refresh()
+	_override_check.set_pressed_no_signal(_active().intervals_override_local)
+	refresh_texts()
 
 
 func profile_error_text() -> String:
@@ -425,7 +477,9 @@ func open_key_dialog() -> void:
 	_key_dialog.open(p.intervals_athlete_id if p != null else "")
 
 
-## Verify and store the key (REQ-INT-01 crit. 1-3). Returns the API result.
+## Verify and store the key (REQ-INT-01 crit. 1-4). The dialog closes only on success; on
+## failure it stays open with a translated message (empty fields have their own text).
+## Returns the API result.
 func submit_key(athlete_id: String, key: String) -> ApiResult:
 	var p := _active()
 	if p == null:
@@ -438,12 +492,25 @@ func submit_key(athlete_id: String, key: String) -> ApiResult:
 		_repo.save(updated)
 		_key_dialog.hide()
 		_last_sync_result = null
-		_intervals_message_label.text = tr("ui.settings.key_saved")
-		refresh()
-		_intervals_message_label.text = tr("ui.settings.key_saved")
+		var athlete_name := str((result.data as Dictionary).get("name", "")) if result.data is Dictionary else ""
+		if athlete_name.is_empty():
+			athlete_name = client.athlete_id
+		refresh_texts()
+		_intervals_message_label.text = tr("ui.settings.key_saved").format({"name": athlete_name})
 	else:
-		_key_dialog.show_error(tr("ui.settings.key_rejected").format({"code": result.code}))
+		_key_dialog.show_error(key_error_text(result.code))
 	return result
+
+
+## Translated message for a failed key verification (REQ-INT-01 crit. 3).
+func key_error_text(code: String) -> String:
+	match code:
+		ApiResult.CODE_AUTH_FAILED, ApiResult.CODE_REAUTH_REQUIRED:
+			return tr("ui.settings.key_rejected")
+		ApiResult.CODE_NOT_CONFIGURED:
+			return tr("ui.settings.key_fill_both")
+		_:
+			return tr("ui.settings.key_check_failed").format({"reason": api_error_text(code)})
 
 
 ## Pull the athlete from Intervals.icu and apply it to the active profile
@@ -456,7 +523,7 @@ func sync_intervals() -> ApiResult:
 	if not client.is_configured():
 		_last_sync_result = ApiResult.failure(ApiResult.CODE_NOT_CONFIGURED, "not configured")
 		_last_sync_warnings = []
-		refresh()
+		refresh_texts()
 		return _last_sync_result
 	var result: ApiResult = await client.get_athlete()
 	_last_sync_result = result
@@ -482,7 +549,7 @@ func forget_intervals() -> void:
 	updated.intervals_athlete_id = ""
 	_repo.save(updated)
 	_last_sync_result = null
-	refresh()
+	refresh_texts()
 	_intervals_message_label.text = tr("ui.settings.intervals_unlinked")
 
 

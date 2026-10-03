@@ -1,7 +1,8 @@
 class_name WorkoutChart
 extends Control
 ## График целевой мощности по времени для предпросмотра (REQ-INT-05 крит. 1–4):
-## сегменты `Workout.segments()` окрашены по зоне (`ZonePalette`), рампы — трапеции,
+## сегменты `Workout.segments()` окрашены по зоне (`ZonePalette`) — зоны те же, что в HUD
+## (границы профиля, REQ-HUD-03 крит. 1; без профиля — Coggan), рампы — трапеции,
 ## точки `Workout.power_points()`, ось времени в минутах, линия и подпись FTP.
 ## Данные задаются `set_workout()`, отрисовка — в `_draw()`.
 
@@ -19,8 +20,9 @@ var _ftp_w: int = 0
 var _max_w: float = 1.0
 
 
-## Задать план; `ftp_w`/`intensity` — как у сессии.
-func set_workout(workout: Workout, ftp_w: int, intensity: float = 1.0) -> void:
+## Задать план; `ftp_w`/`intensity` — как у сессии; `zones` — зоны мощности профиля
+## (`Profile.effective_power_zones()`), null — Coggan от `ftp_w`.
+func set_workout(workout: Workout, ftp_w: int, intensity: float = 1.0, zones: PowerZones = null) -> void:
 	_ftp_w = ftp_w
 	if workout == null:
 		_points = PackedVector2Array()
@@ -29,7 +31,7 @@ func set_workout(workout: Workout, ftp_w: int, intensity: float = 1.0) -> void:
 		_max_w = 1.0
 	else:
 		_points = workout.power_points(ftp_w, intensity)
-		_segments = workout.segments(ftp_w, intensity)
+		_segments = workout.segments(ftp_w, intensity, zones)
 		_total_sec = workout.total_duration_sec()
 		_max_w = maxf(float(ftp_w) * MIN_Y_FACTOR, 1.0)
 		for p in _points:
@@ -85,7 +87,7 @@ func _draw() -> void:
 		draw_colored_polygon(poly, segment_color(seg))
 	var ftp_y: float = PADDING_TOP + h - float(_ftp_w) / _max_w * h
 	draw_line(Vector2(PADDING_LEFT, ftp_y), Vector2(size.x, ftp_y), Color(1, 1, 1, 0.7), 1.0)
-	draw_string(font, Vector2(2, ftp_y + 4), "FTP %d" % _ftp_w, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(1, 1, 1, 0.9))
+	draw_string(font, Vector2(2, ftp_y + 4), tr("ui.plan.chart.ftp_label").format({"ftp": _ftp_w}), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(1, 1, 1, 0.9))
 	for m in axis_minutes():
 		var x: float = PADDING_LEFT + float(m * 60) / float(_total_sec) * w
 		draw_line(Vector2(x, PADDING_TOP + h), Vector2(x, PADDING_TOP + h + 4), Color(1, 1, 1, 0.6), 1.0)

@@ -5,6 +5,7 @@
 [node name="IntervalsKeyDialog" type="ConfirmationDialog"]
 title = "ui.intervals_key.title"
 size = Vector2i(420, 220)
+dialog_hide_on_ok = false
 ok_button_text = "ui.intervals_key.save"
 cancel_button_text = "ui.common.cancel"
 script = ExtResource("1_script")

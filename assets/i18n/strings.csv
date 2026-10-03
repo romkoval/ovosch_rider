@@ -172,7 +172,43 @@ ui.plan.trainer_choice.title,Станок не подключён,Trainer not co
 ui.plan.trainer_choice.text,Станок не подключён. Провести тренировку на эмуляторе или подключить устройства?,No trainer is connected. Ride on the emulator or connect devices?
 ui.plan.trainer_choice.emulator,Эмулятор,Emulator
 ui.plan.trainer_choice.devices,Подключить устройства,Connect devices
+ui.plan.chart.ftp_label,FTP {ftp},FTP {ftp}
+ui.plan.import.error.in_file,{file}: {text},{file}: {text}
+ui.plan.import.error.at_element,элемент {element},element {element}
+ui.plan.import.error.at_line,строка {line},line {line}
+ui.plan.import.error.at_line_col,"строка {line}, позиция {column}","line {line}, column {column}"
+ui.plan.import.error.parse_error,не удалось разобрать файл,could not parse the file
+ui.plan.import.error.unsupported_extension,"тип файла не поддерживается (ожидается .zwo, .erg или .mrc)","unsupported file type (expected .zwo, .erg or .mrc)"
+ui.plan.import.error.file_not_found,файл не найден,file not found
+ui.plan.import.error.file_open_failed,не удалось открыть файл,could not open the file
+ui.plan.import.error.no_profile,профиль не выбран,no profile selected
+ui.plan.import.error.storage_write_failed,не удалось сохранить тренировку в библиотеку,could not save the workout to the library
+ui.plan.import.error.empty_file,файл пуст,the file is empty
+ui.plan.import.error.invalid_xml,нарушена структура XML,malformed XML
+ui.plan.import.error.not_zwo,файл не является тренировкой ZWO (ожидается корневой элемент <workout_file>),not a ZWO workout file (root element <workout_file> expected)
+ui.plan.import.error.unknown_element,элемент {element} не поддерживается,element {element} is not supported
+ui.plan.import.error.no_workout,в файле нет элемента <workout>,no <workout> element in the file
+ui.plan.import.error.no_steps,тренировка не содержит шагов,the workout has no steps
+ui.plan.import.error.invalid_workout,тренировка некорректна,the workout is invalid
+ui.plan.import.error.bad_number,ожидалось число,a number was expected
+ui.plan.import.error.missing_attribute,у элемента {element} нет обязательного атрибута,element {element} is missing a required attribute
+ui.plan.import.error.bad_duration,длительность шага должна быть больше 0 с,step duration must be greater than 0 s
+ui.plan.import.error.bad_repeat,число повторов должно быть не меньше 1,repeat count must be at least 1
+ui.plan.import.error.bad_step,шаг должен быть объектом,a step must be an object
+ui.plan.import.error.unsupported_target,тип цели не поддерживается (только мощность),target type is not supported (power only)
+ui.plan.import.error.bad_power,поле мощности имеет неподдерживаемый вид,unsupported power field format
+ui.plan.import.error.unsupported_units,единицы мощности не поддерживаются (ожидается %ftp или w),unsupported power units (expected %ftp or w)
+ui.plan.import.error.negative_target,отрицательная целевая мощность,negative target power
+ui.plan.import.error.empty_description,описание тренировки пустое,the workout description is empty
+ui.plan.import.error.unsupported_element,элемент {element} не поддерживается (только цели по мощности),element {element} is not supported (power targets only)
+ui.plan.import.error.missing_duration,у шага нет длительности (например «10m»),the step has no duration (e.g. “10m”)
+ui.plan.import.error.unknown_kind,неизвестный тип файла (ожидается erg или mrc),unknown file kind (erg or mrc expected)
+ui.plan.import.error.bad_data_line,ожидались два числа «минуты значение»,two numbers “minutes value” were expected
+ui.plan.import.error.no_course_data,нет секции [COURSE DATA],no [COURSE DATA] section
+ui.plan.import.error.too_few_points,в [COURSE DATA] меньше двух точек,fewer than two points in [COURSE DATA]
+ui.plan.import.error.non_monotonic_time,время в [COURSE DATA] должно не убывать,time in [COURSE DATA] must not decrease
 error.profile.power_source_invalid,Источник мощности должен быть «станок» или «измеритель мощности»,Power source must be “trainer” or “power meter”
+error.profile.source_invalid,Источник FTP или зон задан неверно,FTP or zones source is invalid
 ui.settings.title,Настройки,Settings
 ui.settings.language,Язык интерфейса,Interface language
 ui.settings.lang_ru,Русский,Russian
@@ -202,12 +238,32 @@ ui.settings.intervals_set_key,Указать ключ…,Set API key…
 ui.settings.intervals_sync,Синхронизировать с Intervals.icu,Sync with Intervals.icu
 ui.settings.intervals_forget,Отвязать Intervals.icu,Unlink Intervals.icu
 ui.settings.intervals_unlinked,Ключ Intervals.icu удалён,Intervals.icu key removed
-ui.settings.key_saved,Ключ сохранён,Key saved
-ui.settings.key_rejected,Ключ не принят ({code}),Key rejected ({code})
+ui.settings.key_saved,Ключ сохранён: {name},Key saved: {name}
+ui.settings.key_rejected,Ключ не принят Intervals.icu: проверьте Athlete ID и ключ API,Key rejected by Intervals.icu: check the Athlete ID and API key
+ui.settings.key_fill_both,Введите Athlete ID и ключ API,Enter Athlete ID and API key
+ui.settings.key_check_failed,Не удалось проверить ключ: {reason},Could not verify the key: {reason}
 ui.settings.sync_done,Профиль обновлён из Intervals.icu,Profile updated from Intervals.icu
 ui.settings.sync_done_with_warnings,Синхронизировано с замечаниями: {warnings},Synced with warnings: {warnings}
 ui.settings.sync_skipped_override,Синхронизация пропущена: включено локальное переопределение,Sync skipped: local override is enabled
-ui.settings.sync_failed,Синхронизация не удалась ({code}),Sync failed ({code})
+ui.settings.sync_failed,Синхронизация не удалась: {reason},Sync failed: {reason}
+ui.settings.err_auth_failed,ключ Intervals.icu не принят,Intervals.icu key rejected
+ui.settings.err_reauth_required,ключ Intervals.icu устарел — укажите ключ заново,Intervals.icu key expired — set the key again
+ui.settings.err_network,нет связи с Intervals.icu,no connection to Intervals.icu
+ui.settings.err_rate_limited,слишком много запросов к Intervals.icu — повторите позже,too many requests to Intervals.icu — try again later
+ui.settings.err_not_configured,ключ Intervals.icu не задан,Intervals.icu key is not set
+ui.settings.err_bad_response,неожиданный ответ Intervals.icu,unexpected response from Intervals.icu
+ui.settings.err_unknown,неизвестная ошибка,unknown error
+ui.settings.warn_ftp_missing,FTP не задан в Intervals.icu,FTP is not set in Intervals.icu
+ui.settings.warn_ftp_out_of_range,FTP из Intervals.icu вне допустимого диапазона,FTP from Intervals.icu is out of range
+ui.settings.warn_power_zones_missing,зоны мощности не заданы в Intervals.icu,power zones are not set in Intervals.icu
+ui.settings.warn_power_zones_count,число зон мощности в Intervals.icu не поддерживается,unsupported number of power zones in Intervals.icu
+ui.settings.warn_power_zones_invalid,зоны мощности из Intervals.icu некорректны,power zones from Intervals.icu are invalid
+ui.settings.warn_hr_zones_missing,зоны пульса не заданы в Intervals.icu,heart-rate zones are not set in Intervals.icu
+ui.settings.warn_hr_zones_invalid,зоны пульса из Intervals.icu некорректны,heart-rate zones from Intervals.icu are invalid
+ui.settings.warn_hr_zones_count,число зон пульса в Intervals.icu не поддерживается,unsupported number of heart-rate zones in Intervals.icu
+ui.settings.warn_max_hr_missing,максимальный пульс не задан в Intervals.icu,max heart rate is not set in Intervals.icu
+ui.settings.warn_no_bike_settings,в Intervals.icu нет настроек для велоспорта,no cycling settings in Intervals.icu
+ui.settings.warn_unknown,неизвестное замечание,unknown warning
 ui.settings.strava_title,Strava,Strava
 ui.settings.strava_not_linked,Strava не привязана,Strava not linked
 ui.settings.strava_connect,Connect with Strava,Connect with Strava

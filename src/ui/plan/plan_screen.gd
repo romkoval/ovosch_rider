@@ -9,7 +9,8 @@ extends Control
 ## авторизация; ключ — общий `IntervalsKeyDialog` (`src/ui/common/`, вместе с экраном настроек)
 ## → `verify_key` → `IntervalsSync.sync_profile`),
 ## «Библиотека» (импортированные тренировки, «Импортировать файл…» → `FileDialog`
-## с фильтрами `*.zwo, *.erg, *.mrc`; ошибка — `AcceptDialog` с `ParseResult.user_message`),
+## с фильтрами `*.zwo, *.erg, *.mrc`; ошибка — `AcceptDialog` с текстом по ключу ошибки
+## `ParseResult` → `ui.plan.import.error.*` на языке интерфейса, REQ-IMP-05 крит. 1),
 ## предпросмотр (название, описание, длительность, `WorkoutChart`) и «Начать».
 ## Экран не запускает сессию сам — испускает `workout_chosen(workout)`; владелец (`main.gd`)
 ## решает, какой станок использовать, и при отсутствии станка просит экран показать выбор
@@ -19,7 +20,13 @@ extends Control
 
 const SOURCE_INTERVALS: String = "intervals"
 const SOURCE_LIBRARY: String = "library"
+## Фильтры диалога импорта: маска и описание. Описания — названия форматов файлов
+## (Zwift Workout, ERG, MRC), собственные имена — не локализуются.
 const FILE_FILTERS: PackedStringArray = ["*.zwo ; Zwift Workout", "*.erg ; ERG", "*.mrc ; MRC"]
+## Префикс ключей локализации ошибок разбора: `ui.plan.import.error.<ParseResult key>`.
+const IMPORT_ERROR_KEY_PREFIX: String = "ui.plan.import.error."
+## Действие кнопки «Эмулятор» в `%TrainerDialog`.
+const TRAINER_ACTION_EMULATOR: StringName = &"emulator"
 
 ## Пользователь выбрал тренировку и нажал «Начать».
 signal workout_chosen(workout: Workout, source: String)
@@ -49,6 +56,8 @@ var _items: Array[Dictionary] = []
 var _selected: int = -1
 var _loading: bool = false
 var _trainer_choice_pending: bool = false
+## Кнопка «Эмулятор», добавленная в `%TrainerDialog` из кода (текст обновляется при смене языка).
+var _emulator_button: Button = null
 
 @onready var _status_label: Label = %StatusLabel
 @onready var _key_button: Button = %KeyButton
@@ -93,11 +102,17 @@ func _ready() -> void:
 	_back_button.pressed.connect(func() -> void: _navigate(AppState.Screen.HOME))
 	_trainer_dialog.confirmed.connect(func() -> void: _choose_devices())
 	_trainer_dialog.custom_action.connect(func(action: StringName) -> void:
-		if action == &"emulator":
+		if action == TRAINER_ACTION_EMULATOR:
 			choose_emulator())
-	_trainer_dialog.add_button(tr("ui.plan.trainer_choice.emulator"), true, "emulator")
+	_emulator_button = _trainer_dialog.add_button(tr("ui.plan.trainer_choice.emulator"), true, TRAINER_ACTION_EMULATOR)
 	_chart.set_workout(null, 200)
 	refresh()
+
+
+func _notification(what: int) -> void:
+	# Смена языка интерфейса: тексты, заданные из кода (а не из сцены), обновляются вручную.
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_refresh_texts()
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +123,7 @@ func _ready() -> void:
 func refresh() -> void:
 	if not is_node_ready() or _repo == null:
 		return
+	_refresh_texts()
 	_profile = _repo.get_active()
 	_client = null
 	_service = null
@@ -309,7 +325,7 @@ func on_import_file_selected(path: String) -> ParseResult:
 		return null
 	var result := _library.import_file(_profile.id, path)
 	if result == null or not result.ok():
-		var message := result.user_message(path.get_file()) if result != null else path.get_file()
+		var message := localized_errors(result, path.get_file()) if result != null else path.get_file()
 		_import_error_dialog.dialog_text = message
 		if not _import_error_dialog.visible:
 			_import_error_dialog.popup_centered()
@@ -322,12 +338,64 @@ func on_import_file_selected(path: String) -> ParseResult:
 	_library_status_label.text = tr("ui.plan.import.updated") if replaced else tr("ui.plan.import.done").format({"name": result.workout.name})
 	_rebuild_items()
 	_update_status()
-	var imported_id := str(result.metadata.get("id", ""))
+	# `WorkoutLibrary.import_file` кладёт id записи в `metadata.entry_id` (не `id`).
+	var imported_id := str(result.metadata.get("entry_id", ""))
 	for i in _items.size():
-		if _items[i]["source"] == SOURCE_LIBRARY and (_items[i]["id"] == imported_id or imported_id.is_empty() and _items[i]["name"] == result.workout.name):
+		if _items[i]["source"] == SOURCE_LIBRARY and str(_items[i]["id"]) == imported_id:
 			select_index(i)
-			break
+			return result
+	# Фолбэк на случай, если библиотека не вернула id (не должно случаться): по имени,
+	# иначе при одинаковых именах выбиралась бы старая запись (REQ-IMP-04 крит. 4).
+	if imported_id.is_empty():
+		for i in _items.size():
+			if _items[i]["source"] == SOURCE_LIBRARY and _items[i]["name"] == result.workout.name:
+				select_index(i)
+				break
 	return result
+
+
+# ---------------------------------------------------------------------------
+# Ошибки разбора на языке интерфейса (REQ-IMP-05 крит. 1, 3)
+# ---------------------------------------------------------------------------
+
+## Текст одной записи `ParseResult.errors`: `<файл>: <тип проблемы> (элемент X, строка N)`.
+## Тип проблемы — по ключу `key` через `ui.plan.import.error.<key>`; неизвестный ключ →
+## `ui.plan.import.error.parse_error`. Имя элемента и номер строки — из записи; имя файла
+## добавляется один раз (не повторяется, если элемент — это сам файл).
+func localized_error(entry: Dictionary, file_name: String = "") -> String:
+	var key := str(entry.get("key", ""))
+	var tr_key := IMPORT_ERROR_KEY_PREFIX + key
+	var text := tr(tr_key) if not key.is_empty() else tr_key
+	if text == tr_key:
+		text = tr(IMPORT_ERROR_KEY_PREFIX + "parse_error")
+	var element := str(entry.get("element", ""))
+	var line := int(entry.get("line", 0))
+	var column := int(entry.get("column", 0))
+	var parts: Array[String] = []
+	if text.contains("{element}"):
+		text = text.format({"element": element})
+	elif not element.is_empty() and element != file_name and not text.contains(element):
+		parts.append(tr("ui.plan.import.error.at_element").format({"element": element}))
+	if line > 0:
+		if column > 0:
+			parts.append(tr("ui.plan.import.error.at_line_col").format({"line": line, "column": column}))
+		else:
+			parts.append(tr("ui.plan.import.error.at_line").format({"line": line}))
+	if not parts.is_empty():
+		text += " (" + ", ".join(parts) + ")"
+	if not file_name.is_empty():
+		text = tr("ui.plan.import.error.in_file").format({"file": file_name, "text": text})
+	return text
+
+
+## Все ошибки результата, по одной на строку.
+func localized_errors(result: ParseResult, file_name: String = "") -> String:
+	var lines: Array[String] = []
+	for e in result.errors:
+		lines.append(localized_error(e, file_name))
+	if lines.is_empty():
+		lines.append(tr("ui.plan.import.error.in_file").format({"file": file_name, "text": tr(IMPORT_ERROR_KEY_PREFIX + "parse_error")}) if not file_name.is_empty() else tr(IMPORT_ERROR_KEY_PREFIX + "parse_error"))
+	return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +439,14 @@ func _set_status(text: String) -> void:
 	_status_label.text = text
 
 
+## Тексты, заданные из кода (сцена переводится движком сама).
+func _refresh_texts() -> void:
+	if _emulator_button != null:
+		_emulator_button.text = tr("ui.plan.trainer_choice.emulator")
+	if _trainer_choice_pending:
+		_trainer_dialog.dialog_text = tr("ui.plan.trainer_choice.text")
+
+
 func _show_key_error(text: String) -> void:
 	if not text.is_empty():
 		_key_dialog.show_error(text)
@@ -385,7 +461,7 @@ func _rebuild_items() -> void:
 			var pr: ParseResult = e.get("parse_result", null)
 			var error_text := ""
 			if e.get("workout", null) == null:
-				error_text = pr.user_message() if pr != null else tr("ui.plan.item.no_plan")
+				error_text = localized_errors(pr) if pr != null else tr("ui.plan.item.no_plan")
 			_items.append({
 				"source": SOURCE_INTERVALS, "id": "icu:" + str(e.get("event_id", "")),
 				"name": str(e.get("name", "")), "duration_sec": int(e.get("duration_sec", 0)),
@@ -491,6 +567,8 @@ func _render_preview() -> void:
 	var w := selected_workout()
 	var ftp: int = _profile.ftp_w if _profile != null else 200
 	var intensity: float = float(_profile.intensity_default) / 100.0 if _profile != null else 1.0
+	# REQ-INT-05 крит. 3 / REQ-HUD-03 крит. 1: цвета сегментов — по зонам профиля, как в HUD.
+	var zones: PowerZones = _profile.effective_power_zones() if _profile != null else null
 	if w == null:
 		_preview_name.text = tr("ui.plan.preview.empty")
 		_preview_description.text = ""
@@ -501,5 +579,5 @@ func _render_preview() -> void:
 	_preview_name.text = w.name
 	_preview_description.text = w.description
 	_preview_duration.text = tr("ui.plan.preview.duration").format({"duration": IntervalsPlanService.format_duration(w.total_duration_sec()), "ftp": ftp})
-	_chart.set_workout(w, ftp, intensity)
+	_chart.set_workout(w, ftp, intensity, zones)
 	_start_button.disabled = false

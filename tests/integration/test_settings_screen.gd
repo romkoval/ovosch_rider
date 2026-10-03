@@ -309,8 +309,9 @@ func test_sync_failure_shows_code_and_keeps_profile() -> void:
 	var result: ApiResult = await s.sync_intervals()
 	assert_false(result.ok)
 	assert_eq(_repo.get_active().ftp_w, 200)
-	assert_string_contains(s.intervals_message_text(), "Sync failed (")
-	assert_string_contains(s.intervals_message_text(), result.code)
+	assert_eq(s.intervals_message_text(), "Sync failed: Intervals.icu key rejected",
+		"REQ-NFR-08 крит. 1: причина переведена, а не сырой код")
+	assert_false(s.intervals_message_text().contains(result.code))
 
 
 func test_sync_not_configured_without_key() -> void:
@@ -346,7 +347,8 @@ func test_key_dialog_verifies_and_stores_key() -> void:
 	assert_eq(_store.get_secret(SecureStore.key_for(_profile.id, SecureStore.SERVICE_INTERVALS, SecureStore.ITEM_API_KEY)), "my-secret")
 	assert_eq(_repo.get_active().intervals_athlete_id, "i12345")
 	assert_eq(s.intervals_status_text(), "Intervals.icu linked (athlete i12345)")
-	assert_eq(s.intervals_message_text(), "Key saved")
+	assert_eq(s.intervals_message_text(), "Key saved: Test Athlete", "REQ-INT-01 крит. 4: имя атлета из ответа")
+	assert_false(dialog.visible, "диалог закрыт после успеха")
 	assert_eq(_transport.last_request()["headers"].get("Authorization", "").is_empty(), false, "ключ ушёл в заголовке")
 
 
@@ -357,8 +359,86 @@ func test_key_dialog_rejected_key_shows_error_and_stores_nothing() -> void:
 	var result: ApiResult = await s.submit_key("i12345", "bad")
 	assert_false(result.ok)
 	assert_eq(_store.size(), 0, "REQ-INT-01 крит. 3: ключ не сохраняется")
-	assert_string_contains(s.key_dialog().error_text(), "Key rejected (")
+	assert_eq(s.key_dialog().error_text(), "Key rejected by Intervals.icu: check the Athlete ID and API key")
 	assert_eq(s.intervals_status_text(), "Intervals.icu not linked")
+
+
+func test_key_dialog_ok_button_keeps_dialog_open_with_error_until_success() -> void:
+	_transport.enqueue_json("GET", "api/v1/athlete/i12345", 401, {"error": "unauthorized"})
+	var s := _screen()
+	s.open_key_dialog()
+	var dialog := s.key_dialog()
+	dialog.fill("i12345", "bad")
+	dialog.get_ok_button().pressed.emit()
+	for i in 3:
+		await get_tree().process_frame
+	assert_eq(_transport.request_count("GET", "api/v1/athlete/i12345"), 1)
+	assert_true(dialog.visible, "REQ-INT-01 крит. 3: диалог с ошибкой остаётся открытым")
+	assert_eq(dialog.error_text(), "Key rejected by Intervals.icu: check the Athlete ID and API key")
+	assert_eq(_store.size(), 0)
+	# Повторная попытка с верным ключом закрывает диалог.
+	_transport.enqueue_json("GET", "api/v1/athlete/i12345", 200, _athlete_json())
+	dialog.fill("i12345", "good")
+	dialog.get_ok_button().pressed.emit()
+	for i in 3:
+		await get_tree().process_frame
+	assert_false(dialog.visible, "диалог закрыт после успешной проверки")
+	assert_eq(dialog.error_text(), "")
+	assert_eq(_repo.get_active().intervals_athlete_id, "i12345")
+
+
+func test_key_dialog_empty_fields_show_fill_both_message_without_request() -> void:
+	var s := _screen()
+	s.open_key_dialog()
+	var result: ApiResult = await s.submit_key("", "")
+	assert_false(result.ok)
+	assert_eq(_transport.request_count(), 0)
+	assert_eq(s.key_dialog().error_text(), "Enter Athlete ID and API key")
+	assert_true(s.key_dialog().visible)
+
+
+func test_key_dialog_network_error_translated_without_raw_code() -> void:
+	_transport.enqueue_failure("GET", "api/v1/athlete/i12345", HttpResponse.ERR_OFFLINE)
+	var s := _screen()
+	s.open_key_dialog()
+	var result: ApiResult = await s.submit_key("i12345", "key")
+	assert_false(result.ok)
+	assert_eq(s.key_dialog().error_text(), "Could not verify the key: no connection to Intervals.icu")
+	assert_false(s.key_dialog().error_text().contains(result.code))
+
+
+func test_sync_warnings_translated_in_both_languages() -> void:
+	_link()
+	var s := _screen()
+	var athlete: Dictionary = _athlete_json()
+	var ss: Array = athlete.get("sportSettings", [])
+	for entry in ss:
+		(entry as Dictionary).erase("ftp")
+		(entry as Dictionary).erase("indoor_ftp")
+	_transport.enqueue_json("GET", "api/v1/athlete/i12345", 200, athlete)
+	var result: ApiResult = await s.sync_intervals()
+	assert_true(result.ok)
+	assert_string_contains(s.intervals_message_text(), "Synced with warnings: ")
+	assert_string_contains(s.intervals_message_text(), "FTP is not set in Intervals.icu")
+	assert_false(s.intervals_message_text().contains(IntervalsSync.WARN_FTP_MISSING), "без сырого кода")
+	s.set_locale("ru")
+	assert_string_contains(s.intervals_message_text(), "FTP не задан в Intervals.icu")
+
+
+func test_locale_switch_and_override_toggle_keep_unsaved_form_input() -> void:
+	var s := _screen()
+	s.fill_profile_form("Draft", 333, 66.6, 177)
+	s.set_locale("ru")
+	assert_eq((s.get_node("%NameEdit") as LineEdit).text, "Draft", "смена языка не затирает ввод")
+	assert_eq(int((s.get_node("%FtpSpin") as SpinBox).value), 333)
+	s.set_override_local(true)
+	assert_eq((s.get_node("%NameEdit") as LineEdit).text, "Draft", "переключатель не затирает ввод")
+	assert_eq(int((s.get_node("%MaxHrSpin") as SpinBox).value), 177)
+	assert_true(_repo.get_active().intervals_override_local)
+	assert_eq(_repo.get_active().ftp_w, 200, "в профиль ничего не записано")
+	s.refresh()
+	assert_eq((s.get_node("%NameEdit") as LineEdit).text, "Rider", "явный refresh() заполняет форму из профиля")
+	assert_eq(int((s.get_node("%FtpSpin") as SpinBox).value), 200)
 
 
 # ---------------------------------------------------------------------------

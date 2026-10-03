@@ -351,6 +351,103 @@ func test_import_unsupported_extension_and_missing_file_are_errors() -> void:
 	assert_string_contains(s.import_error_text(), "nope.zwo")
 
 
+func test_import_error_text_is_localized_by_key_en_and_ru() -> void:
+	# REQ-IMP-05 крит. 1: тип проблемы — на языке интерфейса (по `ParseResult.key`), имя файла один раз.
+	var s := _screen()
+	s.import_path(WORKOUT_FIXTURES + "unknown_element.zwo")
+	var en := s.import_error_text()
+	assert_string_contains(en, "unknown_element.zwo: element SolidState is not supported (line 6)")
+	assert_eq(en.count("unknown_element.zwo"), 1, "имя файла один раз")
+	TranslationServer.set_locale("ru")
+	s.import_path(WORKOUT_FIXTURES + "unknown_element.zwo")
+	var ru := s.import_error_text()
+	assert_string_contains(ru, "unknown_element.zwo: элемент SolidState не поддерживается (строка 6)")
+	TranslationServer.set_locale("en")
+
+
+func test_import_unsupported_extension_message_has_file_name_once() -> void:
+	var s := _screen()
+	s.import_path(WORKOUT_FIXTURES + "corrupted.json")
+	var msg := s.import_error_text()
+	assert_eq(msg, "corrupted.json: unsupported file type (expected .zwo, .erg or .mrc)")
+
+
+func test_unknown_parse_key_falls_back_to_generic_text() -> void:
+	var s := _screen()
+	var entry := {"line": 3, "column": 2, "element": "x", "message": "внутренний текст", "key": "no_such_key"}
+	assert_eq(s.localized_error(entry, "f.zwo"), "f.zwo: could not parse the file (element x, line 3, column 2)")
+	assert_eq(s.localized_error({"key": "empty_file"}), "the file is empty")
+
+
+func test_unparsable_event_tooltip_is_in_interface_language() -> void:
+	_with_key()
+	var events: Array = [_unparsable_event()]
+	_mock.enqueue_json("GET", "/events", 200, events)
+	var s := _screen()
+	await s.load_today()
+	var list: ItemList = s.get_node("%WorkoutList")
+	var tip := list.get_item_tooltip(0)
+	assert_false(tip.is_empty())
+	var cyr := RegEx.create_from_string("[\\p{Cyrillic}]")
+	assert_null(cyr.search(tip), "подсказка неразобранного события без кириллицы в en: " + tip)
+
+
+func test_import_same_name_selects_new_entry_by_entry_id() -> void:
+	# D3: после импорта выбирается запись с `metadata.entry_id`, а не старая с тем же именем.
+	var zwo := "<workout_file><name>Same</name><sportType>bike</sportType><workout>%s</workout></workout_file>"
+	var a := _dir + "a.zwo"
+	var b := _dir + "b.zwo"
+	for pair in [[a, "<SteadyState Duration=\"600\" Power=\"0.5\"/>"], [b, "<SteadyState Duration=\"900\" Power=\"0.9\"/>"]]:
+		var f := FileAccess.open(pair[0], FileAccess.WRITE)
+		f.store_string(zwo % pair[1])
+		f.close()
+	var s := _screen()
+	assert_true(s.import_path(a).ok())
+	var rb := s.import_path(b)
+	assert_true(rb.ok())
+	assert_eq(_library.count(_profile.id), 2)
+	assert_eq(str(s.selected_item()["id"]), str(rb.metadata["entry_id"]))
+	assert_eq(s.selected_workout().total_duration_sec(), 900)
+
+
+func test_chart_segment_zones_follow_profile_zones_not_coggan() -> void:
+	# D1 / REQ-INT-05 крит. 3 + REQ-HUD-03 крит. 1: зона сегмента — по границам профиля.
+	var bounds: Array[float] = [70.0, 85.0, 95.0, 110.0, 125.0, 155.0]
+	_profile.set_power_zones_local(PowerZones.custom(200, bounds))
+	_repo.save(_profile)
+	var s := _screen()
+	assert_true(s.import_path(WORKOUT_FIXTURES + "simple.zwo").ok())
+	var segs := s.chart().segments()
+	assert_true(segs.size() > 0)
+	var saw_difference := false
+	for seg in segs:
+		var w := int(seg["start_watts"])
+		assert_eq(int(seg["zone"]), _profile.power_zone_of(w), "%d Вт — зона профиля" % w)
+		if _profile.power_zone_of(w) != Zones.power_zone(w, 200):
+			saw_difference = true
+	assert_true(saw_difference, "фикстура содержит шаг, где зоны профиля и Coggan расходятся")
+	# Без профильных границ — Coggan (контракт домена сохранён).
+	var w0 := s.selected_workout()
+	assert_eq(w0.segments(200)[0]["zone"], Zones.power_zone(int(w0.segments(200)[0]["start_watts"]), 200))
+
+
+func test_emulator_button_text_follows_locale_change() -> void:
+	# O2: текст кнопки «Эмулятор» (добавлена из кода) обновляется при смене языка.
+	var s := _screen()
+	var dialog: ConfirmationDialog = s.get_node("%TrainerDialog")
+	var button: Button = null
+	for child in dialog.find_children("*", "Button", true, false):
+		if (child as Button).text == "Emulator":
+			button = child
+	assert_not_null(button, "кнопка «Эмулятор» (en)")
+	TranslationServer.set_locale("ru")
+	await get_tree().process_frame
+	assert_eq(button.text, "Эмулятор")
+	TranslationServer.set_locale("en")
+	await get_tree().process_frame
+	assert_eq(button.text, "Emulator")
+
+
 func test_duplicate_import_updates_instead_of_adding() -> void:
 	var s := _screen()
 	s.on_import_file_selected(WORKOUT_FIXTURES + "simple.zwo")

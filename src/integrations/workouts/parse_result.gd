@@ -10,9 +10,11 @@ extends RefCounted
 ## Элемент `errors`/`warnings` — словарь `{line, column, element, message, key}`:
 ## - `line`, `column` — позиция в исходнике (1-based; 0 — не применимо);
 ## - `element` — имя элемента/поля/токена, к которому относится сообщение ("" — нет);
-## - `message` — текст на русском, без стека вызовов и внутренних имён классов
-##   (REQ-IMP-05 крит. 3);
-## - `key` — стабильный код для локализации в UI (например `unknown_element`).
+## - `message` — текст на русском для логов и тестов, без стека вызовов и внутренних
+##   имён классов (REQ-IMP-05 крит. 3); на экран не выводится;
+## - `key` — стабильный код, по которому UI показывает тип проблемы на языке интерфейса
+##   (ключ `ui.plan.import.error.<key>` в `strings.csv`, REQ-IMP-05 крит. 1; например
+##   `unknown_element`). Новый `key` в парсере → новая строка в `strings.csv`.
 
 var workout: Workout = null
 var errors: Array[Dictionary] = []
@@ -68,8 +70,9 @@ func warning_messages() -> Array[String]:
 	return out
 
 
-## Сообщение для пользователя по одной записи (REQ-IMP-05 крит. 1):
+## Сообщение по одной записи на русском (логи, тесты, CLI):
 ## `<файл>: <сообщение> (элемент <имя>, строка N)`. Части, которых нет, опускаются.
+## Для экрана используется локализованный вариант по `key` (`PlanScreen.localized_error`).
 static func format_entry(entry: Dictionary, file_name: String = "") -> String:
 	var parts: Array[String] = []
 	var element: String = str(entry.get("element", ""))
