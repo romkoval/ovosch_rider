@@ -116,7 +116,11 @@ func toggle_erg() -> void:
 		refresh()
 
 
+## «Назад»: прогон на эмуляторе останавливается (тикер, сессия, устройство), чтобы скрытый
+## экран не продолжал тренировку и не перерисовывался каждый кадр.
 func back() -> void:
+	_teardown()
+	refresh()
 	if _app_state != null:
 		_app_state.navigate(AppState.Screen.HOME)
 

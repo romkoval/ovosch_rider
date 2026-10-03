@@ -9,7 +9,14 @@ var _manager: ConnectionManager
 var _repo: ProfileRepository
 var _app_state: AppState
 var _rows: Dictionary = {}
+## Не найденные при автоподключении (REQ-DEV-06 крит. 3). Сбрасывается при новом поиске
+## (сканирование, новое автоподключение) и при смене профиля; подключившееся устройство
+## убирается из списка. Вход на экран список не сбрасывает.
 var _not_found_ids: Array[String] = []
+## Профиль, для которого получен `_not_found_ids`.
+var _not_found_profile_id: String = ""
+## id строки, кнопка которой сейчас обрабатывает нажатие (см. `refresh`).
+var _row_in_signal: String = ""
 
 @onready var _status_label: Label = %StatusLabel
 @onready var _scan_button: Button = %ScanButton
@@ -53,6 +60,7 @@ func toggle_scan() -> void:
 	if _manager.scanner.is_scanning():
 		_manager.stop_scan()
 	else:
+		_not_found_ids.clear()
 		_manager.start_scan()
 	refresh()
 
@@ -62,6 +70,7 @@ func set_auto_connect(enabled: bool) -> void:
 		return
 	_manager.auto_connect_enabled = enabled
 	if enabled:
+		_not_found_ids.clear()
 		_manager.auto_connect(profile_id())
 	else:
 		_manager.cancel_auto_connect()
@@ -93,6 +102,8 @@ func back() -> void:
 
 
 func _notification(what: int) -> void:
+	# Вход на экран список «не найдено» не сбрасывает: таймаут автоподключения, истёкший
+	# на другом экране, должен быть виден (REQ-DEV-06 крит. 3).
 	if what == NOTIFICATION_VISIBILITY_CHANGED and is_node_ready() and not visible:
 		_stop_user_scan()
 
@@ -108,6 +119,11 @@ func _stop_user_scan() -> void:
 func refresh() -> void:
 	if _manager == null or not is_node_ready():
 		return
+	# Смена профиля или новое автоподключение (в т.ч. запущенное при выборе профиля):
+	# список «не найдено» относится к прежнему поиску.
+	if profile_id() != _not_found_profile_id or _manager.is_auto_connecting():
+		_not_found_ids.clear()
+	_not_found_profile_id = profile_id()
 	var seen: Dictionary = {}
 	var remembered_ids: Array[String] = []
 	var index_remembered: int = 0
@@ -130,7 +146,13 @@ func refresh() -> void:
 			var hbox: HBoxContainer = _rows[id]["hbox"]
 			if hbox.get_parent() != null:
 				hbox.get_parent().remove_child(hbox)
-			hbox.queue_free()
+			# Отсоединённая строка освобождается сразу (без «сирот» до следующего кадра).
+			# Строку, чья кнопка сейчас испускает `pressed`, освобождать синхронно нельзя:
+			# кнопка обращается к себе после сигнала — для неё отложенное освобождение.
+			if str(id) == _row_in_signal:
+				hbox.queue_free()
+			else:
+				hbox.free()
 			_rows.erase(id)
 	var available: bool = _manager.is_ble_available()
 	_scan_button.text = tr("ui.devices.stop_scan") if _manager.scanner.is_scanning() else tr("ui.devices.scan")
@@ -235,11 +257,10 @@ func _create_row(id: String) -> Dictionary:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hbox.add_child(label)
 	var connect_button := Button.new()
-	connect_button.pressed.connect(func() -> void: _on_row_connect_pressed(id))
+	connect_button.pressed.connect(func() -> void: _on_row_button(id, false))
 	hbox.add_child(connect_button)
 	var forget_button := Button.new()
-	forget_button.text = tr("ui.devices.forget")
-	forget_button.pressed.connect(func() -> void: forget_device(id))
+	forget_button.pressed.connect(func() -> void: _on_row_button(id, true))
 	hbox.add_child(forget_button)
 	return {"id": id, "record": {}, "hbox": hbox, "label": label, "connect_button": connect_button, "forget_button": forget_button}
 
@@ -262,18 +283,28 @@ func _update_row(r: Dictionary, record: Dictionary, is_remembered: bool) -> void
 	var connect_button: Button = r["connect_button"]
 	connect_button.text = tr("ui.devices.disconnect") if state == TrainerDevice.ConnectionState.CONNECTED else tr("ui.devices.connect")
 	connect_button.disabled = str(record.get("kind", "")) == BleScanner.KIND_UNKNOWN or not _manager.is_ble_available()
-	(r["forget_button"] as Button).visible = is_remembered
+	var forget_button: Button = r["forget_button"]
+	forget_button.text = tr("ui.devices.forget")
+	forget_button.visible = is_remembered
 
 
-func _on_row_connect_pressed(id: String) -> void:
-	if _rows.has(id):
+func _on_row_button(id: String, forget: bool) -> void:
+	_row_in_signal = id
+	if forget:
+		forget_device(id)
+	elif _rows.has(id):
 		connect_device(_rows[id]["record"])
+	_row_in_signal = ""
 
 
-func _on_state_changed(_id: String) -> void:
+func _on_state_changed(id: String) -> void:
+	# Успешное подключение: устройство найдено — убрать его из «не найдено».
+	if _manager != null and _manager.state_of(id) == TrainerDevice.ConnectionState.CONNECTED:
+		_not_found_ids.erase(id)
 	refresh()
 
 
 func _on_auto_connect_timed_out(ids: Array[String]) -> void:
-	_not_found_ids = ids
+	_not_found_ids = ids.duplicate()
+	_not_found_profile_id = profile_id()
 	refresh()

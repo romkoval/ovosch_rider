@@ -397,3 +397,46 @@ func test_workout_screen_binds_ride_scene_under_hud() -> void:
 	assert_gt(screen.ride_scene().distance_m, 0.0, "сцена двигается от телеметрии сессии")
 	screen.confirm_stop()
 	assert_false(screen.ride_scene().is_bound(), "после завершения сцена отвязана")
+
+
+func test_pause_stops_rider_and_resume_continues_by_telemetry() -> void:
+	# Ревью MEDIUM-2: на паузе велосипедист стоит, после возобновления едет по данным.
+	var s := _bound_scene()
+	_trainer.set_cadence_sequence([90])
+	for i in 10:
+		_second(s)
+	assert_gt(s.speed_kmh, 20.0)
+	_session.pause()
+	assert_eq(s.speed_kmh, 0.0, "на паузе скорость сцены — 0")
+	assert_eq(s.cadence_rpm, 0, "на паузе каденс сцены — 0")
+	assert_almost_eq(s.rider().target_speed_scale, 0.0, 1e-6, "педалирование остановлено")
+	assert_eq(s.rider().wheel_speed_kmh, 0.0, "колёса остановлены")
+	var dist := s.distance_m
+	for i in 5:
+		_second(s)
+	assert_eq(s.distance_m, dist, "на паузе дистанция не растёт")
+	assert_false(s.rider().is_pedaling())
+	_session.resume()
+	for i in 3:
+		_second(s)
+	assert_gt(s.speed_kmh, 20.0, "после возобновления скорость — по телеметрии")
+	assert_gt(s.distance_m, dist, "движение продолжилось")
+	assert_almost_eq(s.rider().target_speed_scale, 1.5, 1e-6, "каденс снова по телеметрии")
+
+
+func test_rider_is_advanced_only_by_scene_once_per_frame() -> void:
+	# Ревью LOW-5: `Rider.advance` вызывает только `RideScene.advance` (не ещё и `Rider._process`).
+	var s := _scene()
+	assert_false(s.rider().is_processing(), "собственный _process велосипедиста выключен")
+	s.apply_telemetry(200, true, 90, true, 36.0, true)
+	s.set_process(false)
+	var wheel: Node3D = s.rider().get_node("%FrontWheel")
+	var before := wheel.transform.basis
+	var scale_before := s.rider().speed_scale
+	for i in 3:
+		await get_tree().process_frame
+	assert_true(before.is_equal_approx(wheel.transform.basis), "без кадра сцены колёса не крутятся")
+	assert_eq(s.rider().speed_scale, scale_before, "без кадра сцены сглаживание не идёт")
+	s.advance(FRAME)
+	var angle := 36.0 / 3.6 / Rider.WHEEL_RADIUS_M * FRAME
+	assert_true((before * Basis(Vector3.RIGHT, angle)).is_equal_approx(wheel.transform.basis), "один кадр сцены — один поворот колеса")

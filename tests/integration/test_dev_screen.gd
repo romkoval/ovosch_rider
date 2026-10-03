@@ -214,3 +214,30 @@ func test_main_scene_wires_dev_screen_with_profile_ftp() -> void:
 	_advance(dev as DevScreen, 0.1)
 	assert_string_contains((dev as DevScreen).status_text(), "target 125 W")
 	(dev as DevScreen).stop()
+
+
+func test_back_stops_emulator_run_in_main() -> void:
+	# Ревью LOW-8: после «Назад» прогон на эмуляторе остановлен, скрытый экран не тикает.
+	_repo.create("Dev")
+	var main: AppMain = load(MAIN_SCENE).instantiate()
+	main.data_dir = _dir
+	add_child_autofree(main)
+	assert_true(main.app_state.navigate(AppState.Screen.DEV))
+	var dev := main.visible_screen_node() as DevScreen
+	dev.clock_usec = _clock
+	assert_true(dev.play())
+	var session := dev.session()
+	var trainer := dev.trainer()
+	_advance(dev, 0.5)
+	(dev.get_node("%BackButton") as Button).pressed.emit()
+	assert_true(main.visible_screen_node() is HomeScreen)
+	assert_null(dev.ticker(), "тикер снят")
+	assert_null(dev.session())
+	assert_eq(session.get_state(), WorkoutSession.State.FINISHED, "сессия остановлена")
+	assert_eq(trainer.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED, "эмулятор отключён")
+	var elapsed := session.executor.elapsed_sec()
+	_now_usec += 10_000_000
+	await get_tree().process_frame
+	await get_tree().process_frame
+	assert_eq(session.executor.elapsed_sec(), elapsed, "время прогона не идёт")
+	assert_eq(dev.status_text(), "No session — press “Play on emulator”")

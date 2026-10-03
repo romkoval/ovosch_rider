@@ -202,3 +202,103 @@ func test_back_stops_manual_scan_but_not_auto_connect_scan() -> void:
 	assert_true(_cm.scanner.is_scanning())
 	(s.get_node("%BackButton") as Button).pressed.emit()
 	assert_true(_cm.scanner.is_scanning(), "сканирование автоподключения продолжается")
+
+
+# ---------------------------------------------------------------------------
+# Ревью: текст «Забыть» по языку, сброс списка «не найдено»
+# ---------------------------------------------------------------------------
+
+func test_forget_button_text_follows_locale_on_refresh() -> void:
+	# LOW-6: текст кнопки «Забыть» обновляется при смене языка (main → refresh).
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	var s := _screen()
+	var forget: Button = s.row("neo")["forget_button"]
+	assert_eq(forget.text, "Forget")
+	TranslationServer.set_locale("ru")
+	s.refresh()
+	assert_eq(forget.text, "Забыть")
+	TranslationServer.set_locale("en")
+	s.refresh()
+	assert_eq(forget.text, "Forget")
+
+
+## Таймаут автоподключения запомненного станка «Neo»: статус «не найдено».
+func _timed_out_screen() -> DevicesScreen:
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	var s := _screen()
+	s.set_auto_connect(true)
+	_cm.tick(30.0)
+	assert_eq(s.status_text(), "Device not found: Neo. Connect manually.")
+	return s
+
+
+func test_not_found_cleared_on_manual_scan() -> void:
+	# LOW-7: новый поиск (сканирование) сбрасывает устаревший список «не найдено».
+	var s := _timed_out_screen()
+	(s.get_node("%ScanButton") as Button).pressed.emit()
+	assert_eq(s.status_text(), "Scanning for devices…")
+	(s.get_node("%ScanButton") as Button).pressed.emit()
+	assert_eq(s.status_text(), "Not scanning")
+
+
+func test_not_found_cleared_on_successful_connection() -> void:
+	# LOW-7: устройство подключено — оно больше не «не найдено».
+	var s := _timed_out_screen()
+	(s.row("neo")["connect_button"] as Button).pressed.emit()
+	_bridge.pump()
+	assert_string_contains(s.row_text("neo"), "connected")
+	assert_false(s.status_text().contains("not found"), "статус без устаревшего «не найдено»: " + s.status_text())
+
+
+func test_not_found_cleared_by_new_auto_connect() -> void:
+	# LOW-7: новое автоподключение (например, при выборе профиля в main) — список прежнего неактуален.
+	var s := _timed_out_screen()
+	_cm.auto_connect(_profile.id)
+	s.refresh()
+	assert_eq(s.status_text(), "Waiting for remembered devices: 1")
+	_cm.cancel_auto_connect()
+	s.refresh()
+	assert_eq(s.status_text(), "Not scanning", "после отмены нового автоподключения — без прежнего списка")
+
+
+func test_not_found_kept_when_entering_screen_after_timeout() -> void:
+	# LOW-7 (решение менеджера): таймаут, истёкший на другом экране, виден при входе
+	# на экран устройств (REQ-DEV-06 крит. 3).
+	var s := _timed_out_screen()
+	s.hide()
+	s.show()
+	s.refresh()
+	assert_eq(s.status_text(), "Device not found: Neo. Connect manually.")
+
+
+func test_not_found_cleared_on_profile_change() -> void:
+	# LOW-7: «не найдено» профиля A не показывается профилю B.
+	_remembered.remember(_profile.id, RememberedDevices.make_device("hrm", "Polar", RememberedDevices.KIND_HR))
+	var s := _screen()
+	s.set_auto_connect(true)
+	_cm.tick(30.0)
+	assert_eq(s.status_text(), "Device not found: Polar. Connect manually.")
+	var other := _repo.create("Other")
+	_repo.active_profile_id = other.id
+	s.refresh()
+	assert_eq(s.status_text(), "Not scanning")
+
+
+func test_removed_row_is_freed_immediately_without_orphans() -> void:
+	# Ревью инфраструктуры: отсоединённая строка освобождается сразу, а не через queue_free.
+	_remembered.remember(_profile.id, RememberedDevices.make_device("hrm", "Polar", RememberedDevices.KIND_HR))
+	_remembered.remember(_profile.id, RememberedDevices.make_device("cad", "Cadence", RememberedDevices.KIND_CADENCE))
+	var s := _screen()
+	var hbox: HBoxContainer = s.row("hrm")["hbox"]
+	var orphans_before := Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+	s.forget_device("hrm")
+	assert_eq(s.row("hrm"), {}, "строки нет")
+	assert_false(is_instance_valid(hbox), "строка освобождена сразу")
+	assert_eq(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), orphans_before, "без узлов-сирот")
+	# Нажатие «Забыть» на самой строке: её кнопка ещё в обработке сигнала — освобождение
+	# откладывается до конца кадра, без падения.
+	var own: HBoxContainer = s.row("cad")["hbox"]
+	(s.row("cad")["forget_button"] as Button).pressed.emit()
+	assert_eq(s.row("cad"), {})
+	await get_tree().process_frame
+	assert_false(is_instance_valid(own), "строка освобождена к следующему кадру")

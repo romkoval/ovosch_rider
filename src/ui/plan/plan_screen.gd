@@ -51,6 +51,10 @@ var _profile: Profile = null
 var _client: IntervalsIcuClient = null
 var _service: IntervalsPlanService = null
 var _last_result: ApiResult = null
+## Профиль, для которого получен `_last_result` (план одного профиля не показывается другому).
+var _last_result_profile_id: String = ""
+## Поколение загрузок: смена профиля его увеличивает, и ответы, запрошенные раньше, отбрасываются.
+var _load_generation: int = 0
 ## Элементы списка: `{source, name, duration_sec, training_load, workout, error, id}`.
 var _items: Array[Dictionary] = []
 var _selected: int = -1
@@ -125,6 +129,15 @@ func refresh() -> void:
 		return
 	_refresh_texts()
 	_profile = _repo.get_active()
+	var profile_id := _profile.id if _profile != null else ""
+	if profile_id != _last_result_profile_id:
+		# Сменился активный профиль: план, выбор и незавершённая загрузка прежнего профиля
+		# к новому не относятся.
+		_last_result = null
+		_last_result_profile_id = profile_id
+		_selected = -1
+		_loading = false
+		_load_generation += 1
 	_client = null
 	_service = null
 	if _profile != null and _transport != null:
@@ -140,23 +153,37 @@ func refresh() -> void:
 
 
 ## Загрузить план на сегодня из сети (с откатом на кэш внутри сервиса).
+## Профиль и сервис фиксируются до `await`: если за время запроса активный профиль сменился,
+## ответ на экран не попадает (результат возвращается вызывающему, но отбрасывается).
 func load_today() -> ApiResult:
-	if _service == null:
+	if _service == null or not _is_current_profile(_profile):
 		refresh()
 	if _service == null:
 		_set_status(tr("ui.plan.status.no_profile"))
 		return ApiResult.failure(ApiResult.CODE_NOT_CONFIGURED, "no profile")
-	if not _client.is_configured():
+	var profile := _profile
+	var client := _client
+	var service := _service
+	if not client.is_configured():
 		_last_result = ApiResult.failure(ApiResult.CODE_NOT_CONFIGURED, "")
+		_last_result_profile_id = profile.id
 		_rebuild_items()
 		_update_status()
 		plan_loaded.emit(_last_result)
 		return _last_result
+	_load_generation += 1
+	var generation := _load_generation
 	_loading = true
 	_set_status(tr("ui.plan.status.loading"))
-	var result: ApiResult = await _service.load_today(today)
+	var result: ApiResult = await service.load_today(today)
+	if generation != _load_generation or not _is_current_profile(profile):
+		# Ответ устарел: профиль сменился (или запущена более новая загрузка).
+		if generation == _load_generation:
+			_loading = false
+		return result
 	_loading = false
 	_last_result = result
+	_last_result_profile_id = profile.id
 	_rebuild_items()
 	_update_status()
 	_render_preview()
@@ -279,12 +306,27 @@ func close_key_form() -> void:
 
 
 ## Проверить ключ: при успехе — сохранить (внутри клиента), синхронизировать профиль, загрузить план.
+## Профиль и клиент фиксируются до `await` (как в `SettingsScreen.submit_key`): если за время
+## проверки активный профиль сменился, ответ на экран не попадает и в другой профиль не пишется.
+## Ключ при этом уже сохранён клиентом под прежним профилем — его Athlete ID и данные атлета
+## записываются в тот же (прежний) профиль из репозитория, чтобы привязка была согласованной.
 func submit_key(athlete_id: String, key: String) -> ApiResult:
-	if _client == null:
+	if _client == null or not _is_current_profile(_profile):
 		refresh()
 	if _client == null:
 		return ApiResult.failure(ApiResult.CODE_NOT_CONFIGURED, "no profile")
-	var result: ApiResult = await _client.verify_key(athlete_id, key)
+	var profile := _profile
+	var client := _client
+	var result: ApiResult = await client.verify_key(athlete_id, key)
+	if not _is_current_profile(profile):
+		if result.ok:
+			var stored := _repo.get_by_id(profile.id)
+			if stored != null:
+				var updated := stored.duplicate_profile()
+				updated.intervals_athlete_id = athlete_id.strip_edges()
+				IntervalsSync.sync_profile(updated, result.data, today)
+				_repo.save(updated)
+		return result
 	if not result.ok:
 		match result.code:
 			ApiResult.CODE_AUTH_FAILED, ApiResult.CODE_REAUTH_REQUIRED:
@@ -297,10 +339,10 @@ func submit_key(athlete_id: String, key: String) -> ApiResult:
 				_show_key_error(tr("ui.plan.key.failed").format({"reason": api_error_text(result.code)}))
 		return result
 	var athlete: Dictionary = result.data
-	_profile.intervals_athlete_id = athlete_id.strip_edges()
-	IntervalsSync.sync_profile(_profile, athlete, today)
-	_repo.save(_profile)
-	profile_updated.emit(_profile)
+	profile.intervals_athlete_id = athlete_id.strip_edges()
+	IntervalsSync.sync_profile(profile, athlete, today)
+	_repo.save(profile)
+	profile_updated.emit(profile)
 	close_key_form()
 	var athlete_name := str(athlete.get("name", ""))
 	_set_status(tr("ui.plan.key.verified").format({"name": athlete_name if not athlete_name.is_empty() else athlete_id}))
@@ -446,6 +488,12 @@ func _set_status(text: String) -> void:
 	_status_label.text = text
 
 
+## `profile` — по-прежнему активный профиль и профиль экрана (после `await` это не гарантировано).
+func _is_current_profile(profile: Profile) -> bool:
+	return profile != null and _repo != null and _repo.active_profile_id == profile.id \
+		and _profile != null and _profile.id == profile.id
+
+
 ## Тексты, заданные из кода (сцена переводится движком сама).
 func _refresh_texts() -> void:
 	if _emulator_button != null:
@@ -563,10 +611,11 @@ func _update_status() -> void:
 			_set_status(tr("ui.plan.status.bad_response"))
 
 
+## Время загрузки «ЧЧ:ММ» в локальном часовом поясе устройства (как `PlanCache.local_datetime`).
 static func _format_time(unix: int) -> String:
 	if unix <= 0:
 		return "—"
-	var dt := Time.get_datetime_dict_from_unix_time(unix)
+	var dt := PlanCache.local_datetime(unix)
 	return "%02d:%02d" % [dt["hour"], dt["minute"]]
 
 

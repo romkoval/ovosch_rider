@@ -50,6 +50,9 @@ var _env_instance: Node = null
 
 
 func _ready() -> void:
+	# Велосипедиста двигает только сцена (`advance` → `Rider.advance`), иначе его анимация
+	# и колёса продвигались бы дважды за кадр.
+	_rider.set_process(false)
 	if environment_set == null:
 		environment_set = load(DEFAULT_ENVIRONMENT)
 	_apply_environment()
@@ -206,15 +209,27 @@ func _place_rider(snap_camera: bool) -> void:
 func _on_second_elapsed(_elapsed: int, _offset: int, _remaining: int) -> void:
 	if _session == null or _session.samples.size() == 0:
 		return
+	if _session.get_state() == WorkoutSession.State.PAUSED:
+		return
 	var row: Dictionary = _session.samples.last_row()
 	var use_trainer: bool = _session.samples.speed_source == SampleStream.SPEED_SOURCE_TRAINER and bool(row["has_speed"])
 	apply_telemetry(int(row["power_w"]), bool(row["has_power"]), int(row["cadence_rpm"]), bool(row["has_cadence"]),
 		float(row["speed_kmh"]), use_trainer)
 
 
+## Пауза: велосипедист останавливается (скорость и каденс — 0, дистанция не растёт);
+## после возобновления движение продолжается по следующему сэмплу телеметрии.
 func _on_session_state(state: int) -> void:
-	if state == WorkoutSession.State.FINISHED:
-		_rider.set_cadence(0)
+	if state == WorkoutSession.State.PAUSED:
+		speed_kmh = 0.0
+		cadence_rpm = 0
+		_speed_model.reset(0.0)
+		if is_node_ready():
+			_rider.set_cadence(0)
+			_rider.set_wheel_speed(0.0)
+	elif state == WorkoutSession.State.FINISHED:
+		if is_node_ready():
+			_rider.set_cadence(0)
 
 
 # ---------------------------------------------------------------------------

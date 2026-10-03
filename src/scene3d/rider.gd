@@ -48,7 +48,9 @@ func crank_rotation_rad() -> float:
 	return _crank.rotation.x
 
 
-## Продвинуть анимацию на `delta` с (вызывается из `_process`; доступно тестам).
+## Продвинуть анимацию на `delta` с (доступно тестам). Отдельно стоящий велосипедист
+## продвигается из своего `_process`; внутри `RideScene` его `_process` выключен и
+## `advance` вызывает только сцена — ровно один раз за кадр.
 func advance(delta: float) -> void:
 	if delta <= 0.0:
 		return

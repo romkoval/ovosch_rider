@@ -20,6 +20,22 @@ var _library: WorkoutLibrary
 var _profile: Profile
 
 
+## Транспорт, задерживающий ответ до `release()`: позволяет сменить профиль, пока запрос «в сети».
+class GatedTransport extends MockHttpTransport:
+	signal released()
+	var hold: bool = false
+
+	func release() -> void:
+		hold = false
+		released.emit()
+
+	func request(method: String, url: String, headers: Dictionary,
+			body: PackedByteArray = PackedByteArray(), timeout_sec: float = DEFAULT_TIMEOUT_SEC) -> HttpResponse:
+		if hold:
+			await released
+		return super.request(method, url, headers, body, timeout_sec)
+
+
 func before_each() -> void:
 	_dir = "user://test_plan_%d_%d/" % [Time.get_ticks_usec(), randi() % 100000]
 	_repo = ProfileRepository.new(_dir + "profiles/")
@@ -214,11 +230,27 @@ func test_offline_uses_cache_with_loaded_time_label() -> void:
 	var offline: ApiResult = await s.load_today()
 	assert_true(offline.ok and offline.from_cache, "REQ-INT-07 крит. 2")
 	assert_string_contains(s.status_text(), "from cache; loaded ")
-	var dt := Time.get_datetime_dict_from_unix_time(offline.loaded_at)
-	assert_string_contains(s.status_text(), "%02d:%02d" % [dt["hour"], dt["minute"]])
+	# Метка «загружен ЧЧ:ММ» — в локальном времени устройства, не в UTC: сверка с локальными
+	# часами системы (загрузка была только что — допускается переход через границу минуты).
+	var now_local := Time.get_datetime_dict_from_system(false)
+	var now_min: int = int(now_local["hour"]) * 60 + int(now_local["minute"])
+	var prev_min: int = (now_min + 1439) % 1440
+	var now_text := "%02d:%02d" % [floori(now_min / 60.0), now_min % 60]
+	var prev_text := "%02d:%02d" % [floori(prev_min / 60.0), prev_min % 60]
+	var label := s.status_text()
+	assert_true(label.contains(now_text) or label.contains(prev_text), "локальное время загрузки (%s или %s): %s" % [now_text, prev_text, label])
 	assert_eq(s.intervals_items().size(), 2, "в кэше только разобранные тренировки")
 	s.select_index(0)
 	assert_not_null(s.selected_workout())
+
+
+func test_loaded_time_label_matches_local_time_of_history_and_cache() -> void:
+	# Ревью инфраструктуры: «загружен ЧЧ:ММ» — тот же локальный час, что в истории и в кэше плана.
+	var unix := 1_790_000_000
+	var local := PlanCache.local_datetime(unix)
+	assert_eq(PlanScreen._format_time(unix), "%02d:%02d" % [local["hour"], local["minute"]])
+	assert_eq(PlanScreen._format_time(unix), HistoryScreen.format_date_time(unix).substr(11, 5))
+	assert_eq(PlanScreen._format_time(0), "—")
 
 
 func test_offline_without_cache_shows_network_error() -> void:
@@ -548,3 +580,98 @@ func test_home_workout_button_opens_plan_screen() -> void:
 	(home.get_node("%WorkoutButton") as Button).pressed.emit()
 	assert_eq(main.app_state.current_screen, AppState.Screen.PLAN)
 	assert_true(main.visible_screen_node() is PlanScreen)
+
+
+# ---------------------------------------------------------------------------
+# Смена профиля (ревью: план и асинхронные ответы не переходят к другому профилю)
+# ---------------------------------------------------------------------------
+
+func test_main_profile_switch_drops_previous_profile_plan_and_uses_new_profile_cache() -> void:
+	# HIGH-1: план Intervals.icu профиля A не виден и не запускается у профиля B без ключа;
+	# при возврате к A его план берётся из кэша A.
+	var other := _repo.create("Other")
+	_mock.enqueue_json("GET", "/events", 200, _events())
+	var main := _main()
+	assert_true(main.app_state.select_profile(_profile.id))
+	_give_main_key(main)
+	assert_true(main.app_state.navigate(AppState.Screen.PLAN))
+	var plan := main.plan_screen()
+	plan.today = TODAY
+	await plan.load_today()
+	assert_eq(plan.intervals_items().size(), 2, "план A загружен")
+	plan.select_index(0)
+	assert_not_null(plan.selected_workout())
+	main.app_state.switch_profile()
+	assert_true(main.app_state.select_profile(other.id))
+	assert_true(main.app_state.navigate(AppState.Screen.PLAN))
+	assert_eq(plan.intervals_items().size(), 0, "у B нет плана A")
+	assert_eq(plan.selected_index(), -1, "выбор A сброшен")
+	assert_null(plan.selected_workout())
+	assert_false(plan.start_selected(), "B не может запустить тренировку A")
+	assert_true((plan.get_node("%StartButton") as Button).disabled)
+	assert_eq(plan.status_text(), "Intervals.icu API key is not set")
+	assert_null(plan.last_result())
+	var before := _mock.request_count()
+	main.app_state.switch_profile()
+	assert_true(main.app_state.select_profile(_profile.id))
+	assert_true(main.app_state.navigate(AppState.Screen.PLAN))
+	assert_eq(plan.intervals_items().size(), 2, "A снова видит свой план — из кэша A")
+	assert_string_contains(plan.status_text(), "from cache")
+	assert_eq(_mock.request_count(), before, "без сетевых запросов")
+
+
+func test_load_today_response_for_previous_profile_is_dropped_after_switch() -> void:
+	# MEDIUM-3: ответ, запрошенный для A, не попадает на экран профиля B.
+	var gate := GatedTransport.new()
+	_mock = gate
+	_with_key()
+	_mock.enqueue_json("GET", "/events", 200, _events())
+	var s := _screen()
+	var loaded: Array[ApiResult] = []
+	s.plan_loaded.connect(func(r: ApiResult) -> void: loaded.append(r))
+	gate.hold = true
+	s.load_today()
+	assert_eq(s.status_text(), "Loading plan…", "запрос A в полёте")
+	var other := _repo.create("Other")
+	assert_true(_state.select_profile(other.id))
+	s.refresh()
+	gate.release()
+	await get_tree().process_frame
+	assert_eq(gate.request_count("GET", "/events"), 1, "ответ A получен")
+	assert_eq(s.intervals_items().size(), 0, "план A не показан профилю B")
+	assert_null(s.last_result())
+	assert_null(s.selected_workout())
+	assert_eq(s.status_text(), "Intervals.icu API key is not set", "статус — профиля B")
+	assert_eq(loaded.size(), 0, "plan_loaded для устаревшего ответа не испускается")
+
+
+func test_submit_key_response_after_profile_switch_does_not_touch_new_profile() -> void:
+	# MEDIUM-3: проверка ключа, начатая для A, не пишет Athlete ID и данные атлета в B.
+	var gate := GatedTransport.new()
+	_mock = gate
+	_mock.enqueue_json("GET", "/athlete/", 200, _events("athlete.json"))
+	_mock.enqueue_json("GET", "/events", 200, _events())
+	var s := _screen()
+	var updated: Array[Profile] = []
+	s.profile_updated.connect(func(p: Profile) -> void: updated.append(p))
+	gate.hold = true
+	s.open_key_form()
+	s.submit_key("i12345", KEY)
+	var other := _repo.create("Other")
+	var other_ftp := other.ftp_w
+	var other_source := other.ftp_source
+	assert_true(_state.select_profile(other.id))
+	s.refresh()
+	gate.release()
+	await get_tree().process_frame
+	var b := _repo.get_by_id(other.id)
+	assert_eq(b.intervals_athlete_id, "", "Athlete ID A не записан в B")
+	assert_eq(b.ftp_w, other_ftp, "FTP B не изменён")
+	assert_eq(b.ftp_source, other_source, "источник FTP B не изменён")
+	assert_eq(updated.size(), 0, "profile_updated не испускается для чужого ответа")
+	assert_false(s.status_text().begins_with("Athlete:"), "сообщение об A не показано на экране B")
+	assert_eq(s.intervals_items().size(), 0)
+	assert_eq(gate.request_count("GET", "/events"), 0, "план после чужой проверки ключа не загружается")
+	assert_eq(_store.list_keys().size(), 1)
+	assert_true(_store.list_keys()[0].begins_with(_profile.id + "/"), "ключ — под профилем A")
+	assert_true(_repo.get_by_id(_profile.id).ftp_source.begins_with("intervals"), "данные атлета — в профиле A")

@@ -39,6 +39,11 @@ var ride_recorder: RideRecorder = null
 ## Strava активного профиля (T-049): OAuth, очередь выгрузки, статусы заездов.
 var strava: StravaService = null
 var _strava_config: StravaConfig = null
+## Чтение переменных окружения для `StravaConfig` (`func(name: String) -> String`).
+## Тесты подменяют до входа в дерево (например, на пустой ответ), чтобы окружение машины
+## (`OVOSCH_STRAVA_CLIENT_ID/SECRET`) не влияло на результат; невалидный Callable —
+## окружение не читается.
+var env_reader: Callable = SecureStore.read_env
 ## Диалог восстановления незавершённых заездов (REQ-LOC-07 крит. 3).
 var _recovery_dialog: RecoveryDialog
 ## Последняя завершённая сессия (заезд при этом уже сохранён `RideRecorder`).
@@ -316,7 +321,7 @@ func _setup_strava(profile: Profile) -> void:
 		return
 	var root: String = data_dir if data_dir.ends_with("/") else data_dir + "/"
 	if _strava_config == null:
-		_strava_config = StravaConfig.load(root + "secrets.cfg", SecureStore.read_env)
+		_strava_config = StravaConfig.load(root + "secrets.cfg", env_reader)
 	strava = StravaService.new(profile, transport, secure_store, ride_repository, _strava_config, Callable(), root)
 	# Название «Тренировка <дата>» и строку приложения сервис переводит сам в момент постановки
 	# в очередь (текущий язык интерфейса, REQ-STR-03 крит. 1, 2).
@@ -363,7 +368,8 @@ func _on_locale_changed(_locale: String) -> void:
 		elif node is DevicesScreen:
 			(node as DevicesScreen).refresh()
 		elif node is SettingsScreen:
-			(node as SettingsScreen).refresh()
+			# Только тексты: полный `refresh()` затёр бы несохранённый ввод формы профиля.
+			(node as SettingsScreen).refresh_texts()
 		elif node is PlanScreen:
 			(node as PlanScreen).refresh()
 		elif node is HistoryScreen:

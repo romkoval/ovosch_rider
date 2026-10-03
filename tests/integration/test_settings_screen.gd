@@ -1,6 +1,7 @@
 extends GutTest
 ## Интеграционные тесты экрана настроек (REQ-NFR-08 крит. 3, 4; REQ-PRF-02 крит. 1;
-## REQ-INT-06 крит. 4–7; REQ-WRK-04 крит. 1; REQ-DEV-05 крит. 2; REQ-PRF-03 крит. 2).
+## REQ-INT-06 крит. 4–6 (крит. 7 — ручная проверка; источник значений на экране проверяется попутно);
+## REQ-WRK-04 крит. 1; REQ-DEV-05 крит. 2; REQ-PRF-03 крит. 2).
 
 const SCENE: String = "res://src/ui/settings/settings_screen.tscn"
 const MAIN_SCENE: String = "res://src/app/main.tscn"
@@ -243,7 +244,7 @@ func test_name_and_weight_validation_errors_listed() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Intervals.icu (REQ-INT-06 крит. 5–7, REQ-PRF-03 крит. 2)
+# Intervals.icu (REQ-INT-06 крит. 5, 6, REQ-PRF-03 крит. 2)
 # ---------------------------------------------------------------------------
 
 func test_intervals_status_and_buttons_follow_link_state() -> void:
@@ -254,7 +255,7 @@ func test_intervals_status_and_buttons_follow_link_state() -> void:
 	assert_false((s.get_node("%IntervalsKeyButton") as Button).disabled)
 	_link()
 	s.refresh()
-	assert_eq(s.intervals_status_text(), "Intervals.icu linked (athlete i12345)", "REQ-INT-06 крит. 5")
+	assert_eq(s.intervals_status_text(), "Intervals.icu linked (athlete i12345)", "статус привязки к Intervals.icu")
 	assert_false((s.get_node("%IntervalsSyncButton") as Button).disabled)
 	assert_false((s.get_node("%IntervalsForgetButton") as Button).disabled)
 
@@ -266,7 +267,7 @@ func test_sync_applies_ftp_250_and_intervals_source() -> void:
 	var result: ApiResult = await s.sync_intervals()
 	assert_true(result.ok)
 	var p := _repo.get_active()
-	assert_eq(p.ftp_w, 250, "REQ-INT-06: FTP из Intervals.icu")
+	assert_eq(p.ftp_w, 250, "REQ-INT-06 крит. 6: без переопределения синхронизация обновляет FTP")
 	assert_true(p.ftp_source.begins_with("intervals:"), "источник intervals:<дата>, факт %s" % p.ftp_source)
 	assert_eq(p.ftp_source, "intervals:" + IntervalsIcuClient.local_date())
 	assert_true(p.zones_source.begins_with("intervals:"))
@@ -288,7 +289,7 @@ func test_sync_with_override_local_keeps_ftp() -> void:
 	assert_true((s.get_node("%OverrideCheck") as CheckButton).button_pressed)
 	var result: ApiResult = await s.sync_intervals()
 	assert_true(result.ok)
-	assert_eq(_repo.get_active().ftp_w, 200, "REQ-INT-06 крит. 4: переопределение локально — FTP не меняется")
+	assert_eq(_repo.get_active().ftp_w, 200, "REQ-INT-06 крит. 5: переопределение локально — FTP не меняется")
 	assert_eq(_repo.get_active().ftp_source, Profile.SOURCE_LOCAL)
 	assert_eq(s.intervals_message_text(), "Sync skipped: local override is enabled")
 
@@ -296,7 +297,7 @@ func test_sync_with_override_local_keeps_ftp() -> void:
 func test_override_toggle_persists_in_profile() -> void:
 	var s := _screen()
 	s.set_override_local(true)
-	assert_true(_repo.get_active().intervals_override_local, "REQ-INT-06 крит. 7: флаг сохранён")
+	assert_true(_repo.get_active().intervals_override_local, "REQ-INT-06 крит. 5: флаг переопределения сохранён")
 	assert_true(ProfileRepository.new(_dir + "profiles/").get_active().intervals_override_local)
 	s.set_override_local(false)
 	assert_false(_repo.get_active().intervals_override_local)
@@ -440,6 +441,49 @@ func test_locale_switch_and_override_toggle_keep_unsaved_form_input() -> void:
 	assert_eq((s.get_node("%NameEdit") as LineEdit).text, "Rider", "явный refresh() заполняет форму из профиля")
 	assert_eq(int((s.get_node("%FtpSpin") as SpinBox).value), 200)
 
+
+func test_main_locale_switch_keeps_unsaved_form_input() -> void:
+	# Ревью MEDIUM-4: `main._on_locale_changed` не затирает несохранённый ввод формы.
+	var main := _main()
+	assert_true(main.app_state.navigate(AppState.Screen.SETTINGS))
+	var s := main.settings_screen()
+	s.fill_profile_form("Draft", 333, 66.6, 177)
+	var option := s.get_node("%LocaleOption") as OptionButton
+	option.select(1)
+	option.item_selected.emit(1)
+	assert_eq(TranslationServer.get_locale(), "ru")
+	assert_eq((s.get_node("%SaveProfileButton") as Button).text, "Сохранить профиль", "тексты переведены")
+	assert_eq(int((s.get_node("%FtpSpin") as SpinBox).value), 333, "введённый FTP остался в поле")
+	assert_eq((s.get_node("%NameEdit") as LineEdit).text, "Draft")
+	assert_eq(int((s.get_node("%MaxHrSpin") as SpinBox).value), 177)
+	assert_eq(main.repo.get_active().ftp_w, 200, "в профиль ничего не записано")
+
+func test_main_env_reader_is_injectable_for_strava_config() -> void:
+	# Ревью инфраструктуры: окружение машины не влияет на тесты через main.tscn —
+	# читатель окружения подменяется до входа в дерево.
+	var env := {StravaConfig.ENV_CLIENT_ID: "12345", StravaConfig.ENV_CLIENT_SECRET: "env-secret-value"}
+	var main: AppMain = load(MAIN_SCENE).instantiate()
+	main.data_dir = _dir
+	main.transport = _transport
+	main.env_reader = func(name: String) -> String: return str(env.get(name, ""))
+	add_child_autofree(main)
+	assert_not_null(main.strava)
+	assert_true(main.strava.is_configured(), "значения — из подменённого окружения")
+	assert_eq(main.strava.config.source, StravaConfig.SOURCE_ENVIRONMENT)
+	assert_eq(main.strava.config.client_id, "12345")
+	var isolated: AppMain = load(MAIN_SCENE).instantiate()
+	isolated.data_dir = _dir
+	isolated.transport = _transport
+	isolated.env_reader = func(_name: String) -> String: return ""
+	add_child_autofree(isolated)
+	assert_ne(isolated.strava.config.source, StravaConfig.SOURCE_ENVIRONMENT, "пустое окружение — не источник настроек")
+
+
+func test_main_env_reader_defaults_to_system_environment() -> void:
+	var main: AppMain = load(MAIN_SCENE).instantiate()
+	assert_true(main.env_reader.is_valid(), "по умолчанию окружение читается")
+	assert_eq(main.env_reader.call("PATH"), SecureStore.read_env("PATH"))
+	main.free()
 
 # ---------------------------------------------------------------------------
 # Strava, «О программе», навигация
