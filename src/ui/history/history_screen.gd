@@ -63,9 +63,10 @@ func refresh() -> void:
 		_ride_list.add_item(row_text(s))
 	_empty_label.visible = _summaries.is_empty()
 	_ride_list.visible = not _summaries.is_empty()
-	# Если открытая карточка ещё в списке — оставляем её; иначе — к списку.
+	# Если открытая карточка ещё в списке — перечитываем заезд (статус Strava
+	# и т.п., REQ-STR-05 крит. 2) и оставляем её; иначе — к списку.
 	var shown := _detail.ride()
-	if shown != null and _find_index(shown.id) >= 0 and _detail.visible:
+	if shown != null and _find_index(shown.id) >= 0 and _detail.visible and _detail.reload():
 		return
 	back_to_list()
 

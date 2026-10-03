@@ -73,6 +73,20 @@ func ride() -> Ride:
 	return _ride
 
 
+## Перечитать открытый заезд из репозитория и перерисовать карточку (статус Strava
+## и прочие метаданные; REQ-STR-05 крит. 2). false — заезда больше нет.
+func reload() -> bool:
+	if _ride == null or _repository == null:
+		return false
+	var fresh := _repository.get_ride(_ride.id)
+	if fresh == null:
+		return false
+	_ride = fresh
+	_series = RideSeries.from_samples(fresh.samples)
+	_render()
+	return true
+
+
 func series() -> RideSeries:
 	return _series
 
@@ -88,12 +102,12 @@ func set_strava_linked(linked: bool) -> void:
 # Экспорт FIT (REQ-LOC-05 крит. 5, 6)
 # ---------------------------------------------------------------------------
 
-## Имя файла по умолчанию: `<дата>_<название>.fit`.
+## Имя файла по умолчанию: `<дата>_<название>.fit`. Дата — локальная, та же,
+## что в списке и заголовке карточки (`HistoryScreen.format_date_time`).
 func default_export_file_name() -> String:
 	if _ride == null:
 		return "ride.fit"
-	var dict := Time.get_datetime_dict_from_unix_time(_ride.started_at_unix)
-	var date := "%04d-%02d-%02d" % [dict["year"], dict["month"], dict["day"]]
+	var date := HistoryScreen.format_date_time(_ride.started_at_unix).substr(0, 10)
 	var raw_name: String = _ride.name if not _ride.name.is_empty() else tr("ui.history.untitled")
 	return "%s_%s.fit" % [date, sanitize_file_name(raw_name)]
 

@@ -226,10 +226,28 @@ func test_strava_status_and_link_in_detail() -> void:
 	assert_string_contains(s.detail().status_text(), "Uploaded")
 	assert_eq(s.detail().strava_activity_url(), "https://www.strava.com/activities/123456", "REQ-STR-05 крит. 3")
 	_rides.update_upload_status(r.id, {"strava_status": Ride.UPLOAD_FAILED, "last_error": "boom"})
-	s.show_ride(r.id)
-	assert_string_contains(s.detail().status_text(), "Failed")
+	# Открытая карточка перерисовывается по `rides_changed` без повторного show_ride.
+	assert_string_contains(s.detail().status_text(), "Failed", "REQ-STR-05 крит. 2: статус в открытой карточке")
 	assert_string_contains(s.detail().status_text(), "boom")
 	assert_eq(s.detail().strava_activity_url(), "")
+
+
+func test_open_detail_refreshes_status_and_upload_button_on_repository_change() -> void:
+	var r := _ride(_pa, 1700000000, 60, "Retry me")
+	r.upload["strava_status"] = Ride.UPLOAD_FAILED
+	r.upload["last_error"] = "boom"
+	_rides.save(r)
+	var s := _screen()
+	s.set_strava_linked(true)
+	s.select_index(0)
+	assert_string_contains(s.detail().status_text(), "Failed")
+	assert_true(s.detail().is_upload_enabled())
+	_rides.update_upload_status(r.id, {"strava_status": Ride.UPLOAD_QUEUED})
+	assert_string_contains(s.detail().status_text(), "Queued", "карточка показывает «в очереди»")
+	assert_true(s.is_detail_visible(), "карточка остаётся открытой")
+	_rides.update_upload_status(r.id, {"strava_status": Ride.UPLOAD_DONE, "strava_activity_id": "42"})
+	assert_string_contains(s.detail().status_text(), "Uploaded")
+	assert_false(s.detail().is_upload_enabled(), "«выгружено» — кнопка недоступна")
 
 
 func test_upload_button_disabled_without_link_and_emits_when_linked() -> void:
@@ -259,9 +277,11 @@ func test_default_export_file_name_is_date_and_name() -> void:
 	_rides.save(r)
 	var s := _screen()
 	s.select_index(0)
-	var dict := Time.get_datetime_dict_from_unix_time(1700000000)
-	var expected := "%04d-%02d-%02d_Sweet_spot_3x10.fit" % [dict["year"], dict["month"], dict["day"]]
-	assert_eq(s.detail().default_export_file_name(), expected)
+	# Дата — локальная, как в списке (REQ-LOC-05 крит. 6): заезд в 01:00 MSK не должен
+	# получать вчерашнюю дату UTC.
+	var local_date: String = HistoryScreen.format_date_time(1700000000).substr(0, 10)
+	assert_eq(s.detail().default_export_file_name(), "%s_Sweet_spot_3x10.fit" % local_date)
+	assert_eq(s.rows()[0].substr(0, 10), local_date, "та же дата, что в списке")
 	assert_eq(RideDetail.sanitize_file_name("  a/b:c*d  "), "abcd")
 	assert_eq(RideDetail.sanitize_file_name("///"), "ride")
 

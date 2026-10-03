@@ -1,14 +1,19 @@
 class_name RideSeries
 extends RefCounted
-## Серии для графиков заезда (REQ-LOC-03 крит. 1–3, решение 17).
+## Серии для графиков заезда (REQ-LOC-03 крит. 1–3, решения 17 и В-18).
 ##
 ## Из `SampleStream` строятся серии мощности, пульса, каденса, скорости и
-## целевой мощности плана по корзинам времени. Без прореживания корзина = 1 с,
-## значение — сэмпл; «нет данных» — `NAN` (разрыв линии), не 0 (крит. 1).
-## Для потоков длиннее `max_points` сэмплов корзина = ceil(n / max_points) с:
-## значение — среднее по сэмплам корзины с данными, параллельно хранятся
-## минимум и максимум корзины (крит. 2: экстремумы не теряются); корзина без
-## данных → `NAN`. Цель плана (`target`) всегда с данными (0 — свободная езда).
+## целевой мощности плана по общей сетке слотов времени. Без прореживания
+## (сэмплов ≤ `max_points`) корзина = 1 с, один слот на корзину, значение —
+## сэмпл; «нет данных» — `NAN` (разрыв линии), не 0 (крит. 1).
+##
+## Для потоков длиннее `max_points` сэмплов корзина = ceil(n / (max_points / 2)) с,
+## на корзину — два слота (крит. 2, В-18): в них для каждой серии кладутся
+## минимум и максимум корзины в хронологическом порядке их сэмплов, так что
+## экстремумы остаются среди самих точек графика. Если min и max — один и тот же
+## сэмпл (в корзине одно значение с данными), заполняется только первый слот.
+## Корзина без данных — `NAN` в обоих слотах (разрыв). Итого ≤ `max_points` слотов.
+## Цель плана (`target`) всегда с данными (0 — свободная езда).
 ##
 ## `points(name)` — точки `(t, значение)` без разрывов: длина серии мощности
 ## без прореживания равна числу сэмплов с данными мощности.
@@ -21,60 +26,71 @@ const SPEED: String = "speed"
 const TARGET: String = "target"
 const NAMES: Array[String] = [POWER, HEART_RATE, CADENCE, SPEED, TARGET]
 
-## Начало корзины, с активного времени.
+## Время слота, с активного времени (первый слот корзины — её начало).
 var time_sec := PackedFloat32Array()
 ## Ширина корзины, с (1 — без прореживания).
 var bucket_sec: int = 1
 ## Длительность потока, с.
 var duration_sec: int = 0
-var _avg: Dictionary = {}
-var _min: Dictionary = {}
-var _max: Dictionary = {}
+var _values: Dictionary = {}
 
 
 static func from_samples(samples: SampleStream, max_points: int = MAX_POINTS_DEFAULT) -> RideSeries:
 	var s := RideSeries.new()
 	var n: int = samples.size()
 	s.duration_sec = n
-	var limit: int = maxi(max_points, 1)
-	s.bucket_sec = maxi(ceili(float(n) / float(limit)), 1) if n > 0 else 1
+	var limit: int = maxi(max_points, 2)
+	var decimate: bool = n > limit
+	# При прореживании — по два слота на корзину, корзин ≤ limit / 2.
+	s.bucket_sec = maxi(ceili(float(n) / float(limit / 2)), 1) if decimate else 1
 	var buckets: int = ceili(float(n) / float(s.bucket_sec)) if n > 0 else 0
+	# Слоты: без прореживания — один на корзину; с прореживанием — два,
+	# кроме корзины из единственного сэмпла.
+	var slot_of_bucket := PackedInt32Array()
+	slot_of_bucket.resize(buckets)
+	var slots: int = 0
+	for b in buckets:
+		slot_of_bucket[b] = slots
+		var first: int = b * s.bucket_sec
+		var last: int = mini(first + s.bucket_sec, n)
+		slots += 2 if decimate and last - first >= 2 else 1
+	s.time_sec.resize(slots)
 	for name in NAMES:
-		var avg := PackedFloat32Array()
-		var mn := PackedFloat32Array()
-		var mx := PackedFloat32Array()
-		avg.resize(buckets)
-		mn.resize(buckets)
-		mx.resize(buckets)
-		s._avg[name] = avg
-		s._min[name] = mn
-		s._max[name] = mx
-	s.time_sec.resize(buckets)
+		var vals := PackedFloat32Array()
+		vals.resize(slots)
+		vals.fill(NAN)
+		s._values[name] = vals
 	for b in buckets:
 		var first: int = b * s.bucket_sec
 		var last: int = mini(first + s.bucket_sec, n)
-		s.time_sec[b] = float(samples.time_sec[first])
+		var slot: int = slot_of_bucket[b]
+		var two_slots: bool = decimate and last - first >= 2
+		s.time_sec[slot] = float(samples.time_sec[first])
+		if two_slots:
+			# Второй слот — середина корзины (не позже последнего сэмпла корзины).
+			s.time_sec[slot + 1] = float(samples.time_sec[mini(first + maxi(s.bucket_sec / 2, 1), last - 1)])
 		for name in NAMES:
-			var sum: float = 0.0
-			var count: int = 0
-			var lo: float = INF
-			var hi: float = -INF
+			var lo_i: int = -1
+			var hi_i: int = -1
 			for i in range(first, last):
 				if not _has(samples, name, i):
 					continue
 				var v: float = _value(samples, name, i)
-				sum += v
-				count += 1
-				lo = minf(lo, v)
-				hi = maxf(hi, v)
-			if count == 0:
-				s._avg[name][b] = NAN
-				s._min[name][b] = NAN
-				s._max[name][b] = NAN
+				# Минимум — первое вхождение, максимум — последнее: при равных
+				# значениях остаются два разных сэмпла (начало и конец корзины).
+				if lo_i < 0 or v < _value(samples, name, lo_i):
+					lo_i = i
+				if hi_i < 0 or v >= _value(samples, name, hi_i):
+					hi_i = i
+			if lo_i < 0:
+				continue
+			if not two_slots or lo_i == hi_i:
+				s._values[name][slot] = _value(samples, name, lo_i)
 			else:
-				s._avg[name][b] = sum / float(count)
-				s._min[name][b] = lo
-				s._max[name][b] = hi
+				var a: int = mini(lo_i, hi_i)
+				var z: int = maxi(lo_i, hi_i)
+				s._values[name][slot] = _value(samples, name, a)
+				s._values[name][slot + 1] = _value(samples, name, z)
 	return s
 
 
@@ -108,22 +124,14 @@ static func _value(samples: SampleStream, name: String, i: int) -> float:
 	return NAN
 
 
-## Число корзин (точек серии, включая разрывы).
+## Число слотов (точек серии, включая разрывы).
 func size() -> int:
 	return time_sec.size()
 
 
-## Средние по корзинам (`NAN` — разрыв).
+## Значения по слотам (`NAN` — разрыв); длина равна `size()`.
 func values(name: String) -> PackedFloat32Array:
-	return _avg.get(name, PackedFloat32Array())
-
-
-func min_values(name: String) -> PackedFloat32Array:
-	return _min.get(name, PackedFloat32Array())
-
-
-func max_values(name: String) -> PackedFloat32Array:
-	return _max.get(name, PackedFloat32Array())
+	return _values.get(name, PackedFloat32Array())
 
 
 ## Точки `(t, значение)` без разрывов.
@@ -149,10 +157,10 @@ func has_data(name: String) -> bool:
 	return count(name) > 0
 
 
-## Максимум серии по данным (по максимумам корзин); `NAN`, если данных нет.
+## Максимум серии по данным (экстремумы корзин — среди точек); `NAN`, если данных нет.
 func peak(name: String) -> float:
 	var hi: float = -INF
-	for v in max_values(name):
+	for v in values(name):
 		if not is_nan(v):
 			hi = maxf(hi, v)
 	return hi if hi > -INF else NAN
@@ -161,7 +169,7 @@ func peak(name: String) -> float:
 ## Минимум серии по данным; `NAN`, если данных нет.
 func low(name: String) -> float:
 	var lo: float = INF
-	for v in min_values(name):
+	for v in values(name):
 		if not is_nan(v):
 			lo = minf(lo, v)
 	return lo if lo < INF else NAN
