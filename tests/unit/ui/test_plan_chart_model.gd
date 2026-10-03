@@ -165,6 +165,32 @@ func test_free_only_plan_falls_back_to_ftp() -> void:
 	assert_almost_eq(m.y_max(), 250.0, 1e-6)
 
 
+## HUD-10.2 (У-2): y_max = max(1.25 × максимальная цель, 1.1 × FTP); без целей — 1.25 × FTP.
+## Примеры из требования при FTP 250: 150 Вт → 275, 300 Вт → 375, без целей → 312.5.
+func test_y_max_floor_of_110_percent_ftp_examples_at_ftp_250() -> void:
+	var low := PlanChartModel.new(Workout.make("low", _steps([WorkoutStep.watts(600, 150)])), 250)
+	assert_eq(low.max_target_w(), 150)
+	assert_almost_eq(low.y_max(), 275.0, 0.5)
+	var high := PlanChartModel.new(Workout.make("high", _steps([WorkoutStep.watts(600, 300)])), 250)
+	assert_almost_eq(high.y_max(), 375.0, 0.5)
+	var free := PlanChartModel.new(Workout.make("free", _steps([WorkoutStep.free_ride(600)])), 250)
+	assert_almost_eq(free.y_max(), 312.5, 0.5)
+
+
+func test_ftp_dash_always_inside_field() -> void:
+	# Восстановительный план 50 % FTP: без нижней границы потолок был бы ниже FTP.
+	var m := PlanChartModel.new(Workout.make("easy", _steps([WorkoutStep.percent(600, 50.0)])), FTP)
+	assert_almost_eq(m.y_max(), 1.1 * FTP, 1e-6)
+	assert_true(m.ftp_visible())
+	assert_lte(m.ftp_fraction(), 1.0)
+	assert_almost_eq(m.ftp_fraction(), 1.0 / 1.1, 1e-6)
+	# Множитель ниже 1 опускает цели, но не потолок ниже 1.1 × FTP.
+	m.set_intensity(0.5)
+	assert_almost_eq(m.y_max(), 1.1 * FTP, 1e-6)
+	assert_true(m.ftp_visible())
+	assert_false(PlanChartModel.new(_plan(), 0).ftp_visible(), "без FTP пунктира нет")
+
+
 # ---------------------------------------------------------------------------
 # Крит. 3 — рампы кусками по зонам
 # ---------------------------------------------------------------------------
@@ -273,6 +299,43 @@ func test_skipped_step_state_and_time_shift() -> void:
 	# Курсор — в текущем шаге: начало (600) + 1 с; сдвиг к активному времени — 540 с.
 	assert_almost_eq(m.cursor_sec(), 601.0, 1e-6)
 	assert_eq(m.time_shift_sec(), 540)
+	assert_eq(m.shift_at(60), 0, "сэмпл до пропуска не сдвинут")
+	assert_eq(m.shift_at(61), 540, "сэмпл после пропуска — сдвиг на остаток шага")
+
+
+func test_shift_at_follows_skip_journal_not_sync_rate() -> void:
+	_session_for(_plan())
+	var m := PlanChartModel.for_session(_session)
+	_session.start()
+	_ticks(100)
+	_session.skip_step()  # шаг 0 (до 600 с) на 100-й секунде: сдвиг 500
+	_ticks(50)
+	_session.skip_step()  # шаг 1 (до 900 с) на 150-й секунде, позиция 650: сдвиг 750
+	_ticks(10)
+	m.sync(_session)  # единственная синхронизация — журнал целиком
+	assert_eq(m.shift_at(1), 0)
+	assert_eq(m.shift_at(100), 0)
+	assert_eq(m.shift_at(101), 500)
+	assert_eq(m.shift_at(150), 500)
+	assert_eq(m.shift_at(151), 750)
+	assert_eq(m.shift_at(160), 750)
+	assert_eq(m.shift_at(_session.executor.elapsed_sec()), m.time_shift_sec(),
+			"сдвиг текущего сэмпла совпадает с текущим сдвигом курсора")
+	assert_almost_eq(m.cursor_sec(), 910.0, 1e-6)
+
+
+func test_two_skips_in_same_second_last_wins() -> void:
+	_session_for(_plan())
+	var m := PlanChartModel.for_session(_session)
+	_session.start()
+	_ticks(30)
+	_session.skip_step()
+	_session.skip_step()
+	_ticks(5)
+	m.sync(_session)
+	assert_eq(m.shift_at(30), 0)
+	assert_eq(m.shift_at(31), 900 - 30)
+	assert_eq(m.shift_at(35), m.time_shift_sec())
 
 
 func test_finished_plan_all_done_cursor_at_end() -> void:

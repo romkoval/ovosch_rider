@@ -229,8 +229,10 @@ func sync(session: WorkoutSession) -> void:
 	if _model != null:
 		_model.sync(session)
 	if _series != null:
-		var shift: int = _model.time_shift_sec() if _model != null else 0
-		_series.sync_from_stream(session.samples, shift)
+		if _model != null:
+			_series.sync_from_plan(session.samples, _model)
+		else:
+			_series.sync_from_stream(session.samples)
 	refresh()
 
 

@@ -3,8 +3,14 @@ extends SceneTree
 ## п. 14, T-059). Запуск: ./scripts/ui_screenshot.sh [каталог] [разрешение] [язык] [--safe-area]
 ## (оболочка перебирает разрешения и языки; этот скрипт снимает одно разрешение и один язык).
 ##
-## Аргументы после `--`: каталог, разрешение `WxH` (только для имён файлов — размер окна задаёт
-## `--resolution`), язык `ru|en`, флаг `--safe-area`.
+## Аргументы после `--`: каталог, разрешение `WxH` (имя файла и обязательный размер кадра; окно
+## открывает `--resolution`), язык `ru|en`, флаг `--safe-area`.
+##
+## Размер кадра проверяется: кадр должен быть ровно запрошенного разрешения в пикселях. Если окно
+## оказалось другого размера (Retina/HiDPI, оконный менеджер растянул окно — на macOS был кадр
+## 2704×1522 под именем 1280×720), скрипт возвращает окно к запрошенному размеру
+## (`window_set_size` в пикселях) и снимает заново; не вышло — снимок не сохраняется, ошибка,
+## код выхода 1. Кадр не масштабируется: вёрстка при другом размере окна другая.
 ##
 ## Что делает: поднимает `main.tscn` с временным `data_dir`, `trainer_kind = "fake"`,
 ## `env_reader = Callable()`, заводит два профиля, импортирует `acc_full.zwo` и проходит
@@ -27,6 +33,8 @@ const FRAME_DT: float = 1.0 / 60.0
 const TIME_SCALE: float = 30.0
 ## Предохранитель от зависания: столько кадров максимум на один переход по времени.
 const MAX_ADVANCE_FRAMES: int = 20000
+## Попыток вернуть окно к запрошенному размеру перед снимком.
+const RESIZE_ATTEMPTS: int = 3
 ## Отладочная безопасная зона (lp): читает `UiScale` (T-060).
 const SAFE_AREA_META: StringName = &"ui_debug_safe_area"
 const SAFE_AREA_LP: Dictionary = {"left": 100.0, "right": 100.0, "top": 0.0, "bottom": 13.0}
@@ -60,6 +68,8 @@ const SCENARIOS: Array[Dictionary] = [
 
 var _out_dir: String = "screenshots/ui"
 var _resolution: String = ""
+## Запрошенный размер кадра в пикселях (из аргумента `WxH`); (0, 0) — не задан, берётся окно.
+var _requested_size := Vector2i.ZERO
 var _lang: String = "ru"
 var _safe_area: bool = false
 var _data_dir: String = ""
@@ -79,6 +89,8 @@ func _run() -> void:
 	if _safe_area:
 		Engine.set_meta(SAFE_AREA_META, SAFE_AREA_LP)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	# Окно фиксированного размера: оконный менеджер не растягивает его во время прохода.
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_RESIZE_DISABLED, true)
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_data_dir = "user://ui_screenshot_%d/" % OS.get_process_id()
 	_remove_tree(ProjectSettings.globalize_path(_data_dir))
@@ -110,6 +122,19 @@ func _parse_args() -> void:
 		_lang = positional[2]
 	if _resolution.is_empty():
 		_resolution = "%dx%d" % [root.size.x, root.size.y]
+	_requested_size = parse_resolution(_resolution)
+	if _requested_size == Vector2i.ZERO:
+		_fail("разрешение '%s' не в формате WxH" % _resolution)
+		_requested_size = root.size
+
+
+## `WxH` → размер в пикселях; не тот формат — (0, 0).
+static func parse_resolution(text: String) -> Vector2i:
+	var parts: PackedStringArray = text.split("x")
+	if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+		return Vector2i.ZERO
+	var size := Vector2i(parts[0].to_int(), parts[1].to_int())
+	return size if size.x > 0 and size.y > 0 else Vector2i.ZERO
 
 
 # ---------------------------------------------------------------------------
@@ -262,18 +287,44 @@ func _ignore_keep_awake(_on: bool) -> void:
 # ---------------------------------------------------------------------------
 
 func _shoot(id: String) -> void:
-	for i in SETTLE_FRAMES:
-		await process_frame
-	await RenderingServer.frame_post_draw
-	var image: Image = root.get_texture().get_image()
 	var name: String = "%s_%s_%s%s.png" % [id, _resolution, _lang, "_safe" if _safe_area else ""]
 	var path: String = _out_dir.path_join(name)
+	var image: Image = await _capture()
+	var attempt: int = 0
+	while image.get_size() != _requested_size and attempt < RESIZE_ATTEMPTS:
+		attempt += 1
+		push_warning("ui_screenshot: %s: кадр %s вместо %s — окно возвращается к запрошенному размеру"
+				% [name, _size_text(image.get_size()), _resolution])
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_size(_requested_size)
+		image = await _capture()
+	if image.get_size() != _requested_size:
+		_fail("%s: кадр %s, а запрошено %s — снимок не сохранён" % [path, _size_text(image.get_size()), _resolution])
+		return
 	var err: Error = image.save_png(path)
 	if err != OK:
 		_fail("%s: %s" % [path, error_string(err)])
 		return
+	# Проверка сохранённого файла, а не только кадра в памяти.
+	var saved: Image = Image.load_from_file(path)
+	if saved == null or saved.get_size() != _requested_size:
+		_fail("%s: сохранённый файл %s, а запрошено %s" % [path,
+				_size_text(saved.get_size()) if saved != null else "не читается", _resolution])
+		return
 	_saved += 1
-	print("ui_screenshot: %s (%dx%d)" % [path, image.get_width(), image.get_height()])
+	print("ui_screenshot: %s (%s)" % [path, _size_text(saved.get_size())])
+
+
+## Кадр окна после `SETTLE_FRAMES` кадров и `frame_post_draw`.
+func _capture() -> Image:
+	for i in SETTLE_FRAMES:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	return root.get_texture().get_image()
+
+
+static func _size_text(size: Vector2i) -> String:
+	return "%dx%d" % [size.x, size.y]
 
 
 func _fail(message: String) -> void:

@@ -14,14 +14,21 @@ extends RefCounted
 ## режется курсором: слева — `done`, справа — `upcoming`, у обоих `current = true`.
 ##
 ## Оси: X — весь план целиком, `x(0) = 0`, `x(total) = width`, линейно (скользящего окна нет).
-## Y мощности — 0…`y_max = Y_MAX_FACTOR × максимальная цель плана` с учётом множителя;
-## при смене множителя пересчитываются `y_max`, цели и зоны (вызов `set_intensity`/`sync`
-## раз в сэмпл). Пунктир FTP — на `ftp_fraction()` высоты поля.
+## Y мощности — 0…`y_max = max(Y_MAX_FACTOR × максимальная цель плана с учётом множителя,
+## FTP_FLOOR_FACTOR × FTP)` (HUD-10.2, решение У-2), у плана без целей — `Y_MAX_FACTOR × FTP`;
+## пунктир FTP (`ftp_fraction()` высоты поля) поэтому всегда внутри поля. При смене множителя
+## пересчитываются `y_max`, цели и зоны (вызов `set_intensity`/`sync` раз в сэмпл).
 ##
 ## Курсор — позиция в плане: начало текущего шага + смещение в нём. Без пропусков это ровно
 ## прошедшее активное время (HUD-10.5); после пропуска (WRK-06) курсор стоит в текущем
 ## шаге, а остаток пропущенного шага остаётся слева от курсора в состоянии `skipped`.
 ## На паузе исполнитель не продвигает время — курсор стоит.
+##
+## Сдвиг серий факта (HUD-10.5, HUD-11.1, решение У-1): точка сэмпла активного времени `e`
+## стоит в плане на `e + shift_at(e)`. Сдвиг берётся из журнала пропусков сессии, а не из
+## текущего состояния: пропуск шага k на активном времени a даёт сдвиг
+## `конец шага k − ⌊a⌋` всем сэмплам с `e > ⌊a⌋` (до следующего пропуска). Поэтому результат
+## не зависит от того, как часто вызывается `sync`.
 ##
 ## Статусы шага: `skipped` (по журналу сессии) → `current` (индекс исполнителя) →
 ## `done` (конец шага не правее курсора) → `upcoming`.
@@ -33,6 +40,8 @@ const STATUS_SKIPPED: String = "skipped"
 
 ## Потолок шкалы мощности: доля от максимальной цели плана (HUD-10.2).
 const Y_MAX_FACTOR: float = 1.25
+## Нижняя граница потолка шкалы: доля FTP — пунктир FTP всегда в поле (HUD-10.2, У-2).
+const FTP_FLOOR_FACTOR: float = 1.1
 ## Высота сегмента «свободно» в долях высоты поля (HUD-10.6).
 const FREE_HEIGHT_FRACTION: float = 0.30
 ## Токен цвета сегмента «свободно» (`hud.md` п. 11).
@@ -52,6 +61,10 @@ var _cursor_sec: float = 0.0
 var _current_index: int = -1
 var _skipped: Array[int] = []
 var _time_shift_sec: int = 0
+## Журнал сдвигов по пропускам: с активного времени `_shift_from[i]` (включительно) действует
+## сдвиг `_shift_value[i]`; по возрастанию `_shift_from`.
+var _shift_from := PackedInt32Array()
+var _shift_value := PackedInt32Array()
 var _revision: int = 0
 
 
@@ -90,6 +103,7 @@ func sync(session: WorkoutSession) -> bool:
 	else:
 		cursor = 0.0
 	changed = set_progress(cursor, index, skipped_indices(session.events)) or changed
+	set_skip_log(session.events)
 	if index >= 0:
 		_time_shift_sec = maxi(roundi(cursor) - ex.elapsed_sec(), 0)
 	return changed
@@ -144,6 +158,41 @@ static func skipped_indices(events: Array[Dictionary]) -> Array[int]:
 	return out
 
 
+## Журнал сдвигов из событий пропуска сессии (`WorkoutSession.EVENT_SKIP`: `at_sec` — активное
+## время пропуска, `value` — индекс пропущенного шага). Вызывается из `sync`; отдельно — для
+## восстановленной сессии или тестов.
+func set_skip_log(events: Array[Dictionary]) -> void:
+	_shift_from.clear()
+	_shift_value.clear()
+	if workout == null:
+		return
+	for e in events:
+		if e.get("type") != WorkoutSession.EVENT_SKIP:
+			continue
+		var index: int = int(e.get("value", -1))
+		if index < 0 or index >= workout.steps.size():
+			continue
+		var at: int = floori(float(e.get("at_sec", 0.0)))
+		var shift: int = maxi(workout.step_start_sec(index + 1) - at, 0)
+		var from: int = at + 1
+		# Несколько пропусков в одну секунду — действует последний.
+		if _shift_from.size() > 0 and _shift_from[_shift_from.size() - 1] >= from:
+			_shift_value[_shift_value.size() - 1] = shift
+			continue
+		_shift_from.append(from)
+		_shift_value.append(shift)
+
+
+## Сдвиг позиции в плане относительно активного времени для сэмпла, закрытого на активном
+## времени `elapsed_sec` (точка серии факта — `elapsed_sec + shift_at(elapsed_sec)`), с (≥ 0).
+## Сэмплы до первого пропуска — 0; после пропуска — сдвиг, действовавший в их момент.
+func shift_at(elapsed_sec: int) -> int:
+	for i in range(_shift_from.size() - 1, -1, -1):
+		if elapsed_sec >= _shift_from[i]:
+			return _shift_value[i]
+	return 0
+
+
 # ---------------------------------------------------------------------------
 # Оси
 # ---------------------------------------------------------------------------
@@ -162,7 +211,7 @@ func max_target_w() -> int:
 	return best
 
 
-## Потолок шкалы мощности, Вт: 1.25 × максимальная цель; без целей — 1.25 × FTP.
+## Потолок шкалы мощности, Вт: max(1.25 × максимальная цель, 1.1 × FTP); без целей — 1.25 × FTP.
 func y_max() -> float:
 	return _y_max
 
@@ -184,14 +233,14 @@ func y_of(watts: float, height: float) -> float:
 	return height * (1.0 - power_fraction(watts))
 
 
-## Доля высоты пунктира FTP (без зажима: > 1 — FTP выше потолка шкалы).
+## Доля высоты пунктира FTP: при FTP > 0 не больше 1 / 1.1 (потолок шкалы ≥ 1.1 × FTP).
 func ftp_fraction() -> float:
 	return float(ftp_w) / _y_max
 
 
-## Пунктир FTP помещается в поле графика.
+## Пунктир FTP в поле графика: всегда при FTP > 0 (HUD-10.2, У-2).
 func ftp_visible() -> bool:
-	return ftp_w > 0 and ftp_fraction() <= 1.0
+	return ftp_w > 0
 
 
 ## Подписи шкалы времени (HUD-10.4), см. `TimeAxis.labels`.
@@ -213,9 +262,9 @@ func cursor_fraction() -> float:
 	return _cursor_sec / float(_total_sec) if _total_sec > 0 else 0.0
 
 
-## Насколько позиция в плане опережает активное время из-за пропусков, с (≥ 0).
-## Для серий факта: точка сэмпла активного времени t стоит в плане на t + сдвиг
-## (`EffortSeries.sync_from_stream(stream, time_shift_sec())`).
+## Насколько позиция в плане опережает активное время сейчас (на последнем `sync`), с (≥ 0).
+## Для серий факта — не текущий сдвиг, а сдвиг на момент сэмпла: `shift_at(e)`
+## (`EffortSeries.sync_from_plan(stream, model)`).
 func time_shift_sec() -> int:
 	return _time_shift_sec
 
@@ -296,7 +345,7 @@ func _rebuild() -> void:
 		_base.append(seg)
 	var top: int = max_target_w()
 	if top > 0:
-		_y_max = Y_MAX_FACTOR * float(top)
+		_y_max = maxf(Y_MAX_FACTOR * float(top), FTP_FLOOR_FACTOR * float(ftp_w))
 	else:
 		_y_max = Y_MAX_FACTOR * float(ftp_w) if ftp_w > 0 else 1.0
 	# Высоты верха считаются от нового y_max.

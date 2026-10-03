@@ -5,8 +5,8 @@ extends RefCounted
 ## `docs/game/hud.md` п. 7, 8). Только числа и токены, без узлов: рисует `HudChart` (T-071, T-079).
 ##
 ## Точки:
-## - одна точка на сэмпл (1 Гц), время `t` — активное время сэмпла (плюс сдвиг плана после
-##   пропусков, см. `PlanChartModel.time_shift_sec()`);
+## - одна точка на сэмпл (1 Гц), время `t` — активное время сэмпла плюс сдвиг плана после
+##   пропусков, действовавший в момент этого сэмпла (`PlanChartModel.shift_at`, `sync_from_plan`);
 ## - мощность — сглаженная 3 с (`PowerSmoother`, HUD-09); 100, 200, 300, 300 → 100, 150, 200, 267;
 ## - сэмпл «нет данных» мощности — разрыв линии, а не точка 0 (в сглаживатель он идёт пропуском);
 ## - пульс — одна точка на сэмпл с пульсом > 0; пульс 0 и «нет данных» — разрыв;
@@ -132,14 +132,29 @@ func push(t_sec: int, power_w: int, has_power: bool, hr_bpm: int, has_hr: bool) 
 
 ## Забрать новые строки потока сессии. Строка потока помечена началом своей секунды
 ## (`time_sec = elapsed − 1`), точка графика — её концом (`elapsed`), чтобы последняя точка
-## стояла ровно на курсоре. `time_shift_sec` прибавляется к времени (сдвиг плана после
-## пропусков). Новый (более короткий) поток — сброс. Возвращает число добавленных точек.
+## стояла ровно на курсоре. `time_shift_sec` прибавляется ко всем новым строкам одинаково —
+## годится без пропусков (свободная езда); для плана — `sync_from_plan`. Новый (более
+## короткий) поток — сброс. Возвращает число добавленных точек.
 func sync_from_stream(stream: SampleStream, time_shift_sec: int = 0) -> int:
+	return _consume(stream, null, time_shift_sec)
+
+
+## То же для тренировки по плану: каждая строка получает сдвиг позиции в плане, действовавший
+## в её момент (`plan.shift_at(elapsed)`, журнал пропусков сессии — HUD-10.5, HUD-11.1).
+## Результат не зависит от частоты вызова: одна синхронизация в конце даёт те же точки, что
+## синхронизация на каждом сэмпле. `plan.sync(session)` — раньше этого вызова.
+func sync_from_plan(stream: SampleStream, plan: PlanChartModel) -> int:
+	return _consume(stream, plan, 0)
+
+
+func _consume(stream: SampleStream, plan: PlanChartModel, time_shift_sec: int) -> int:
 	if stream.size() < _consumed_rows:
 		reset()
 	var added: int = 0
 	for i in range(_consumed_rows, stream.size()):
-		if push(stream.time_sec[i] + 1 + time_shift_sec, stream.power_w[i], stream.has_power[i],
+		var elapsed: int = stream.time_sec[i] + 1
+		var shift: int = plan.shift_at(elapsed) if plan != null else time_shift_sec
+		if push(elapsed + shift, stream.power_w[i], stream.has_power[i],
 				stream.heart_rate_bpm[i], stream.has_heart_rate[i]):
 			added += 1
 	_consumed_rows = stream.size()

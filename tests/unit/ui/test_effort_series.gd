@@ -133,6 +133,55 @@ func test_skip_shifts_points_into_plan_time() -> void:
 	assert_eq(last[last.size() - 1].x, plan.cursor_sec())
 
 
+## HUD-10.5, HUD-11.1 (У-1): сдвиг привязан к строке — точки до пропуска не сдвигаются, даже если
+## синхронизация была реже раза в сэмпл; одна синхронизация в конце == синхронизация на каждом.
+func _run_with_skips(sync_every: int) -> EffortSeries:
+	var steps: Array[WorkoutStep] = [WorkoutStep.percent(300, 50.0), WorkoutStep.percent(300, 80.0),
+			WorkoutStep.percent(300, 60.0)]
+	_session = WorkoutSession.new(Workout.make("skip", steps), _trainer, FTP)
+	var plan := PlanChartModel.for_session(_session)
+	var s := EffortSeries.new(EffortSeries.MODE_PLAN, FTP, 190)
+	_session.start()
+	var n: int = 0
+	for action in [100, "skip", 50, "skip", 40]:
+		if action is String:
+			_session.skip_step()
+			continue
+		for i in int(action):
+			_session.tick(1.0)
+			n += 1
+			if sync_every > 0 and n % sync_every == 0:
+				plan.sync(_session)
+				s.sync_from_plan(_session.samples, plan)
+	plan.sync(_session)
+	s.sync_from_plan(_session.samples, plan)
+	return s
+
+
+func test_sync_rate_does_not_change_points_after_skip() -> void:
+	var every := _run_with_skips(1)
+	var sparse := _run_with_skips(7)
+	var once := _run_with_skips(0)
+	var expected := every.raw_points(EffortSeries.SERIES_POWER)
+	assert_eq(expected.size(), 190)
+	assert_eq(sparse.raw_points(EffortSeries.SERIES_POWER), expected)
+	assert_eq(once.raw_points(EffortSeries.SERIES_POWER), expected)
+	assert_eq(once.raw_points(EffortSeries.SERIES_HR), every.raw_points(EffortSeries.SERIES_HR))
+	# Пропуск шага 0 на 100-й секунде (сдвиг 200), шага 1 на 150-й, позиция 350 (сдвиг 450).
+	assert_eq(expected[0].x, 1.0)
+	assert_eq(expected[99].x, 100.0, "точки до пропуска не сдвинуты")
+	assert_eq(expected[100].x, 301.0)
+	assert_eq(expected[149].x, 350.0)
+	assert_eq(expected[150].x, 601.0)
+	assert_eq(expected[189].x, 640.0)
+	var runs := once.power_runs(0.0, 900.0, 900, 1000.0)
+	assert_eq(runs.size(), 3, "в местах пропуска — разрывы")
+	for r in runs:
+		for p in (r["points"] as PackedVector2Array):
+			assert_false(p.x > 100.0 and p.x < 300.0, "над остатком шага 0 точек нет")
+			assert_false(p.x > 350.0 and p.x < 600.0, "над остатком шага 1 точек нет")
+
+
 # ---------------------------------------------------------------------------
 # HUD-11.4 — обрезка по y_max
 # ---------------------------------------------------------------------------
