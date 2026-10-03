@@ -109,12 +109,15 @@ jobs:
         run: ls -l native/ble/bin/ && test -f native/ble/bin/libovosch_ble.linux.template_debug.x86_64.so
 
   native-macos:
-    name: Native BLE (CoreBluetooth) compiles (macos)
+    name: Native BLE (CoreBluetooth) builds (macos, ${{ matrix.target }})
     runs-on: macos-latest
-    timeout-minutes: 40
-    # Единственная проверка компиляции Apple-бэкенда до появления macOS у владельца;
-    # на приватном репозитории macOS-минуты могут быть недоступны — job не блокирует CI.
-    continue-on-error: true
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # template_debug — для загрузки расширения редактором (проверка контракта),
+        # template_release — для экспорта приложения.
+        target: [template_debug, template_release]
     env:
       GODOT_CPP_BRANCH: "4.5"
     steps:
@@ -132,21 +135,134 @@ jobs:
         uses: actions/cache@v4
         with:
           path: native/ble/godot-cpp
-          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-macos-arm64-${{ hashFiles('native/ble/SConstruct') }}
+          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-macos-universal-${{ matrix.target }}-${{ hashFiles('native/ble/SConstruct') }}
 
       - name: Clone godot-cpp
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
         run: git clone --depth 1 -b "$GODOT_CPP_BRANCH" https://github.com/godotengine/godot-cpp native/ble/godot-cpp
 
       # godot-cpp собирается в своём каталоге (иначе ar получает абсолютные пути объектов и
-      # падает с «Argument list too long»), затем — расширение.
+      # падает с «Argument list too long»), затем — расширение. arch=universal: x86_64 + arm64.
       - name: Build godot-cpp
         working-directory: native/ble/godot-cpp
-        run: scons platform=macos target=template_debug arch=arm64 -j4
+        run: scons platform=macos target=${{ matrix.target }} arch=universal -j4
 
       - name: Build GDExtension with CoreBluetooth backend
         working-directory: native/ble
-        run: scons platform=macos target=template_debug arch=arm64 -j4
+        run: scons platform=macos target=${{ matrix.target }} arch=universal -j4
 
-      - name: Framework produced
-        run: ls -R native/ble/bin/ && test -d native/ble/bin/libovosch_ble.macos.template_debug.framework
+      - name: Framework produced (universal, with Info.plist)
+        run: |
+          set -euo pipefail
+          FW=native/ble/bin/libovosch_ble.macos.${{ matrix.target }}.framework
+          test -f "$FW/libovosch_ble.macos.${{ matrix.target }}"
+          test -f "$FW/Resources/Info.plist"
+          plutil -lint "$FW/Resources/Info.plist"
+          lipo -info "$FW/libovosch_ble.macos.${{ matrix.target }}" | tee /dev/stderr | grep -q "x86_64 arm64"
+
+      # tar сохраняет права и структуру бандла (upload-artifact их не хранит).
+      - name: Pack framework
+        run: tar -czf ovosch-ble-macos-${{ matrix.target }}.tar.gz -C native/ble bin
+
+      - name: Upload framework
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovosch-ble-macos-${{ matrix.target }}
+          path: ovosch-ble-macos-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  macos-app:
+    name: macOS app export (universal, ad-hoc signed)
+    runs-on: macos-latest
+    needs: [tests, native-macos]
+    timeout-minutes: 30
+    env:
+      BUNDLE_ID: io.github.romkoval.ovosch-rider
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download BLE frameworks
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ovosch-ble-macos-*
+          path: ble-artifacts
+          merge-multiple: true
+
+      - name: Install BLE frameworks
+        run: |
+          set -euo pipefail
+          for f in ble-artifacts/*.tar.gz; do tar -xzf "$f" -C native/ble; done
+          ls -R native/ble/bin
+          # native/ скрыт от Godot файлом .gdignore, пока библиотеки не собраны;
+          # здесь они есть — открываем каталог, чтобы расширение загрузилось и попало в экспорт.
+          rm native/.gdignore
+
+      - name: Cache Godot editor and macOS export template
+        id: cache-godot-macos
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-macos
+            ~/godot-templates
+          key: godot-${{ env.GODOT_VERSION }}-macos-editor-and-template
+
+      - name: Download Godot editor and macOS export template
+        if: steps.cache-godot-macos.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p ~/godot-macos ~/godot-templates
+          curl -sSL -o godot-macos.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_macos.universal.zip"
+          unzip -q godot-macos.zip -d ~/godot-macos
+          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          unzip -q -j templates.tpz "templates/macos.zip" "templates/version.txt" -d ~/godot-templates
+          rm -f godot-macos.zip templates.tpz
+
+      - name: Install export template
+        run: |
+          set -euo pipefail
+          VERSION_DIR="$(cat ~/godot-templates/version.txt)"
+          DEST="$HOME/Library/Application Support/Godot/export_templates/$VERSION_DIR"
+          mkdir -p "$DEST"
+          cp ~/godot-templates/macos.zip ~/godot-templates/version.txt "$DEST/"
+          echo "GODOT=$HOME/godot-macos/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+
+      - name: Project opens headless with native BLE
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path . --import 2>&1 | tee import.log
+          if grep -E "SCRIPT ERROR|Can't open dynamic library|GDExtension.*(failed|error)" import.log; then exit 1; fi
+
+      - name: Native BLE loads and matches BleBridge contract
+        run: '"$GODOT" --headless --path . --script res://scripts/ci/check_native_ble.gd'
+
+      - name: Generate export preset
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^config\/version="\([0-9.]*\).*"/\1/p' project.godot)"
+          python3 scripts/ci/make_export_presets.py "$BUNDLE_ID" "${VERSION:-0.1.0}" "${{ github.run_number }}"
+
+      - name: Export macOS app
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          "$GODOT" --headless --path . --export-release "macOS" build/ovosch-rider-macos.zip 2>&1 | tee export.log
+          test -f build/ovosch-rider-macos.zip
+
+      - name: Verify bundle
+        run: |
+          set -euo pipefail
+          rm -rf verify && mkdir verify && unzip -q build/ovosch-rider-macos.zip -d verify
+          APP="$(find verify -maxdepth 2 -name '*.app' -type d | head -1)"
+          test -n "$APP"
+          echo "App: $APP"
+          plutil -p "$APP/Contents/Info.plist" | grep -q NSBluetoothAlwaysUsageDescription
+          test -d "$APP/Contents/Frameworks/libovosch_ble.macos.template_release.framework"
+          lipo -info "$APP/Contents/MacOS/"* | grep -q "x86_64 arm64"
+          codesign --verify --deep --verbose=2 "$APP"
+
+      - name: Upload macOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovosch-rider-macos
+          path: build/ovosch-rider-macos.zip
+          if-no-files-found: error

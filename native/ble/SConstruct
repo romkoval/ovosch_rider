@@ -47,10 +47,36 @@ if platform in ("macos", "ios"):
         sources += apple_cpp
 
 if platform == "macos":
-    library = env.SharedLibrary(
-        "bin/libovosch_ble.{0}.{1}.framework/libovosch_ble.{0}.{1}".format(platform, env["target"]),
-        source=sources,
-    )
+    # Фреймворк: бинарник + Resources/Info.plist. Без Info.plist codesign не распознаёт
+    # бандл, и экспорт приложения с подписью (в т.ч. ad-hoc) падает. arch=universal даёт
+    # один бинарник x86_64 + arm64 для экспорта binary_format/architecture="universal".
+    fw_name = "libovosch_ble.{0}.{1}".format(platform, env["target"])
+    fw_dir = "bin/{}.framework".format(fw_name)
+    library = env.SharedLibrary("{}/{}".format(fw_dir, fw_name), source=sources)
+
+    def _write_framework_plist(target, source, env):
+        plist = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+            '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+            '<plist version="1.0">\n<dict>\n'
+            "\t<key>CFBundleExecutable</key>\n\t<string>{name}</string>\n"
+            "\t<key>CFBundleIdentifier</key>\n\t<string>org.ovoschrider.{ident}</string>\n"
+            "\t<key>CFBundleInfoDictionaryVersion</key>\n\t<string>6.0</string>\n"
+            "\t<key>CFBundleName</key>\n\t<string>{name}</string>\n"
+            "\t<key>CFBundlePackageType</key>\n\t<string>FMWK</string>\n"
+            "\t<key>CFBundleShortVersionString</key>\n\t<string>1.0.0</string>\n"
+            "\t<key>CFBundleSupportedPlatforms</key>\n\t<array>\n\t\t<string>MacOSX</string>\n\t</array>\n"
+            "\t<key>CFBundleVersion</key>\n\t<string>1.0.0</string>\n"
+            "\t<key>LSMinimumSystemVersion</key>\n\t<string>11.0</string>\n"
+            "</dict>\n</plist>\n"
+        ).format(name=fw_name, ident=fw_name.replace("_", "-").replace(".", "-"))
+        with open(str(target[0]), "w") as out:
+            out.write(plist)
+
+    plist_node = env.Command("{}/Resources/Info.plist".format(fw_dir), [], _write_framework_plist)
+    env.Depends(library, plist_node)
+    library = [library, plist_node]
 elif platform == "ios":
     library = env.StaticLibrary(
         "bin/libovosch_ble.{}.{}.a".format(platform, env["target"]),

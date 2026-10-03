@@ -162,3 +162,28 @@ scons platform=macos target=template_release arch=universal
 это допустимо и не блокирует остальные проверки. Статическое соответствие контракту
 (`OvoschBle` ⇔ `BleBridge`, `AppleBackend` ⇔ `BleBackend`) проверяет GUT-тест
 `tests/unit/arch/test_native_contract.gd`.
+
+## Сборка в CI и артефакт macOS
+
+CI (`.github/workflows/ci.yml`) на каждый push:
+
+1. `native-macos` — собирает фреймворк `libovosch_ble.macos.<target>.framework` для `template_debug`
+   и `template_release`, `arch=universal` (x86_64 + arm64), с `Resources/Info.plist`
+   (без него `codesign` не распознаёт бандл). Артефакты: `ovosch-ble-macos-<target>`.
+2. `macos-app` — кладёт фреймворки в `native/ble/bin/`, снимает `native/.gdignore`, проверяет
+   скриптом `scripts/ci/check_native_ble.gd`, что расширение загружается и `OvoschBle`
+   совпадает с контрактом `BleBridge`, генерирует `export_presets.cfg`
+   (`scripts/ci/make_export_presets.py`, Info.plist — из `platform/macos/Info.plist.template`)
+   и экспортирует универсальное приложение с ad-hoc подписью. Артефакт: `ovosch-rider-macos`.
+
+Запуск скачанной сборки на Mac: распаковать архив артефакта, затем `ovosch-rider-macos.zip`.
+Сборка подписана ad-hoc и не нотаризована, поэтому Gatekeeper её блокирует. Снять карантин:
+
+```sh
+xattr -dr com.apple.quarantine ovosch-rider.app
+open ovosch-rider.app
+```
+
+При первом подключении к станку macOS спросит разрешение на Bluetooth
+(текст — `NSBluetoothAlwaysUsageDescription`). Для распространения нужна подпись Developer ID
+и нотаризация — см. `docs/publishing/app_store_checklist.md`.
