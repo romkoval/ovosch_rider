@@ -15,3 +15,5 @@ native/**/*.os
 # Local secrets / config
 *.local.cfg
 .env
+# Локальный файл секретов (образец — secrets.example.cfg.txt); на случай копии в корень проекта
+secrets.cfg

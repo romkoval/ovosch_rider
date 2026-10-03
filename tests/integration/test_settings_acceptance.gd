@@ -13,6 +13,8 @@ const ATHLETE_FIXTURE: String = "res://tests/fixtures/intervals/athlete.json"
 const CSV_PATH: String = "res://assets/i18n/strings.csv"
 const SECRET: String = "SECRETKEY-q7w8e9r0t1y2"
 const ATHLETE_ID: String = "i12345"
+## Префикс сообщений вспомогательного теста к критерию [ручная проверка] (REQ-INF-04 крит. 3).
+const MANUAL_AUX: String = "[вспомогательно, ручная проверка REQ-INT-06 крит. 7] "
 
 ## Файлы экрана настроек и диалога ключа (объект приёмки T-057).
 const SETTINGS_FILES: Array[String] = [
@@ -477,10 +479,14 @@ func test_req_int_06_c6_turning_override_off_via_checkbox_lets_sync_overwrite_lo
 
 
 # ===========================================================================
-# REQ-INT-06 крит. 7 — [ручная проверка]; здесь только вспомогательная проверка текста
+# REQ-INT-06 крит. 7 — [ручная проверка]; здесь только вспомогательная проверка текста.
+# Тест `*_c7_manual_aux_*` — автоматическая часть ручного критерия (REQ-INF-04 крит. 3),
+# критерий им не закрывается: видимость источника на экране профиля проверяется вручную.
 # ===========================================================================
 
-func test_req_int_06_c7_support_source_text_reflects_ftp_and_zones_source() -> void:
+func test_req_int_06_c7_manual_aux_source_text_reflects_ftp_and_zones_source() -> void:
+	# Вспомогательный автотест (REQ-INF-04 крит. 3): автоматическая часть критерия
+	# REQ-INT-06 крит. 7 [ручная проверка]; критерий не закрывает.
 	_set_profile(func(p: Profile) -> void:
 		p.ftp_source = "intervals:2026-10-01"
 		p.zones_source = Profile.SOURCE_LOCAL)
@@ -490,7 +496,7 @@ func test_req_int_06_c7_support_source_text_reflects_ftp_and_zones_source() -> v
 		var expected := _csv_text("ui.settings.sources", locale).format({
 			"ftp": _csv_text("ui.settings.source_intervals", locale).format({"date": "2026-10-01"}),
 			"zones": _csv_text("ui.settings.source_local", locale)})
-		assert_eq(s.sources_text(), expected, "[%s]" % locale)
+		assert_eq(s.sources_text(), expected, MANUAL_AUX + ("[%s] текст источника FTP/зон" % locale))
 
 
 # ===========================================================================

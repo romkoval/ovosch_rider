@@ -1,6 +1,6 @@
 extends GutTest
 ## Архитектурные и инфраструктурные проверки (REQ-NFR-06 крит. 1–3, REQ-NFR-05 крит. 1,
-## REQ-INF-03 крит. 3, 5, REQ-INF-04 крит. 1, 2; REQ-DEV-09 крит. 1 — реализация станка известна только `src/devices/`).
+## REQ-INF-03 крит. 3, 5, REQ-INF-04 крит. 2; REQ-DEV-09 крит. 1 — реализация станка известна только `src/devices/`).
 
 const SRC: String = "res://src"
 const TESTS: String = "res://tests"
@@ -209,7 +209,8 @@ func test_every_gd_has_uid_and_no_orphan_uids() -> void:
 
 
 # ---------------------------------------------------------------------------
-# (6) Тестовые файлы (REQ-INF-01, REQ-INF-04 крит. 1)
+# (6) Тестовые файлы (REQ-INF-01). REQ-INF-04 крит. 1 (REQ-ID в каждом файле) проверяется
+# строго в test_infra_acceptance.gd::test_req_inf_04_c1_every_test_file_mentions_a_req_id_strictly.
 # ---------------------------------------------------------------------------
 
 func test_every_test_file_extends_gut_test() -> void:
@@ -227,18 +228,6 @@ func test_every_test_file_extends_gut_test() -> void:
 		if first_code != "extends GutTest":
 			bad.append(path)
 	assert_eq(bad, [], "тестовые файлы без `extends GutTest`")
-
-
-func test_every_test_file_mentions_a_req_id() -> void:
-	var re := RegEx.create_from_string("REQ-[A-Z0-9]+-[0-9]+")
-	var without: Array[String] = []
-	for path in _list(TESTS, [".gd"]):
-		if path.get_file().begins_with("test_") and re.search(FileAccess.get_file_as_string(path)) == null:
-			without.append(path)
-	# Пока только предупреждение: правило станет падающим после очистки чужих файлов (см. отчёт).
-	if not without.is_empty():
-		print("ПРЕДУПРЕЖДЕНИЕ REQ-INF-04 крит. 1: тестовые файлы без REQ-ID: %s" % str(without))
-	pass_test("REQ-INF-04 крит. 1: без REQ-ID %d файл(ов) — см. предупреждение выше" % without.size())
 
 
 # ---------------------------------------------------------------------------

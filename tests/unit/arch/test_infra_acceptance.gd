@@ -6,8 +6,9 @@ extends GutTest
 ## Скрипт `check_secrets.sh` проверяется на изолированной копии в собственном временном
 ## каталоге теста (скрипт делает `cd "$(dirname "$0")/.."`, поэтому сканирует только то,
 ## что мы туда положили) — репозиторий и параллельные прогоны не затрагиваются.
-## Скрипт `check_commit_messages.sh` проверяется на реальной истории и на shallow-клоне
-## во временном каталоге.
+## Скрипт `check_commit_messages.sh` проверяется на копии во временном git-репозитории-фикстуре
+## (хорошие/плохие сообщения, merge-коммит) и на его shallow-клоне — история и HEAD
+## основного репозитория на результат не влияют.
 
 const SRC: String = "res://src"
 const TESTS: String = "res://tests"
@@ -15,8 +16,6 @@ const REQUIREMENTS: String = "res://docs/requirements.md"
 const BACKLOG: String = "res://docs/backlog.md"
 const SECRETS_SCRIPT: String = "res://scripts/check_secrets.sh"
 const COMMITS_SCRIPT: String = "res://scripts/check_commit_messages.sh"
-## Коммиты из начала истории без REQ-ID и без префикса (для негативной проверки скрипта).
-const EARLY_BAD_RANGE: String = "2851b8f~1..cfb072a"
 
 var _dir: String
 
@@ -193,19 +192,94 @@ func test_req_inf_03_c5_no_secret_like_literals_in_repo_by_gut_scan() -> void:
 
 # ===========================================================================
 # REQ-INF-03 крит. 1, 2 — сообщения коммитов и история в CI
+# Все проверки — на временном репозитории-фикстуре в user:// (не зависят от истории
+# и HEAD основного репозитория). Топология фикстуры (_commit_fixture):
+#   main:    init(chore:) — wip(без REQ-ID) — good(REQ-ID в заголовке) — docs(docs:) — merge
+#   feature:                                   └─ feat(REQ-ID только в теле) ─────────┘
+# HEAD — merge-коммит с сообщением «Merge branch 'feature'» (нет REQ-ID и префикса).
 # ===========================================================================
 
-func test_req_inf_03_c1_commit_script_accepts_recent_history_and_rejects_early_commits() -> void:
+const BAD_SUBJECT: String = "WIP без идентификатора"
+const MERGE_SUBJECT: String = "Merge branch 'feature'"
+
+
+## git в каталоге фикстуры с локальной идентичностью, без подписи и без хуков пользователя.
+func _git(repo_abs: String, args: Array[String]) -> Dictionary:
+	var argv: Array = ["-C", repo_abs, "-c", "user.name=ovosch-tester", "-c", "user.email=tester@ovosch.invalid",
+		"-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "-c", "init.defaultBranch=main"]
+	argv.append_array(args)
+	var out := []
+	var code := OS.execute("git", argv, out, true)
+	return {"code": code, "output": "\n".join(PackedStringArray(out)).strip_edges()}
+
+
+func _git_ok(repo_abs: String, args: Array[String]) -> String:
+	var r := _git(repo_abs, args)
+	assert_eq(r["code"], 0, "фикстура: git %s: %s" % [" ".join(PackedStringArray(args)), r["output"]])
+	return str(r["output"])
+
+
+func _commit(repo_abs: String, message: String) -> String:
+	_git_ok(repo_abs, ["commit", "-q", "--allow-empty", "-m", message])
+	return _git_ok(repo_abs, ["rev-parse", "HEAD"])
+
+
+## Временный репозиторий с копией текущего scripts/check_commit_messages.sh.
+## Возвращает {root, script, init, wip, good, feat, docs, merge}.
+func _commit_fixture() -> Dictionary:
+	var root_res := _dir + "repo/"
+	_write(root_res + "scripts/check_commit_messages.sh", FileAccess.get_file_as_string(COMMITS_SCRIPT))
+	var root := ProjectSettings.globalize_path(root_res).trim_suffix("/")
+	_git_ok(root, ["init", "-q"])
+	_git_ok(root, ["symbolic-ref", "HEAD", "refs/heads/main"])
+	_git_ok(root, ["add", "-A"])
+	var fx := {"root": root, "script": root.path_join("scripts/check_commit_messages.sh")}
+	fx["init"] = _commit(root, "chore: фикстура для check_commit_messages")
+	fx["wip"] = _commit(root, BAD_SUBJECT)
+	fx["good"] = _commit(root, "REQ-INF-03: проверка сообщений коммитов")
+	_git_ok(root, ["checkout", "-q", "-b", "feature"])
+	fx["feat"] = _commit(root, "Добавить отчёт трассируемости\n\nЗакрывает REQ-INF-04.")
+	_git_ok(root, ["checkout", "-q", "main"])
+	fx["docs"] = _commit(root, "docs: заметки к фикстуре")
+	_git_ok(root, ["merge", "-q", "--no-ff", "-m", MERGE_SUBJECT, "feature"])
+	fx["merge"] = _git_ok(root, ["rev-parse", "HEAD"])
+	assert_eq(_git_ok(root, ["rev-list", "--parents", "-n", "1", "HEAD"]).split(" ").size(), 3, "фикстура: HEAD — merge-коммит")
+	return fx
+
+
+func _tools_for_commit_script() -> bool:
 	if not _has_tool("bash") or not _has_tool("git"):
 		pending("bash/git недоступны")
+		return false
+	return true
+
+
+func test_req_inf_03_c1_commit_script_good_range_in_fixture_gives_0() -> void:
+	if not _tools_for_commit_script():
 		return
-	var script := ProjectSettings.globalize_path(COMMITS_SCRIPT)
-	var head := _run(script, ["HEAD~0..HEAD"])
-	assert_eq(head["code"], 0, "HEAD соответствует правилу: %s" % head["output"])
-	var bad := _run(script, [EARLY_BAD_RANGE])
-	assert_eq(bad["code"], 1, "ранние коммиты без REQ-ID и префикса → код 1: %s" % bad["output"])
-	assert_true(str(bad["output"]).contains("BAD COMMIT"))
-	assert_true(str(bad["output"]).contains("REQ-ID"))
+	var fx := _commit_fixture()
+	# wip..HEAD: good, feat (REQ-ID в теле), docs:, merge (пропускается) — все по правилу.
+	var r := _run(fx["script"], ["%s..HEAD" % fx["wip"]])
+	assert_eq(r["code"], 0, "хороший диапазон → код 0: %s" % r["output"])
+	assert_string_contains(str(r["output"]), "OK (3 коммит(ов))", "проверены 3 не-merge коммита, merge пропущен")
+	assert_false(str(r["output"]).contains("BAD COMMIT"), "в хорошем диапазоне нет плохих коммитов: %s" % r["output"])
+	var single := _run(fx["script"], ["%s..%s" % [fx["good"], fx["feat"]]])
+	assert_eq(single["code"], 0, "REQ-ID только в теле сообщения тоже засчитывается: %s" % single["output"])
+
+
+func test_req_inf_03_c1_commit_script_bad_range_in_fixture_gives_1() -> void:
+	if not _tools_for_commit_script():
+		return
+	var fx := _commit_fixture()
+	var r := _run(fx["script"], ["%s..HEAD" % fx["init"]])
+	var out := str(r["output"])
+	assert_eq(r["code"], 1, "диапазон с коммитом без REQ-ID и префикса → код 1: %s" % out)
+	assert_string_contains(out, "BAD COMMIT %s: %s" % [str(fx["wip"]).substr(0, 9), BAD_SUBJECT], "назван плохой коммит")
+	assert_string_contains(out, "REQ-ID", "подсказка о правиле")
+	assert_eq(out.count("BAD COMMIT"), 1, "плохой ровно один (merge не проверяется): %s" % out)
+	assert_false(out.contains(MERGE_SUBJECT), "merge-коммит не считается плохим: %s" % out)
+	var only_wip := _run(fx["script"], ["%s..%s" % [fx["init"], fx["wip"]]])
+	assert_eq(only_wip["code"], 1, "диапазон из одного плохого коммита → 1: %s" % only_wip["output"])
 
 
 func test_req_inf_03_c1_commit_script_rule_matches_requirement_regex() -> void:
@@ -218,28 +292,49 @@ func test_req_inf_03_c1_commit_script_rule_matches_requirement_regex() -> void:
 	assert_string_contains(text, "--no-merges", "merge-коммиты не проверяются")
 
 
-func test_req_inf_03_c2_commit_script_skips_with_warning_on_shallow_clone() -> void:
-	if not _has_tool("bash") or not _has_tool("git"):
-		pending("bash/git недоступны")
+func test_req_inf_03_c2_commit_script_empty_range_checks_last_non_merge_commit() -> void:
+	if not _tools_for_commit_script():
 		return
-	var repo_abs := ProjectSettings.globalize_path("res://")
+	var fx := _commit_fixture()
+	# HEAD — merge с сообщением без REQ-ID: проверяться должен последний не-merge коммит (хороший).
+	var no_arg := _run(fx["script"], [])
+	assert_eq(no_arg["code"], 0, "без аргумента при HEAD=merge → последний не-merge коммит, код 0: %s" % no_arg["output"])
+	assert_false(str(no_arg["output"]).contains("BAD COMMIT"), "merge-коммит не проверяется: %s" % no_arg["output"])
+	var empty := _run(fx["script"], [""])
+	assert_eq(empty["code"], 0, "пустой диапазон при HEAD=merge → последний не-merge коммит, код 0: %s" % empty["output"])
+	assert_false(str(empty["output"]).contains("BAD COMMIT"), "merge-коммит не проверяется: %s" % empty["output"])
+	# Контроль: последний не-merge коммит без REQ-ID действительно проверяется и даёт 1.
+	var wip2 := _commit(fx["root"], BAD_SUBJECT)
+	var bad := _run(fx["script"], [""])
+	assert_eq(bad["code"], 1, "пустой диапазон, HEAD без REQ-ID → код 1: %s" % bad["output"])
+	assert_string_contains(str(bad["output"]), "BAD COMMIT %s" % wip2.substr(0, 9))
+
+
+func test_req_inf_03_c2_commit_script_unknown_range_checks_last_non_merge_commit() -> void:
+	if not _tools_for_commit_script():
+		return
+	var fx := _commit_fixture()
+	var r := _run(fx["script"], ["no-such-ref-xyz..HEAD"])
+	assert_eq(r["code"], 0, "недоступный диапазон при HEAD=merge → последний не-merge коммит, код 0: %s" % r["output"])
+	assert_string_contains(str(r["output"]), "недоступен", "предупреждение о недоступном диапазоне")
+	assert_false(str(r["output"]).contains("BAD COMMIT"), "merge-коммит не проверяется: %s" % r["output"])
+	var wip2 := _commit(fx["root"], BAD_SUBJECT)
+	var bad := _run(fx["script"], ["no-such-ref-xyz..HEAD"])
+	assert_eq(bad["code"], 1, "недоступный диапазон, HEAD без REQ-ID → код 1: %s" % bad["output"])
+	assert_string_contains(str(bad["output"]), "BAD COMMIT %s" % wip2.substr(0, 9))
+
+
+func test_req_inf_03_c2_commit_script_skips_with_warning_on_shallow_clone() -> void:
+	if not _tools_for_commit_script():
+		return
+	var fx := _commit_fixture()
 	var clone_abs := ProjectSettings.globalize_path(_dir + "shallow")
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_dir))
 	var out := []
-	var code := OS.execute("git", ["clone", "-q", "--depth", "1", "file://" + repo_abs.trim_suffix("/"), clone_abs], out, true)
-	assert_eq(code, 0, "shallow-клон создан: %s" % "\n".join(PackedStringArray(out)))
+	var code := OS.execute("git", ["clone", "-q", "--depth", "1", "file://" + str(fx["root"]), clone_abs], out, true)
+	assert_eq(code, 0, "shallow-клон фикстуры создан: %s" % "\n".join(PackedStringArray(out)))
 	var r := _run(clone_abs.path_join("scripts/check_commit_messages.sh"), ["HEAD~5..HEAD"])
 	assert_eq(r["code"], 0, "на shallow clone проверка пропускается с кодом 0: %s" % r["output"])
 	assert_true(str(r["output"]).contains("shallow"), "есть предупреждение о shallow clone: %s" % r["output"])
-
-
-func test_req_inf_03_c2_commit_script_falls_back_to_head_on_unknown_range() -> void:
-	if not _has_tool("bash") or not _has_tool("git"):
-		pending("bash/git недоступны")
-		return
-	var r := _run(ProjectSettings.globalize_path(COMMITS_SCRIPT), ["no-such-ref-xyz..HEAD"])
-	assert_eq(r["code"], 0, "недоступный диапазон → только HEAD, код 0: %s" % r["output"])
-	assert_true(str(r["output"]).contains("недоступен"))
 
 
 func test_req_inf_03_c2_ci_checks_out_full_history_and_runs_both_scripts_before_tests() -> void:

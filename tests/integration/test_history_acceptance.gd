@@ -8,6 +8,8 @@ extends GutTest
 const SCENE: String = "res://src/ui/history/history_screen.tscn"
 const MAIN_SCENE: String = "res://src/app/main.tscn"
 const FTP: int = 250
+## Префикс сообщений вспомогательных тестов к критерию [ручная проверка] (REQ-INF-04 крит. 3).
+const MANUAL_AUX: String = "[вспомогательно, ручная проверка REQ-LOC-05 крит. 6] "
 
 var _dir: String
 var _profiles: ProfileRepository
@@ -281,32 +283,38 @@ func test_req_loc_04_c6_card_without_hr_shows_dash_without_errors() -> void:
 
 
 # ---------------------------------------------------------------------------
-# REQ-LOC-05 крит. 6 [ручная проверка] — механика диалога экспорта (вспомогательно)
+# REQ-LOC-05 крит. 6 [ручная проверка] — механика диалога экспорта (вспомогательно).
+# Тесты `*_c6_manual_aux_*` — автоматическая часть ручного критерия (REQ-INF-04 крит. 3),
+# критерий ими не закрывается: системный диалог сохранения проверяется вручную.
 # ---------------------------------------------------------------------------
 
-func test_req_loc_05_c6_export_dialog_default_name_and_decodable_file() -> void:
+func test_req_loc_05_c6_manual_aux_export_dialog_default_name_and_decodable_file() -> void:
+	# Вспомогательный автотест (REQ-INF-04 крит. 3): автоматическая часть критерия
+	# REQ-LOC-05 крит. 6 [ручная проверка]; критерий не закрывает — системный диалог проверяется вручную.
 	var r := _ride(_pa, 1700000000, 120, "Sweet spot 3x10", 230, 150)
 	_rides.save(r)
 	var s := _screen()
 	s.select_index(0)
 	var d := s.detail()
 	var dialog: FileDialog = d.get_node("%ExportDialog")
-	assert_eq(dialog.file_mode, FileDialog.FILE_MODE_SAVE_FILE, "диалог сохранения")
-	assert_true(Array(dialog.filters).any(func(f: String) -> bool: return f.contains("*.fit")), "фильтр *.fit")
+	assert_eq(dialog.file_mode, FileDialog.FILE_MODE_SAVE_FILE, MANUAL_AUX + "диалог сохранения")
+	assert_true(Array(dialog.filters).any(func(f: String) -> bool: return f.contains("*.fit")), MANUAL_AUX + "фильтр *.fit")
 	d.request_export()
 	var expected_date: String = HistoryScreen.format_date_time(1700000000).substr(0, 10)
-	assert_eq(dialog.current_file, "%s_Sweet_spot_3x10.fit" % expected_date, "имя по умолчанию <дата>_<название>.fit")
+	assert_eq(dialog.current_file, "%s_Sweet_spot_3x10.fit" % expected_date, MANUAL_AUX + "имя по умолчанию <дата>_<название>.fit")
 	dialog.hide()
 	var path := ProjectSettings.globalize_path(_dir).path_join(dialog.current_file)
 	dialog.file_selected.emit(path)
-	assert_true(FileAccess.file_exists(path))
+	assert_true(FileAccess.file_exists(path), MANUAL_AUX + "файл записан по выбранному пути")
 	var res := FitDecoder.decode(FileAccess.get_file_as_bytes(path))
-	assert_true(res.ok, "FitDecoder: %s" % res.error)
-	assert_true(res.file_crc_ok)
-	assert_eq(res.count(FitDefinitions.MSG_RECORD), 120)
+	assert_true(res.ok, MANUAL_AUX + ("FitDecoder: %s" % res.error))
+	assert_true(res.file_crc_ok, MANUAL_AUX + "CRC файла верна")
+	assert_eq(res.count(FitDefinitions.MSG_RECORD), 120, MANUAL_AUX + "все записи выгружены")
 
 
-func test_req_loc_05_c6_export_file_date_matches_local_ride_date() -> void:
+func test_req_loc_05_c6_manual_aux_export_file_date_matches_local_ride_date() -> void:
+	# Вспомогательный автотест (REQ-INF-04 крит. 3): автоматическая часть критерия
+	# REQ-LOC-05 крит. 6 [ручная проверка]; критерий не закрывает — системный диалог проверяется вручную.
 	# Дата в имени файла должна совпадать с датой заезда, показанной пользователю (локальное время).
 	# 1700000000 = 2023-11-14 22:13:20 UTC; в UTC+N (N ≥ 2) это уже 15.11.
 	_rides.save(_ride(_pa, 1700000000, 10, "Late", 200, -1))
@@ -314,17 +322,19 @@ func test_req_loc_05_c6_export_file_date_matches_local_ride_date() -> void:
 	s.select_index(0)
 	var shown_date: String = HistoryScreen.format_date_time(1700000000).substr(0, 10)
 	assert_true(s.detail().default_export_file_name().begins_with(shown_date + "_"),
-		"имя %s начинается с даты из списка %s" % [s.detail().default_export_file_name(), shown_date])
+		MANUAL_AUX + ("имя %s начинается с даты из списка %s" % [s.detail().default_export_file_name(), shown_date]))
 
 
-func test_req_loc_05_c6_default_name_keeps_cyrillic_and_strips_path_chars() -> void:
+func test_req_loc_05_c6_manual_aux_default_name_keeps_cyrillic_and_strips_path_chars() -> void:
+	# Вспомогательный автотест (REQ-INF-04 крит. 3): автоматическая часть критерия
+	# REQ-LOC-05 крит. 6 [ручная проверка]; критерий не закрывает — системный диалог проверяется вручную.
 	_rides.save(_ride(_pa, 1700000000, 10, "Свит-спот 3/10: база", 200, -1))
 	var s := _screen()
 	s.select_index(0)
 	var file_name := s.detail().default_export_file_name()
-	assert_true(file_name.ends_with("_Свит-спот_310_база.fit"), file_name)
-	assert_false(file_name.contains("/"))
-	assert_false(file_name.contains(":"))
+	assert_true(file_name.ends_with("_Свит-спот_310_база.fit"), MANUAL_AUX + file_name)
+	assert_false(file_name.contains("/"), MANUAL_AUX + "нет «/» в имени: " + file_name)
+	assert_false(file_name.contains(":"), MANUAL_AUX + "нет «:» в имени: " + file_name)
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 extends GutTest
-## Тесты PlanCache и IntervalsPlanService (REQ-INT-07 крит. 1–4, REQ-NFR-03 крит. 1, 2,
+## Тесты PlanCache и IntervalsPlanService (REQ-INT-07 крит. 1–4, 6, REQ-NFR-03 крит. 1, 2,
 ## REQ-INT-02 крит. 3, 4, REQ-INT-04 крит. 2 — формат длительности).
 
 const FIXTURES: String = "res://tests/fixtures/intervals/"
@@ -83,9 +83,9 @@ func test_save_and_load_round_trip() -> void:
 	assert_eq((workouts[1]["workout"] as Workout).total_duration_sec(), 2100)
 
 
-func test_cache_of_other_date_is_not_offered_as_today() -> void:
+func test_req_int_07_c4_cache_of_other_date_is_not_offered_as_today() -> void:
 	_cache.save(PROFILE, YESTERDAY, _entries(), 100)
-	assert_eq(_cache.get_today(PROFILE, TODAY), {}, "REQ-INT-07 крит. 3")
+	assert_eq(_cache.get_today(PROFILE, TODAY), {}, "REQ-INT-07 крит. 4: кэш другой даты не предлагается как план на сегодня")
 	assert_false(_cache.has(PROFILE, TODAY))
 	assert_eq(_cache.get_today(PROFILE, YESTERDAY).size(), 3, "на свою дату кэш доступен")
 
@@ -152,7 +152,7 @@ func test_cache_label_uses_local_time() -> void:
 
 
 # ---------------------------------------------------------------------------
-# IntervalsPlanService (REQ-INT-07 крит. 2, 4; REQ-NFR-03)
+# IntervalsPlanService (REQ-INT-07 крит. 1–4, 6; REQ-NFR-03)
 # ---------------------------------------------------------------------------
 
 func test_online_load_saves_cache_then_offline_uses_it() -> void:
@@ -176,14 +176,14 @@ func test_online_load_saves_cache_then_offline_uses_it() -> void:
 	assert_eq(_mock.request_count(), 2, "одна неудачная попытка сети, затем кэш")
 
 
-func test_cached_today_makes_no_network_requests() -> void:
+func test_req_int_07_c6_cached_today_makes_no_network_requests() -> void:
 	_cache.save(PROFILE, TODAY, _entries(), 123)
 	_mock.offline = true
 	var r: ApiResult = await _service.cached_today(TODAY)
 	assert_true(r.ok)
 	assert_true(r.from_cache)
 	assert_eq((r.data as Array).size(), 2)
-	assert_eq(_mock.request_count(), 0, "REQ-INT-07 крит. 4 / REQ-NFR-03 крит. 2: 0 запросов")
+	assert_eq(_mock.request_count(), 0, "REQ-INT-07 крит. 6 / REQ-NFR-03 крит. 2: 0 запросов")
 	var w: Workout = (r.data as Array)[0]["workout"]
 	assert_true(w.is_valid(), "план из кэша готов к WorkoutSession")
 	var none: ApiResult = await _service.cached_today(YESTERDAY)
@@ -200,7 +200,7 @@ func test_offline_without_cache_is_retryable_network_error() -> void:
 	assert_false(r.from_cache)
 
 
-func test_5xx_falls_back_to_cache_but_401_does_not() -> void:
+func test_req_int_07_c2_c3_5xx_falls_back_to_cache_but_401_does_not() -> void:
 	_cache.save(PROFILE, TODAY, _entries(), 50)
 	_mock.enqueue_json("GET", "/events", 502, {})
 	var r: ApiResult = await _service.load_today(TODAY)
@@ -209,14 +209,14 @@ func test_5xx_falls_back_to_cache_but_401_does_not() -> void:
 	_mock.enqueue_json("GET", "/events", 401, {"error": "Unauthorized"})
 	var auth: ApiResult = await _service.load_today(TODAY)
 	assert_false(auth.ok)
-	assert_eq(auth.code, ApiResult.CODE_AUTH_FAILED, "ключ не принят — кэш не подменяет ошибку")
+	assert_eq(auth.code, ApiResult.CODE_AUTH_FAILED, "REQ-INT-07 крит. 3: ключ не принят — кэш не подменяет ошибку")
 
 
-func test_cache_of_other_date_not_used_by_service() -> void:
+func test_req_int_07_c4_cache_of_other_date_not_used_by_service() -> void:
 	_cache.save(PROFILE, YESTERDAY, _entries(), 50)
 	_mock.offline = true
 	var r: ApiResult = await _service.load_today(TODAY)
-	assert_false(r.ok, "REQ-INT-07 крит. 3: вчерашний кэш не предлагается")
+	assert_false(r.ok, "REQ-INT-07 крит. 4: вчерашний кэш не предлагается")
 	assert_eq(r.code, ApiResult.CODE_NETWORK)
 
 

@@ -5,6 +5,10 @@ on:
     branches: ["**"]
   pull_request:
 
+# Workflow только читает репозиторий (артефакты и кэш работают через свой токен раннера).
+permissions:
+  contents: read
+
 env:
   GODOT_VERSION: 4.7-stable
 
@@ -27,7 +31,11 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           if [ -n "$BASE_REF" ]; then
-            git fetch origin "$BASE_REF" --depth=0 2>/dev/null || true
+            # checkout с fetch-depth: 0 уже содержит базу; догружаем, только если её нет.
+            if ! git rev-parse --verify -q "origin/$BASE_REF" >/dev/null; then
+              git fetch --no-tags origin "$BASE_REF:refs/remotes/origin/$BASE_REF" \
+                || echo "не удалось получить origin/$BASE_REF" >&2
+            fi
             RANGE="origin/$BASE_REF..HEAD"
           elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
             RANGE="$BEFORE..HEAD"
@@ -52,8 +60,12 @@ jobs:
           mv ~/godot/Godot_v${GODOT_VERSION}_linux.x86_64 ~/godot/godot
           chmod +x ~/godot/godot
 
+      # godot --import возвращает 0 и при ошибках скриптов — валим шаг по логу.
       - name: Project opens headless
-        run: ~/godot/godot --headless --path . --import
+        run: |
+          set -euo pipefail
+          ~/godot/godot --headless --path . --import 2>&1 | tee import.log
+          if grep -E "SCRIPT ERROR|Parse Error|Failed loading resource" import.log; then exit 1; fi
 
       - name: Run GUT tests
         run: GODOT=~/godot/godot ./scripts/test.sh
@@ -83,12 +95,21 @@ jobs:
       - name: Install SCons
         run: pip install scons
 
+      # HEAD ветки godot-cpp входит в ключ кэша: новый коммит в ветке → пересборка.
+      - name: Resolve godot-cpp HEAD
+        id: godot-cpp-rev
+        run: |
+          set -euo pipefail
+          SHA="$(git ls-remote https://github.com/godotengine/godot-cpp "refs/heads/$GODOT_CPP_BRANCH" | cut -f1)"
+          test -n "$SHA"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
       - name: Cache godot-cpp (sources + built objects)
         id: cache-godot-cpp
         uses: actions/cache@v4
         with:
           path: native/ble/godot-cpp
-          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-linux-v2-${{ hashFiles('native/ble/SConstruct') }}
+          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-${{ steps.godot-cpp-rev.outputs.sha }}-linux-v2-${{ hashFiles('native/ble/SConstruct') }}
 
       - name: Clone godot-cpp
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
@@ -130,12 +151,21 @@ jobs:
       - name: Install SCons
         run: pip install scons
 
+      # HEAD ветки godot-cpp входит в ключ кэша: новый коммит в ветке → пересборка.
+      - name: Resolve godot-cpp HEAD
+        id: godot-cpp-rev
+        run: |
+          set -euo pipefail
+          SHA="$(git ls-remote https://github.com/godotengine/godot-cpp "refs/heads/$GODOT_CPP_BRANCH" | cut -f1)"
+          test -n "$SHA"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
       - name: Cache godot-cpp (sources + built objects)
         id: cache-godot-cpp
         uses: actions/cache@v4
         with:
           path: native/ble/godot-cpp
-          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-macos-universal-${{ matrix.target }}-${{ hashFiles('native/ble/SConstruct') }}
+          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-${{ steps.godot-cpp-rev.outputs.sha }}-macos-universal-${{ matrix.target }}-${{ hashFiles('native/ble/SConstruct') }}
 
       - name: Clone godot-cpp
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
@@ -230,7 +260,7 @@ jobs:
         run: |
           set -euo pipefail
           "$GODOT" --headless --path . --import 2>&1 | tee import.log
-          if grep -E "SCRIPT ERROR|Can't open dynamic library|GDExtension.*(failed|error)" import.log; then exit 1; fi
+          if grep -E "SCRIPT ERROR|Parse Error|Failed loading resource|Can't open dynamic library|GDExtension.*(failed|error)" import.log; then exit 1; fi
 
       - name: Native BLE loads and matches BleBridge contract
         run: '"$GODOT" --headless --path . --script res://scripts/ci/check_native_ble.gd'

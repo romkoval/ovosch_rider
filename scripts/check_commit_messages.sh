@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Проверка сообщений коммитов (REQ-INF-03 крит. 1, 2): каждое сообщение в диапазоне
 # содержит REQ-ID вида REQ-XXX-NN или начинается с docs:/ci:/tests:/chore:.
-# Использование: check_commit_messages.sh [<range>]  (по умолчанию — только HEAD).
+# Использование: check_commit_messages.sh [<range>]  (по умолчанию — последний не-merge коммит).
+# Merge-коммиты не проверяются.
 # На shallow clone или без истории — предупреждение и выход 0.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -11,12 +12,20 @@ if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
   exit 0
 fi
 if ! git rev-list "$RANGE" >/dev/null 2>&1; then
-  echo "check_commit_messages: диапазон '$RANGE' недоступен — проверяю только HEAD" >&2
+  echo "check_commit_messages: диапазон '$RANGE' недоступен — проверяю последний не-merge коммит" >&2
   RANGE="HEAD~0..HEAD"
 fi
 mapfile -t COMMITS < <(git rev-list --no-merges "$RANGE" 2>/dev/null)
 if [ "${#COMMITS[@]}" -eq 0 ]; then
-  COMMITS=("$(git rev-parse HEAD)")
+  # Пустой диапазон: проверяем последний не-merge коммит (на pull_request HEAD — это
+  # синтетический merge-коммит «Merge X into Y», его сообщение не проверяется).
+  last="$(git rev-list --no-merges -1 HEAD 2>/dev/null)"
+  if [ -z "$last" ]; then
+    echo "check_commit_messages: в истории нет не-merge коммитов — проверять нечего" >&2
+    echo "check_commit_messages: OK (0 коммит(ов))"
+    exit 0
+  fi
+  COMMITS=("$last")
 fi
 bad=0
 for c in "${COMMITS[@]}"; do

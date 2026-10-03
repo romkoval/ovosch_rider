@@ -1,8 +1,8 @@
 extends GutTest
 ## Независимая приёмка T-032/T-033/T-034/T-036 (коммит ad5b364): `MockHttpTransport`,
 ## `IntervalsIcuClient`, `IntervalsSync`, `PlanCache`, `IntervalsPlanService`, поля Intervals в `Profile`.
-## Критерии: REQ-INT-01 к1–3; REQ-INT-02 к1–5; REQ-INT-04 к1–2 (данные); REQ-INT-06 к1–5, 7;
-## REQ-INT-07 к1–4; REQ-NFR-03 к1–2; REQ-PRF-03 к1–3. Фикстуры — tests/fixtures/intervals/ (синтетические),
+## Критерии: REQ-INT-01 к1–3; REQ-INT-02 к1–5; REQ-INT-04 к1–2 (данные); REQ-INT-06 к1–6, 8;
+## REQ-INT-07 к1–6; REQ-NFR-03 к1–2; REQ-PRF-03 к1–3. Фикстуры — tests/fixtures/intervals/ (синтетические),
 ## дополнительные ответы собираются в тестах по публичной документации API.
 
 const FIXTURES: String = "res://tests/fixtures/intervals/"
@@ -616,7 +616,7 @@ func test_req_int_06_c3_hr_zones_from_sport_settings_else_from_max_hr() -> void:
 	assert_eq(IntervalsSync.hr_zones_to_bpm([120, "x"], 190), [] as Array[int])
 
 
-func test_req_int_06_c4_c5_local_override_blocks_sync_and_resync_updates_otherwise() -> void:
+func test_req_int_06_c5_c6_local_override_blocks_sync_and_resync_updates_otherwise() -> void:
 	var p := _profile(200)
 	p.max_hr = 175
 	p.power_zones = PowerZones.custom(200, [50.0, 100.0] as Array[float])
@@ -659,7 +659,7 @@ func test_req_int_06_c4_c5_local_override_blocks_sync_and_resync_updates_otherwi
 	assert_true(p.is_valid())
 
 
-func test_req_int_06_c7_missing_or_out_of_range_ftp_keeps_local_value_with_warning() -> void:
+func test_req_int_06_c8_missing_or_out_of_range_ftp_keeps_local_value_with_warning() -> void:
 	var p := _profile(210)
 	var no_ftp := IntervalsSync.parse_athlete(_athlete_json(null, [55, 75, 90, 105, 120, 150, 999], null, 185))
 	assert_true((no_ftp["warnings"] as Array).has(IntervalsSync.WARN_FTP_MISSING))
@@ -742,8 +742,9 @@ func test_req_int_07_c2_network_failure_falls_back_to_today_cache_with_label() -
 	assert_true(r.message.begins_with("из кэша, загружен "), r.message)
 	assert_eq(r.loaded_at, loaded_at, "время загрузки — исходное")
 	assert_true(r.can_retry)
-	var dt := Time.get_datetime_dict_from_unix_time(loaded_at)
-	assert_string_contains(r.message, "%02d:%02d" % [dt["hour"], dt["minute"]])
+	# Метка — в локальном поясе пользователя (как форматирует PlanCache), не в UTC.
+	var dt := PlanCache.local_datetime(loaded_at)
+	assert_string_contains(r.message, "%02d:%02d" % [dt["hour"], dt["minute"]], "время загрузки ЧЧ:ММ в локальном поясе")
 	var entries: Array = r.data
 	assert_eq(entries.size(), 2)
 	assert_true(entries[0]["workout"] is Workout, "план восстановлен из кэша")
@@ -760,11 +761,11 @@ func test_req_int_07_c2_network_failure_falls_back_to_today_cache_with_label() -
 	var r429: ApiResult = await _service.load_today(TODAY)
 	assert_true(r429.ok and r429.from_cache, "429 после повтора → кэш")
 	assert_eq(_waited, [5.0] as Array[float])
-	# 401 — кэш не подменяет ошибку ключа.
+	# REQ-INT-07 крит. 3: 401 — кэш не подменяет ошибку ключа.
 	_mock.enqueue_json("GET", EVENTS_URL, 401, _fixture("error_401.json"))
 	var r401: ApiResult = await _service.load_today(TODAY)
 	assert_false(r401.ok)
-	assert_eq(r401.code, ApiResult.CODE_AUTH_FAILED)
+	assert_eq(r401.code, ApiResult.CODE_AUTH_FAILED, "REQ-INT-07 крит. 3: 401 не подменяется кэшем")
 	assert_false(r401.from_cache)
 	# Не настроено — тоже без кэша.
 	_store.delete_secret(_client.secret_key())
@@ -809,14 +810,14 @@ func test_req_int_07_c2_offline_without_cache_is_retryable_error_and_cache_error
 	assert_eq(empty_cached.code, ApiResult.CODE_NO_WORKOUT_TODAY)
 
 
-func test_req_int_07_c3_cache_of_other_date_is_not_offered_as_today() -> void:
+func test_req_int_07_c4_cache_of_other_date_is_not_offered_as_today() -> void:
 	_mock.enqueue_json("GET", EVENTS_URL, 200, [_bike_event(1, "Yesterday", "- 10m 65%", 600, 20)])
 	var y: ApiResult = await _service.load_today(YESTERDAY)
 	assert_true(y.ok)
 	assert_true(_cache.has(A, YESTERDAY))
 	_mock.offline = true
 	var r: ApiResult = await _service.load_today(TODAY)
-	assert_false(r.ok, "вчерашний кэш не предлагается как план на сегодня")
+	assert_false(r.ok, "REQ-INT-07 крит. 4: вчерашний кэш не предлагается как план на сегодня")
 	assert_eq(r.code, ApiResult.CODE_NETWORK)
 	assert_false(r.from_cache)
 	var c: ApiResult = await _service.cached_today(TODAY)
@@ -835,7 +836,7 @@ func test_req_int_07_c3_cache_of_other_date_is_not_offered_as_today() -> void:
 	assert_false(_cache.save("", TODAY, []))
 
 
-func test_req_int_07_c4_nfr_03_cached_plan_runs_full_session_with_zero_requests() -> void:
+func test_req_int_07_c6_nfr_03_cached_plan_runs_full_session_with_zero_requests() -> void:
 	_events_today()
 	var online: ApiResult = await _service.load_today(TODAY)
 	assert_true(online.ok)
@@ -872,7 +873,7 @@ func test_req_int_07_c4_nfr_03_cached_plan_runs_full_session_with_zero_requests(
 	assert_eq(finished[0], 1, "тренировка завершена")
 	assert_eq(session.samples.size(), session.executor.elapsed_sec(), "сэмплы записаны за всё активное время")
 	assert_gt(session.samples.size(), 180)
-	assert_eq(_mock.request_count(), 0, "REQ-INT-07 крит. 4 / NFR-03 крит. 2: ни одного запроса от старта до финиша")
+	assert_eq(_mock.request_count(), 0, "REQ-INT-07 крит. 6 / NFR-03 крит. 2: ни одного запроса от старта до финиша")
 	assert_eq(trainer.commands.size() > 3, true, "команды на станок шли")
 	# Повторный «запуск» без сети: тот же кэш, по-прежнему 0 запросов.
 	var again: ApiResult = await _service.cached_today(TODAY)
