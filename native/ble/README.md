@@ -179,7 +179,9 @@ CI (`.github/workflows/ci.yml`) на каждый push:
    скриптом `scripts/ci/check_native_ble.gd`, что расширение загружается и `OvoschBle`
    совпадает с контрактом `BleBridge`, генерирует `export_presets.cfg`
    (`scripts/ci/make_export_presets.py`, Info.plist — из `platform/macos/Info.plist.template`)
-   и экспортирует универсальное приложение с ad-hoc подписью. Артефакт: `ovosch-rider-macos`.
+   и экспортирует универсальное приложение. Подпись ad-hoc ставит системный `codesign` (встроенный
+   подписчик Godot не читает Info.plist фреймворка), без hardened runtime — иначе ad-hoc
+   приложение не загрузит фреймворк BLE. Артефакт: `ovosch-rider-macos`.
 
 Запуск скачанной сборки на Mac: распаковать архив артефакта, затем `ovosch-rider-macos.zip`.
 Сборка подписана ad-hoc и не нотаризована, поэтому Gatekeeper её блокирует. Снять карантин:

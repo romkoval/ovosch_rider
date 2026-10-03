@@ -6,7 +6,9 @@ export_presets.cfg в репозиторий не коммитится (може
 фрагмент между маркерами ADDITIONAL_PLIST_CONTENT_BEGIN/END уходит в опцию
 application/additional_plist_content (NSBluetoothAlwaysUsageDescription, типы документов).
 
-Подпись — ad-hoc (codesign/codesign=1, без сертификата), нотаризации нет: сборка для
+Подпись в Godot отключена (codesign/codesign=0): встроенный ad-hoc подписчик Godot
+не читает Info.plist фреймворка расширения и оставляет неполную подпись. CI подписывает
+готовый бандл системным `codesign --sign -` (ad-hoc). Нотаризации нет: сборка для
 тестирования, не для распространения через App Store.
 
 Использование: make_export_presets.py <bundle_id> <short_version> <build_number> [out]
@@ -63,7 +65,7 @@ def main() -> None:
         "application/version": cfg_string(build_number),
         "application/additional_plist_content": cfg_string(plist_fragment(bundle_id)),
         "display/high_res": "true",
-        "codesign/codesign": "1",
+        "codesign/codesign": "0",
         "notarization/notarization": "0",
     }
     preset = [

@@ -275,20 +275,30 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build
-          "$GODOT" --headless --path . --export-release "macOS" build/ovosch-rider-macos.zip 2>&1 | tee export.log
-          test -f build/ovosch-rider-macos.zip
+          "$GODOT" --headless --path . --export-release "macOS" build/godot-export.zip 2>&1 | tee export.log
+          test -f build/godot-export.zip
 
-      - name: Verify bundle
+      # Godot экспортирует без подписи; подписываем системным codesign (ad-hoc): встроенный
+      # подписчик Godot не читает Info.plist фреймворка и оставляет неполную подпись.
+      - name: Verify, sign (ad-hoc) and pack bundle
         run: |
           set -euo pipefail
-          rm -rf verify && mkdir verify && unzip -q build/ovosch-rider-macos.zip -d verify
+          rm -rf verify && mkdir verify && ditto -x -k build/godot-export.zip verify
           APP="$(find verify -maxdepth 2 -name '*.app' -type d | head -1)"
           test -n "$APP"
           echo "App: $APP"
+          FW="$APP/Contents/Frameworks/libovosch_ble.macos.template_release.framework"
+          plutil -lint "$APP/Contents/Info.plist"
           plutil -p "$APP/Contents/Info.plist" | grep -q NSBluetoothAlwaysUsageDescription
-          test -d "$APP/Contents/Frameworks/libovosch_ble.macos.template_release.framework"
+          test -d "$FW"
+          plutil -lint "$FW/Resources/Info.plist"
           lipo -info "$APP/Contents/MacOS/"* | grep -q "x86_64 arm64"
-          codesign --verify --deep --verbose=2 "$APP"
+          lipo -info "$FW/libovosch_ble.macos.template_release" | grep -q "x86_64 arm64"
+          codesign --force --sign - --timestamp=none "$FW"
+          codesign --force --sign - --timestamp=none "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          ditto -c -k --keepParent "$APP" build/ovosch-rider-macos.zip
+          unzip -l build/ovosch-rider-macos.zip | tail -1
 
       - name: Upload macOS app
         uses: actions/upload-artifact@v4
