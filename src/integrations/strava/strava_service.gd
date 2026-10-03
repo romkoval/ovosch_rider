@@ -24,6 +24,13 @@ const DEFAULT_NAME_TEMPLATE: String = "Тренировка %s"
 ## в очередь, поэтому смена языка на лету сразу действует на новые выгрузки.
 const KEY_DEFAULT_NAME: String = "ui.strava.default_name"
 const KEY_DEFAULT_DESCRIPTION: String = "ui.strava.default_description"
+## Название свободной езды по умолчанию (REQ-FRD-07 крит. 7): «Свободная езда — <трасса>» /
+## «Free ride — <track>», `%s` — название трассы `track.<route_id>.name` на том же языке.
+## Ключи заводит T-060 (`assets/i18n/strings_*.csv`); без перевода — запасные шаблоны ниже.
+const KEY_FREE_RIDE_NAME: String = "ride.free_ride.default_name"
+const TRACK_NAME_KEY_FORMAT: String = "track.%s.name"
+const FREE_RIDE_NAME_FALLBACK_RU: String = "Свободная езда — %s"
+const FREE_RIDE_NAME_FALLBACK_EN: String = "Free ride — %s"
 
 ## Статус выгрузки заезда изменился (уже записан в `RideRepository`).
 signal status_changed(ride_id: String)
@@ -159,7 +166,8 @@ func on_ride_deleted(ride_id: String) -> void:
 	queue.remove(ride_id)
 
 
-## Название по умолчанию (REQ-STR-03 крит. 1): план или «Тренировка <дата>» на текущем языке.
+## Название по умолчанию (REQ-STR-03 крит. 1): план или «Тренировка <дата>» на текущем языке;
+## свободная езда — «Свободная езда — <трасса>» (REQ-FRD-07 крит. 7).
 func default_name(ride: Ride) -> String:
 	return compose_default_name(ride, current_name_template())
 
@@ -186,8 +194,38 @@ func current_app_line() -> String:
 
 
 ## Название по умолчанию с заданным шаблоном (карточка заезда строит его тем же правилом).
+## Свободная езда без названия — «Свободная езда — <трасса>» на текущем языке интерфейса
+## (REQ-FRD-07 крит. 7); `template` (шаблон «Тренировка <дата>») к ней не применяется.
 static func compose_default_name(ride: Ride, template: String) -> String:
+	if ride.is_free_ride() and ride.name.strip_edges().is_empty():
+		return free_ride_default_name(ride.route_id())
 	return StravaUploader.default_name(ride.name, _date_text(ride.started_at_unix), template)
+
+
+## «Свободная езда — <трасса>» / «Free ride — <track>» на текущем языке интерфейса.
+static func free_ride_default_name(route_id: String) -> String:
+	return compose_free_ride_name(_free_ride_template(), track_display_name(route_id))
+
+
+## Название по шаблону свободной езды (`%s` — название трассы).
+static func compose_free_ride_name(template: String, track_name: String) -> String:
+	return template % track_name if template.contains("%s") else "%s %s" % [template, track_name]
+
+
+## Название трассы на текущем языке (`track.<id>.name`); без перевода — идентификатор трассы.
+static func track_display_name(route_id: String) -> String:
+	if route_id.is_empty():
+		return ""
+	var key := TRACK_NAME_KEY_FORMAT % route_id
+	var translated := String(TranslationServer.translate(key))
+	return translated if translated != key and not translated.is_empty() else route_id
+
+
+static func _free_ride_template() -> String:
+	var translated := String(TranslationServer.translate(KEY_FREE_RIDE_NAME))
+	if translated != KEY_FREE_RIDE_NAME and translated.contains("%s"):
+		return translated
+	return FREE_RIDE_NAME_FALLBACK_RU if TranslationServer.get_locale().begins_with("ru") else FREE_RIDE_NAME_FALLBACK_EN
 
 
 ## Описание по умолчанию с заданной строкой приложения.

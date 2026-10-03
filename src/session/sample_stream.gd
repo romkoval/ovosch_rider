@@ -16,6 +16,11 @@ extends RefCounted
 ## Скорость: `speed_source` = "trainer" (поле скорости FTMS) или "model"
 ## (`SpeedModel`, решение В-8); выбирается сессией один раз. `distance_m` —
 ## интеграл скорости по секундам.
+##
+## Свободная езда (REQ-FRD-07 крит. 4): сэмпл дополнительно несёт позицию на трассе —
+## накопленную дистанцию от старта (её даёт сессия по `RoutePosition`, она заменяет
+## интеграл скорости), высоту h(s) `altitude_m` и уклон трассы `grade_pct`. Признак
+## `has_route[i]`; у заездов по плану он `false`, высота и уклон — 0 (поля отсутствуют).
 
 const SPEED_SOURCE_TRAINER: String = "trainer"
 const SPEED_SOURCE_MODEL: String = "model"
@@ -43,6 +48,12 @@ var cadence_age_sec := PackedInt32Array()
 var heart_rate_age_sec := PackedInt32Array()
 ## Пройденное расстояние к концу секунды, м (интеграл скорости).
 var distance_m := PackedFloat32Array()
+## Высота трассы h(s) к концу секунды, м (свободная езда; иначе 0).
+var altitude_m := PackedFloat32Array()
+## Уклон трассы g(s), % (свободная езда; иначе 0).
+var grade_pct := PackedFloat32Array()
+## Сэмпл несёт позицию на трассе (дистанция от трассы, высота, уклон) — свободная езда.
+var has_route: Array[bool] = []
 ## "trainer" | "model" | "" (ещё не выбран).
 var speed_source: String = ""
 
@@ -54,8 +65,11 @@ func size() -> int:
 ## Добавить слот секунды `t`. `sample` может быть null (нет телеметрии за секунду);
 ## `hr_bpm < 0` — нет пульса. `model_speed_kmh >= 0` — расчётная скорость (источник
 ## «модель»), заменяет скорость станка. `ages` — `{power, cadence, heart_rate}` в секундах.
+## `route` — позиция на трассе для свободной езды (REQ-FRD-07 крит. 4):
+## `{distance_m, altitude_m, grade_pct}`; `distance_m` (накопленная от старта) заменяет
+## интеграл скорости. Пустой словарь — сэмпл без позиции (тренировка по плану).
 func append(t: int, sample: TrainerSample, hr_bpm: int, target: int, step: int, erg: bool,
-		model_speed_kmh: float = -1.0, ages: Dictionary = {}) -> void:
+		model_speed_kmh: float = -1.0, ages: Dictionary = {}, route: Dictionary = {}) -> void:
 	time_sec.append(t)
 	var p_ok: bool = sample != null and sample.has_power
 	var c_ok: bool = sample != null and sample.has_cadence
@@ -83,7 +97,15 @@ func append(t: int, sample: TrainerSample, hr_bpm: int, target: int, step: int, 
 	cadence_age_sec.append(0 if c_ok else int(ages.get("cadence", -1)))
 	heart_rate_age_sec.append(0 if hr_bpm >= 0 else int(ages.get("heart_rate", -1)))
 	var prev_distance: float = distance_m[distance_m.size() - 1] if distance_m.size() > 0 else 0.0
-	distance_m.append(prev_distance + (speed / 3.6 if speed_ok else 0.0))
+	var route_ok: bool = not route.is_empty()
+	var dist: Variant = route.get("distance_m")
+	if route_ok and (dist is float or dist is int):
+		distance_m.append(float(dist))
+	else:
+		distance_m.append(prev_distance + (speed / 3.6 if speed_ok else 0.0))
+	altitude_m.append(_num(route.get("altitude_m"), 0.0) if route_ok else 0.0)
+	grade_pct.append(_num(route.get("grade_pct"), 0.0) if route_ok else 0.0)
+	has_route.append(route_ok)
 
 
 ## Строка i словарём — для тестов, HUD и отладки.
@@ -96,6 +118,7 @@ func row(i: int) -> Dictionary:
 		"heart_rate_bpm": heart_rate_bpm[i], "has_heart_rate": has_heart_rate[i], "heart_rate_age_sec": heart_rate_age_sec[i],
 		"target_w": target_w[i], "step_index": step_index[i], "erg_enabled": erg_enabled[i],
 		"distance_m": distance_m[i],
+		"altitude_m": altitude_m[i], "grade_pct": grade_pct[i], "has_route": has_route[i],
 	}
 
 
@@ -124,6 +147,26 @@ func total_distance_m() -> float:
 	return distance_m[distance_m.size() - 1] if distance_m.size() > 0 else 0.0
 
 
+## Есть ли в потоке позиция на трассе (свободная езда, REQ-FRD-07 крит. 4).
+func has_route_data() -> bool:
+	return has_route.has(true)
+
+
+## Набор высоты, м (REQ-FRD-07 крит. 4): сумма положительных приращений `altitude_m`
+## между соседними сэмплами с позицией на трассе. Без позиции — 0.
+func total_ascent_m() -> float:
+	var ascent: float = 0.0
+	var prev: float = NAN
+	for i in size():
+		if not has_route[i]:
+			continue
+		var h: float = altitude_m[i]
+		if not is_nan(prev) and h > prev:
+			ascent += h - prev
+		prev = h
+	return ascent
+
+
 ## Устарели ли данные с данным возрастом (для HUD, REQ-WRK-08 крит. 4).
 static func is_stale(age_sec: int) -> bool:
 	return age_sec < 0 or age_sec >= STALE_AFTER_SEC
@@ -143,6 +186,7 @@ func to_dict() -> Dictionary:
 		"power_age_sec": Array(power_age_sec), "cadence_age_sec": Array(cadence_age_sec),
 		"heart_rate_age_sec": Array(heart_rate_age_sec),
 		"distance_m": Array(distance_m),
+		"altitude_m": Array(altitude_m), "grade_pct": Array(grade_pct), "has_route": has_route.duplicate(),
 	}
 
 
@@ -172,7 +216,15 @@ static func from_dict(data: Dictionary) -> SampleStream:
 		s.heart_rate_age_sec.append(_int_at(data, "heart_rate_age_sec", i, 0 if s.has_heart_rate[i] else -1))
 		var prev: float = s.distance_m[i - 1] if i > 0 else 0.0
 		s.distance_m.append(_float_at(data, "distance_m", i, prev + (s.speed_kmh[i] / 3.6 if s.has_speed[i] else 0.0)))
+		# Позиция на трассе — только у свободной езды; старые потоки без колонок → «нет».
+		s.altitude_m.append(_float_at(data, "altitude_m", i, 0.0))
+		s.grade_pct.append(_float_at(data, "grade_pct", i, 0.0))
+		s.has_route.append(_bool_at(data, "has_route", i, false))
 	return s
+
+
+static func _num(v: Variant, default: float) -> float:
+	return float(v) if v is float or v is int else default
 
 
 static func _len(v: Variant) -> int:

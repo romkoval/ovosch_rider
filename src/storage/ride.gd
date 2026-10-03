@@ -15,8 +15,28 @@ extends RefCounted
 ##
 ## Флаги жизненного цикла в `metadata`: `in_progress` — заезд пишется
 ## (LOC-07), `recovered` — восстановлен после сбоя при следующем запуске.
+##
+## Тип заезда `metadata.ride_type` (REQ-FRD-07 крит. 3): `workout` (по плану) или
+## `free_ride` (свободная езда). У свободной езды плана нет (`workout` пуст, `name` пуст,
+## `workout_name` отсутствует), `speed_source = model`, в метаданных — `route_id`,
+## `sim_steepness_start_pct` (крутизна SIM на старте, %), `total_distance_m` и
+## `total_ascent_m` (набор — по сэмплам, `SampleStream.total_ascent_m`). Заезды,
+## записанные до появления типа, читаются как `workout` (миграция не нужна).
+##
+## Источник заезда (`from_session`) — `WorkoutSession` или сессия свободной езды с тем же
+## контрактом записи: свойства `samples: SampleStream`, `events: Array[Dictionary]`,
+## `started_at_unix: int` и метод `metadata() -> Dictionary` (для свободной езды — с
+## `ride_type = free_ride`, `route_id`, `sim_steepness_start_pct`; см. `free_ride_metadata`).
 
 const SCHEMA_VERSION: int = 1
+
+const RIDE_TYPE_WORKOUT: String = "workout"
+const RIDE_TYPE_FREE_RIDE: String = "free_ride"
+const KEY_RIDE_TYPE: String = "ride_type"
+const KEY_ROUTE_ID: String = "route_id"
+const KEY_SIM_STEEPNESS_START_PCT: String = "sim_steepness_start_pct"
+const KEY_TOTAL_DISTANCE_M: String = "total_distance_m"
+const KEY_TOTAL_ASCENT_M: String = "total_ascent_m"
 
 const UPLOAD_NONE: String = "none"
 const UPLOAD_QUEUED: String = "queued"
@@ -54,19 +74,37 @@ static func generate_id(started_at: int = int(Time.get_unix_time_from_system()))
 	return "%d-%s" % [started_at, rand.hex_encode()]
 
 
+## Метаданные свободной езды для `metadata()` сессии (REQ-FRD-07 крит. 3): тип, трасса,
+## крутизна SIM на старте (%), источник скорости — модель.
+static func free_ride_metadata(route: String, sim_steepness_start_pct: float) -> Dictionary:
+	return {
+		KEY_RIDE_TYPE: RIDE_TYPE_FREE_RIDE,
+		KEY_ROUTE_ID: route,
+		KEY_SIM_STEEPNESS_START_PCT: sim_steepness_start_pct,
+		"speed_source": SampleStream.SPEED_SOURCE_MODEL,
+	}
+
+
 ## Заезд из текущего состояния сессии и профиля. `session.samples` используется
 ## по ссылке (один и тот же поток, который сессия продолжает наполнять).
-static func from_session(session: WorkoutSession, profile: Profile, ride_id: String = "") -> Ride:
+## `session` — `WorkoutSession` или сессия свободной езды (контракт — в шапке класса).
+static func from_session(session: Object, profile: Profile, ride_id: String = "") -> Ride:
 	var r := Ride.new()
-	r.started_at_unix = session.started_at_unix if session.started_at_unix > 0 else int(Time.get_unix_time_from_system())
+	var started: int = _int(session.get("started_at_unix"), 0)
+	r.started_at_unix = started if started > 0 else int(Time.get_unix_time_from_system())
 	r.id = ride_id if not ride_id.is_empty() else generate_id(r.started_at_unix)
 	r.profile_id = profile.id if profile != null else ""
-	r.workout = WorkoutSerializer.to_dict(session.executor.workout)
-	r.name = session.executor.workout.name
-	r.description = session.executor.workout.description
-	r.samples = session.samples
-	r.events = session.events
-	r.metadata = session.metadata()
+	if session is WorkoutSession:
+		var ws := session as WorkoutSession
+		r.workout = WorkoutSerializer.to_dict(ws.executor.workout)
+		r.name = ws.executor.workout.name
+		r.description = ws.executor.workout.description
+	r.samples = session.get("samples") as SampleStream
+	if r.samples == null:
+		r.samples = SampleStream.new()
+	r.events = _events_of(session)
+	r.metadata = _session_metadata(session)
+	r._normalize_ride_type()
 	r.metadata["in_progress"] = false
 	r.metadata["recovered"] = false
 	if profile != null:
@@ -88,12 +126,96 @@ static func from_session(session: WorkoutSession, profile: Profile, ride_id: Str
 
 
 ## Обновить метаданные и журнал из сессии, сохранив поля профиля и флаги жизненного цикла.
-func refresh_from_session(session: WorkoutSession) -> void:
-	var fresh: Dictionary = session.metadata()
+func refresh_from_session(session: Object) -> void:
+	var fresh: Dictionary = _session_metadata(session)
 	for key in fresh.keys():
 		metadata[key] = fresh[key]
-	events = session.events
-	samples = session.samples
+	events = _events_of(session)
+	var stream: SampleStream = session.get("samples") as SampleStream
+	if stream != null:
+		samples = stream
+	_normalize_ride_type()
+
+
+static func _session_metadata(session: Object) -> Dictionary:
+	if session is WorkoutSession:
+		return (session as WorkoutSession).metadata()
+	if session != null and session.has_method("metadata"):
+		var m: Variant = session.call("metadata")
+		if m is Dictionary:
+			return (m as Dictionary).duplicate(true)
+	return {}
+
+
+## Журнал сессии по ссылке (сессия продолжает его наполнять).
+static func _events_of(session: Object) -> Array[Dictionary]:
+	if session is WorkoutSession:
+		return (session as WorkoutSession).events
+	var ev: Variant = session.get("events") if session != null else null
+	if ev is Array and (ev as Array).get_typed_builtin() == TYPE_DICTIONARY:
+		return ev
+	var out: Array[Dictionary] = []
+	if ev is Array:
+		for item in ev:
+			if item is Dictionary:
+				out.append(item)
+	return out
+
+
+## Тип заезда и обязательные поля свободной езды (REQ-FRD-07 крит. 3).
+func _normalize_ride_type() -> void:
+	if str(metadata.get(KEY_RIDE_TYPE, "")) != RIDE_TYPE_FREE_RIDE:
+		metadata[KEY_RIDE_TYPE] = RIDE_TYPE_WORKOUT
+		return
+	metadata["speed_source"] = SampleStream.SPEED_SOURCE_MODEL
+	metadata.erase("workout_name")
+	if not metadata.has(KEY_ROUTE_ID):
+		metadata[KEY_ROUTE_ID] = ""
+	if not metadata.has(KEY_SIM_STEEPNESS_START_PCT):
+		metadata[KEY_SIM_STEEPNESS_START_PCT] = 0.0
+	workout = {}
+	name = ""
+	update_route_totals()
+
+
+## Итоговая дистанция и набор высоты свободной езды по сэмплам (REQ-FRD-07 крит. 3, 4).
+func update_route_totals() -> void:
+	if not is_free_ride():
+		return
+	metadata[KEY_TOTAL_DISTANCE_M] = samples.total_distance_m()
+	metadata[KEY_TOTAL_ASCENT_M] = samples.total_ascent_m()
+
+
+## `workout` или `free_ride`; заезды без поля (записанные до FRD-07) — `workout`.
+func ride_type() -> String:
+	var t := str(metadata.get(KEY_RIDE_TYPE, RIDE_TYPE_WORKOUT))
+	return RIDE_TYPE_FREE_RIDE if t == RIDE_TYPE_FREE_RIDE else RIDE_TYPE_WORKOUT
+
+
+func is_free_ride() -> bool:
+	return ride_type() == RIDE_TYPE_FREE_RIDE
+
+
+## Идентификатор трассы свободной езды ("" у тренировки по плану).
+func route_id() -> String:
+	return str(metadata.get(KEY_ROUTE_ID, "")) if is_free_ride() else ""
+
+
+## Крутизна SIM на старте, % (0 у тренировки по плану).
+func sim_steepness_start_pct() -> float:
+	return _float(metadata.get(KEY_SIM_STEEPNESS_START_PCT), 0.0)
+
+
+## Итоговая дистанция, м: из метаданных свободной езды, иначе по потоку.
+func total_distance_m() -> float:
+	var v: Variant = metadata.get(KEY_TOTAL_DISTANCE_M)
+	return float(v) if v is int or v is float else samples.total_distance_m()
+
+
+## Набор высоты, м: из метаданных свободной езды, иначе по потоку (0 без позиции на трассе).
+func total_ascent_m() -> float:
+	var v: Variant = metadata.get(KEY_TOTAL_ASCENT_M)
+	return float(v) if v is int or v is float else samples.total_ascent_m()
 
 
 func ftp_w() -> int:
@@ -151,6 +273,7 @@ func hr_zones() -> HrZones:
 
 ## Пересчитать сводку по текущему потоку и зонам заезда; шапка синхронизируется.
 func compute_summary() -> RideSummary:
+	update_route_totals()
 	summary = RideSummary.compute(samples, ftp_w(), power_zones(), hr_zones())
 	sync_summary_header()
 	return summary
@@ -168,6 +291,8 @@ func sync_summary_header() -> void:
 	summary.stopped_early = stopped_early()
 	summary.in_progress = is_in_progress()
 	summary.recovered = is_recovered()
+	summary.ride_type = ride_type()
+	summary.route_id = route_id()
 
 
 ## События паузы `{at_sec, duration_sec}` (для FIT и истории). Пауза без

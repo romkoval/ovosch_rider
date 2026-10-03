@@ -17,6 +17,11 @@ extends RefCounted
 ##
 ## `points(name)` — точки `(t, значение)` без разрывов: длина серии мощности
 ## без прореживания равна числу сэмплов с данными мощности.
+##
+## Свободная езда (поток с позицией на трассе, REQ-FRD-07 крит. 6): цели нет — серия
+## `target` пустая (`values` — пустой массив, `has_target == false`), ошибки нет.
+## Профиль высоты по дистанции — `altitude_by_distance()` (точки `(дистанция м, высота м)`,
+## круги подряд по накопленной дистанции; для истории, T-085).
 
 const MAX_POINTS_DEFAULT: int = 3600
 const POWER: String = "power"
@@ -32,6 +37,8 @@ var time_sec := PackedFloat32Array()
 var bucket_sec: int = 1
 ## Длительность потока, с.
 var duration_sec: int = 0
+## Есть ли серия цели плана (у свободной езды — нет).
+var has_target: bool = true
 var _values: Dictionary = {}
 
 
@@ -39,6 +46,7 @@ static func from_samples(samples: SampleStream, max_points: int = MAX_POINTS_DEF
 	var s := RideSeries.new()
 	var n: int = samples.size()
 	s.duration_sec = n
+	s.has_target = not samples.has_route_data()
 	var limit: int = maxi(max_points, 2)
 	var decimate: bool = n > limit
 	# При прореживании — по два слота на корзину, корзин ≤ limit / 2.
@@ -55,7 +63,8 @@ static func from_samples(samples: SampleStream, max_points: int = MAX_POINTS_DEF
 		var last: int = mini(first + s.bucket_sec, n)
 		slots += 2 if decimate and last - first >= 2 else 1
 	s.time_sec.resize(slots)
-	for name in NAMES:
+	var names: Array[String] = s._series_names()
+	for name in names:
 		var vals := PackedFloat32Array()
 		vals.resize(slots)
 		vals.fill(NAN)
@@ -69,7 +78,7 @@ static func from_samples(samples: SampleStream, max_points: int = MAX_POINTS_DEF
 		if two_slots:
 			# Второй слот — середина корзины (не позже последнего сэмпла корзины).
 			s.time_sec[slot + 1] = float(samples.time_sec[mini(first + maxi(s.bucket_sec / 2, 1), last - 1)])
-		for name in NAMES:
+		for name in names:
 			var lo_i: int = -1
 			var hi_i: int = -1
 			for i in range(first, last):
@@ -92,6 +101,53 @@ static func from_samples(samples: SampleStream, max_points: int = MAX_POINTS_DEF
 				s._values[name][slot] = _value(samples, name, a)
 				s._values[name][slot + 1] = _value(samples, name, z)
 	return s
+
+
+## Серии этого графика: без цели — все, кроме `target`.
+func _series_names() -> Array[String]:
+	var out: Array[String] = []
+	for name in NAMES:
+		if name != TARGET or has_target:
+			out.append(name)
+	return out
+
+
+## Профиль высоты по дистанции (REQ-FRD-07 крит. 6, для T-085): точки `(distance_m,
+## altitude_m)` сэмплов с позицией на трассе, дистанция накопленная (круги подряд). Если
+## точек больше `max_points`, сэмплы делятся на корзины и от каждой берутся минимум и
+## максимум высоты в порядке следования — вершины и впадины остаются среди точек.
+## Пусто, если позиции на трассе нет (тренировка по плану).
+static func altitude_by_distance(samples: SampleStream, max_points: int = MAX_POINTS_DEFAULT) -> PackedVector2Array:
+	var idx := PackedInt32Array()
+	for i in samples.size():
+		if samples.has_route[i]:
+			idx.append(i)
+	var out := PackedVector2Array()
+	var n: int = idx.size()
+	var limit: int = maxi(max_points, 2)
+	if n <= limit:
+		for i in idx:
+			out.append(Vector2(samples.distance_m[i], samples.altitude_m[i]))
+		return out
+	var bucket: int = ceili(float(n) / float(limit / 2))
+	var first: int = 0
+	while first < n:
+		var last: int = mini(first + bucket, n)
+		var lo: int = idx[first]
+		var hi: int = idx[first]
+		for k in range(first, last):
+			var i: int = idx[k]
+			if samples.altitude_m[i] < samples.altitude_m[lo]:
+				lo = i
+			if samples.altitude_m[i] >= samples.altitude_m[hi]:
+				hi = i
+		var a: int = mini(lo, hi)
+		var z: int = maxi(lo, hi)
+		out.append(Vector2(samples.distance_m[a], samples.altitude_m[a]))
+		if z != a:
+			out.append(Vector2(samples.distance_m[z], samples.altitude_m[z]))
+		first = last
+	return out
 
 
 static func _has(samples: SampleStream, name: String, i: int) -> bool:

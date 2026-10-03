@@ -17,7 +17,14 @@ extends RideRepository
 ## `record_size` байт: time_sec i32, power_w i32, target_w i32, step_index i32,
 ## speed_kmh f32, distance_m f32, cadence i16, heart_rate i16, power_age i16,
 ## cadence_age i16, heart_rate_age i16, flags u8 (бит 0 has_power, 1 has_cadence,
-## 2 has_speed, 3 has_heart_rate, 4 erg_enabled), 1 байт выравнивания.
+## 2 has_speed, 3 has_heart_rate, 4 erg_enabled, 5 has_route), 1 байт выравнивания,
+## altitude_m f32, grade_pct f32.
+##
+## Версии потока: 2 (текущая, запись 44 байта) — с позицией на трассе для свободной езды
+## (REQ-FRD-07 крит. 4: дистанция от старта — в `distance_m`, высота и уклон — в хвосте
+## записи, признак — бит 5); 1 (запись 36 байт, без хвоста) — заезды до FRD-07, читаются
+## без миграции (позиции на трассе нет). Дозапись в файл версии 1 (заезд прерван до
+## обновления) переписывает поток целиком в версии 2.
 ##
 ## Периодический сброс во время тренировки (`save_progress`, LOC-07 крит. 4) не переименовывает
 ## файлы: на ext4 rename поверх существующего файла запускает принудительную запись данных
@@ -44,14 +51,18 @@ const SAMPLES_FILE: String = "samples.bin"
 const INDEX_SCHEMA_VERSION: int = 1
 
 const SAMPLES_MAGIC: int = 0x5253564F  # "OVSR" little-endian
-const SAMPLES_VERSION: int = 1
+const SAMPLES_VERSION: int = 2
 const SAMPLES_HEADER_SIZE: int = 16
-const SAMPLES_RECORD_SIZE: int = 36
+const SAMPLES_RECORD_SIZE: int = 44
+## Прежняя версия потока (до FRD-07) — только чтение.
+const SAMPLES_VERSION_V1: int = 1
+const SAMPLES_RECORD_SIZE_V1: int = 36
 const FLAG_POWER: int = 1
 const FLAG_CADENCE: int = 2
 const FLAG_SPEED: int = 4
 const FLAG_HEART_RATE: int = 8
 const FLAG_ERG: int = 16
+const FLAG_ROUTE: int = 32
 
 var _dir: String
 ## Кэш индексов: profile_id → Array[RideSummary] (новые сверху).
@@ -528,8 +539,12 @@ static func _encode_records(s: SampleStream, from_index: int, to_index: int) -> 
 			flags |= FLAG_HEART_RATE
 		if s.erg_enabled[i]:
 			flags |= FLAG_ERG
+		if s.has_route[i]:
+			flags |= FLAG_ROUTE
 		buf.put_u8(flags)
 		buf.put_u8(0)
+		buf.put_float(s.altitude_m[i])
+		buf.put_float(s.grade_pct[i])
 	return buf.data_array
 
 
@@ -540,34 +555,38 @@ static func _write_samples_file(path: String, samples: SampleStream) -> bool:
 	return AtomicFile.write_bytes(path, bytes) == OK
 
 
-## Число целых записей в файле; -1 — файла нет или заголовок повреждён.
+## Число целых записей в файле текущей версии; -1 — файла нет, заголовок повреждён или
+## версия прежняя (тогда дозапись переписывает поток целиком).
 static func _count_records(path: String) -> int:
 	if not FileAccess.file_exists(path):
 		return -1
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return -1
-	var ok: bool = _check_header(file)
+	var record_size: int = _check_header(file)
 	var length: int = file.get_length()
 	file.close()
-	if not ok:
+	if record_size != SAMPLES_RECORD_SIZE:
 		return -1
 	return int((length - SAMPLES_HEADER_SIZE) / SAMPLES_RECORD_SIZE)
 
 
-## Проверяет заголовок открытого файла; курсор остаётся после заголовка.
-static func _check_header(file: FileAccess) -> bool:
+## Проверяет заголовок открытого файла; курсор остаётся после заголовка. Возвращает
+## длину записи известной версии (`SAMPLES_RECORD_SIZE` или `SAMPLES_RECORD_SIZE_V1`), 0 — повреждён.
+static func _check_header(file: FileAccess) -> int:
 	if file.get_length() < SAMPLES_HEADER_SIZE:
-		return false
+		return 0
 	file.seek(0)
 	if file.get_32() != SAMPLES_MAGIC:
-		return false
-	if file.get_16() != SAMPLES_VERSION:
-		return false
-	if file.get_16() != SAMPLES_RECORD_SIZE:
-		return false
+		return 0
+	var version: int = file.get_16()
+	var record_size: int = file.get_16()
+	var known: bool = (version == SAMPLES_VERSION and record_size == SAMPLES_RECORD_SIZE) \
+			or (version == SAMPLES_VERSION_V1 and record_size == SAMPLES_RECORD_SIZE_V1)
+	if not known:
+		return 0
 	file.seek(SAMPLES_HEADER_SIZE)
-	return true
+	return record_size
 
 
 ## Поток из файла; null — файла нет или заголовок повреждён. Усечённый хвост отбрасывается.
@@ -577,16 +596,18 @@ static func _read_samples_file(path: String) -> SampleStream:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return null
-	if not _check_header(file):
+	var record_size: int = _check_header(file)
+	if record_size == 0:
 		push_warning("FileRideRepository: повреждён %s" % path)
 		file.close()
 		return null
+	var with_route: bool = record_size == SAMPLES_RECORD_SIZE
 	file.seek(8)
 	var source_code: int = file.get_8()
-	var n: int = int((file.get_length() - SAMPLES_HEADER_SIZE) / SAMPLES_RECORD_SIZE)
+	var n: int = int((file.get_length() - SAMPLES_HEADER_SIZE) / record_size)
 	file.seek(SAMPLES_HEADER_SIZE)
 	var buf := StreamPeerBuffer.new()
-	buf.data_array = file.get_buffer(n * SAMPLES_RECORD_SIZE)
+	buf.data_array = file.get_buffer(n * record_size)
 	file.close()
 	var s := SampleStream.new()
 	s.speed_source = _speed_source_name(source_code)
@@ -609,4 +630,12 @@ static func _read_samples_file(path: String) -> SampleStream:
 		s.has_speed.append((flags & FLAG_SPEED) != 0)
 		s.has_heart_rate.append((flags & FLAG_HEART_RATE) != 0)
 		s.erg_enabled.append((flags & FLAG_ERG) != 0)
+		if with_route:
+			s.altitude_m.append(buf.get_float())
+			s.grade_pct.append(buf.get_float())
+			s.has_route.append((flags & FLAG_ROUTE) != 0)
+		else:
+			s.altitude_m.append(0.0)
+			s.grade_pct.append(0.0)
+			s.has_route.append(false)
 	return s

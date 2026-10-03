@@ -22,6 +22,14 @@ extends RefCounted
 ## Подписки — связанными методами, поэтому сессия держит записывающий через
 ## Callable: после FINISHED подписки снимаются сами, при отказе от записи до
 ## конца — `dispose()` (иначе цикл сессия → сигнал → recorder → сессия).
+##
+## Свободная езда (REQ-FRD-07 крит. 2–4): сессия без плана пишется тем же способом, если
+## выполняет контракт записи (кроме контракта `Ride.from_session`): сигналы
+## `state_changed(state: int)` (значения `WorkoutSession.State`), `event_logged(event)`
+## (пауза — `WorkoutSession.EVENT_PAUSE`), `second_elapsed(elapsed_sec: int)` (секунда
+## активного времени; на паузе не идёт) и методы `get_state() -> int`, `elapsed_sec() -> int`.
+## У `WorkoutSession` секунды идут от исполнителя (`executor.second_elapsed`).
+## Финальная запись свободной езды кладёт в метаданные итоговую дистанцию и набор высоты.
 
 const FLUSH_INTERVAL_SEC: int = 10
 
@@ -30,7 +38,8 @@ signal flushed(elapsed_sec: int)
 
 var repository: RideRepository
 var profile: Profile
-var session: WorkoutSession
+## `WorkoutSession` или сессия свободной езды (контракт — в шапке класса).
+var session: Object
 var ride: Ride = null
 ## Число сброшенных на диск сэмплов.
 var flushed_samples: int = 0
@@ -40,14 +49,18 @@ var flush_count: int = 0
 var _finished: bool = false
 
 
-func _init(repo: RideRepository, rider_profile: Profile, workout_session: WorkoutSession) -> void:
+func _init(repo: RideRepository, rider_profile: Profile, ride_session: Object) -> void:
 	repository = repo
 	profile = rider_profile
-	session = workout_session
-	session.state_changed.connect(_on_state_changed)
-	session.event_logged.connect(_on_event_logged)
-	session.executor.second_elapsed.connect(_on_second_elapsed)
-	if session.get_state() in [WorkoutSession.State.RUNNING, WorkoutSession.State.PAUSED]:
+	session = ride_session
+	_state_signal().connect(_on_state_changed)
+	_event_signal().connect(_on_event_logged)
+	if session is WorkoutSession:
+		(session as WorkoutSession).executor.second_elapsed.connect(_on_second_elapsed)
+	else:
+		_second_signal().connect(_on_session_second)
+	var state: int = int(session.call("get_state"))
+	if state in [WorkoutSession.State.RUNNING, WorkoutSession.State.PAUSED]:
 		_begin()
 
 
@@ -55,12 +68,16 @@ func _init(repo: RideRepository, rider_profile: Profile, workout_session: Workou
 func dispose() -> void:
 	if session == null:
 		return
-	if session.state_changed.is_connected(_on_state_changed):
-		session.state_changed.disconnect(_on_state_changed)
-	if session.event_logged.is_connected(_on_event_logged):
-		session.event_logged.disconnect(_on_event_logged)
-	if session.executor.second_elapsed.is_connected(_on_second_elapsed):
-		session.executor.second_elapsed.disconnect(_on_second_elapsed)
+	if _state_signal().is_connected(_on_state_changed):
+		_state_signal().disconnect(_on_state_changed)
+	if _event_signal().is_connected(_on_event_logged):
+		_event_signal().disconnect(_on_event_logged)
+	if session is WorkoutSession:
+		var executor := (session as WorkoutSession).executor
+		if executor.second_elapsed.is_connected(_on_second_elapsed):
+			executor.second_elapsed.disconnect(_on_second_elapsed)
+	elif _second_signal().is_connected(_on_session_second):
+		_second_signal().disconnect(_on_session_second)
 
 
 ## Идентификатор записываемого заезда ("" до старта).
@@ -77,16 +94,17 @@ func flush() -> void:
 	if ride == null or _finished:
 		return
 	var t0: int = Time.get_ticks_msec()
-	var total: int = session.samples.size()
+	var stream := _samples()
+	var total: int = stream.size()
 	if total > flushed_samples:
-		if repository.append_samples(ride.id, session.samples, flushed_samples):
+		if repository.append_samples(ride.id, stream, flushed_samples):
 			flushed_samples = total
 	ride.refresh_from_session(session)
 	ride.metadata["in_progress"] = true
 	repository.save_progress(ride)
 	last_flush_ms = Time.get_ticks_msec() - t0
 	flush_count += 1
-	flushed.emit(session.executor.elapsed_sec())
+	flushed.emit(_elapsed_sec())
 
 
 func _on_state_changed(state: int) -> void:
@@ -112,10 +130,14 @@ func _begin() -> void:
 	ride.metadata["in_progress"] = true
 	ride.sync_summary_header()
 	repository.save(ride)
-	flushed_samples = session.samples.size()
+	flushed_samples = _samples().size()
 
 
 func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec: int) -> void:
+	_on_session_second(elapsed_sec)
+
+
+func _on_session_second(elapsed_sec: int) -> void:
 	if ride == null or _finished:
 		return
 	if elapsed_sec > 0 and elapsed_sec % FLUSH_INTERVAL_SEC == 0:
@@ -132,8 +154,31 @@ func _finish() -> void:
 	ride.metadata["recovered"] = false
 	ride.compute_summary()
 	repository.save(ride)
-	flushed_samples = session.samples.size()
+	flushed_samples = _samples().size()
 	last_flush_ms = Time.get_ticks_msec() - t0
 	flush_count += 1
-	flushed.emit(session.executor.elapsed_sec())
+	flushed.emit(_elapsed_sec())
 	dispose()
+
+
+func _state_signal() -> Signal:
+	return Signal(session, &"state_changed")
+
+
+func _event_signal() -> Signal:
+	return Signal(session, &"event_logged")
+
+
+func _second_signal() -> Signal:
+	return Signal(session, &"second_elapsed")
+
+
+func _samples() -> SampleStream:
+	var stream: SampleStream = session.get("samples") as SampleStream
+	return stream if stream != null else SampleStream.new()
+
+
+func _elapsed_sec() -> int:
+	if session is WorkoutSession:
+		return (session as WorkoutSession).executor.elapsed_sec()
+	return int(session.call("elapsed_sec"))

@@ -20,6 +20,11 @@ extends RefCounted
 ## Поля «шапки» (`ride_id`, `started_at_unix`, `name`, статус Strava, флаги)
 ## заполняет хранилище из `Ride` — чтобы `RideRepository.list()` отдавал всё
 ## нужное списку без чтения потоков.
+##
+## Свободная езда (REQ-FRD-07 крит. 6): в шапке — тип заезда и трасса, в метриках —
+## набор высоты `ascent_m` (по сэмплам, крит. 4). Поля, связанные с целью плана
+## (`avg_target_w`), у заезда без цели — `NO_DATA` («—»), без ошибок. Сводки, записанные
+## до FRD-07, читаются как `workout` без набора.
 
 const NO_DATA: int = -1
 ## Окно скользящего среднего для NP, с.
@@ -37,11 +42,19 @@ var strava_activity_id: String = ""
 var stopped_early: bool = false
 var in_progress: bool = false
 var recovered: bool = false
+## `Ride.RIDE_TYPE_WORKOUT` | `Ride.RIDE_TYPE_FREE_RIDE`.
+var ride_type: String = Ride.RIDE_TYPE_WORKOUT
+## Трасса свободной езды ("" у тренировки по плану).
+var route_id: String = ""
 
 # --- Метрики ---
 ## Активное время, с (число сэмплов).
 var duration_sec: int = 0
 var distance_m: float = 0.0
+## Набор высоты, м — сумма положительных приращений высоты (свободная езда; иначе 0).
+var ascent_m: float = 0.0
+## Средняя цель плана по сэмплам с целью (> 0), Вт; `NO_DATA` — цели не было.
+var avg_target_w: int = NO_DATA
 var avg_power_w: int = NO_DATA
 var normalized_power_w: int = NO_DATA
 var max_power_w: int = NO_DATA
@@ -65,6 +78,7 @@ static func compute(samples: SampleStream, _ftp_w: int, zones: PowerZones, hr_zo
 	var n: int = samples.size()
 	s.duration_sec = n
 	s.distance_m = samples.total_distance_m()
+	s.ascent_m = samples.total_ascent_m()
 	if zones != null:
 		s.time_in_power_zones.resize(zones.zone_count())
 		s.time_in_power_zones.fill(0)
@@ -78,7 +92,12 @@ static func compute(samples: SampleStream, _ftp_w: int, zones: PowerZones, hr_zo
 	var max_p: int = NO_DATA
 	var max_h: int = NO_DATA
 	var max_c: int = NO_DATA
+	var target_sum: int = 0
+	var target_count: int = 0
 	for i in n:
+		if samples.target_w[i] > 0:
+			target_sum += samples.target_w[i]
+			target_count += 1
 		if samples.has_power[i]:
 			var p: int = samples.power_w[i]
 			s.power_sample_count += 1
@@ -105,6 +124,8 @@ static func compute(samples: SampleStream, _ftp_w: int, zones: PowerZones, hr_zo
 			max_c = maxi(max_c, c)
 
 	s.work_kj = float(power_sum) / 1000.0
+	if target_count > 0:
+		s.avg_target_w = roundi(float(target_sum) / float(target_count))
 	if s.power_sample_count > 0:
 		s.avg_power_w = roundi(float(power_sum) / float(s.power_sample_count))
 		s.max_power_w = max_p
@@ -157,6 +178,15 @@ func has_cadence() -> bool:
 	return cadence_sample_count > 0
 
 
+## Была ли у заезда цель плана (у свободной езды — нет).
+func has_target() -> bool:
+	return avg_target_w != NO_DATA
+
+
+func is_free_ride() -> bool:
+	return ride_type == Ride.RIDE_TYPE_FREE_RIDE
+
+
 ## Сумма секунд по зонам мощности (должна равняться `power_sample_count`).
 func total_power_zone_sec() -> int:
 	var total: int = 0
@@ -185,8 +215,12 @@ func to_dict() -> Dictionary:
 		"stopped_early": stopped_early,
 		"in_progress": in_progress,
 		"recovered": recovered,
+		"ride_type": ride_type,
+		"route_id": route_id,
 		"duration_sec": duration_sec,
 		"distance_m": distance_m,
+		"ascent_m": ascent_m,
+		"avg_target_w": avg_target_w,
 		"avg_power_w": avg_power_w,
 		"normalized_power_w": normalized_power_w,
 		"max_power_w": max_power_w,
@@ -216,8 +250,12 @@ static func from_dict(data: Dictionary) -> RideSummary:
 	s.stopped_early = _bool(data.get("stopped_early"))
 	s.in_progress = _bool(data.get("in_progress"))
 	s.recovered = _bool(data.get("recovered"))
+	s.ride_type = Ride.RIDE_TYPE_FREE_RIDE if str(data.get("ride_type", "")) == Ride.RIDE_TYPE_FREE_RIDE else Ride.RIDE_TYPE_WORKOUT
+	s.route_id = str(data.get("route_id", ""))
 	s.duration_sec = _int(data.get("duration_sec"), 0)
 	s.distance_m = _float(data.get("distance_m"), 0.0)
+	s.ascent_m = _float(data.get("ascent_m"), 0.0)
+	s.avg_target_w = _int(data.get("avg_target_w"), NO_DATA)
 	s.avg_power_w = _int(data.get("avg_power_w"), NO_DATA)
 	s.normalized_power_w = _int(data.get("normalized_power_w"), NO_DATA)
 	s.max_power_w = _int(data.get("max_power_w"), NO_DATA)
