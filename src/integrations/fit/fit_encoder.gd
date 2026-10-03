@@ -16,7 +16,8 @@ extends RefCounted
 ## Время: метки `record` — unix-время старта + активное время сэмпла + сумма
 ## пауз, завершившихся к этому сэмплу (на паузе слоты не пишутся, В-4), поэтому
 ## `total_timer_time` = число сэмплов (активное время), `total_elapsed_time` =
-## активное + паузы. Скорость — из потока согласно `speed_source` заезда (В-8),
+## активное + паузы (сумма пауз копится в мс без промежуточного округления и
+## сверяется с `paused_total_sec` заезда). Скорость — из потока согласно `speed_source` заезда (В-8),
 ## дистанция — интеграл скорости (`SampleStream.distance_m`).
 
 const PRODUCT_ID: int = 1
@@ -106,11 +107,17 @@ static func encode(ride: Ride) -> PackedByteArray:
 		summary = RideSummary.compute(samples, ride.ftp_w(), ride.power_zones(), ride.hr_zones())
 	var started: int = ride.started_at_unix if ride.started_at_unix > 0 else FitDefinitions.FIT_EPOCH_UNIX
 	var pauses: Array[Dictionary] = ride.pause_events()
-	var paused_total: int = 0
-	for p in pauses:
-		paused_total += roundi(float(p["duration_sec"]))
-	var end_unix: int = started + n + paused_total
-	var timestamps: PackedInt64Array = _record_timestamps(samples, started, pauses)
+	var pause_cum_ms: PackedInt64Array = _pause_cumulative_ms(pauses)
+	var paused_total_ms: int = int(pause_cum_ms[pause_cum_ms.size() - 1]) if pause_cum_ms.size() > 0 else 0
+	# Сверка с метаданными заезда (REQ-LOC-05 крит. 4): итог — `paused_total_sec`,
+	# если он задан; события дают лишь расстановку пауз между записями.
+	var meta_paused_ms: int = roundi(ride.paused_total_sec() * 1000.0)
+	if meta_paused_ms > 0:
+		paused_total_ms = meta_paused_ms
+	var timestamps: PackedInt64Array = _record_timestamps(samples, started, pauses, pause_cum_ms)
+	var end_unix: int = started + n + _ms_to_sec(paused_total_ms)
+	if n > 0:
+		end_unix = maxi(end_unix, int(timestamps[n - 1]) + 1)
 
 	var w := Writer.new()
 	_write_file_id(w, started)
@@ -119,7 +126,7 @@ static func encode(ride: Ride) -> PackedByteArray:
 	_define_event(w)
 	_event(w, started, FitDefinitions.EVENT_TYPE_START)
 	_define_record(w)
-	_write_records_with_pauses(w, samples, timestamps, started, pauses)
+	_write_records_with_pauses(w, samples, timestamps, started, pauses, pause_cum_ms)
 	_event(w, end_unix, FitDefinitions.EVENT_TYPE_STOP_ALL)
 	var laps: int = _write_laps(w, samples, timestamps, started, end_unix)
 	_write_session(w, ride, summary, started, end_unix, n, laps)
@@ -139,18 +146,37 @@ static func encode(ride: Ride) -> PackedByteArray:
 	return out.data_array
 
 
+## Накопленная длительность пауз в мс после каждой паузы: сумма считается в
+## дробных секундах и округляется один раз, чтобы ошибка округления не
+## накапливалась (две паузы по 2.5 с → 5000 мс, а не 6000; REQ-LOC-05 крит. 4).
+static func _pause_cumulative_ms(pauses: Array[Dictionary]) -> PackedInt64Array:
+	var out := PackedInt64Array()
+	out.resize(pauses.size())
+	var total_sec: float = 0.0
+	for k in pauses.size():
+		total_sec += maxf(float(pauses[k]["duration_sec"]), 0.0)
+		out[k] = roundi(total_sec * 1000.0)
+	return out
+
+
+## Миллисекунды → целые секунды меток FIT (округление к ближайшей).
+static func _ms_to_sec(ms: int) -> int:
+	return roundi(float(ms) / 1000.0)
+
+
 ## Метки времени записей (unix): старт + активное время + паузы, завершившиеся к сэмплу.
-static func _record_timestamps(samples: SampleStream, started: int, pauses: Array[Dictionary]) -> PackedInt64Array:
+static func _record_timestamps(samples: SampleStream, started: int, pauses: Array[Dictionary],
+		pause_cum_ms: PackedInt64Array) -> PackedInt64Array:
 	var out := PackedInt64Array()
 	out.resize(samples.size())
 	var k: int = 0
-	var paused: int = 0
+	var paused_sec: int = 0
 	for i in samples.size():
 		var t: int = samples.time_sec[i]
 		while k < pauses.size() and int(floor(float(pauses[k]["at_sec"]))) <= t:
-			paused += roundi(float(pauses[k]["duration_sec"]))
+			paused_sec = _ms_to_sec(int(pause_cum_ms[k]))
 			k += 1
-		out[i] = started + t + paused
+		out[i] = started + t + paused_sec
 	return out
 
 
@@ -213,13 +239,13 @@ static func _define_record(w: Writer) -> void:
 
 ## Записи с вкраплёнными событиями пауз (stop_all / start) в хронологическом порядке.
 static func _write_records_with_pauses(w: Writer, s: SampleStream, timestamps: PackedInt64Array,
-		started: int, pauses: Array[Dictionary]) -> void:
+		started: int, pauses: Array[Dictionary], pause_cum_ms: PackedInt64Array) -> void:
 	var k: int = 0
 	var paused: int = 0
 	for i in s.size():
 		var t: int = s.time_sec[i]
 		while k < pauses.size() and int(floor(float(pauses[k]["at_sec"]))) <= t:
-			paused = _emit_pause(w, pauses[k], started, paused)
+			paused = _emit_pause(w, pauses[k], started, paused, _ms_to_sec(int(pause_cum_ms[k])))
 			k += 1
 		w.data(LOCAL_RECORD, [
 			FitDefinitions.to_fit_time(int(timestamps[i])),
@@ -231,18 +257,19 @@ static func _write_records_with_pauses(w: Writer, s: SampleStream, timestamps: P
 		])
 	# Паузы после последнего сэмпла (например, завершение на паузе).
 	while k < pauses.size():
-		paused = _emit_pause(w, pauses[k], started, paused)
+		paused = _emit_pause(w, pauses[k], started, paused, _ms_to_sec(int(pause_cum_ms[k])))
 		k += 1
 
 
-static func _emit_pause(w: Writer, pause: Dictionary, started: int, paused_before: int) -> int:
+## `stop_all` в начале паузы и `start` в её конце; `paused_before`/`paused_after` —
+## накопленные паузы в целых секундах до и после этой (из общего накопителя в мс).
+static func _emit_pause(w: Writer, pause: Dictionary, started: int, paused_before: int, paused_after: int) -> int:
 	var at: int = int(floor(float(pause["at_sec"])))
 	var stop_unix: int = started + at + paused_before
 	_event(w, stop_unix, FitDefinitions.EVENT_TYPE_STOP_ALL)
-	var duration: int = roundi(float(pause["duration_sec"]))
 	if bool(pause.get("resumed", false)):
-		_event(w, stop_unix + duration, FitDefinitions.EVENT_TYPE_START)
-	return paused_before + duration
+		_event(w, started + at + paused_after, FitDefinitions.EVENT_TYPE_START)
+	return paused_after
 
 
 ## `lap` на каждый шаг плана по `step_index` потока; без сэмплов — один пустой lap.

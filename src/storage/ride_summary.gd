@@ -88,7 +88,8 @@ static func compute(samples: SampleStream, _ftp_w: int, zones: PowerZones, hr_zo
 				var z: int = zones.zone_of(p)
 				if z >= 1 and z <= s.time_in_power_zones.size():
 					s.time_in_power_zones[z - 1] += 1
-		if samples.has_heart_rate[i]:
+		# Пульс 0 уд/мин — отсутствие данных (решение В-17, REQ-LOC-04 крит. 5).
+		if samples.has_heart_rate[i] and samples.heart_rate_bpm[i] > 0:
 			var h: int = samples.heart_rate_bpm[i]
 			s.hr_sample_count += 1
 			hr_sum += h

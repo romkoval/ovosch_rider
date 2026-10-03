@@ -208,6 +208,46 @@ func test_stop_finishes_early_and_stops_recording() -> void:
 	assert_eq(_finished_count, 1)
 
 
+## REQ-WRK-05 крит. 2, REQ-LOC-01 крит. 1: stop() на паузе закрывает текущую паузу —
+## её время идёт в paused_total_sec, у события паузы есть duration_sec/until_sec.
+func test_stop_while_paused_closes_pause_and_counts_its_duration() -> void:
+	_session = _make(_plan_60_30_90())
+	_session.start()
+	_tick_n(_session, 10)
+	_session.pause()
+	_tick_n(_session, 7)
+	_session.stop()
+	assert_eq(_session.get_state(), WorkoutSession.State.FINISHED)
+	assert_eq(_finished_count, 1)
+	assert_almost_eq(float(_session.metadata()["paused_total_sec"]), 7.0, 1e-6, "7 с паузы до stop учтены")
+	var pause_event: Dictionary = {}
+	for e in _session.events:
+		if e["type"] == WorkoutSession.EVENT_PAUSE:
+			pause_event = e
+	assert_true(pause_event.has("duration_sec"), "событие паузы закрыто duration_sec")
+	assert_almost_eq(float(pause_event.get("duration_sec", 0.0)), 7.0, 1e-6)
+	assert_almost_eq(float(pause_event.get("until_sec", 0.0)), 17.0, 1e-6)
+	# Порядок событий: pause → stop → finish; сэмплов на паузе нет.
+	var types: Array[String] = []
+	for e in _session.events:
+		types.append(str(e["type"]))
+	assert_eq(types, ["start", "pause", "stop", "finish"] as Array[String])
+	assert_eq(_session.samples.size(), 10)
+
+
+## Пауза, закрытая resume(), не закрывается повторно при stop().
+func test_stop_after_resume_does_not_double_count_pause() -> void:
+	_session = _make(_plan_60_30_90())
+	_session.start()
+	_tick_n(_session, 5)
+	_session.pause()
+	_tick_n(_session, 3)
+	_session.resume()
+	_tick_n(_session, 4)
+	_session.stop()
+	assert_almost_eq(float(_session.metadata()["paused_total_sec"]), 3.0, 1e-6)
+
+
 func test_start_twice_and_lifecycle_states() -> void:
 	_session = _make(_plan_60_30_90())
 	_session.start()
@@ -326,6 +366,24 @@ func test_free_ride_step_sends_no_target_power() -> void:
 # ---------------------------------------------------------------------------
 # Телеметрия, пульс, обрывы
 # ---------------------------------------------------------------------------
+
+## REQ-LOC-04 крит. 5: пульс 0 от датчика — «нет данных», не сэмпл с пульсом 0.
+func test_heart_rate_zero_is_no_data() -> void:
+	_trainer.set_heart_rate_sequence([0, 0, 120, 0, 130])
+	_session = _make(_plan_600())
+	_session.start()
+	_tick_n(_session, 5)
+	var s := _session.samples
+	assert_eq(s.size(), 5)
+	assert_false(s.has_heart_rate[0], "0 уд/мин — нет данных")
+	assert_false(s.has_heart_rate[1])
+	assert_true(s.has_heart_rate[2])
+	assert_eq(s.heart_rate_bpm[2], 120)
+	assert_false(s.has_heart_rate[3], "0 после реального значения — снова нет данных")
+	assert_eq(s.heart_rate_age_sec[3], 1, "возраст данных пульса растёт")
+	assert_true(s.has_heart_rate[4])
+	assert_eq(s.heart_rate_bpm[4], 130)
+
 
 func test_heart_rate_recorded_when_present() -> void:
 	_trainer.set_heart_rate(150)

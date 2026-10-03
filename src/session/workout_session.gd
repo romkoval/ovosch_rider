@@ -37,7 +37,8 @@ extends RefCounted
 ## времени, прошедшему через `tick()` (станок тикает и на паузе), — и
 ## `until_sec = at_sec + duration_sec` — «конец паузы по часам устройства».
 ## Сумма длительностей всех пауз — `metadata()["paused_total_sec"]` (для FIT
-## `timer_stopped/started` и истории).
+## `timer_stopped/started` и истории). `stop()` на паузе закрывает текущую паузу
+## так же, как `resume()`. Пульс 0 уд/мин от датчика считается отсутствием данных.
 
 enum State { IDLE, RUNNING, PAUSED, FINISHED }
 
@@ -176,12 +177,7 @@ func resume() -> void:
 		return
 	_set_state(State.RUNNING)
 	executor.resume()
-	if _pause_event_index >= 0 and _pause_event_index < events.size():
-		var paused_for: float = maxf(_wall_sec - _pause_started_wall_sec, 0.0)
-		_paused_total_sec += paused_for
-		events[_pause_event_index]["duration_sec"] = paused_for
-		events[_pause_event_index]["until_sec"] = float(events[_pause_event_index]["at_sec"]) + paused_for
-	_pause_event_index = -1
+	_close_pause()
 	_log(EVENT_RESUME, executor.elapsed_sec())
 	_resend(_erg_pending)
 	_erg_pending = false
@@ -197,9 +193,12 @@ func skip_step() -> void:
 
 
 ## Досрочное завершение (REQ-WRK-05 крит. 4): подтверждение — на стороне UI.
+## На паузе сначала закрывается текущая пауза (её время идёт в `paused_total_sec`,
+## у события паузы появляется `duration_sec`, REQ-WRK-05 крит. 2, REQ-LOC-01 крит. 1).
 func stop() -> void:
 	if _state != State.RUNNING and _state != State.PAUSED:
 		return
+	_close_pause()
 	_log(EVENT_STOP, executor.elapsed_sec())
 	executor.stop()
 
@@ -338,6 +337,19 @@ func _log(type: String, value: Variant) -> void:
 	event_logged.emit(event)
 
 
+## Закрыть открытую паузу: учесть её длительность по протиканному времени и
+## дописать `duration_sec`/`until_sec` в событие паузы. Без открытой паузы — ничего.
+func _close_pause() -> void:
+	if _pause_event_index < 0:
+		return
+	if _pause_event_index < events.size():
+		var paused_for: float = maxf(_wall_sec - _pause_started_wall_sec, 0.0)
+		_paused_total_sec += paused_for
+		events[_pause_event_index]["duration_sec"] = paused_for
+		events[_pause_event_index]["until_sec"] = float(events[_pause_event_index]["at_sec"]) + paused_for
+	_pause_event_index = -1
+
+
 func _effective_erg() -> bool:
 	return erg_enabled and not _freeride_suspended
 
@@ -418,8 +430,10 @@ func _on_telemetry(sample: TrainerSample) -> void:
 	_latest_sample = sample
 
 
+## Пульс 0 от датчика — «нет данных» (решение по REQ-LOC-04 крит. 5: 0 уд/мин
+## не попадает ни в одну зону, поэтому в сэмпле это отсутствие пульса).
 func _on_heart_rate(bpm: int) -> void:
-	_latest_hr_bpm = bpm
+	_latest_hr_bpm = bpm if bpm > 0 else -1
 
 
 func _on_connection_state_changed(state: int) -> void:
