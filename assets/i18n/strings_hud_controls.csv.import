@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://by0wv0xiwusa0"
+
+[deps]
+
+files=["res://assets/i18n/strings_hud_controls.ru.translation", "res://assets/i18n/strings_hud_controls.en.translation"]
+
+source_file="res://assets/i18n/strings_hud_controls.csv"
+dest_files=["res://assets/i18n/strings_hud_controls.ru.translation", "res://assets/i18n/strings_hud_controls.en.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

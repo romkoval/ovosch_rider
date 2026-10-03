@@ -1,0 +1,10 @@
+[gd_resource type="FontVariation" format=3]
+
+[ext_resource type="FontFile" path="res://assets/fonts/inter/Inter-Variable.res" id="1_sobne"]
+
+[resource]
+base_font = ExtResource("1_sobne")
+variation_opentype = {
+1869640570: 16,
+2003265652: 400
+}

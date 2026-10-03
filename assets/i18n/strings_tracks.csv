@@ -1,0 +1,10 @@
+keys,ru,en
+meta.area.tracks,Трассы,Tracks
+track.flat.name,Пшеничные поля,Wheat Fields
+track.flat.kind,равнина,flatlands
+track.hills.name,Зелёные холмы,Green Hills
+track.hills.kind,холмы,hills
+track.mountains.name,Перевал,Mountain Pass
+track.mountains.kind,горы,mountains
+track.seaside.name,Приморье,Seaside
+track.seaside.kind,море и мост,sea & bridge
