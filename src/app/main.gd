@@ -136,6 +136,10 @@ func _show_screen(screen: int) -> void:
 	var previous := visible_screen_node()
 	if previous is WorkoutScreen and screen != AppState.Screen.WORKOUT:
 		(previous as WorkoutScreen).on_screen_exited()
+	# Leaving the devices screen stops manual scanning (REQ-DEV-01 crit. 4, D-5);
+	# a running auto-connect keeps its own scan and stops it by itself.
+	if previous is DevicesScreen and screen != AppState.Screen.DEVICES and connections != null:
+		connections.stop_scan()
 	for key in _screens:
 		(_screens[key] as Control).visible = key == screen
 	var node := screen_node(screen)

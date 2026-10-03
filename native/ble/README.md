@@ -10,15 +10,15 @@
 ```
 native/
   .gdignore              — каталог закрыт от Godot, пока библиотеки не собраны (см. ниже)
-  godot-cpp/             — клон godot-cpp (не в репозитории, см. «Зависимости»)
   ble/
+    godot-cpp/           — клон godot-cpp (не в репозитории, см. «Зависимости»)
     SConstruct           — сборка на godot-cpp
     ovosch_ble.gdextension
     src/register_types.{h,cpp}
     src/ovosch_ble.{h,cpp}    — класс OvoschBle: методы и сигналы 1:1 с BleBridge
     src/ble_backend.h         — чистый C++ интерфейс платформенного backend'а
     src/null_backend.{h,cpp}  — заглушка (is_available() == false), собирается везде
-    src/platform/apple/       — CoreBluetooth-backend (T-022, Objective-C++)
+    src/platform/apple/apple_backend.{h,mm} — CoreBluetooth-backend (T-022, Objective-C++, ARC)
 ```
 
 ## Зависимости
@@ -30,14 +30,24 @@ native/
   Когда появится ветка `4.7`, замените её в командах ниже и в CI.
 
 ```sh
-cd native
+cd native/ble
 git clone --depth 1 -b 4.5 https://github.com/godotengine/godot-cpp godot-cpp
 ```
 
+Клон лежит **внутри `native/ble`** (`native/ble/godot-cpp`, в `.gitignore`): SConstruct ищет
+его там по относительному пути, затем в `native/godot-cpp`; другой путь — `scons godot_cpp_path=…`.
+Относительный путь важен: при `../godot-cpp` SCons делает пути объектов абсолютными, и линковка
+`libgodot-cpp.a` падала на CI с «Argument list too long» (лимит 128 КБ на аргумент `sh -c`).
+
 ## Сборка
 
+Сначала собирается godot-cpp **в своём каталоге**, затем расширение — так же устроены CI-jobs
+`native-linux` и `native-macos`.
+
 ```sh
-cd native/ble
+cd native/ble/godot-cpp
+scons platform=linux   target=template_debug -j4     # один раз (кэшируется)
+cd ..
 scons platform=linux   target=template_debug -j4     # проверка каркаса (CI, job native-linux)
 scons platform=macos   target=template_debug         # macOS (нужен Xcode CLT)
 scons platform=macos   target=template_release
@@ -51,6 +61,10 @@ scons platform=ios     target=template_release arch=arm64
   `xcodebuild -create-xcframework -library bin/libovosch_ble.ios.template_release.a -output bin/libovosch_ble.ios.template_release.xcframework`.
 
 ## Подключение к проекту
+
+Локальный клон godot-cpp внутри `native/ble` виден GUT-тестам как `res://native/ble/godot-cpp`;
+архитектурные тесты это учитывают (сторонний код внутри `native/ble/`), но прогонять тесты
+лучше без собранных артефактов — они в `.gitignore` и в репозиторий не попадают.
 
 Пока библиотек нет, файл `native/.gdignore` скрывает каталог от Godot — иначе движок при
 открытии проекта сообщал бы об отсутствующих библиотеках для текущей платформы, а
@@ -78,3 +92,73 @@ scons platform=ios     target=template_release arch=arm64
 
 Потокобезопасность: callbacks CoreBluetooth приходят не из главного потока; `OvoschBle`
 испускает сигналы через `call_deferred`, поэтому GDScript получает их в главном потоке.
+
+## macOS / iOS: CoreBluetooth-backend
+
+`src/platform/apple/apple_backend.mm` реализует `BleBackend` поверх `CBCentralManager`
+(macOS 10.13+/iOS 10+, без API новее macOS 12/iOS 15). SConstruct подхватывает его
+автоматически для `platform=macos|ios`, определяет `OVOSCH_BLE_HAS_PLATFORM_BACKEND`,
+линкует `CoreBluetooth` и `Foundation`, компилирует `.mm` с ARC.
+
+Поведение:
+- сканирование — `scanForPeripheralsWithServices:` с `AllowDuplicates = NO`; если адаптер ещё
+  не `poweredOn`, запрос откладывается и стартует в `centralManagerDidUpdateState`;
+- `is_available()` — состояние `poweredOn`; `adapter_state_changed` — из `didUpdateState`;
+- идентификатор устройства — `peripheral.identifier.UUIDString`; `connect_peripheral` для
+  запомненного id, не виденного в рекламе, пробует `retrievePeripheralsWithIdentifiers:`;
+- `discover_services` — `discoverServices:nil`, затем `discoverCharacteristics:nil` для каждого
+  сервиса; `services_discovered` приходит после последнего; UUID нормализованы как
+  `BleUuids.normalize` (16-битные → `XXXX`);
+- чтение и нотификация различаются по флагу ожидающего чтения на характеристике
+  (`pendingReads`), поэтому `readValueForCharacteristic` даёт `characteristic_read`,
+  а `setNotifyValue:YES` — `notification`;
+- `write` без ответа (Write Command) подтверждения в CoreBluetooth не имеет —
+  `write_done(ok=true)` отдаётся сразу после постановки;
+- `disconnected(reason)`: `REQUESTED` для наших `cancelPeripheralConnection`, `TIMEOUT` для
+  `CBErrorConnectionTimeout`, иначе `LINK_LOSS`/`ERROR`;
+- все колбэки — на серийной очереди `ovosch.ble`; `OvoschBle` переправляет сигналы в главный
+  поток через `call_deferred`.
+
+### Info.plist и entitlements (только документация, настраивается в экспорте Godot)
+
+- `NSBluetoothAlwaysUsageDescription` — обязателен на macOS 11+/iOS 13+ (без него приложение
+  завершается при первом обращении к CoreBluetooth); для iOS ≤ 12 дополнительно
+  `NSBluetoothPeripheralUsageDescription`.
+- Sandbox / Mac App Store: entitlement `com.apple.security.device.bluetooth = true`.
+- iOS, фоновая работа: `UIBackgroundModes` → `bluetooth-central`, если тренировка должна
+  продолжаться при свёрнутом приложении. **Вопрос владельцу**: нужен ли фоновый режим
+  (влияет на ревью App Store и энергопотребление); по умолчанию не включаем.
+- Хранить тексты описаний в экспорт-пресетах Godot (`export_presets.cfg` в `.gitignore`) или
+  в документации — не в репозитории с ключами.
+
+### Сборка на macOS
+
+```sh
+cd native/ble
+git clone --depth 1 -b 4.5 https://github.com/godotengine/godot-cpp godot-cpp
+cd godot-cpp
+scons platform=macos target=template_debug arch=universal     # сначала godot-cpp в своём каталоге
+scons platform=macos target=template_release arch=universal
+cd ..
+scons platform=macos target=template_debug arch=universal     # или arch=arm64 / x86_64
+scons platform=macos target=template_release arch=universal
+```
+
+Проверка в редакторе:
+1. убедиться, что в `native/ble/bin/` появился `libovosch_ble.macos.template_debug.framework/`;
+2. удалить `native/.gdignore`;
+3. открыть проект в Godot 4.7 — в Output не должно быть ошибок GDExtension;
+4. в консоли редактора: `print(ClassDB.class_exists("OvoschBle"))` → `true`;
+   `print(NativeBleBridge.is_native_available())` → `true`;
+5. запустить приложение, экран «Устройства» → «Сканировать»: при включённом Bluetooth Tacx Neo
+   появляется в списке (REQ-DEV-01 крит. 5).
+
+### Состояние проверки
+
+Собрать Apple-backend в контейнере разработки нельзя (нет SDK). Единственная проверка компиляции
+до появления macOS у владельца — CI job `native-macos` (`macos-latest`,
+`scons platform=macos target=template_debug arch=arm64`), помеченный `continue-on-error: true`:
+на приватном репозитории macOS-минуты могут быть недоступны, тогда job не стартует или падает —
+это допустимо и не блокирует остальные проверки. Статическое соответствие контракту
+(`OvoschBle` ⇔ `BleBridge`, `AppleBackend` ⇔ `BleBackend`) проверяет GUT-тест
+`tests/unit/arch/test_native_contract.gd`.

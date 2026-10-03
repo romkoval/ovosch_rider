@@ -78,7 +78,12 @@ func test_create_default_falls_back_to_stub() -> void:
 	var b := BleBridge.create_default()
 	assert_not_null(b)
 	assert_true(b is StubBleBridge, "без нативного модуля — заглушка (REQ-NFR-06 крит. 1: выбор только здесь)")
-	assert_true(b.is_available())
+	assert_false(b.is_available(), "REQ-DEV-01 крит. 7: заглушка из create_default недоступна — без фантомных подключений")
+	assert_eq(b.get_adapter_state(), BleBridge.AdapterState.UNSUPPORTED)
+	(b as StubBleBridge).set_available(true)
+	assert_true(b.is_available(), "в тестах включается явно")
+	assert_eq(b.get_adapter_state(), BleBridge.AdapterState.POWERED_ON)
+	assert_true(StubBleBridge.new().is_available(), "прямой StubBleBridge.new() доступен")
 	assert_eq(BleBridge.adapter_state_name(BleBridge.AdapterState.POWERED_ON), "powered_on")
 	assert_eq(BleBridge.adapter_state_name(99), "unknown")
 

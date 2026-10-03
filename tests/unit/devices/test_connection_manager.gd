@@ -81,10 +81,12 @@ func test_connect_sensor_remembers_in_profile_only() -> void:
 	assert_eq(_cm.device_states()["hrm"]["kind"], RememberedDevices.KIND_HR)
 
 
-func test_connect_sensor_unknown_kind_rejected() -> void:
-	_cm.connect_sensor("x", "bananas")
-	assert_push_error("неизвестный тип датчика")
+func test_connect_sensor_unknown_kind_rejected_with_warning() -> void:
+	assert_false(_cm.connect_sensor("x", "bananas"))
+	assert_push_warning("неизвестный тип датчика")
+	assert_false(_cm.connect_sensor("", RememberedDevices.KIND_HR), "пустой id")
 	assert_eq(_cm.sensors.size(), 0)
+	assert_true(_cm.connect_sensor("hrm", RememberedDevices.KIND_HR))
 
 
 func test_trainer_battery_read_and_exposed() -> void:
@@ -214,6 +216,13 @@ func test_forget_disconnects_and_removes_and_blocks_auto_connect() -> void:
 	assert_true(_cm.forget(A, "neo"))
 	assert_eq(_cm.state_of("neo"), TrainerDevice.ConnectionState.DISCONNECTED, "REQ-DEV-06 крит. 4: отключено")
 	assert_false(_remembered.has_trainer(), "удалено из реестра")
+	assert_false(_cm.device_states().has("neo"), "забытое устройство исчезает из device_states")
+	assert_eq(_cm.trainer_id, "")
+	_cm.connect_sensor("hrm", RememberedDevices.KIND_HR)
+	_bridge.pump()
+	_cm.forget(A, "hrm")
+	assert_false(_cm.device_states().has("hrm"))
+	assert_false(_cm.sensor_ids.has(RememberedDevices.KIND_HR))
 	_cm.auto_connect(A)
 	assert_false(_cm.is_auto_connecting(), "автоподключение к забытому не выполняется")
 	assert_false(_cm.forget(A, "nothing"))
@@ -302,3 +311,54 @@ func test_fake_trainer_kind_for_dev_mode() -> void:
 	assert_eq(cm.battery_of("fake-1"), -1)
 	assert_true(_remembered.has_trainer())
 	cm.dispose()
+
+
+# ---------------------------------------------------------------------------
+# REQ-DEV-01 крит. 7 — Bluetooth недоступен
+# ---------------------------------------------------------------------------
+
+func test_start_scan_and_auto_connect_refused_when_ble_unavailable() -> void:
+	assert_true(_cm.is_ble_available())
+	assert_true(_cm.start_scan())
+	_cm.stop_scan()
+	_bridge.set_available(false)
+	assert_false(_cm.is_ble_available())
+	assert_false(_cm.start_scan(), "REQ-DEV-01 крит. 7: сканирование не стартует")
+	assert_false(_cm.scanner.is_scanning())
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	_cm.auto_connect(A)
+	assert_false(_cm.is_auto_connecting(), "автоподключение без Bluetooth не начинается")
+	assert_eq(_bridge.calls_of("start_scan").size(), 1, "на мост ушёл только первый, успешный start_scan")
+
+
+func test_adapter_powered_off_cancels_scan_and_auto_connect() -> void:
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	var changed: Array[int] = [0]
+	_cm.devices_changed.connect(func() -> void: changed[0] += 1)
+	_cm.auto_connect(A)
+	assert_true(_cm.is_auto_connecting())
+	_bridge.set_adapter_state(BleBridge.AdapterState.POWERED_OFF)
+	assert_false(_cm.is_ble_available(), "мост есть, но адаптер выключен")
+	assert_false(_cm.is_auto_connecting())
+	assert_false(_cm.scanner.is_scanning())
+	assert_gt(changed[0], 0, "UI уведомлён об изменении доступности")
+	_bridge.set_adapter_state(BleBridge.AdapterState.POWERED_ON)
+	assert_true(_cm.is_ble_available())
+
+
+func test_default_bridge_without_native_module_is_unavailable_for_manager() -> void:
+	var cm := ConnectionManager.new(BleBridge.create_default(), _remembered)
+	assert_false(cm.is_ble_available(), "UX-3: без нативного модуля фантомных подключений нет")
+	assert_false(cm.start_scan())
+	cm.dispose()
+
+
+func test_stop_scan_keeps_auto_connect_scan_running() -> void:
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	_cm.start_scan()
+	_cm.auto_connect(A)
+	_cm.stop_scan()
+	assert_true(_cm.scanner.is_scanning(), "D-5: ручной stop не гасит сканирование автоподключения")
+	assert_true(_cm.is_auto_connecting())
+	_bridge.emit_device_found("neo", "Neo", -50, PackedStringArray(["1826"]))
+	assert_false(_cm.scanner.is_scanning(), "автоподключение само остановило сканер")

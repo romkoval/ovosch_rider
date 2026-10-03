@@ -838,7 +838,12 @@ func test_req_nfr_06_create_default_without_gdextension_is_stub_and_native_is_sa
 	assert_false(NativeBleBridge.is_native_available(), "в контейнере GDExtension нет")
 	var bridge := BleBridge.create_default()
 	assert_true(bridge is StubBleBridge, "мост по умолчанию — заглушка")
-	assert_true(bridge.is_available())
+	# Доступность заглушки по умолчанию — решение по REQ-DEV-01 крит. 7 (без нативного модуля
+	# приложение может честно сообщать «Bluetooth недоступен»); требование фиксирует лишь
+	# согласованность: is_available() ⇔ адаптер POWERED_ON.
+	assert_eq(bridge.is_available(), bridge.get_adapter_state() == BleBridge.AdapterState.POWERED_ON,
+		"is_available() согласована с состоянием адаптера")
+	assert_true(StubBleBridge.new().is_available(), "явно созданная заглушка для тестов доступна")
 	var native := NativeBleBridge.new()
 	assert_false(native.is_available())
 	assert_eq(native.get_adapter_state(), BleBridge.AdapterState.UNSUPPORTED)

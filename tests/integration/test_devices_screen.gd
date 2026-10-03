@@ -172,3 +172,33 @@ func test_back_navigates_home_and_main_builds_devices_screen() -> void:
 	(s.get_node("%BackButton") as Button).pressed.emit()
 	assert_eq(_state.current_screen, AppState.Screen.HOME)
 	assert_eq(AppState.screen_name(AppState.Screen.DEVICES), "devices")
+
+
+func test_ble_unavailable_shows_status_and_disables_scan_and_connect() -> void:
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	var s := _screen()
+	assert_false((s.get_node("%ScanButton") as Button).disabled)
+	_bridge.set_available(false)
+	assert_eq(s.status_text(), "Bluetooth unavailable: native module not loaded or adapter is off", "REQ-DEV-01 крит. 7")
+	assert_true((s.get_node("%ScanButton") as Button).disabled)
+	assert_true((s.row("neo")["connect_button"] as Button).disabled, "подключение недоступно")
+	(s.get_node("%ScanButton") as Button).pressed.emit()
+	assert_false(_cm.scanner.is_scanning())
+	_bridge.set_available(true)
+	assert_eq(s.status_text(), "Not scanning")
+	assert_false((s.get_node("%ScanButton") as Button).disabled)
+	assert_false((s.row("neo")["connect_button"] as Button).disabled)
+
+
+func test_back_stops_manual_scan_but_not_auto_connect_scan() -> void:
+	var s := _screen()
+	(s.get_node("%ScanButton") as Button).pressed.emit()
+	assert_true(_cm.scanner.is_scanning())
+	(s.get_node("%BackButton") as Button).pressed.emit()
+	assert_false(_cm.scanner.is_scanning(), "REQ-DEV-01 крит. 4 / D-5")
+	assert_eq(_bridge.calls_of("stop_scan").size(), 1)
+	_remembered.set_trainer(RememberedDevices.make_device("neo", "Neo", RememberedDevices.KIND_TRAINER))
+	_cm.auto_connect(_profile.id)
+	assert_true(_cm.scanner.is_scanning())
+	(s.get_node("%BackButton") as Button).pressed.emit()
+	assert_true(_cm.scanner.is_scanning(), "сканирование автоподключения продолжается")

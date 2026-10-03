@@ -272,9 +272,10 @@ func test_power_meter_silent_falls_back_to_trainer_and_vice_versa() -> void:
 
 
 func test_set_power_source_rejects_unknown() -> void:
-	_hub.set_power_source("bananas")
+	assert_false(_hub.set_power_source("bananas"))
 	assert_eq(_hub.power_source, SensorHub.SOURCE_TRAINER)
-	assert_push_error("неизвестный источник")
+	assert_push_warning("неизвестный источник")
+	assert_true(_hub.set_power_source(SensorHub.SOURCE_POWER_METER))
 
 
 func test_replacing_sensor_disconnects_old_handlers() -> void:

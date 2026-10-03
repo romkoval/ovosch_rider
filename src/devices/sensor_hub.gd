@@ -111,11 +111,13 @@ func set_power_meter(sensor: SensorDevice) -> void:
 	power_meter = sensor
 
 
-func set_power_source(source: String) -> void:
+## false — неизвестный источник (предупреждение, выбор не меняется).
+func set_power_source(source: String) -> bool:
 	if source != SOURCE_TRAINER and source != SOURCE_POWER_METER:
-		push_error("SensorHub.set_power_source: неизвестный источник '%s'" % source)
-		return
+		push_warning("SensorHub.set_power_source: неизвестный источник '%s'" % source)
+		return false
 	power_source = source
+	return true
 
 
 ## Источник, давший значение в последнем объединённом сэмпле.

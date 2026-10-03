@@ -107,11 +107,17 @@ func get_adapter_state() -> int:
 	return AdapterState.UNKNOWN
 
 
-## Мост по умолчанию: нативный, если GDExtension загружен, иначе заглушка.
+## Мост по умолчанию: нативный, если GDExtension загружен, иначе **недоступная**
+## заглушка (`is_available() == false`, адаптер UNSUPPORTED) — приложение без нативного
+## модуля честно показывает «Bluetooth недоступен» (REQ-DEV-01 крит. 7). Для тестов
+## заглушка создаётся напрямую `StubBleBridge.new()` (доступна) либо включается
+## `set_available(true)`.
 static func create_default() -> BleBridge:
 	if NativeBleBridge.is_native_available():
 		return NativeBleBridge.new()
-	return StubBleBridge.new()
+	var stub := StubBleBridge.new()
+	stub.set_available(false)
+	return stub
 
 
 static func adapter_state_name(state: int) -> String:

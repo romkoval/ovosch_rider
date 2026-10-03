@@ -85,9 +85,21 @@ func forget_device(id: String) -> void:
 	refresh()
 
 
+## Leaving the screen stops scanning (REQ-DEV-01 crit. 4); auto-connect keeps its own scan.
 func back() -> void:
+	_stop_user_scan()
 	if _app_state != null:
 		_app_state.navigate(AppState.Screen.HOME)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and is_node_ready() and not visible:
+		_stop_user_scan()
+
+
+func _stop_user_scan() -> void:
+	if _manager != null and not _manager.is_auto_connecting():
+		_manager.stop_scan()
 
 
 ## Incremental refresh: rows are kept and updated in place, moved between the lists
@@ -120,7 +132,9 @@ func refresh() -> void:
 				hbox.get_parent().remove_child(hbox)
 			hbox.queue_free()
 			_rows.erase(id)
+	var available: bool = _manager.is_ble_available()
 	_scan_button.text = tr("ui.devices.stop_scan") if _manager.scanner.is_scanning() else tr("ui.devices.scan")
+	_scan_button.disabled = not available
 	_auto_connect_check.set_pressed_no_signal(_manager.auto_connect_enabled)
 	_status_label.text = _status_text()
 
@@ -178,6 +192,8 @@ static func state_key(state: int) -> String:
 
 
 func _status_text() -> String:
+	if not _manager.is_ble_available():
+		return tr("ui.devices.ble_unavailable")
 	if _manager.is_auto_connecting():
 		return tr("ui.devices.status.auto_connecting").format({"count": _manager.pending_auto_connect_ids().size()})
 	if not _not_found_ids.is_empty():
@@ -245,7 +261,7 @@ func _update_row(r: Dictionary, record: Dictionary, is_remembered: bool) -> void
 	(r["label"] as Label).text = " · ".join(parts)
 	var connect_button: Button = r["connect_button"]
 	connect_button.text = tr("ui.devices.disconnect") if state == TrainerDevice.ConnectionState.CONNECTED else tr("ui.devices.connect")
-	connect_button.disabled = str(record.get("kind", "")) == BleScanner.KIND_UNKNOWN
+	connect_button.disabled = str(record.get("kind", "")) == BleScanner.KIND_UNKNOWN or not _manager.is_ble_available()
 	(r["forget_button"] as Button).visible = is_remembered
 
 

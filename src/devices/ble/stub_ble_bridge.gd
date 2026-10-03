@@ -22,6 +22,10 @@ extends BleBridge
 var calls: Array[Dictionary] = []
 var pending: Array[Callable] = []
 var adapter_state: int = AdapterState.POWERED_ON
+## Доступность моста. `StubBleBridge.new()` доступен (тесты); заглушка из
+## `BleBridge.create_default()` — нет (REQ-DEV-01 крит. 7: без нативного модуля приложение
+## показывает «Bluetooth недоступен», а не подключает фантомные устройства).
+var available: bool = true
 var scanning: bool = false
 var scan_filter: PackedStringArray = PackedStringArray()
 var connected_ids: Array[String] = []
@@ -41,7 +45,14 @@ var _next_cp_result: int = FtmsCodec.RESULT_SUCCESS
 
 
 func is_available() -> bool:
-	return true
+	return available
+
+
+## Включить/выключить заглушку: вместе с флагом переключается состояние адаптера
+## (POWERED_ON / UNSUPPORTED) с сигналом `adapter_state_changed`.
+func set_available(enabled: bool) -> void:
+	available = enabled
+	set_adapter_state(AdapterState.POWERED_ON if enabled else AdapterState.UNSUPPORTED)
 
 
 # ---------------------------------------------------------------------------

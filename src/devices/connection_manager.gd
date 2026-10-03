@@ -14,6 +14,10 @@ extends RefCounted
 ## - `device_states()` — `id → {state, battery, kind}` для UI, `state_changed(id)`.
 ## - Станок создаётся через `TrainerFactory`: `"ble"` → `BleTrainer` поверх моста,
 ##   иначе (`"fake"`) — эмулятор для режима разработки.
+## - REQ-DEV-01 крит. 7: при `bridge.is_available() == false` или адаптере не POWERED_ON
+##   сканирование и автоподключение не стартуют (`start_scan()` → false, `is_ble_available()`).
+## - `stop_scan()` гасит только ручное сканирование: если идёт автоподключение, сканер
+##   остаётся у него и остановится сам по успеху/таймауту (D-5).
 ## - `tick(delta)` продвигает сканер, таймер автоподключения и — пока `ticks_devices`
 ##   истинно — `SensorHub` (станок + датчики). Когда сессия тренировки берёт хаб под
 ##   свой `SessionTicker`, владелец ставит `ticks_devices = false`, иначе устройства
@@ -59,6 +63,7 @@ func _init(ble_bridge: BleBridge, remembered_devices: RememberedDevices,
 	scanner.device_found.connect(_on_scanner_device_found)
 	scanner.devices_changed.connect(_forward_devices_changed)
 	remembered.changed.connect(_forward_devices_changed)
+	bridge.adapter_state_changed.connect(_on_adapter_state_changed)
 	if trainer_kind == TrainerFactory.KIND_BLE:
 		trainer = TrainerFactory.create_ble(bridge)
 	else:
@@ -81,6 +86,8 @@ func dispose() -> void:
 		scanner.dispose()
 	if remembered != null and remembered.changed.is_connected(_forward_devices_changed):
 		remembered.changed.disconnect(_forward_devices_changed)
+	if bridge != null and bridge.adapter_state_changed.is_connected(_on_adapter_state_changed):
+		bridge.adapter_state_changed.disconnect(_on_adapter_state_changed)
 	if hub != null:
 		hub.dispose()
 	if trainer != null:
@@ -104,6 +111,13 @@ func _forward_devices_changed() -> void:
 	devices_changed.emit()
 
 
+func _on_adapter_state_changed(_state: int) -> void:
+	if not is_ble_available():
+		cancel_auto_connect()
+		scanner.stop()
+	devices_changed.emit()
+
+
 func _on_trainer_battery(percent: int) -> void:
 	_on_battery(trainer_id, percent)
 
@@ -124,11 +138,26 @@ func set_profile(id: String) -> void:
 	devices_changed.emit()
 
 
-func start_scan() -> void:
+## Bluetooth доступен: мост загружен и адаптер включён (REQ-DEV-01 крит. 7).
+func is_ble_available() -> bool:
+	return bridge != null and bridge.is_available() \
+		and bridge.get_adapter_state() == BleBridge.AdapterState.POWERED_ON
+
+
+## Запустить ручное сканирование; false — Bluetooth недоступен (REQ-DEV-01 крит. 7).
+func start_scan() -> bool:
+	if not is_ble_available():
+		return false
 	scanner.start()
+	return true
 
 
+## Остановить ручное сканирование. Идущее автоподключение забирает сканер себе
+## и останавливает его само (успех или таймаут 30 с).
 func stop_scan() -> void:
+	if is_auto_connecting():
+		_auto_started_scan = true
+		return
 	scanner.stop()
 
 
@@ -143,10 +172,11 @@ func connect_trainer(id: String) -> void:
 	state_changed.emit(id)
 
 
-func connect_sensor(id: String, kind: String) -> void:
+## false — пустой id или неизвестный тип датчика (предупреждение, без ошибки).
+func connect_sensor(id: String, kind: String) -> bool:
 	if id.is_empty() or not _is_sensor_kind(kind):
-		push_error("ConnectionManager.connect_sensor: неизвестный тип датчика '%s'" % kind)
-		return
+		push_warning("ConnectionManager.connect_sensor: неизвестный тип датчика '%s' (id '%s')" % [kind, id])
+		return false
 	var sensor: SensorDevice = _sensor(kind)
 	if str(sensor_ids.get(kind, "")) != id and sensor.get_connection_state() != TrainerDevice.ConnectionState.DISCONNECTED:
 		sensor.disconnect_device()
@@ -154,6 +184,7 @@ func connect_sensor(id: String, kind: String) -> void:
 	_auto_pending.erase(id)
 	sensor.connect_device(id)
 	state_changed.emit(id)
+	return true
 
 
 ## Подключить устройство по записи реестра/сканера (`kind` решает, станок это или датчик).
@@ -191,10 +222,16 @@ func disconnect_all() -> void:
 
 
 ## «Забыть»: отключить и удалить из реестра; автоподключение к нему больше не выполняется.
+## Забытое устройство исчезает и из `device_states()` (сбрасываются `trainer_id`/`sensor_ids`).
 func forget(for_profile_id: String, id: String) -> bool:
 	disconnect_device(id)
 	_auto_pending.erase(id)
 	_battery.erase(id)
+	if id == trainer_id:
+		trainer_id = ""
+	for kind in sensor_ids.keys():
+		if str(sensor_ids[kind]) == id:
+			sensor_ids.erase(kind)
 	var removed: bool = remembered.forget(for_profile_id, id)
 	devices_changed.emit()
 	return removed
@@ -208,7 +245,7 @@ func forget(for_profile_id: String, id: String) -> bool:
 ## Уже видимые в сканере — подключаются сразу, остальные — по мере рекламы.
 func auto_connect(for_profile_id: String) -> void:
 	profile_id = for_profile_id
-	if not auto_connect_enabled:
+	if not auto_connect_enabled or not is_ble_available():
 		return
 	var candidates := remembered.auto_connect_candidates(profile_id)
 	if candidates.is_empty():
