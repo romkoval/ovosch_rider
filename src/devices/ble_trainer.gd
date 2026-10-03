@@ -1,6 +1,7 @@
 class_name BleTrainer
 extends TrainerDevice
-## Станок по FTMS поверх `BleBridge` (REQ-DEV-02, REQ-DEV-07, REQ-DEV-08, REQ-WRK-02/03/04, REQ-NFR-01).
+## Станок по FTMS поверх `BleBridge` (REQ-DEV-02, REQ-DEV-07, REQ-DEV-08, REQ-WRK-02/03/04, REQ-NFR-01,
+## REQ-FRD-04 крит. 1, 3, 6).
 ##
 ## Последовательность подключения (REQ-DEV-02 крит. 1):
 ## `connect_device(id)` → `connect_peripheral` → `connected` → `discover_services` →
@@ -19,7 +20,7 @@ extends TrainerDevice
 ## Control Point — очередь (FTMS: новая процедура только после ответа на предыдущую).
 ## В полёте не больше одной команды; следующая уходит после индикации `80 <opcode> …`
 ## по ней или через `CP_RESPONSE_TIMEOUT_SEC` без ответа. Неотправленная команда того же
-## опкода заменяется новой и встаёт в конец; команда режима (`04` уровень / `05` цель)
+## опкода заменяется новой и встаёт в конец; команда режима (`04` уровень / `05` цель / `11` SIM)
 ## вытесняет и неотправленные команды другого режима — в очереди остаётся только
 ## последний режим. Команда, совпадающая с последней ожидающей (в очереди или, при
 ## пустой очереди, в полёте), не дублируется — кроме возврата режима (цель в полёте →
@@ -39,6 +40,17 @@ extends TrainerDevice
 ##
 ## Включение ERG пишет запомненную цель, если она > 0 (явная цель 0 Вт пишется
 ## через `set_target_power(0)`).
+##
+## SIM (REQ-FRD-04): если в сервисах заявлены 2ACC (Fitness Machine Feature) и 2AD5
+## (Supported Inclination Range), они читаются вместе с 2AD6 после Request Control.
+## Без заявленной характеристики чтения нет: поддержка SIM остаётся UNKNOWN, диапазон
+## уклона — запасной (`DEFAULT_INCLINATION_*`). Бит 13 Target Setting Features → SUPPORTED
+## или UNSUPPORTED. `set_simulation` пишет `11 …` в Control Point (третья команда режима,
+## ERG выключается); ответ на `11` с `result != 0x01` → `error(SIMULATION_REJECTED)`,
+## поддержка UNSUPPORTED до подключения к другому станку, SIM-режим снимается (станок
+## остался в прежнем режиме, вызывающий переводит его на сопротивление). Успешный ответ
+## при неизвестной поддержке → SUPPORTED. Блокировки отправки по UNSUPPORTED нет:
+## решение «SIM или сопротивление» принимает вызывающий.
 ##
 ## Управление: `Control Permission Lost` (2ADA `FF`) → повторный Request Control;
 ## после его успеха заново уходит текущий режим (цель/уровень), если с подключения
@@ -97,9 +109,21 @@ var _cp_queue: Array[PackedByteArray] = []
 ## Последний отказ записи пришёл как `write_done(false)`: следующий `error(WRITE_FAILED)`
 ## моста — его дубль (старый нативный мост слал оба события).
 var _write_failure_seen: bool = false
-## С подключения на станок уходила команда режима (цель/уровень) — её восстанавливаем
+## С подключения на станок уходила команда режима (цель/уровень/SIM) — её восстанавливаем
 ## после повторного Request Control.
 var _mode_sent: bool = false
+## SIM-режим включён последней командой режима (`set_simulation`).
+var simulation_active: bool = false
+## Параметры последней `set_simulation`: `[grade_pct, wind_mps, crr, cw]` (уже в пределах).
+var simulation_params: Array[float] = [0.0, DEFAULT_SIM_WIND_MPS, DEFAULT_SIM_CRR, DEFAULT_SIM_CW]
+## Признаки станка из 2ACC (`FtmsCodec.decode_fitness_machine_feature`); пустой — не прочитаны.
+var machine_features: Dictionary = {}
+## Диапазон уклона из 2AD5 (`FtmsCodec.decode_supported_inclination_range`); пустой — не прочитан.
+var supported_inclination: Dictionary = {}
+## Станок отверг команду SIM (ответ на 0x11 с result != 0x01).
+var _simulation_rejected: bool = false
+## Станок принял команду SIM.
+var _simulation_confirmed: bool = false
 
 
 func _init(ble_bridge: BleBridge) -> void:
@@ -128,6 +152,7 @@ func connect_device(id: String) -> void:
 		return
 	if id != device_id:
 		battery_percent = -1
+		_forget_simulation_capabilities()
 	device_id = id
 	_disconnect_requested = false
 	control_granted = false
@@ -182,9 +207,11 @@ func set_target_power(watts: int) -> void:
 
 
 func set_erg_enabled(enabled: bool) -> void:
-	if enabled == erg_enabled:
+	# В SIM ERG уже выключен, но `false` означает переход на фиксированное сопротивление.
+	if enabled == erg_enabled and not simulation_active:
 		return
 	erg_enabled = enabled
+	simulation_active = false
 	if _state != ConnectionState.CONNECTED:
 		return
 	_write_current_mode()
@@ -199,8 +226,39 @@ func set_resistance_level(percent: int) -> void:
 	if value != percent:
 		push_warning("BleTrainer.set_resistance_level: %d вне диапазона, обрезано до %d" % [percent, value])
 	resistance_percent = value
+	# В SIM уровень применяется и переводит станок на фиксированное сопротивление.
+	simulation_active = false
 	if _state == ConnectionState.CONNECTED and not erg_enabled:
 		_write_resistance()
+
+
+func set_simulation(grade_pct: float, wind_mps: float = DEFAULT_SIM_WIND_MPS,
+		crr: float = DEFAULT_SIM_CRR, cw: float = DEFAULT_SIM_CW) -> void:
+	simulation_params = clamp_simulation_params("BleTrainer", grade_pct, wind_mps, crr, cw)
+	simulation_active = true
+	erg_enabled = false
+	if _state == ConnectionState.CONNECTED:
+		_write_simulation()
+
+
+func simulation_support() -> int:
+	if _simulation_rejected:
+		return SimulationSupport.UNSUPPORTED
+	if machine_features.get("ok", false):
+		return SimulationSupport.SUPPORTED if machine_features["simulation_supported"] \
+			else SimulationSupport.UNSUPPORTED
+	if _simulation_confirmed:
+		return SimulationSupport.SUPPORTED
+	return SimulationSupport.UNKNOWN
+
+
+## Диапазон из 2AD5, приведённый к представимому в команде SIM, иначе запасной.
+func inclination_range() -> Vector2:
+	if not supported_inclination.get("ok", false):
+		return Vector2(DEFAULT_INCLINATION_MIN_PCT, DEFAULT_INCLINATION_MAX_PCT)
+	return Vector2(
+		clampf(supported_inclination["min_pct"], -MAX_SIM_GRADE_PCT, MAX_SIM_GRADE_PCT),
+		clampf(supported_inclination["max_pct"], -MAX_SIM_GRADE_PCT, MAX_SIM_GRADE_PCT))
 
 
 func get_connection_state() -> int:
@@ -262,6 +320,12 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 	_write_control_point(FtmsCodec.encode_request_control())
 	if _has_characteristic(FTMS, BleUuids.SUPPORTED_RESISTANCE_RANGE):
 		bridge.read_characteristic(id, FTMS, BleUuids.SUPPORTED_RESISTANCE_RANGE)
+	# Признаки SIM — только если заявлены (REQ-FRD-04 крит. 3, 6): CoreBluetooth отдаёт
+	# полный список характеристик, без него поддержка SIM остаётся UNKNOWN.
+	if _declares_characteristic(FTMS, BleUuids.FITNESS_MACHINE_FEATURE):
+		bridge.read_characteristic(id, FTMS, BleUuids.FITNESS_MACHINE_FEATURE)
+	if _declares_characteristic(FTMS, BleUuids.SUPPORTED_INCLINATION_RANGE):
+		bridge.read_characteristic(id, FTMS, BleUuids.SUPPORTED_INCLINATION_RANGE)
 	if services.is_empty() or services.has(BleUuids.BATTERY_SERVICE):
 		bridge.read_characteristic(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
 		bridge.subscribe(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
@@ -306,10 +370,24 @@ func _on_control_point_response(bytes: PackedByteArray) -> void:
 				disconnect_device()
 		_pump_control_point()
 		return
-	if not r["success"]:
+	if opcode == FtmsCodec.OP_SET_INDOOR_BIKE_SIMULATION:
+		_on_simulation_response(r["success"], r["result"])
+	elif not r["success"]:
 		error.emit(ErrorCode.CONTROL_POINT_REJECTED, "Станок отверг команду %s: %s" % [
 			FtmsCodec.opcode_name(opcode), FtmsCodec.result_name(r["result"])])
 	_pump_control_point()
+
+
+## Ответ на команду SIM (REQ-FRD-04 крит. 6): отказ → UNSUPPORTED и SIMULATION_REJECTED.
+func _on_simulation_response(success: bool, result: int) -> void:
+	if success:
+		_simulation_confirmed = true
+		return
+	_simulation_rejected = true
+	# Станок остался в прежнем режиме; повторно SIM (после Control Permission Lost) не шлём.
+	simulation_active = false
+	error.emit(ErrorCode.SIMULATION_REJECTED, "Станок отверг SIM (%s): %s" % [
+		FtmsCodec.opcode_name(FtmsCodec.OP_SET_INDOOR_BIKE_SIMULATION), FtmsCodec.result_name(result)])
 
 
 func _on_indoor_bike_data(bytes: PackedByteArray) -> void:
@@ -351,8 +429,21 @@ func _on_characteristic_read(id: String, char_uuid: String, bytes: PackedByteArr
 				var changed: bool = r != resistance_range
 				resistance_range = r
 				# Диапазон пришёл после CONNECTED: уровень мог уйти в масштабе по умолчанию.
-				if changed and _state == ConnectionState.CONNECTED and not erg_enabled:
+				if changed and _state == ConnectionState.CONNECTED and not erg_enabled \
+						and not simulation_active:
 					_write_resistance()
+		BleUuids.FITNESS_MACHINE_FEATURE:
+			var f := FtmsCodec.decode_fitness_machine_feature(bytes)
+			if f["ok"]:
+				machine_features = f
+			else:
+				push_warning("BleTrainer: Fitness Machine Feature 2ACC короче 8 байт, поддержка SIM не определена")
+		BleUuids.SUPPORTED_INCLINATION_RANGE:
+			var inc := FtmsCodec.decode_supported_inclination_range(bytes)
+			if inc["ok"]:
+				supported_inclination = inc
+			else:
+				push_warning("BleTrainer: Supported Inclination Range 2AD5 некорректен, запасной диапазон уклона")
 		BleUuids.BATTERY_LEVEL:
 			_on_battery(bytes)
 
@@ -470,11 +561,19 @@ func _reset_control_point() -> void:
 	_mode_sent = false
 
 
+## Новый станок: признаки SIM и диапазон уклона прежнего не действуют.
+func _forget_simulation_capabilities() -> void:
+	machine_features = {}
+	supported_inclination = {}
+	_simulation_rejected = false
+	_simulation_confirmed = false
+
+
 ## Поставить команду в очередь Control Point (см. шапку: объединение и дедупликация).
 func _write_control_point(bytes: PackedByteArray) -> void:
 	if bridge == null or bytes.is_empty():
 		return
-	if bytes[0] == FtmsCodec.OP_SET_TARGET_POWER or bytes[0] == FtmsCodec.OP_SET_TARGET_RESISTANCE:
+	if _is_mode_opcode(bytes[0]):
 		_mode_sent = true
 	if _cp_inflight.is_empty() and _cp_queue.is_empty():
 		_send_control_point(bytes)
@@ -502,7 +601,8 @@ func _write_control_point(bytes: PackedByteArray) -> void:
 
 
 static func _is_mode_opcode(opcode: int) -> bool:
-	return opcode == FtmsCodec.OP_SET_TARGET_POWER or opcode == FtmsCodec.OP_SET_TARGET_RESISTANCE
+	return opcode == FtmsCodec.OP_SET_TARGET_POWER or opcode == FtmsCodec.OP_SET_TARGET_RESISTANCE \
+		or opcode == FtmsCodec.OP_SET_INDOOR_BIKE_SIMULATION
 
 
 func _send_control_point(bytes: PackedByteArray) -> void:
@@ -517,13 +617,20 @@ func _pump_control_point() -> void:
 	_send_control_point(_cp_queue.pop_front())
 
 
-## Текущий режим на станок: цель (ERG, если > 0) или уровень сопротивления.
+## Текущий режим на станок: SIM, цель (ERG, если > 0) или уровень сопротивления.
 func _write_current_mode() -> void:
-	if erg_enabled:
+	if simulation_active:
+		_write_simulation()
+	elif erg_enabled:
 		if target_power_w > 0:
 			_write_control_point(FtmsCodec.encode_set_target_power(target_power_w))
 	else:
 		_write_resistance()
+
+
+func _write_simulation() -> void:
+	_write_control_point(FtmsCodec.encode_indoor_bike_simulation(
+		simulation_params[1], simulation_params[0], simulation_params[2], simulation_params[3]))
 
 
 func _write_resistance() -> void:
@@ -543,3 +650,8 @@ func _has_characteristic(service_uuid: String, char_uuid: String) -> bool:
 		if BleUuids.normalize(c) == ch:
 			return true
 	return false
+
+
+## Характеристика заявлена в известном списке сервисов (неизвестный список — нет).
+func _declares_characteristic(service_uuid: String, char_uuid: String) -> bool:
+	return not services.is_empty() and _has_characteristic(service_uuid, char_uuid)

@@ -2,7 +2,7 @@ class_name TrainerDevice
 extends RefCounted
 ## Интерфейс умного велостанка. Единственная точка общения игровой части со станком.
 ##
-## Контракт (REQ-DEV-02, REQ-DEV-08, REQ-WRK-02/03/04, REQ-WRK-08, REQ-NFR-02):
+## Контракт (REQ-DEV-02, REQ-DEV-08, REQ-WRK-02/03/04, REQ-WRK-08, REQ-NFR-02, REQ-FRD-04):
 ## - Реализации: `BleTrainer` (нативный FTMS-мост) и `FakeTrainer` (эмулятор).
 ##   Какая реализация подключена, знает только `src/devices/` (см. `TrainerFactory`).
 ## - Класс не является Node: время продвигается извне через `tick(delta_sec)`.
@@ -13,7 +13,7 @@ extends RefCounted
 ##   вызов из главного потока сцены.
 ## - Телеметрия идёт потоком ~1 Гц; отсутствующие значения помечены флагами
 ##   `has_*` в `TrainerSample`, а не нулями.
-## - Команды (цель мощности, ERG, сопротивление) должны уходить на станок не позже
+## - Команды (цель мощности, ERG, сопротивление, SIM) должны уходить на станок не позже
 ##   1 с после вызова (REQ-NFR-01); у эмулятора — немедленно, с меткой времени.
 
 ## Состояние подключения. Переходы:
@@ -26,6 +26,16 @@ enum ConnectionState {
 	CONNECTING,
 	CONNECTED,
 	RECONNECTING,
+}
+
+## Поддержка SIM-режима (FTMS Indoor Bike Simulation, REQ-FRD-04 крит. 6).
+## UNKNOWN — ещё не определена (не подключались, признаки станка не прочитаны);
+## SUPPORTED — станок заявил поддержку или принял команду SIM;
+## UNSUPPORTED — не заявил или отверг команду SIM (тогда — фиксированное сопротивление).
+enum SimulationSupport {
+	UNKNOWN,
+	SUPPORTED,
+	UNSUPPORTED,
 }
 
 ## Коды ошибок сигнала `error`.
@@ -41,6 +51,9 @@ enum ErrorCode {
 	## DISCONNECTED, SCANNING или CONNECTING: отклонена и не применена.
 	## В RECONNECTING команды принимаются (реализация доставит их после восстановления).
 	NOT_CONNECTED,
+	## Станок отверг команду SIM (FTMS 0x11, result != 0x01): поддержка SIM после этого
+	## UNSUPPORTED (REQ-FRD-04 крит. 6).
+	SIMULATION_REJECTED,
 }
 
 ## Допустимые диапазоны аргументов команд.
@@ -48,6 +61,18 @@ const MIN_TARGET_POWER_W: int = 0
 const MAX_TARGET_POWER_W: int = 2000
 const MIN_RESISTANCE_PERCENT: int = 0
 const MAX_RESISTANCE_PERCENT: int = 100
+## Параметры SIM: пределы — представимые в команде FTMS 0x11 значения (REQ-FRD-04 крит. 1).
+const MAX_SIM_GRADE_PCT: float = 327.67
+const MAX_SIM_WIND_MPS: float = 32.767
+const MAX_SIM_CRR: float = 0.0255
+const MAX_SIM_CW: float = 2.55
+## Значения SIM по умолчанию (вводный абзац FRD): ветер 0, Crr 0.004, Cw 0.20 кг/м.
+const DEFAULT_SIM_WIND_MPS: float = 0.0
+const DEFAULT_SIM_CRR: float = 0.004
+const DEFAULT_SIM_CW: float = 0.20
+## Запасной диапазон уклона SIM, %, если станок не сообщил свой (REQ-FRD-04 крит. 3).
+const DEFAULT_INCLINATION_MIN_PCT: float = -10.0
+const DEFAULT_INCLINATION_MAX_PCT: float = 20.0
 
 ## Изменилось состояние подключения; `state` — значение `ConnectionState`.
 signal connection_state_changed(state: int)
@@ -80,6 +105,8 @@ func set_target_power(_watts: int) -> void:
 
 ## Включить/выключить ERG-режим. При выключении станок переходит на фиксированное
 ## сопротивление `set_resistance_level` (REQ-WRK-03 крит. 2, REQ-WRK-04).
+## Любой из вызовов завершает SIM-режим (`set_simulation`); `false` в SIM — переход
+## на фиксированное сопротивление.
 func set_erg_enabled(_enabled: bool) -> void:
 	push_error("TrainerDevice.set_erg_enabled: not implemented")
 
@@ -95,8 +122,58 @@ func is_erg_enabled() -> bool:
 ## Установить уровень сопротивления в процентах 0..100 (REQ-WRK-04). Перевод
 ## в единицы станка (FTMS Set Target Resistance Level 0x04, единицы 0.1) —
 ## забота реализации. При включённом ERG значение запоминается, но не применяется.
+## В SIM-режиме — применяется и переводит станок на фиксированное сопротивление
+## (REQ-FRD-05 крит. 4).
 func set_resistance_level(_percent: int) -> void:
 	push_error("TrainerDevice.set_resistance_level: not implemented")
+
+
+## Включить SIM-режим и передать станку параметры симуляции: уклон, %
+## (округляется до 0.01), ветер, м/с, Crr, Cw, кг/м (FTMS Set Indoor Bike
+## Simulation Parameters 0x11, REQ-FRD-04 крит. 1). Значения вне пределов
+## `MAX_SIM_*` обрезаются с предупреждением. Команда переводит станок из ERG и
+## фиксированного сопротивления в SIM: после неё `is_erg_enabled() == false`.
+## Выход из SIM — `set_resistance_level` (фиксированное сопротивление) или
+## `set_erg_enabled`. Ограничение уклона диапазоном `inclination_range()`, частоту
+## и порог отправки выдерживает вызывающий. Вне подключения — как у остальных команд.
+## Отказ станка → `error(SIMULATION_REJECTED)` и `simulation_support() == UNSUPPORTED`.
+func set_simulation(_grade_pct: float, _wind_mps: float = DEFAULT_SIM_WIND_MPS,
+		_crr: float = DEFAULT_SIM_CRR, _cw: float = DEFAULT_SIM_CW) -> void:
+	push_error("TrainerDevice.set_simulation: not implemented")
+
+
+## Поддерживает ли станок SIM (`SimulationSupport`, REQ-FRD-04 крит. 6).
+func simulation_support() -> int:
+	push_error("TrainerDevice.simulation_support: not implemented")
+	return SimulationSupport.UNKNOWN
+
+
+## Допустимый диапазон уклона SIM, % (x — минимум, y — максимум): сообщённый станком
+## или запасной `DEFAULT_INCLINATION_MIN_PCT..DEFAULT_INCLINATION_MAX_PCT` (REQ-FRD-04 крит. 3).
+func inclination_range() -> Vector2:
+	push_error("TrainerDevice.inclination_range: not implemented")
+	return Vector2(DEFAULT_INCLINATION_MIN_PCT, DEFAULT_INCLINATION_MAX_PCT)
+
+
+## Параметры SIM, приведённые к допустимым пределам, с уклоном, округлённым до 0.01 %:
+## `[grade_pct, wind_mps, crr, cw]`. Общая часть реализаций `set_simulation`; выход
+## за пределы или нечисловое значение — предупреждение с именем реализации `who`.
+static func clamp_simulation_params(who: String, grade_pct: float, wind_mps: float, crr: float,
+		cw: float) -> Array[float]:
+	var grade: float = _clamp_sim_param(who, "grade_pct", grade_pct, -MAX_SIM_GRADE_PCT, MAX_SIM_GRADE_PCT, 0.0)
+	var wind: float = _clamp_sim_param(who, "wind_mps", wind_mps, -MAX_SIM_WIND_MPS, MAX_SIM_WIND_MPS,
+		DEFAULT_SIM_WIND_MPS)
+	var c_rr: float = _clamp_sim_param(who, "crr", crr, 0.0, MAX_SIM_CRR, DEFAULT_SIM_CRR)
+	var c_w: float = _clamp_sim_param(who, "cw", cw, 0.0, MAX_SIM_CW, DEFAULT_SIM_CW)
+	return [snappedf(grade, 0.01), wind, c_rr, c_w]
+
+
+static func _clamp_sim_param(who: String, param: String, value: float, lo: float, hi: float,
+		fallback: float) -> float:
+	var v: float = clampf(value, lo, hi) if is_finite(value) else fallback
+	if v != value:
+		push_warning("%s.set_simulation: %s = %s вне диапазона %s..%s, заменён на %s" % [who, param, value, lo, hi, v])
+	return v
 
 
 ## Текущее состояние подключения (`ConnectionState`).

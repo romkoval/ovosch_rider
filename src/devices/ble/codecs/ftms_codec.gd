@@ -7,7 +7,13 @@ extends RefCounted
 ## - Indoor Bike Data `2AD2` (FTMS §4.9): флаги uint16, далее поля по флагам;
 ## - Fitness Machine Control Point `2AD9` (FTMS §4.16): запросы и ответ 0x80;
 ## - Supported Resistance Level Range `2AD6` (FTMS §4.5): min/max sint16, inc uint16, ед. 0.1;
+## - Supported Inclination Range `2AD5` (FTMS §4.4): min/max sint16, inc uint16, ед. 0.1 %;
+## - Fitness Machine Feature `2ACC` (FTMS §4.3): Fitness Machine Features uint32 +
+##   Target Setting Features uint32 (REQ-FRD-04 крит. 6);
 ## - Fitness Machine Status `2ADA` (FTMS §4.17).
+## Команда SIM Set Indoor Bike Simulation Parameters `0x11` (FTMS §4.16.2.18,
+## REQ-FRD-04 крит. 1): ветер sint16 ×0.001 м/с, уклон sint16 ×0.01 %,
+## Crr uint8 ×0.0001, Cw uint8 ×0.01 кг/м.
 ## Все функции статические, без состояния. `decode_*` возвращают словарь с
 ## `ok: bool`; при обрезанном пакете разбор останавливается, присутствующие
 ## поля остаются, `ok == false`.
@@ -19,6 +25,7 @@ const OP_SET_TARGET_RESISTANCE: int = 0x04
 const OP_SET_TARGET_POWER: int = 0x05
 const OP_START_RESUME: int = 0x07
 const OP_STOP_PAUSE: int = 0x08
+const OP_SET_INDOOR_BIKE_SIMULATION: int = 0x11
 const OP_RESPONSE_CODE: int = 0x80
 ## Параметр Stop or Pause.
 const STOP_PARAM_STOP: int = 0x01
@@ -57,6 +64,31 @@ const STATUS_TARGET_RESISTANCE_CHANGED: int = 0x07
 const STATUS_TARGET_POWER_CHANGED: int = 0x08
 const STATUS_TARGET_HEART_RATE_CHANGED: int = 0x09
 const STATUS_CONTROL_PERMISSION_LOST: int = 0xFF
+
+# --- Target Setting Features в Fitness Machine Feature 2ACC (FTMS §4.3.1.2) ---
+const TSF_INCLINATION: int = 1 << 1
+const TSF_RESISTANCE: int = 1 << 2
+const TSF_POWER: int = 1 << 3
+const TSF_INDOOR_BIKE_SIMULATION: int = 1 << 13
+
+# --- Параметры SIM 0x11: разрешение и пределы представимых значений ---
+## Ветер: sint16, разрешение 0.001 м/с.
+const SIM_WIND_UNIT: float = 0.001
+const SIM_WIND_MAX_MPS: float = 32.767
+## Уклон: sint16, разрешение 0.01 %; диапазон симметричный ±327.67 % (REQ-FRD-04 крит. 1).
+const SIM_GRADE_UNIT: float = 0.01
+const SIM_GRADE_MAX_PCT: float = 327.67
+## Crr: uint8, разрешение 0.0001.
+const SIM_CRR_UNIT: float = 0.0001
+const SIM_CRR_MAX: float = 0.0255
+## Cw: uint8, разрешение 0.01 кг/м.
+const SIM_CW_UNIT: float = 0.01
+const SIM_CW_MAX: float = 2.55
+## Допуск сравнения с пределом (погрешность float на границе вроде 327.67).
+const SIM_LIMIT_EPSILON: float = 1e-9
+
+## Единица уклона в Supported Inclination Range 2AD5, %.
+const INCLINATION_UNIT: float = 0.1
 
 ## Единица уровня сопротивления в Control Point и 2AD6.
 const RESISTANCE_UNIT: float = 0.1
@@ -217,6 +249,38 @@ static func encode_set_resistance_level(level: float) -> PackedByteArray:
 	return PackedByteArray([OP_SET_TARGET_RESISTANCE, units])
 
 
+## Set Indoor Bike Simulation Parameters (REQ-FRD-04 крит. 1):
+## `11 <wind sint16 LE ×0.001> <grade sint16 LE ×0.01> <crr uint8 ×0.0001> <cw uint8 ×0.01>`;
+## (0, 5.0, 0.004, 0.20) → `11 00 00 F4 01 28 14`. Значение вне диапазона типа
+## (см. `simulation_params_error`) — пустой массив: команда не формируется.
+static func encode_indoor_bike_simulation(wind_mps: float, grade_pct: float, crr: float,
+		cw: float) -> PackedByteArray:
+	if simulation_params_error(wind_mps, grade_pct, crr, cw) != "":
+		return PackedByteArray()
+	var out := PackedByteArray([OP_SET_INDOOR_BIKE_SIMULATION])
+	BleBytes.put_s16(out, roundi(wind_mps / SIM_WIND_UNIT))
+	BleBytes.put_s16(out, roundi(grade_pct / SIM_GRADE_UNIT))
+	BleBytes.put_u8(out, clampi(roundi(crr / SIM_CRR_UNIT), 0, 255))
+	BleBytes.put_u8(out, clampi(roundi(cw / SIM_CW_UNIT), 0, 255))
+	return out
+
+
+## Причина, по которой параметры SIM не кодируются, или "" — если кодируются:
+## |ветер| ≤ 32.767 м/с, |уклон| ≤ 327.67 %, 0 ≤ Crr ≤ 0.0255, 0 ≤ Cw ≤ 2.55, все конечны.
+static func simulation_params_error(wind_mps: float, grade_pct: float, crr: float, cw: float) -> String:
+	if not (is_finite(wind_mps) and is_finite(grade_pct) and is_finite(crr) and is_finite(cw)):
+		return "параметр SIM не является конечным числом"
+	if absf(wind_mps) > SIM_WIND_MAX_MPS + SIM_LIMIT_EPSILON:
+		return "ветер %.3f м/с вне ±%.3f" % [wind_mps, SIM_WIND_MAX_MPS]
+	if absf(grade_pct) > SIM_GRADE_MAX_PCT + SIM_LIMIT_EPSILON:
+		return "уклон %.2f %% вне ±%.2f" % [grade_pct, SIM_GRADE_MAX_PCT]
+	if crr < -SIM_LIMIT_EPSILON or crr > SIM_CRR_MAX + SIM_LIMIT_EPSILON:
+		return "Crr %.5f вне 0..%.4f" % [crr, SIM_CRR_MAX]
+	if cw < -SIM_LIMIT_EPSILON or cw > SIM_CW_MAX + SIM_LIMIT_EPSILON:
+		return "Cw %.3f вне 0..%.2f" % [cw, SIM_CW_MAX]
+	return ""
+
+
 static func encode_start() -> PackedByteArray:
 	return PackedByteArray([OP_START_RESUME])
 
@@ -279,6 +343,8 @@ static func opcode_name(opcode: int) -> String:
 			return "start_or_resume"
 		OP_STOP_PAUSE:
 			return "stop_or_pause"
+		OP_SET_INDOOR_BIKE_SIMULATION:
+			return "set_indoor_bike_simulation"
 		OP_RESPONSE_CODE:
 			return "response_code"
 	return "opcode_0x%02X" % opcode
@@ -299,6 +365,57 @@ static func decode_resistance_range(bytes: PackedByteArray) -> Dictionary:
 	r["increment"] = BleBytes.u16(bytes, 4) * RESISTANCE_UNIT
 	r["ok"] = r["max_level"] > r["min_level"]
 	return r
+
+
+# ---------------------------------------------------------------------------
+# Supported Inclination Range 2AD5, Fitness Machine Feature 2ACC
+# ---------------------------------------------------------------------------
+
+## `{ok, min_pct, max_pct, increment_pct}` (ед. 0.1 % → float; REQ-FRD-04 крит. 3):
+## `9C FF C8 00 05 00` → −10.0 .. 20.0 %, шаг 0.5 %. `ok == false` при пакете
+## короче 6 байт или max ≤ min.
+static func decode_supported_inclination_range(bytes: PackedByteArray) -> Dictionary:
+	var r: Dictionary = {"ok": false, "min_pct": 0.0, "max_pct": 0.0, "increment_pct": 0.0}
+	if bytes.size() < 6:
+		return r
+	r["min_pct"] = BleBytes.s16(bytes, 0) * INCLINATION_UNIT
+	r["max_pct"] = BleBytes.s16(bytes, 2) * INCLINATION_UNIT
+	r["increment_pct"] = BleBytes.u16(bytes, 4) * INCLINATION_UNIT
+	r["ok"] = r["max_pct"] > r["min_pct"]
+	return r
+
+
+## `{ok, machine_features, target_settings, simulation_supported, resistance_supported,
+## power_supported, inclination_supported}` (REQ-FRD-04 крит. 6). Бит 13 Target Setting
+## Features — «Indoor Bike Simulation Parameters Supported». `ok == false` при пакете
+## короче 8 байт (оба поля uint32 обязательны), флаги поддержки тогда false.
+static func decode_fitness_machine_feature(bytes: PackedByteArray) -> Dictionary:
+	var r: Dictionary = {
+		"ok": false, "machine_features": 0, "target_settings": 0,
+		"simulation_supported": false, "resistance_supported": false,
+		"power_supported": false, "inclination_supported": false,
+	}
+	if bytes.size() < 8:
+		return r
+	var ts: int = BleBytes.u32(bytes, 4)
+	r["machine_features"] = BleBytes.u32(bytes, 0)
+	r["target_settings"] = ts
+	r["simulation_supported"] = ts & TSF_INDOOR_BIKE_SIMULATION != 0
+	r["resistance_supported"] = ts & TSF_RESISTANCE != 0
+	r["power_supported"] = ts & TSF_POWER != 0
+	r["inclination_supported"] = ts & TSF_INCLINATION != 0
+	r["ok"] = true
+	return r
+
+
+## Обратная операция для тестов и эмуляторов.
+static func encode_fitness_machine_feature(machine_features: int, target_settings: int) -> PackedByteArray:
+	var out := PackedByteArray()
+	BleBytes.put_u16(out, machine_features & 0xFFFF)
+	BleBytes.put_u16(out, (machine_features >> 16) & 0xFFFF)
+	BleBytes.put_u16(out, target_settings & 0xFFFF)
+	BleBytes.put_u16(out, (target_settings >> 16) & 0xFFFF)
+	return out
 
 
 ## Процент 0..100 → уровень сопротивления станка (REQ-WRK-04 крит. 2).

@@ -12,6 +12,10 @@ const FTMS_SERVICE: String = "1826"
 const INDOOR_BIKE_DATA: String = "2AD2"
 const FTMS_CONTROL_POINT: String = "2AD9"
 const FTMS_STATUS: String = "2ADA"
+## Fitness Machine Feature: поддержка SIM в Target Setting Features (REQ-FRD-04 крит. 6).
+const FITNESS_MACHINE_FEATURE: String = "2ACC"
+## Supported Inclination Range: ограничение уклона SIM (REQ-FRD-04 крит. 3).
+const SUPPORTED_INCLINATION_RANGE: String = "2AD5"
 const SUPPORTED_RESISTANCE_RANGE: String = "2AD6"
 const SUPPORTED_POWER_RANGE: String = "2AD8"
 ## Heart Rate Service.

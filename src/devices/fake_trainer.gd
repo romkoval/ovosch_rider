@@ -19,7 +19,7 @@ extends TrainerDevice
 ##   (опорная точка из «Открытых решений», п. 15).
 ##
 ## Журнал команд `commands`: каждый вызов команды записывается словарём
-## `{type: "target_power"|"erg"|"resistance", value, at_sec}`, где `at_sec` —
+## `{type: "target_power"|"erg"|"resistance"|"simulation", value, at_sec}`, где `at_sec` —
 ## показание часов эмулятора в момент вызова. Журнал фиксирует, что послал
 ## исполнитель, включая отклонённые команды; отклонение сообщается только
 ## сигналом `error`. По `at_sec` тесты проверяют задержку отправки команд
@@ -29,11 +29,22 @@ extends TrainerDevice
 ## применяются сразу — так исполнитель может повторно послать цель при
 ## переподключении, REQ-DEV-08 крит. 3). В DISCONNECTED/SCANNING/CONNECTING
 ## команда отклоняется с `error(NOT_CONNECTED)` и не применяется.
+##
+## SIM (REQ-FRD-04): `set_simulation` пишет в журнал `CMD_SIM` (`value` — уклон, %,
+## округлённый до 0.01; дополнительно `wind_mps`, `crr`, `cw`), выключает ERG без
+## команды `erg` в журнале; мощность в SIM задаёт `set_rider_power`. Нагрузку от уклона
+## эмулятор не моделирует. `set_simulation_supported(false)` — станок без SIM:
+## `simulation_support() == UNSUPPORTED`, команда SIM журналируется, отвергается с
+## `error(SIMULATION_REJECTED)` и не применяется. Отказ `fail_next_command()` по команде
+## SIM тоже даёт `SIMULATION_REJECTED` и UNSUPPORTED (как ответ станка ≠ 0x01 у
+## `BleTrainer`); `fail_next_command(WRITE_FAILED)` — отказ записи, поддержка не меняется.
+## `set_inclination_range(min, max)` — диапазон уклона станка (по умолчанию запасной).
 
 ## Тип команды в журнале.
 const CMD_TARGET_POWER: String = "target_power"
 const CMD_ERG: String = "erg"
 const CMD_RESISTANCE: String = "resistance"
+const CMD_SIM: String = "simulation"
 
 ## Допуск сравнения времени с целой секундой (защита от накопления ошибки float).
 const TIME_EPSILON: float = 1e-6
@@ -75,6 +86,10 @@ var target_power_w: int = 0
 var resistance_percent: int = 0
 ## Число выданных сэмплов телеметрии (без потерянных пакетов).
 var samples_emitted: int = 0
+## SIM-режим включён последней принятой командой режима.
+var simulation_active: bool = false
+## Уклон последней принятой команды SIM, %.
+var simulation_grade_pct: float = 0.0
 
 # --- Внутреннее состояние ---
 
@@ -95,6 +110,8 @@ var _heart_rate_sequence: Array[int] = []
 var _heart_rate_index: int = 0
 var _cadence_sequence: Array[int] = []
 var _cadence_index: int = 0
+var _simulation_supported: bool = true
+var _inclination_range := Vector2(DEFAULT_INCLINATION_MIN_PCT, DEFAULT_INCLINATION_MAX_PCT)
 
 
 func _init(seed: int = 42) -> void:
@@ -147,6 +164,7 @@ func set_target_power(watts: int) -> void:
 func set_erg_enabled(enabled: bool) -> void:
 	if _accept_command(CMD_ERG, enabled):
 		erg_enabled = enabled
+		simulation_active = false
 
 
 func is_erg_enabled() -> bool:
@@ -159,6 +177,36 @@ func set_resistance_level(percent: int) -> void:
 		push_warning("FakeTrainer.set_resistance_level: %d вне диапазона, обрезано до %d" % [percent, value])
 	if _accept_command(CMD_RESISTANCE, value):
 		resistance_percent = value
+		simulation_active = false
+
+
+func set_simulation(grade_pct: float, wind_mps: float = DEFAULT_SIM_WIND_MPS,
+		crr: float = DEFAULT_SIM_CRR, cw: float = DEFAULT_SIM_CW) -> void:
+	var p: Array[float] = clamp_simulation_params("FakeTrainer", grade_pct, wind_mps, crr, cw)
+	var connected: bool = _state == ConnectionState.CONNECTED or _state == ConnectionState.RECONNECTING
+	if connected and not _fail_next_command and not _simulation_supported:
+		# Станок без SIM отвечает на 0x11 кодом «не поддерживается».
+		_fail_next_command = true
+		_fail_next_code = ErrorCode.SIMULATION_REJECTED
+	elif connected and _fail_next_command and _fail_next_code == ErrorCode.CONTROL_POINT_REJECTED:
+		_fail_next_code = ErrorCode.SIMULATION_REJECTED
+	var fails_as_rejection: bool = connected and _fail_next_command \
+		and _fail_next_code == ErrorCode.SIMULATION_REJECTED
+	var extra: Dictionary = {"wind_mps": p[1], "crr": p[2], "cw": p[3]}
+	if _accept_command(CMD_SIM, p[0], extra):
+		simulation_active = true
+		simulation_grade_pct = p[0]
+		erg_enabled = false
+	elif fails_as_rejection:
+		_simulation_supported = false
+
+
+func simulation_support() -> int:
+	return SimulationSupport.SUPPORTED if _simulation_supported else SimulationSupport.UNSUPPORTED
+
+
+func inclination_range() -> Vector2:
+	return _inclination_range
 
 
 func get_connection_state() -> int:
@@ -236,12 +284,25 @@ func inject_silence(duration_sec: float) -> void:
 	_silence_until_sec = _time_sec + maxf(duration_sec, 0.0)
 
 
-## Следующая команда (target_power/erg/resistance) будет отвергнута станком:
+## Следующая команда (target_power/erg/resistance/simulation) будет отвергнута станком:
 ## попадёт в журнал, но не применится, и придёт `error(code)` — по умолчанию
 ## CONTROL_POINT_REJECTED; `WRITE_FAILED` эмулирует двойной отказ записи (REQ-NFR-01 крит. 2).
 func fail_next_command(code: int = ErrorCode.CONTROL_POINT_REJECTED) -> void:
 	_fail_next_command = true
 	_fail_next_code = code
+
+
+## Поддерживает ли эмулируемый станок SIM (по умолчанию да).
+func set_simulation_supported(supported: bool) -> void:
+	_simulation_supported = supported
+
+
+## Диапазон уклона станка, % (`min_pct < max_pct`, иначе предупреждение и без изменений).
+func set_inclination_range(min_pct: float, max_pct: float) -> void:
+	if not (min_pct < max_pct):
+		push_warning("FakeTrainer.set_inclination_range: min %.1f не меньше max %.1f" % [min_pct, max_pct])
+		return
+	_inclination_range = Vector2(min_pct, max_pct)
 
 
 ## Следующий `connect_device` завершится ошибкой: `error(CONNECTION_FAILED)` и DISCONNECTED.
@@ -312,7 +373,7 @@ func _finish_connect() -> void:
 
 ## Записывает вызов в журнал и решает, принимает ли команду станок.
 ## Возвращает true, если команду нужно применить к модели; иначе испускает `error`.
-func _accept_command(type: String, value: Variant) -> bool:
+func _accept_command(type: String, value: Variant, extra: Dictionary = {}) -> bool:
 	var accepted: bool = true
 	var code: int = ErrorCode.NONE
 	var message: String = ""
@@ -325,8 +386,15 @@ func _accept_command(type: String, value: Variant) -> bool:
 		accepted = false
 		code = _fail_next_code
 		_fail_next_code = ErrorCode.CONTROL_POINT_REJECTED
-		message = "FakeTrainer: станок отверг команду %s (%s)" % [type, "write failed" if code == ErrorCode.WRITE_FAILED else "control point"]
-	commands.append({"type": type, "value": value, "at_sec": _time_sec})
+		var reason: String = "control point"
+		if code == ErrorCode.WRITE_FAILED:
+			reason = "write failed"
+		elif code == ErrorCode.SIMULATION_REJECTED:
+			reason = "SIM not supported"
+		message = "FakeTrainer: станок отверг команду %s (%s)" % [type, reason]
+	var entry: Dictionary = {"type": type, "value": value, "at_sec": _time_sec}
+	entry.merge(extra)
+	commands.append(entry)
 	if not accepted:
 		error.emit(code, message)
 	return accepted
