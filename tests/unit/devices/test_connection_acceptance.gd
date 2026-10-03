@@ -696,7 +696,7 @@ func _collect_files(dir_path: String, exts: Array[String], out: Array[String]) -
 	while name != "":
 		var full := dir_path.path_join(name)
 		if dir.current_is_dir():
-			if name != ".git" and name != ".godot" and not _is_third_party(full) \
+			if name != ".git" and name != ".godot" and name != ".claude" and not _is_third_party(full) \
 					and not dir.is_link(ProjectSettings.globalize_path(full)):
 				_collect_files(full, exts, out)
 		else:
