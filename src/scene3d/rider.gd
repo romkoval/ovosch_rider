@@ -40,6 +40,9 @@ var lean_rad: float = 0.0
 
 func _ready() -> void:
 	_build_model()
+	# Шатуны продвигаются вручную в `advance` перед постановкой ног: иначе ноги ставились
+	# бы по углу прошлого кадра (AnimationPlayer обрабатывается позже узла сцены).
+	_anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	_build_pedal_animation()
 	_anim.play(PEDAL_ANIMATION)
 	_anim.speed_scale = 0.0
@@ -91,6 +94,8 @@ func advance(delta: float) -> void:
 		if _anim.is_playing():
 			_anim.pause()
 		_anim.speed_scale = 0.0
+	if _anim.is_playing():
+		_anim.advance(delta)
 	# Колесо катится вперёд (−Z): верх обода уходит вперёд — поворот вокруг X отрицательный.
 	var angular: float = wheel_speed_kmh / 3.6 / WHEEL_RADIUS_M
 	_front_wheel.rotate_object_local(Vector3.RIGHT, -angular * delta)

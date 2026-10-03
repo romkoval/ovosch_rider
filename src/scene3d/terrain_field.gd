@@ -6,13 +6,16 @@ extends RefCounted
 ## закрывают горизонт. Работает с любой реализацией `Track` (петля, прямая, GPX).
 ##
 ## Расстояние до трассы считается «штампом»: каждая точка трассы (шаг `SAMPLE_STEP_M`)
-## обновляет вершины сетки в радиусе `NEAR_RADIUS_M` — без перебора всех пар. Всё
+## обновляет вершины сетки в радиусе `near_radius_m` — без перебора всех пар. Всё
 ## строится один раз в `RideScene.set_track()`.
 
 const SAMPLE_STEP_M: float = 5.0
-## Дальше этого расстояния от трассы рельеф не зависит от высоты дороги.
+## Дальше этого расстояния от трассы рельеф не зависит от высоты дороги (минимум; на
+## длинном маршруте с крупной ячейкой — не меньше трёх ячеек, см. `near_radius_m`).
 const NEAR_RADIUS_M: float = 60.0
-## До этого расстояния земля ровная, на `ROAD_SINK_M` ниже дороги.
+## До этого расстояния земля ровная, на `ROAD_SINK_M` ниже дороги (минимум; не меньше
+## полутора ячеек — тогда все углы ячейки под дорогой ровные и интерполяция не поднимает
+## землю над полотном).
 const FLAT_RADIUS_M: float = 16.0
 const ROAD_SINK_M: float = 0.45
 ## Запас сетки за габаритом трассы, м: на нём поднимаются холмы горизонта.
@@ -33,6 +36,8 @@ var road_dist := PackedFloat32Array()
 var mean_y: float = 0.0
 var bounds_min := Vector2.ZERO
 var bounds_max := Vector2.ZERO
+var flat_radius_m: float = FLAT_RADIUS_M
+var near_radius_m: float = NEAR_RADIUS_M
 
 
 static func build(track: Track, rolling_m: float, hills_m: float, seed: int) -> TerrainField:
@@ -64,13 +69,15 @@ func _build(track: Track, rolling_m: float, hills_m: float, seed: int) -> void:
 	nx = int(ceil(extent.x / cell_m)) + 1
 	nz = int(ceil(extent.y / cell_m)) + 1
 	origin = lo - Vector2.ONE * MARGIN_M
+	flat_radius_m = maxf(FLAT_RADIUS_M, cell_m * 1.5)
+	near_radius_m = maxf(NEAR_RADIUS_M, flat_radius_m + cell_m * 1.5)
 	var total: int = nx * nz
 	road_dist.resize(total)
 	road_dist.fill(FAR)
 	var road_y := PackedFloat32Array()
 	road_y.resize(total)
 	road_y.fill(mean_y)
-	var reach: int = int(ceil(NEAR_RADIUS_M / cell_m))
+	var reach: int = int(ceil(near_radius_m / cell_m))
 	for p in pts:
 		var cx: int = int(round((p.x - origin.x) / cell_m))
 		var cz: int = int(round((p.z - origin.y) / cell_m))
@@ -106,8 +113,8 @@ func _build(track: Track, rolling_m: float, hills_m: float, seed: int) -> void:
 				var h01: float = 0.3 + 0.7 * clampf(hills.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
 				base += t * t * h01 * hills_m
 			var d: float = road_dist[k]
-			if d < NEAR_RADIUS_M:
-				var w: float = smoothstep(FLAT_RADIUS_M, NEAR_RADIUS_M, d)
+			if d < near_radius_m:
+				var w: float = smoothstep(flat_radius_m, near_radius_m, d)
 				heights[k] = lerpf(road_y[k] - ROAD_SINK_M, base, w)
 			else:
 				heights[k] = base
@@ -124,7 +131,7 @@ func height_at(x: float, z: float) -> float:
 	return _bilinear(heights, x, z)
 
 
-## Расстояние до оси трассы в точке (билинейно; дальше `NEAR_RADIUS_M` — большое число).
+## Расстояние до оси трассы в точке (билинейно; дальше `near_radius_m` — большое число).
 func road_distance_at(x: float, z: float) -> float:
 	return _bilinear(road_dist, x, z)
 
