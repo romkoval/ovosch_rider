@@ -1,6 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/ui/devices/devices_screen.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://src/ui/common/app_bar.tscn" id="2_appbar"]
+[ext_resource type="PackedScene" path="res://src/ui/common/banner.tscn" id="3_banner"]
+[ext_resource type="PackedScene" path="res://src/ui/devices/device_slot.tscn" id="4_slot"]
+[ext_resource type="PackedScene" path="res://src/ui/common/empty_state.tscn" id="5_empty"]
 
 [node name="DevicesScreen" type="Control"]
 layout_mode = 3
@@ -11,70 +15,143 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Root" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 32
+theme_type_variation = &"Stack0"
 
-[node name="VBox" type="VBoxContainer" parent="Margin"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="Margin/VBox"]
-layout_mode = 2
-text = "ui.devices.title"
-horizontal_alignment = 1
-
-[node name="StatusLabel" type="Label" parent="Margin/VBox"]
+[node name="AppBar" parent="Root" instance=ExtResource("2_appbar")]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.devices.status.idle"
-autowrap_mode = 3
+navigate_on_back = false
 
-[node name="Controls" type="HBoxContainer" parent="Margin/VBox"]
+[node name="ScanIndicator" type="TextureRect" parent="Root/AppBar/Row/Actions"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
-alignment = 1
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
 
-[node name="ScanButton" type="Button" parent="Margin/VBox/Controls"]
+[node name="AutoConnectCheck" type="CheckButton" parent="Root/AppBar/Row/Actions"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.devices.scan"
-
-[node name="AutoConnectCheck" type="CheckButton" parent="Margin/VBox/Controls"]
-unique_name_in_owner = true
-layout_mode = 2
+size_flags_vertical = 4
 button_pressed = true
 text = "ui.devices.auto_connect"
 
-[node name="BackButton" type="Button" parent="Margin/VBox/Controls"]
+[node name="ScanButton" type="Button" parent="Root/AppBar/Row/Actions"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.devices.back"
+size_flags_vertical = 4
+theme_type_variation = &"PrimaryButton"
+text = "ui.devices.scan"
 
-[node name="RememberedTitle" type="Label" parent="Margin/VBox"]
-layout_mode = 2
-text = "ui.devices.remembered"
-
-[node name="RememberedList" type="VBoxContainer" parent="Margin/VBox"]
+[node name="Margin" type="MarginContainer" parent="Root"]
 unique_name_in_owner = true
-layout_mode = 2
-
-[node name="FoundTitle" type="Label" parent="Margin/VBox"]
-layout_mode = 2
-text = "ui.devices.found"
-
-[node name="FoundScroll" type="ScrollContainer" parent="Margin/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
+theme_type_variation = &"ScreenMargin"
 
-[node name="FoundList" type="VBoxContainer" parent="Margin/VBox/FoundScroll"]
+[node name="Body" type="VBoxContainer" parent="Root/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"Stack0"
+
+[node name="Scroll" type="ScrollContainer" parent="Root/Margin/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+horizontal_scroll_mode = 0
+
+[node name="Content" type="VBoxContainer" parent="Root/Margin/Body/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_type_variation = &"Stack24"
+
+[node name="BleBanner" parent="Root/Margin/Body/Scroll/Content" instance=ExtResource("3_banner")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+kind = 1
+icon_name = "bluetooth-off"
+
+[node name="StatusLabel" type="Label" parent="Root/Margin/Body/Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+autowrap_mode = 3
+
+[node name="Slots" type="BoxContainer" parent="Root/Margin/Body/Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="TrainerSlot" parent="Root/Margin/Body/Scroll/Content/Slots" instance=ExtResource("4_slot")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HrSlot" parent="Root/Margin/Body/Scroll/Content/Slots" instance=ExtResource("4_slot")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CadenceSlot" parent="Root/Margin/Body/Scroll/Content/Slots" instance=ExtResource("4_slot")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FoundSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="FoundTitle" type="Label" parent="Root/Margin/Body/Scroll/Content/FoundSection"]
+layout_mode = 2
+theme_type_variation = &"OverlineLabel"
+text = "ui.devices.found"
+uppercase = true
+
+[node name="FoundList" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/FoundSection"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="FoundEmpty" parent="Root/Margin/Body/Scroll/Content/FoundSection" instance=ExtResource("5_empty")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+icon_name = "bluetooth"
+
+[node name="RememberedSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="RememberedTitle" type="Label" parent="Root/Margin/Body/Scroll/Content/RememberedSection"]
+layout_mode = 2
+theme_type_variation = &"OverlineLabel"
+text = "ui.devices.remembered"
+uppercase = true
+
+[node name="RememberedList" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/RememberedSection"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="BleHelpDialog" type="AcceptDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.devices.ble_help_title"
+size = Vector2i(440, 200)
+ok_button_text = "ui.common.ok"
+dialog_text = "ui.devices.ble_help_text"
+dialog_autowrap = true

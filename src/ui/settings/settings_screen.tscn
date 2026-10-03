@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/ui/settings/settings_screen.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://src/ui/common/intervals_key_dialog.tscn" id="2_dialog"]
 [ext_resource type="PackedScene" path="res://src/ui/common/strava_connect_button.tscn" id="3_strava"]
+[ext_resource type="PackedScene" path="res://src/ui/common/app_bar.tscn" id="4_appbar"]
+[ext_resource type="PackedScene" path="res://src/ui/common/banner.tscn" id="5_banner"]
 
 [node name="SettingsScreen" type="Control"]
 layout_mode = 3
@@ -13,233 +15,576 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Root" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 32
+theme_type_variation = &"Stack0"
 
-[node name="Scroll" type="ScrollContainer" parent="Margin"]
+[node name="AppBar" parent="Root" instance=ExtResource("4_appbar")]
+unique_name_in_owner = true
 layout_mode = 2
 
-[node name="VBox" type="VBoxContainer" parent="Margin/Scroll"]
+[node name="Margin" type="MarginContainer" parent="Root"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"ScreenMargin"
+
+[node name="Body" type="HBoxContainer" parent="Root/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"Row24"
+
+[node name="Nav" type="VBoxContainer" parent="Root/Margin/Body"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="Scroll" type="ScrollContainer" parent="Root/Margin/Body"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 12
+focus_mode = 0
+horizontal_scroll_mode = 0
 
-[node name="Title" type="Label" parent="Margin/Scroll/VBox"]
+[node name="Content" type="VBoxContainer" parent="Root/Margin/Body/Scroll"]
+unique_name_in_owner = true
 layout_mode = 2
-text = "ui.settings.title"
-horizontal_alignment = 1
+size_flags_horizontal = 3
+theme_type_variation = &"Stack24"
 
-[node name="StoreWarning" type="VBoxContainer" parent="Margin/Scroll/VBox"]
+[node name="StoreWarning" parent="Root/Margin/Body/Scroll/Content" instance=ExtResource("5_banner")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+kind = 2
+icon_name = "circle-alert"
+
+[node name="NoticeBanner" parent="Root/Margin/Body/Scroll/Content" instance=ExtResource("5_banner")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
-[node name="StoreWarningLabel" type="Label" parent="Margin/Scroll/VBox/StoreWarning"]
-unique_name_in_owner = true
+[node name="ProfileSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.6, 0.3, 1)
-text = "ui.settings.store_unreadable"
-autowrap_mode = 3
+theme_type_variation = &"Stack8"
 
-[node name="ResetStoreButton" type="Button" parent="Margin/Scroll/VBox/StoreWarning"]
-unique_name_in_owner = true
+[node name="Title" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection"]
 layout_mode = 2
-size_flags_horizontal = 0
-text = "ui.settings.store_reset"
+theme_type_variation = &"H2Label"
 
-[node name="NoticeLabel" type="Label" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-autowrap_mode = 3
-
-[node name="LanguageTitle" type="Label" parent="Margin/Scroll/VBox"]
-layout_mode = 2
-text = "ui.settings.language"
-
-[node name="LocaleOption" type="OptionButton" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
+[node name="Card" type="PanelContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection"]
 layout_mode = 2
 
-[node name="ProfileStatusLabel" type="Label" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
+[node name="Rows" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card"]
 layout_mode = 2
-text = "ui.settings.profile_title"
+theme_type_variation = &"Stack8"
 
-[node name="Grid" type="GridContainer" parent="Margin/Scroll/VBox"]
+[node name="NameRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
-columns = 2
+theme_type_variation = &"Row16"
 
-[node name="NameLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+[node name="NameLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/NameRow"]
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
 text = "ui.settings.name"
+autowrap_mode = 3
 
-[node name="NameEdit" type="LineEdit" parent="Margin/Scroll/VBox/Grid"]
+[node name="NameEdit" type="LineEdit" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/NameRow"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
 layout_mode = 2
+size_flags_vertical = 4
 max_length = 40
 
-[node name="FtpLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+[node name="FtpRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
-text = "ui.settings.ftp"
+theme_type_variation = &"Row16"
 
-[node name="FtpSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
-unique_name_in_owner = true
+[node name="FtpLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/FtpRow"]
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "ui.settings.ftp"
+autowrap_mode = 3
+
+[node name="FtpSpin" type="SpinBox" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/FtpRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
 max_value = 2000.0
 value = 200.0
 
-[node name="WeightLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+[node name="WeightRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
-text = "ui.settings.weight"
+theme_type_variation = &"Row16"
 
-[node name="WeightSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
-unique_name_in_owner = true
+[node name="WeightLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/WeightRow"]
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "ui.settings.weight"
+autowrap_mode = 3
+
+[node name="WeightSpin" type="SpinBox" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/WeightRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
 max_value = 500.0
 step = 0.1
 value = 75.0
 
-[node name="MaxHrLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+[node name="MaxHrRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
-text = "ui.settings.max_hr"
+theme_type_variation = &"Row16"
 
-[node name="MaxHrSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
-unique_name_in_owner = true
+[node name="MaxHrLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/MaxHrRow"]
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "ui.settings.max_hr"
+autowrap_mode = 3
+
+[node name="MaxHrSpin" type="SpinBox" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/MaxHrRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
 max_value = 300.0
 
-[node name="ResistanceLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+[node name="PowerSourceRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
-text = "ui.settings.resistance"
+theme_type_variation = &"Row16"
 
-[node name="ResistanceSpin" type="SpinBox" parent="Margin/Scroll/VBox/Grid"]
+[node name="PowerSourceLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/PowerSourceRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "ui.settings.power_source"
+autowrap_mode = 3
+
+[node name="PowerSourceOption" type="OptionButton" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/PowerSourceRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="ProfileErrorLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"ErrorLabel"
+autowrap_mode = 3
+
+[node name="Footer" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="ProfileStatusLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/Footer"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+autowrap_mode = 3
+
+[node name="SaveProfileButton" type="Button" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"PrimaryButton"
+text = "ui.settings.save_profile"
+
+[node name="TrainingSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="Title" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection"]
+layout_mode = 2
+theme_type_variation = &"H2Label"
+
+[node name="Card" type="PanelContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection"]
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="ResistanceRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="Texts" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/ResistanceRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"Stack0"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/ResistanceRow/Texts"]
+layout_mode = 2
+text = "ui.settings.resistance"
+autowrap_mode = 3
+
+[node name="Hint" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/ResistanceRow/Texts"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+autowrap_mode = 3
+
+[node name="ResistanceSpin" type="SpinBox" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/ResistanceRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
 max_value = 100.0
 step = 5.0
 value = 50.0
 
-[node name="PowerSourceLabel" type="Label" parent="Margin/Scroll/VBox/Grid"]
+[node name="IntensityRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
-text = "ui.settings.power_source"
+theme_type_variation = &"Row16"
 
-[node name="PowerSourceOption" type="OptionButton" parent="Margin/Scroll/VBox/Grid"]
+[node name="Texts" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/IntensityRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"Stack0"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/IntensityRow/Texts"]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="Hint" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/IntensityRow/Texts"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+autowrap_mode = 3
+
+[node name="IntensitySpin" type="SpinBox" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/IntensityRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 50.0
+max_value = 150.0
+step = 5.0
+value = 100.0
+
+[node name="SteepnessRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="Texts" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/SteepnessRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"Stack0"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/SteepnessRow/Texts"]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="Hint" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/SteepnessRow/Texts"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+autowrap_mode = 3
+
+[node name="SteepnessBox" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/SteepnessRow"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"Row12"
+
+[node name="SteepnessSlider" type="HSlider" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/SteepnessRow/SteepnessBox"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+step = 5.0
+value = 50.0
 
-[node name="ProfileErrorLabel" type="Label" parent="Margin/Scroll/VBox"]
+[node name="SteepnessValue" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows/SteepnessRow/SteepnessBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 0)
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"NumLabel"
+auto_translate_mode = 2
+horizontal_alignment = 2
+
+[node name="TrainingErrorLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/TrainingSection/Card/Rows"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
-theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+theme_type_variation = &"ErrorLabel"
+auto_translate_mode = 2
 autowrap_mode = 3
 
-[node name="SaveProfileButton" type="Button" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
+[node name="ZonesSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
 layout_mode = 2
-text = "ui.settings.save_profile"
+theme_type_variation = &"Stack8"
 
-[node name="HrZonesLabel" type="Label" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
+[node name="Title" type="Label" parent="Root/Margin/Body/Scroll/Content/ZonesSection"]
 layout_mode = 2
-text = "ui.settings.hr_zones_unavailable"
+theme_type_variation = &"H2Label"
 
-[node name="IntervalsTitle" type="Label" parent="Margin/Scroll/VBox"]
+[node name="Card" type="PanelContainer" parent="Root/Margin/Body/Scroll/Content/ZonesSection"]
 layout_mode = 2
-text = "ui.settings.intervals_title"
 
-[node name="IntervalsStatusLabel" type="Label" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
+[node name="Rows" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/ZonesSection/Card"]
 layout_mode = 2
-text = "ui.settings.intervals_not_linked"
+theme_type_variation = &"Stack12"
 
-[node name="SourcesLabel" type="Label" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
+[node name="SourcesRow" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/ZonesSection/Card/Rows"]
 layout_mode = 2
-text = "ui.settings.sources"
+theme_type_variation = &"Stack0"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/ZonesSection/Card/Rows/SourcesRow"]
+layout_mode = 2
 autowrap_mode = 3
 
-[node name="OverrideCheck" type="CheckButton" parent="Margin/Scroll/VBox"]
+[node name="SourcesLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ZonesSection/Card/Rows/SourcesRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+auto_translate_mode = 2
+autowrap_mode = 3
+
+[node name="OverrideCheck" type="CheckButton" parent="Root/Margin/Body/Scroll/Content/ZonesSection/Card/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "ui.settings.intervals_override"
+autowrap_mode = 3
 
-[node name="IntervalsButtons" type="HBoxContainer" parent="Margin/Scroll/VBox"]
-layout_mode = 2
-
-[node name="IntervalsKeyButton" type="Button" parent="Margin/Scroll/VBox/IntervalsButtons"]
+[node name="HrZonesBanner" parent="Root/Margin/Body/Scroll/Content/ZonesSection/Card/Rows" instance=ExtResource("5_banner")]
 unique_name_in_owner = true
 layout_mode = 2
+
+[node name="IntegrationsSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="Title" type="Label" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection"]
+layout_mode = 2
+theme_type_variation = &"H2Label"
+
+[node name="IntervalsCard" type="PanelContainer" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection"]
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard"]
+layout_mode = 2
+theme_type_variation = &"Stack12"
+
+[node name="Header" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows"]
+layout_mode = 2
+theme_type_variation = &"Row12"
+
+[node name="IntervalsTitle" type="Label" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows/Header"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"TitleLabel"
+text = "ui.settings.intervals_title"
+
+[node name="IntervalsDot" type="Control" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(10, 10)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="IntervalsStatusLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+autowrap_mode = 3
+
+[node name="IntervalsButtons" type="BoxContainer" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Row12"
+
+[node name="IntervalsKeyButton" type="Button" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows/IntervalsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
 text = "ui.settings.intervals_set_key"
 
-[node name="IntervalsSyncButton" type="Button" parent="Margin/Scroll/VBox/IntervalsButtons"]
+[node name="IntervalsSyncButton" type="Button" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows/IntervalsButtons"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 0
 text = "ui.settings.intervals_sync"
 
-[node name="IntervalsForgetButton" type="Button" parent="Margin/Scroll/VBox/IntervalsButtons"]
+[node name="IntervalsForgetButton" type="Button" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows/IntervalsButtons"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 0
+theme_type_variation = &"DangerButton"
 text = "ui.settings.intervals_forget"
 
-[node name="IntervalsMessageLabel" type="Label" parent="Margin/Scroll/VBox"]
+[node name="IntervalsMessageLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/IntervalsCard/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
 autowrap_mode = 3
 
-[node name="StravaTitle" type="Label" parent="Margin/Scroll/VBox"]
+[node name="StravaCard" type="PanelContainer" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection"]
 layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/StravaCard"]
+layout_mode = 2
+theme_type_variation = &"Stack12"
+
+[node name="StravaTitle" type="Label" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/StravaCard/Rows"]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
 text = "ui.settings.strava_title"
 
-[node name="StravaStatusLabel" type="Label" parent="Margin/Scroll/VBox"]
+[node name="StravaStatusLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/StravaCard/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.settings.strava_not_linked"
-
-[node name="StravaButtons" type="HBoxContainer" parent="Margin/Scroll/VBox"]
-layout_mode = 2
-
-[node name="StravaConnectButton" parent="Margin/Scroll/VBox/StravaButtons" instance=ExtResource("3_strava")]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="AboutTitle" type="Label" parent="Margin/Scroll/VBox"]
-layout_mode = 2
-text = "ui.settings.about_title"
-
-[node name="VersionLabel" type="Label" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.settings.version"
-
-[node name="LicensesLabel" type="Label" parent="Margin/Scroll/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.settings.licenses_title"
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
 autowrap_mode = 3
 
-[node name="Footer" type="HBoxContainer" parent="Margin/Scroll/VBox"]
-layout_mode = 2
-alignment = 1
-
-[node name="SwitchProfileButton" type="Button" parent="Margin/Scroll/VBox/Footer"]
+[node name="StravaConnectButton" parent="Root/Margin/Body/Scroll/Content/IntegrationsSection/StravaCard/Rows" instance=ExtResource("3_strava")]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.settings.switch_profile"
 
-[node name="BackButton" type="Button" parent="Margin/Scroll/VBox/Footer"]
+[node name="InterfaceSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="Title" type="Label" parent="Root/Margin/Body/Scroll/Content/InterfaceSection"]
+layout_mode = 2
+theme_type_variation = &"H2Label"
+
+[node name="Card" type="PanelContainer" parent="Root/Margin/Body/Scroll/Content/InterfaceSection"]
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/InterfaceSection/Card"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="LanguageRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/InterfaceSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/InterfaceSection/Card/Rows/LanguageRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "ui.settings.language"
+autowrap_mode = 3
+
+[node name="LocaleOption" type="OptionButton" parent="Root/Margin/Body/Scroll/Content/InterfaceSection/Card/Rows/LanguageRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="AboutSection" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="Title" type="Label" parent="Root/Margin/Body/Scroll/Content/AboutSection"]
+layout_mode = 2
+theme_type_variation = &"H2Label"
+text = "ui.settings.about_title"
+
+[node name="Card" type="PanelContainer" parent="Root/Margin/Body/Scroll/Content/AboutSection"]
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="VersionRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/VersionRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+autowrap_mode = 3
+
+[node name="VersionLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/VersionRow"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.settings.back"
+size_flags_vertical = 4
+theme_type_variation = &"NumLabel"
+auto_translate_mode = 2
+
+[node name="LicensesRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="Texts" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/LicensesRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"Stack0"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/LicensesRow/Texts"]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="Hint" type="Label" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/LicensesRow/Texts"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+autowrap_mode = 3
+
+[node name="LicensesButton" type="Button" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/LicensesRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="PrivacyRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="Texts" type="VBoxContainer" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/PrivacyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"Stack0"
+
+[node name="Label" type="Label" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/PrivacyRow/Texts"]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="PrivacyDocLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/AboutSection/Card/Rows/PrivacyRow/Texts"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+auto_translate_mode = 2
+autowrap_mode = 3
 
 [node name="IntervalsKeyDialog" parent="." instance=ExtResource("2_dialog")]
 unique_name_in_owner = true
@@ -251,3 +596,23 @@ ok_button_text = "ui.settings.store_reset_confirm_ok"
 cancel_button_text = "ui.common.cancel"
 dialog_text = "ui.settings.store_reset_confirm"
 dialog_autowrap = true
+
+[node name="LicensesDialog" type="AcceptDialog" parent="."]
+unique_name_in_owner = true
+size = Vector2i(560, 360)
+ok_button_text = "ui.common.ok"
+
+[node name="LicensesScroll" type="ScrollContainer" parent="LicensesDialog"]
+custom_minimum_size = Vector2(512, 240)
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 536.0
+offset_bottom = 288.0
+horizontal_scroll_mode = 0
+
+[node name="LicensesLabel" type="Label" parent="LicensesDialog/LicensesScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+auto_translate_mode = 2
+autowrap_mode = 3

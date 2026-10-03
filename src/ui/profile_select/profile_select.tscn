@@ -11,135 +11,239 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Root" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 32
+theme_type_variation = &"Stack0"
 
-[node name="VBox" type="VBoxContainer" parent="Margin"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="Margin/VBox"]
-layout_mode = 2
-text = "ui.profile_select.title"
-horizontal_alignment = 1
-
-[node name="EmptyHint" type="Label" parent="Margin/VBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.profile_select.empty_hint"
-horizontal_alignment = 1
-
-[node name="ProfileList" type="ItemList" parent="Margin/VBox"]
+[node name="Margin" type="MarginContainer" parent="Root"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-custom_minimum_size = Vector2(0, 160)
+theme_type_variation = &"ScreenMargin"
 
-[node name="Buttons" type="HBoxContainer" parent="Margin/VBox"]
+[node name="Scroll" type="ScrollContainer" parent="Root/Margin"]
+unique_name_in_owner = true
 layout_mode = 2
+focus_mode = 0
+horizontal_scroll_mode = 0
+
+[node name="Column" type="VBoxContainer" parent="Root/Margin/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_type_variation = &"Stack24"
 alignment = 1
 
-[node name="SelectButton" type="Button" parent="Margin/VBox/Buttons"]
+[node name="Header" type="VBoxContainer" parent="Root/Margin/Scroll/Column"]
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="Logo" type="HBoxContainer" parent="Root/Margin/Scroll/Column/Header"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"Row0"
+
+[node name="LogoMain" type="Label" parent="Root/Margin/Scroll/Column/Header/Logo"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.profile_select.select"
+theme_type_variation = &"DisplayLabel"
+auto_translate_mode = 2
 
-[node name="CreateButton" type="Button" parent="Margin/VBox/Buttons"]
+[node name="LogoAccent" type="Label" parent="Root/Margin/Scroll/Column/Header/Logo"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.profile_select.create"
+theme_type_variation = &"DisplayLabel"
+auto_translate_mode = 2
 
-[node name="DeleteButton" type="Button" parent="Margin/VBox/Buttons"]
+[node name="WhoLabel" type="Label" parent="Root/Margin/Scroll/Column/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ui.profile_select.delete"
+theme_type_variation = &"H2Label"
+auto_translate_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
 
-[node name="CreateForm" type="PanelContainer" parent="Margin/VBox"]
+[node name="EmptyHint" type="Label" parent="Root/Margin/Scroll/Column/Header"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+text = "ui.profile_select.empty_hint"
+horizontal_alignment = 1
+autowrap_mode = 3
 
-[node name="FormVBox" type="VBoxContainer" parent="Margin/VBox/CreateForm"]
+[node name="Grid" type="VBoxContainer" parent="Root/Margin/Scroll/Column"]
+unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"Stack16"
 
-[node name="FormTitle" type="Label" parent="Margin/VBox/CreateForm/FormVBox"]
+[node name="CreateButton" type="Button" parent="Root/Margin/Scroll/Column/Grid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 200)
 layout_mode = 2
+theme_type_variation = &"GhostButton"
 text = "ui.profile_create.title"
 
-[node name="Grid" type="GridContainer" parent="Margin/VBox/CreateForm/FormVBox"]
+[node name="ScreenErrorLabel" type="Label" parent="Root/Margin/Scroll/Column"]
+unique_name_in_owner = true
+visible = false
 layout_mode = 2
-columns = 2
+theme_type_variation = &"ErrorLabel"
+auto_translate_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
 
-[node name="NameLabel" type="Label" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="Compat" type="Control" parent="."]
+visible = false
+layout_mode = 1
+mouse_filter = 2
+
+[node name="ProfileList" type="ItemList" parent="Compat"]
+unique_name_in_owner = true
+layout_mode = 0
+focus_mode = 0
+
+[node name="SelectButton" type="Button" parent="Compat"]
+unique_name_in_owner = true
+layout_mode = 0
+focus_mode = 0
+text = "ui.profile_select.select"
+
+[node name="DeleteButton" type="Button" parent="Compat"]
+unique_name_in_owner = true
+layout_mode = 0
+focus_mode = 0
+text = "ui.profile_select.delete"
+
+[node name="CreateDialog" type="AcceptDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.profile_create.title"
+size = Vector2i(480, 360)
+
+[node name="CreateForm" type="VBoxContainer" parent="CreateDialog"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(432, 0)
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 456.0
+offset_bottom = 372.0
+theme_type_variation = &"Stack16"
+
+[node name="FieldsScroll" type="ScrollContainer" parent="CreateDialog/CreateForm"]
+unique_name_in_owner = true
 layout_mode = 2
+focus_mode = 0
+horizontal_scroll_mode = 0
+
+[node name="Fields" type="VBoxContainer" parent="CreateDialog/CreateForm/FieldsScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"Stack16"
+
+[node name="NameField" type="VBoxContainer" parent="CreateDialog/CreateForm/FieldsScroll/Fields"]
+layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="NameLabel" type="Label" parent="CreateDialog/CreateForm/FieldsScroll/Fields/NameField"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "ui.profile_create.name"
 
-[node name="NameEdit" type="LineEdit" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="NameEdit" type="LineEdit" parent="CreateDialog/CreateForm/FieldsScroll/Fields/NameField"]
 unique_name_in_owner = true
 layout_mode = 2
 max_length = 40
 
-[node name="FtpLabel" type="Label" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="Numbers" type="HBoxContainer" parent="CreateDialog/CreateForm/FieldsScroll/Fields"]
 layout_mode = 2
+theme_type_variation = &"Row16"
+
+[node name="FtpField" type="VBoxContainer" parent="CreateDialog/CreateForm/FieldsScroll/Fields/Numbers"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"Stack0"
+
+[node name="FtpLabel" type="Label" parent="CreateDialog/CreateForm/FieldsScroll/Fields/Numbers/FtpField"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "ui.profile_create.ftp"
 
-[node name="FtpSpin" type="SpinBox" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="FtpSpin" type="SpinBox" parent="CreateDialog/CreateForm/FieldsScroll/Fields/Numbers/FtpField"]
 unique_name_in_owner = true
 layout_mode = 2
 max_value = 2000.0
 value = 200.0
 
-[node name="WeightLabel" type="Label" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="WeightField" type="VBoxContainer" parent="CreateDialog/CreateForm/FieldsScroll/Fields/Numbers"]
 layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"Stack0"
+
+[node name="WeightLabel" type="Label" parent="CreateDialog/CreateForm/FieldsScroll/Fields/Numbers/WeightField"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "ui.profile_create.weight"
 
-[node name="WeightSpin" type="SpinBox" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="WeightSpin" type="SpinBox" parent="CreateDialog/CreateForm/FieldsScroll/Fields/Numbers/WeightField"]
 unique_name_in_owner = true
 layout_mode = 2
 max_value = 300.0
 step = 0.1
 value = 75.0
 
-[node name="MaxHrLabel" type="Label" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="MaxHrField" type="VBoxContainer" parent="CreateDialog/CreateForm/FieldsScroll/Fields"]
 layout_mode = 2
+theme_type_variation = &"Stack0"
+
+[node name="MaxHrLabel" type="Label" parent="CreateDialog/CreateForm/FieldsScroll/Fields/MaxHrField"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "ui.profile_create.max_hr"
 
-[node name="MaxHrSpin" type="SpinBox" parent="Margin/VBox/CreateForm/FormVBox/Grid"]
+[node name="MaxHrSpin" type="SpinBox" parent="CreateDialog/CreateForm/FieldsScroll/Fields/MaxHrField"]
 unique_name_in_owner = true
 layout_mode = 2
 max_value = 300.0
 
-[node name="ErrorLabel" type="Label" parent="Margin/VBox/CreateForm/FormVBox"]
+[node name="ErrorLabel" type="Label" parent="CreateDialog/CreateForm/FieldsScroll/Fields"]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+theme_type_variation = &"ErrorLabel"
+auto_translate_mode = 2
 autowrap_mode = 3
 
-[node name="FormButtons" type="HBoxContainer" parent="Margin/VBox/CreateForm/FormVBox"]
+[node name="FormButtons" type="HBoxContainer" parent="CreateDialog/CreateForm"]
 layout_mode = 2
-alignment = 1
+theme_type_variation = &"Row12"
+alignment = 2
 
-[node name="SaveButton" type="Button" parent="Margin/VBox/CreateForm/FormVBox/FormButtons"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "ui.profile_create.save"
-
-[node name="CancelButton" type="Button" parent="Margin/VBox/CreateForm/FormVBox/FormButtons"]
+[node name="CancelButton" type="Button" parent="CreateDialog/CreateForm/FormButtons"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "ui.profile_create.cancel"
+
+[node name="SaveButton" type="Button" parent="CreateDialog/CreateForm/FormButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "ui.profile_create.save"
 
 [node name="DeleteDialog" type="ConfirmationDialog" parent="."]
 unique_name_in_owner = true
 title = "ui.profile_select.delete"
 ok_button_text = "ui.common.delete"
 cancel_button_text = "ui.common.cancel"
+dialog_autowrap = true
+
+[node name="CardMenu" type="PopupMenu" parent="."]
+unique_name_in_owner = true

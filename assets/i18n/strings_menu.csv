@@ -56,3 +56,37 @@ ui.home.tile.devices.disconnected,станок не подключён,trainer n
 ui.home.tile.devices.ble_off,Bluetooth недоступен,Bluetooth unavailable
 ui.home.tile.settings,FTP {ftp} · {weight} кг,FTP {ftp} · {weight} kg
 ui.home.dev_menu,Отладка,Debug
+ui.settings.section.profile,Профиль,Profile
+ui.settings.section.training,Тренировка,Training
+ui.settings.section.zones,Зоны,Zones
+ui.settings.section.integrations,Интеграции,Integrations
+ui.settings.section.interface,Интерфейс,Interface
+ui.settings.resistance_hint,"Уровень сопротивления станка, когда ERG выключен","Trainer resistance level when ERG is off"
+ui.settings.intensity,Интенсивность по умолчанию (%),Default intensity (%)
+ui.settings.intensity_hint,Множитель целей плана в начале тренировки,Multiplier for plan targets at the start of a workout
+ui.settings.steepness,Крутизна SIM по умолчанию,Default SIM steepness
+ui.settings.steepness_hint,"Доля уклона трассы, которую станок передаёт в свободной езде",Share of the route grade the trainer applies in free ride
+ui.settings.sources_title,Источник FTP и зон,FTP and zones source
+ui.settings.version_title,Версия,Version
+ui.settings.licenses_row,Лицензии,Licenses
+ui.settings.licenses_hint,Сторонние компоненты и их лицензии,Third-party components and their licenses
+ui.settings.licenses_open,Показать,Show
+ui.settings.license_inter,Шрифт Inter 4.1 — SIL Open Font License 1.1 (© The Inter Project Authors),Inter 4.1 font — SIL Open Font License 1.1 (© The Inter Project Authors)
+ui.settings.license_lucide,"Иконки Lucide 1.51 — ISC (© Lucide Icons and Contributors; часть иконок — Feather, MIT)","Lucide 1.51 icons — ISC (© Lucide Icons and Contributors; some icons from Feather, MIT)"
+ui.settings.privacy_title,Политика конфиденциальности,Privacy policy
+ui.settings.privacy_doc,Документ: {path},Document: {path}
+ui.devices.slot.trainer,Станок,Trainer
+ui.devices.slot.hr,Пульсометр,Heart-rate monitor
+ui.devices.slot.cadence,Каденс,Cadence
+ui.devices.slot.not_connected,Не подключено,Not connected
+ui.devices.slot.find,Найти,Find
+ui.devices.empty_title,Устройства не найдены,No devices found
+ui.devices.empty_text,"Крутаните педали, чтобы разбудить станок",Spin the pedals to wake the trainer up
+ui.devices.empty_action,Искать,Search
+ui.devices.ble_help,Как включить,How to turn on
+ui.devices.ble_help_title,Как включить Bluetooth,How to turn on Bluetooth
+ui.devices.ble_help_text,"Включите Bluetooth в настройках системы и разрешите приложению доступ к Bluetooth, затем нажмите «Сканировать».","Turn on Bluetooth in system settings and allow the app to use Bluetooth, then press “Scan”."
+ui.profile_select.who,Кто едет?,Who’s riding?
+ui.profile_select.card_stats,FTP {ftp} Вт · {weight} кг,FTP {ftp} W · {weight} kg
+ui.profile_select.more,Действия с профилем,Profile actions
+ui.profile_select.delete_profile,Удалить профиль,Delete profile

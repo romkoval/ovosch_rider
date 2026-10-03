@@ -1,0 +1,124 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/devices/device_slot.gd" id="1_script"]
+
+[node name="DeviceSlot" type="PanelContainer"]
+size_flags_horizontal = 3
+script = ExtResource("1_script")
+
+[node name="Rows" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"Stack12"
+
+[node name="Header" type="HBoxContainer" parent="Rows"]
+layout_mode = 2
+theme_type_variation = &"Row12"
+
+[node name="Icon" type="TextureRect" parent="Rows/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Title" type="Label" parent="Rows/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"TitleLabel"
+auto_translate_mode = 2
+autowrap_mode = 3
+
+[node name="Chip" type="Button" parent="Rows/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+focus_mode = 0
+theme_type_variation = &"ChipButton"
+auto_translate_mode = 2
+
+[node name="Connected" type="VBoxContainer" parent="Rows"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="Name" type="Label" parent="Rows/Connected"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"BodyStrongLabel"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Meta" type="HBoxContainer" parent="Rows/Connected"]
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="SignalIcon" type="TextureRect" parent="Rows/Connected/Meta"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="SignalLabel" type="Label" parent="Rows/Connected/Meta"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"NumLabel"
+auto_translate_mode = 2
+
+[node name="BatteryIcon" type="TextureRect" parent="Rows/Connected/Meta"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="BatteryLabel" type="Label" parent="Rows/Connected/Meta"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"NumLabel"
+auto_translate_mode = 2
+
+[node name="DisconnectButton" type="Button" parent="Rows/Connected"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+theme_type_variation = &"GhostButton"
+auto_translate_mode = 2
+
+[node name="Empty" type="VBoxContainer" parent="Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="EmptyLabel" type="Label" parent="Rows/Empty"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+auto_translate_mode = 2
+autowrap_mode = 3
+
+[node name="RememberedLabel" type="Label" parent="Rows/Empty"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+auto_translate_mode = 2
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="FindButton" type="Button" parent="Rows/Empty"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+auto_translate_mode = 2
