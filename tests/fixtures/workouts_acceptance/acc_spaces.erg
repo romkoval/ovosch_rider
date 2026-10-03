@@ -1,0 +1,26 @@
+[COURSE HEADER]
+VERSION = 2
+UNITS = ENGLISH
+DESCRIPTION = Acceptance erg with spaces
+FILE NAME = acc_spaces.erg
+FTP = 250
+MINUTES WATTS
+[END COURSE HEADER]
+
+[COURSE DATA]
+0    100
+5    100
+
+5    200
+10   200
+10   150
+12.5 250
+12.5 100
+15   100
+[END COURSE DATA]
+
+[COURSE TEXT]
+0 Разминка сто ватт 10
+300 Второй блок 10
+600 Рампа пошла 15
+[END COURSE TEXT]

@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!-- комментарий перед корнем -->
+<workout_file>
+    <author>BOM Tester</author>
+    <name>BOM CRLF</name>
+    <description><![CDATA[Описание <в CDATA> & с амперсандом]]></description>
+    <sportType>bike</sportType>
+    <workout>
+        <!-- комментарий внутри workout -->
+        <SteadyState Duration="600" Power="0.75">
+            <!-- комментарий внутри шага -->
+            <textevent timeoffset="60" message="Подсказка в CRLF"><![CDATA[тело textevent]]></textevent>
+        </SteadyState>
+        <Cooldown Duration="300" PowerLow="0.60" PowerHigh="0.40"/>
+    </workout>
+</workout_file>

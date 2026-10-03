@@ -65,8 +65,10 @@ static func parse_text(text: String, file_name: String) -> ParseResult:
 			var shown := ext if not ext.is_empty() else "(нет)"
 			result.add_error("расширение .%s не поддерживается (ожидается .zwo, .erg или .mrc)" % shown, 0, 0, file_name.get_file(), "unsupported_extension")
 	result.metadata["file_name"] = file_name.get_file()
-	if result.workout != null and result.workout.name.strip_edges().is_empty():
-		result.workout.name = file_name.get_file().get_basename()
+	if result.workout != null:
+		result.workout.metadata["source_file"] = file_name.get_file()
+		if result.workout.name.strip_edges().is_empty():
+			result.workout.name = file_name.get_file().get_basename()
 	return result
 
 
@@ -258,6 +260,8 @@ func _read_record(profile_id: String, id: String) -> Dictionary:
 	if err != OK or not (json.data is Dictionary):
 		return {}  # повреждённая запись пропускается молча (REQ-IMP-05 крит. 4: без ошибок движка)
 	var data: Dictionary = json.data
+	if not (data.get("workout") is Dictionary):
+		return {}  # запись без плана непригодна — пропускается, как битый JSON
 	if str(data.get("id", "")) != id:
 		data["id"] = id
 	return data

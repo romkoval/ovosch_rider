@@ -1,0 +1,9 @@
+{
+  "id": 5004,
+  "start_date_local": "2026-10-02T00:00:00",
+  "category": "WORKOUT",
+  "type": "Ride",
+  "name": "Press Lap",
+  "description": "Warmup\n- 10m 65%\n- 5m press lap\n- 10m 50%\n",
+  "duration": 1500
+}

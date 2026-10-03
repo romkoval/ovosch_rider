@@ -185,6 +185,9 @@ static func parse(text: String, kind: String = KIND_AUTO) -> ParseResult:
 			continue
 		workout.steps[idx].text_cues.append(TextCue.make(sec - workout.step_start_sec(idx), str(cue["text"])))
 
+	workout.metadata = result.metadata.duplicate(true)
+	if result.metadata.has("ftp"):
+		workout.metadata["ftp_header"] = result.metadata["ftp"]
 	for e in workout.validate():
 		result.add_error(e, 0, 0, "", "invalid_workout")
 	result.set_workout(workout)

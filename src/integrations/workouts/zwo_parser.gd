@@ -35,6 +35,9 @@ const BIKE_SPORT_TYPES: Array[String] = ["bike", "", "cycling"]
 ## Разобранный план или ошибки. Никогда не бросает и не пишет ошибок движка.
 static func parse(xml_text: String) -> ParseResult:
 	var result := ParseResult.new()
+	# BOM (U+FEFF) в начале строки — не часть разметки.
+	while xml_text.begins_with(String.chr(0xFEFF)):
+		xml_text = xml_text.substr(1)
 	if xml_text.strip_edges().is_empty():
 		result.add_error("файл пуст", 0, 0, "", "empty_file")
 		return result
@@ -48,6 +51,7 @@ static func parse(xml_text: String) -> ParseResult:
 	var steps: Array[WorkoutStep] = []
 	var stack: Array[String] = []  # имена открытых элементов (в нижнем регистре)
 	var saw_root := false
+	var root_closed := false
 	var saw_workout := false
 	var meta_text := ""
 	# Шаги текущего элемента-шага (1 для простых, 2 для IntervalsT) и число повторов.
@@ -111,6 +115,9 @@ static func parse(xml_text: String) -> ParseResult:
 			XMLParser.NODE_ELEMENT_END:
 				var lname := parser.get_node_name().to_lower()
 				var line := parser.get_current_line() + 1
+				if stack.is_empty() and root_closed:
+					# XMLParser при завершающих байтах (CRLF, пустая строка) повторяет END корня — Д-1.
+					break
 				if stack.is_empty() or stack[stack.size() - 1] != lname:
 					var expected := "" if stack.is_empty() else stack[stack.size() - 1]
 					result.add_error("нарушена структура XML: закрывающий тег </%s>, ожидался </%s>" % [parser.get_node_name(), expected],
@@ -118,15 +125,21 @@ static func parse(xml_text: String) -> ParseResult:
 					return result
 				stack.pop_back()
 				var depth := stack.size()
+				if depth == 0:
+					root_closed = true
 				if depth == 2 and stack[1] == WORKOUT_ELEMENT and STEP_ELEMENTS.has(lname):
 					_flush_pending(steps, pending, pending_repeat, pending_is_intervals)
 					pending = []
 				elif depth == 1 and lname != WORKOUT_ELEMENT:
 					_store_meta(workout, result, lname, meta_text.strip_edges())
 					meta_text = ""
-			XMLParser.NODE_TEXT, XMLParser.NODE_CDATA:
+			XMLParser.NODE_TEXT:
 				if stack.size() == 2 and stack[1] != WORKOUT_ELEMENT:
 					meta_text += parser.get_node_data()
+			XMLParser.NODE_CDATA:
+				# Текст CDATA XMLParser отдаёт через get_node_name(); get_node_data() — ошибка движка (Д-2).
+				if stack.size() == 2 and stack[1] != WORKOUT_ELEMENT:
+					meta_text += parser.get_node_name()
 			_:
 				pass
 
@@ -146,6 +159,7 @@ static func parse(xml_text: String) -> ParseResult:
 		result.add_error("тренировка не содержит шагов", 0, 0, "workout", "no_steps")
 		return result
 	workout.steps = steps
+	workout.metadata = result.metadata.duplicate(true)
 	for e in workout.validate():
 		result.add_error(e, 0, 0, "", "invalid_workout")
 	result.set_workout(workout)

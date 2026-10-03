@@ -153,17 +153,24 @@ func _on_profile_deleted(profile_id: String) -> void:
 	clear(profile_id)
 
 
-## Пометка для UI: «из кэша, загружен <ЧЧ:ММ>» (дата добавляется, если не сегодня).
+## Пометка для UI: «из кэша, загружен <ЧЧ:ММ>» в локальном времени устройства
+## (дата добавляется, если не сегодня).
 static func cache_label(loaded_at: int, today: String = "") -> String:
 	if loaded_at <= 0:
 		return "из кэша"
-	var dt := Time.get_datetime_dict_from_unix_time(loaded_at)
+	var dt := local_datetime(loaded_at)
 	var date := today if not today.is_empty() else IntervalsIcuClient.local_date()
 	var loaded_date := "%04d-%02d-%02d" % [dt["year"], dt["month"], dt["day"]]
 	var time := "%02d:%02d" % [dt["hour"], dt["minute"]]
 	if loaded_date == date:
 		return "из кэша, загружен %s" % time
 	return "из кэша, загружен %s %s" % [loaded_date, time]
+
+
+## Локальные дата/время для unix-секунд (смещение часового пояса системы).
+static func local_datetime(unix_sec: int) -> Dictionary:
+	var bias_min := int(Time.get_time_zone_from_system().get("bias", 0))
+	return Time.get_datetime_dict_from_unix_time(unix_sec + bias_min * 60)
 
 
 func _prune_other_dates(profile_id: String, keep_date: String) -> void:

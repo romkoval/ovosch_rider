@@ -1,0 +1,23 @@
+{
+  "id": 5002,
+  "start_date_local": "2026-10-02T00:00:00",
+  "category": "WORKOUT",
+  "type": "Ride",
+  "name": "Acceptance Doc Workout",
+  "description": "ignored when workout_doc present",
+  "duration": 2700,
+  "workout_doc": {
+    "duration": 2700,
+    "steps": [
+      {"duration": 600, "warmup": true, "ramp": true, "power": {"start": 40, "end": 70, "units": "%ftp"}, "text": "Разминка"},
+      {"reps": 4, "steps": [
+        {"duration": 180, "power": {"value": 110, "units": "%ftp"}, "cadence": 95, "text": "Жми"},
+        {"duration": 120, "power": {"value": 50, "units": "%ftp"}}
+      ]},
+      {"duration": 300, "power": {"value": 220, "units": "w"}, "cadence": {"start": 85, "end": 95}},
+      {"duration": 300, "power": {"start": 60, "end": 70, "units": "%ftp"}},
+      {"duration": 120, "freeride": true},
+      {"duration": 180, "cooldown": true, "ramp": true, "power": {"start": 60, "end": 40, "units": "%ftp"}}
+    ]
+  }
+}

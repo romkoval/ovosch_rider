@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <author>Acceptance Tester</author>
+    <name>No Workout Element</name>
+    <description>Файл без элемента workout.</description>
+    <sportType>bike</sportType>
+</workout_file>

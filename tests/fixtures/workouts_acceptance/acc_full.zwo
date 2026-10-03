@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Собрано по документации Zwift ZWO: Power — доля FTP, Duration — секунды -->
+<workout_file>
+    <author>Acceptance Tester</author>
+    <name>Acceptance Full</name>
+    <description>Все поддерживаемые элементы ZWO.</description>
+    <sportType>bike</sportType>
+    <tags>
+        <tag name="acceptance"/>
+    </tags>
+    <workout>
+        <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.70" Cadence="85"/>
+        <SteadyState Duration="600" Power="1.0" Cadence="90">
+            <textevent timeoffset="0" message="Ровно на FTP"/>
+            <textevent timeoffset="300" message="Половина"/>
+        </SteadyState>
+        <IntervalsT Repeat="3" OnDuration="120" OffDuration="60" OnPower="1.2" OffPower="0.5" Cadence="100" CadenceResting="80">
+            <textevent timeoffset="10" message="Жми"/>
+            <textevent timeoffset="130" message="Отдых"/>
+        </IntervalsT>
+        <Ramp Duration="300" PowerLow="0.50" PowerHigh="0.90" CadenceLow="80" CadenceHigh="90"/>
+        <FreeRide Duration="180" FlatRoad="1"/>
+        <MaxEffort Duration="60"/>
+        <Cooldown Duration="300" PowerLow="0.60" PowerHigh="0.30"/>
+    </workout>
+</workout_file>

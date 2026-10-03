@@ -1,0 +1,9 @@
+{
+  "id": 5001,
+  "start_date_local": "2026-10-02T00:00:00",
+  "category": "WORKOUT",
+  "type": "Ride",
+  "name": "Acceptance Text Workout",
+  "description": "Warmup\n- 10m 65%\n\n3x (4m 105%, 2m 50%)\n\n- 8m ramp 50-75%\n- 10m 85-95%\n- 1h30m 60% 85rpm\n- 90s 250w 100-110rpm\n- 10:00 55%\n",
+  "duration": 8850
+}

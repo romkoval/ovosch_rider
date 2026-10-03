@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>Zero Duration</name>
+    <workout>
+        <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.70"/>
+        <SteadyState Duration="0" Power="0.75"/>
+    </workout>
+</workout_file>

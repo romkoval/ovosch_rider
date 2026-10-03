@@ -20,8 +20,10 @@ extends RefCounted
 ##      - 4m 105% 95rpm      → каденс 95 (крит. 6; `80-90rpm` → середина)
 ##      Строка без дефиса → текстовая подсказка следующего шага (крит. 7).
 ##      Слова после целей внутри шага (например `- 10m 65% Spin easy`) — подсказка шага.
-##    Неподдерживаемые цели (пульс `140bpm`, зоны `Z2`, темп, `press lap`) → ошибка
-##    с номером строки и позицией (крит. 9).
+##    Неподдерживаемые цели → ошибка с номером строки и позицией (крит. 9): только токены,
+##    похожие на цель — пульс `140bpm`/`140-150bpm`/`80%hr`, зона `Z2`, темп `4:30/km`,
+##    `press lap` у шага без цели по мощности. Свободные слова (`Keep HR low`) после валидной
+##    цели — подсказка, не ошибка.
 ##
 ## Сумма длительностей сверяется с заявленной (`event.duration`, иначе
 ## `workout_doc.duration`, иначе `event.moving_time`): расхождение > 1 с →
@@ -34,7 +36,7 @@ const UNITS_PERCENT: Array[String] = ["%ftp", "%", "percent_ftp", "ftp"]
 const UNITS_WATTS: Array[String] = ["w", "watts", "watt"]
 
 ## Токен-цель, которую движок не поддерживает (пульс, зоны, темп).
-const UNSUPPORTED_TARGET_RE: String = "^(?:\\d+(?:[.,:]\\d+)?(?:-\\d+(?:[.,:]\\d+)?)?(?:bpm|hr|%hr|%lthr|%maxhr|/km|/mi|km/h|kph|mph|z[1-7])|hr|pace|z[1-7]|zone\\d|lap|press|maxhr|lthr)$"
+const UNSUPPORTED_TARGET_RE: String = "^(?:\\d+(?:[.,:]\\d+)?(?:-\\d+(?:[.,:]\\d+)?)?(?:bpm|%hr|%lthr|%maxhr|/km|/mi|km/h|kph|mph)|z[1-7])$"
 const DURATION_RE: String = "^(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?$"
 const CLOCK_RE: String = "^(\\d+):(\\d{1,2})(?::(\\d{1,2}))?$"
 const POWER_RE: String = "^(\\d+(?:[.,]\\d+)?)(?:-(\\d+(?:[.,]\\d+)?))?(%|w)$"
@@ -61,6 +63,10 @@ static func parse(event: Dictionary) -> ParseResult:
 	for key in ["id", "start_date_local", "type", "category", "external_id", "icu_training_load"]:
 		if event.has(key):
 			result.metadata[key] = event[key]
+	if result.workout != null:
+		result.workout.metadata = result.metadata.duplicate(true)
+		if event.has("id"):
+			result.workout.metadata["event_id"] = str(event["id"])
 	_check_declared_duration(result, event, doc)
 	return result
 
@@ -302,6 +308,10 @@ static func _parse_step_text(body: String, line_no: int, col: int, pending_cues:
 	var unsupported_re := RegEx.create_from_string(UNSUPPORTED_TARGET_RE)
 	var cursor := col
 	var idx := 0
+	var step_has_power := false
+	for t in tokens:
+		if power_re.search(t.to_lower()) != null:
+			step_has_power = true
 	while idx < tokens.size():
 		var tok := tokens[idx]
 		var tok_l := tok.to_lower()
@@ -321,6 +331,9 @@ static func _parse_step_text(body: String, line_no: int, col: int, pending_cues:
 			continue
 		var pm := power_re.search(tok_l)
 		if pm != null and not has_power:
+			if pm.get_string(3) == "%" and idx < tokens.size() and tokens[idx].to_lower() == "hr":
+				result.add_error("элемент '%s hr' не поддерживается (только цели по мощности)" % tok, line_no, tok_col, tok + " hr", "unsupported_element")
+				return null
 			has_power = true
 			p_lo = pm.get_string(1).replace(",", ".").to_float()
 			p_hi = pm.get_string(2).replace(",", ".").to_float() if not pm.get_string(2).is_empty() else p_lo
@@ -334,6 +347,9 @@ static func _parse_step_text(body: String, line_no: int, col: int, pending_cues:
 			continue
 		if unsupported_re.search(tok_l) != null:
 			result.add_error("элемент '%s' не поддерживается (только цели по мощности)" % tok, line_no, tok_col, tok, "unsupported_element")
+			return null
+		if tok_l == "press" and idx < tokens.size() and tokens[idx].to_lower() == "lap" and not step_has_power:
+			result.add_error("элемент 'press lap' не поддерживается (шаг без цели по мощности)", line_no, tok_col, "press lap", "unsupported_element")
 			return null
 		text_words.append(tok)
 	if duration <= 0:

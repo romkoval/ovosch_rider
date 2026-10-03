@@ -135,12 +135,18 @@ func test_clear_and_profile_cascade() -> void:
 	assert_false(_cache.has(a.id, TODAY), "каскад при удалении профиля")
 
 
-func test_cache_label() -> void:
+func test_cache_label_uses_local_time() -> void:
+	var bias_min := int(Time.get_time_zone_from_system().get("bias", 0))
 	var dt := {"year": 2026, "month": 10, "day": 2, "hour": 7, "minute": 5, "second": 0}
-	var ts := Time.get_unix_time_from_datetime_dict(dt)
+	var ts := Time.get_unix_time_from_datetime_dict(dt) - bias_min * 60  # 07:05 по локальному времени
 	var label := PlanCache.cache_label(ts, TODAY)
 	assert_string_contains(label, "из кэша, загружен", "REQ-INT-07 крит. 2")
-	assert_true(RegEx.create_from_string("\\d{2}:\\d{2}$").search(label) != null, "время ЧЧ:ММ: %s" % label)
+	assert_true(label.ends_with("07:05"), "локальное время ЧЧ:ММ: %s" % label)
+	var local := PlanCache.local_datetime(ts)
+	assert_eq(int(local["hour"]), 7)
+	assert_eq(int(local["minute"]), 5)
+	if bias_min != 0:
+		assert_ne(int(Time.get_datetime_dict_from_unix_time(ts)["hour"]), 7, "UTC отличается от локального")
 	assert_string_contains(PlanCache.cache_label(ts, "2026-10-03"), "2026-10-02", "другая дата — с датой")
 	assert_eq(PlanCache.cache_label(0), "из кэша")
 

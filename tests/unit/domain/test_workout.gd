@@ -217,3 +217,65 @@ func test_segments_zone_follows_intensity() -> void:
 	assert_eq(w.segments(FTP, 1.1)[0]["zone"], 5, "REQ-HUD-07 крит. 2: 220 Вт → Z5")
 	assert_eq(w.segments(FTP, 0.5)[0]["zone"], 1)
 	assert_eq(Workout.new().segments(FTP).size(), 0)
+
+
+# ---------------------------------------------------------------------------
+# Сериализация и метаданные (решение Н-6)
+# ---------------------------------------------------------------------------
+
+func test_to_dict_contains_schema_fields_metadata_and_steps() -> void:
+	var w := _three_steps()
+	w.description = "desc"
+	w.source = "zwo"
+	w.metadata = {"author": "A", "sport_type": "bike", "ftp_header": 250}
+	var d := w.to_dict()
+	assert_eq(int(d["schema"]), Workout.SCHEMA_VERSION)
+	assert_eq(str(d["name"]), "test")
+	assert_eq(str(d["description"]), "desc")
+	assert_eq(str(d["source"]), "zwo")
+	assert_eq(str(d["metadata"]["author"]), "A")
+	assert_eq((d["steps"] as Array).size(), 3)
+	assert_eq(int(d["steps"][1]["duration_sec"]), 30)
+	var copied: Dictionary = d["metadata"]
+	copied["author"] = "B"
+	assert_eq(str(w.metadata["author"]), "A", "to_dict отдаёт копию метаданных")
+
+
+func test_from_dict_round_trip_via_json_preserves_everything() -> void:
+	var steps: Array[WorkoutStep] = [
+		WorkoutStep.ramp_percent(300, 40.0, 65.0, WorkoutStep.StepKind.WARMUP),
+		WorkoutStep.percent(600, 90.0),
+		WorkoutStep.watts(120, 250.0, WorkoutStep.StepKind.INTERVAL_ON),
+		WorkoutStep.free_ride(90),
+	]
+	steps[1].cadence_rpm = 95
+	steps[1].text_cues.append(TextCue.make(15, "hold"))
+	var w := Workout.make("All", steps, "erg")
+	w.description = "d"
+	w.metadata = {"author": "A", "source_file": "x.erg", "ftp_header": 250}
+	var text := JSON.stringify(w.to_dict())
+	var back := Workout.from_dict(JSON.parse_string(text))
+	assert_not_null(back)
+	assert_eq(back.name, "All")
+	assert_eq(back.description, "d")
+	assert_eq(back.source, "erg")
+	assert_eq(str(back.metadata["author"]), "A")
+	assert_eq(str(back.metadata["source_file"]), "x.erg")
+	assert_eq(int(back.metadata["ftp_header"]), 250)
+	assert_eq(back.steps.size(), 4)
+	assert_eq(back.total_duration_sec(), w.total_duration_sec())
+	assert_eq(back.steps[1].cadence_rpm, 95)
+	assert_eq(back.steps[1].text_cues[0].text, "hold")
+	assert_eq(back.steps[3].target_kind, WorkoutStep.TargetKind.NONE)
+	assert_eq(back.power_points(FTP), w.power_points(FTP), "профиль мощности идентичен")
+	assert_true(back.is_valid())
+
+
+func test_from_dict_rejects_non_workout_and_skips_bad_steps() -> void:
+	assert_null(Workout.from_dict({}))
+	assert_null(Workout.from_dict({"name": "x"}), "без steps → null")
+	var w := Workout.from_dict({"steps": [{"duration_sec": 60, "target_kind": "percent_ftp", "target_start": 50}, 7, {"no": "duration"}], "metadata": "garbage"})
+	assert_eq(w.steps.size(), 1, "битые шаги пропущены")
+	assert_eq(w.metadata, {}, "метаданные не словарь → пусто")
+	assert_eq(w.source, "manual")
+	assert_eq(Workout.new().metadata, {}, "по умолчанию пусто")

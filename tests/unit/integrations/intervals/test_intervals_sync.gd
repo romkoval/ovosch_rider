@@ -61,6 +61,21 @@ func test_power_zones_in_watts_convert_to_rounded_percent() -> void:
 	assert_eq(IntervalsSync.power_zones_to_pct([100, 150], 0, "watts"), [], "без FTP ватты не перевести")
 
 
+func test_power_zones_watts_with_999_sentinel_is_open_bound() -> void:
+	assert_eq(IntervalsSync.power_zones_to_pct([110, 150, 180, 210, 240, 300, 999], 200), [55.0, 75.0, 90.0, 105.0, 120.0, 150.0], "D-7: 999 — открытая граница и в ваттах")
+	assert_eq(IntervalsSync.power_zones_to_pct([110, 150, 999], 200, "watts"), [55.0, 75.0])
+
+
+func test_more_than_nine_hr_zones_warns_and_keeps_profile_zones() -> void:
+	var p := _profile()
+	p.hr_zones = HrZones.custom_bpm([100, 120, 140, 160])
+	var ten: Array[int] = [100, 110, 120, 130, 140, 150, 160, 170, 180]
+	var w := IntervalsSync.apply_athlete_to_profile(p, {"ftp": 220, "power_zones_pct": [55.0, 75.0], "hr_zones_bpm": ten, "max_hr": 195}, false, DATE)
+	assert_has(w, IntervalsSync.WARN_HR_ZONES_COUNT, "10 зон пульса → предупреждение")
+	assert_eq(p.hr_zones.boundaries_bpm, [100, 120, 140, 160], "зоны пульса не тронуты")
+	assert_eq(p.max_hr, 180, "max_hr тоже не тронут")
+
+
 func test_power_zones_percent_and_names_rule() -> void:
 	assert_eq(IntervalsSync.power_zones_to_pct([55, 75, 90], 200, "auto", ["Z1", "Z2", "Z3"]), [55.0, 75.0], "число имён = число значений → последняя граница открытая")
 	assert_eq(IntervalsSync.power_zones_to_pct([55, 75, 90], 200), [55.0, 75.0, 90.0], "без имён и без открытой границы — все значения границы")

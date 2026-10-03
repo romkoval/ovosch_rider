@@ -1,0 +1,12 @@
+{
+  "id": 5005,
+  "name": "Doc With HR Target",
+  "duration": 1200,
+  "workout_doc": {
+    "duration": 1200,
+    "steps": [
+      {"duration": 600, "power": {"value": 65, "units": "%ftp"}},
+      {"duration": 600, "hr": {"value": 150, "units": "bpm"}}
+    ]
+  }
+}

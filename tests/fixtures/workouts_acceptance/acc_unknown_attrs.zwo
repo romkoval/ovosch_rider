@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>Unknown Attributes</name>
+    <sportType>bike</sportType>
+    <workout>
+        <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.70" Zone="1" show_avg="1"/>
+        <SteadyState Duration="600" Power="0.75" FlatRoad="0" Zone="3" OffPower="0.5" ForcePowerDisplay="1"/>
+        <IntervalsT Repeat="2" OnDuration="60" OffDuration="60" OnPower="1.1" OffPower="0.5" OverUnder="1" pace="0"/>
+        <FreeRide Duration="120" FlatRoad="1" ftptest="1"/>
+    </workout>
+</workout_file>

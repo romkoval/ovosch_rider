@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>Lowercase Elements</name>
+    <workout>
+        <warmup Duration="300" PowerLow="0.40" PowerHigh="0.70"/>
+        <steadystate Duration="600" Power="0.80"/>
+        <cooldown Duration="300" PowerLow="0.60" PowerHigh="0.40"/>
+    </workout>
+</workout_file>

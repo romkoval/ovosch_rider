@@ -235,6 +235,22 @@ func test_text_unsupported_target_is_error_with_line_and_column() -> void:
 func test_text_zone_and_pace_targets_are_errors() -> void:
 	assert_eq(str(IntervalsIcuWorkoutParser.parse_description_text("- 10m Z2").errors[0]["key"]), "unsupported_element")
 	assert_eq(str(IntervalsIcuWorkoutParser.parse_description_text("- 10m 4:30/km").errors[0]["key"]), "unsupported_element")
+	assert_eq(str(IntervalsIcuWorkoutParser.parse_description_text("- 10m 80%hr").errors[0]["key"]), "unsupported_element")
+	assert_eq(str(IntervalsIcuWorkoutParser.parse_description_text("- 10m 80% hr").errors[0]["key"]), "unsupported_element", "«80% hr» — пульсовая цель")
+
+
+func test_text_free_words_after_power_target_are_cues_not_errors() -> void:
+	var hr := IntervalsIcuWorkoutParser.parse_description_text("- 10m 65% Keep HR low")
+	assert_true(hr.ok(), "слово HR в подсказке — не цель: %s" % str(hr.error_messages()))
+	assert_eq(hr.workout.steps[0].text_cues[0].text, "Keep HR low")
+	var pace := IntervalsIcuWorkoutParser.parse_description_text("- 10m 65% steady pace, then press lap")
+	assert_true(pace.ok(), "pace/press lap как слова при валидной цели: %s" % str(pace.error_messages()))
+	assert_eq(pace.workout.steps[0].text_cues[0].text, "steady pace, then press lap")
+	var lap := IntervalsIcuWorkoutParser.parse_description_text("- 10m 65%\n- 5m press lap")
+	assert_false(lap.ok(), "press lap без цели по мощности — неподдерживаемый шаг")
+	assert_eq(int(lap.errors[0]["line"]), 2)
+	assert_eq(int(lap.errors[0]["column"]), 6, "позиция токена press")
+	assert_string_contains(str(lap.errors[0]["message"]), "press")
 
 
 func test_text_missing_duration_and_empty_description_are_errors() -> void:

@@ -21,6 +21,8 @@ const CODE_RATE_LIMITED: String = "rate_limited"
 const CODE_NOT_CONFIGURED: String = "not_configured"
 ## Ответ сервера не разобран (не JSON, неожиданная структура, прочие 4xx).
 const CODE_BAD_RESPONSE: String = "bad_response"
+## Привязка требует повторного входа: обновление токена отклонено (REQ-STR-01 крит. 4).
+const CODE_REAUTH_REQUIRED: String = "reauth_required"
 
 var ok: bool = false
 var code: String = CODE_OK

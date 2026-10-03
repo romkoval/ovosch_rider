@@ -13,6 +13,13 @@ var description: String = ""
 ## Происхождение плана: "intervals_icu" | "zwo" | "erg" | "mrc" | "manual".
 var source: String = "manual"
 var steps: Array[WorkoutStep] = []
+## Метаданные источника, не влияющие на исполнение: `author`, `sport_type`,
+## `source_file`, `ftp_header`, `event_id` и т. п. (REQ-IMP-01 крит. 5, REQ-IMP-02 крит. 4).
+## Только JSON-совместимые значения.
+var metadata: Dictionary = {}
+
+## Версия схемы `to_dict()`.
+const SCHEMA_VERSION: int = 1
 
 
 static func make(workout_name: String, workout_steps: Array[WorkoutStep],
@@ -33,6 +40,61 @@ static func expand_repeat(block: Array[WorkoutStep], count: int) -> Array[Workou
 		for step in block:
 			out.append(step.duplicate_step())
 	return out
+
+
+## Сериализация в словарь (JSON-совместимый): `{schema, name, description, source,
+## metadata, steps: [WorkoutStep.to_dict()]}`. Числа метаданных отдаются как float
+## (как они выглядят после JSON), поэтому `from_dict(to_dict()).to_dict()` и
+## `from_dict(JSON(to_dict())).to_dict()` совпадают с `to_dict()` без потерь.
+func to_dict() -> Dictionary:
+	var items: Array = []
+	for s in steps:
+		items.append(s.to_dict())
+	return {
+		"schema": SCHEMA_VERSION,
+		"name": name,
+		"description": description,
+		"source": source,
+		"metadata": _json_numbers(metadata.duplicate(true)),
+		"steps": items,
+	}
+
+
+## Восстановление из словаря; null, если нет массива `steps`. Битые шаги
+## пропускаются (их отловит `validate()` по итогу). Не падает на любом входе.
+static func from_dict(data: Dictionary) -> Workout:
+	if not (data.get("steps") is Array):
+		return null
+	var w := Workout.new()
+	w.name = str(data.get("name", ""))
+	w.description = str(data.get("description", ""))
+	w.source = str(data.get("source", "manual"))
+	var meta: Variant = data.get("metadata", {})
+	if meta is Dictionary:
+		w.metadata = (meta as Dictionary).duplicate(true)
+	for item in data["steps"]:
+		if item is Dictionary:
+			var s := WorkoutStep.from_dict(item)
+			if s != null:
+				w.steps.append(s)
+	return w
+
+
+## int → float рекурсивно (вид чисел после JSON), bool не трогается.
+static func _json_numbers(value: Variant) -> Variant:
+	if value is int:
+		return float(value)
+	if value is Dictionary:
+		var d: Dictionary = value
+		for k in d.keys():
+			d[k] = _json_numbers(d[k])
+		return d
+	if value is Array:
+		var a: Array = value
+		for i in a.size():
+			a[i] = _json_numbers(a[i])
+		return a
+	return value
 
 
 ## Суммарная длительность, с.

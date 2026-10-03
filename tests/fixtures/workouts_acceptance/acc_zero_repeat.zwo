@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>Zero Repeat</name>
+    <workout>
+        <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.70"/>
+        <IntervalsT Repeat="0" OnDuration="120" OffDuration="60" OnPower="1.2" OffPower="0.5"/>
+    </workout>
+</workout_file>

@@ -248,6 +248,22 @@ func test_error_messages_contain_no_stacktrace_or_class_names() -> void:
 			assert_gt(m.length(), 5, "сообщение не пустое")
 
 
+func test_crlf_trailing_newline_and_bom_are_accepted() -> void:
+	var crlf := _fixture("simple.zwo").replace("\n", "\r\n") + "\r\n\r\n"
+	var r := ZwoParser.parse(crlf)
+	assert_true(r.ok(), "Д-1: CRLF и завершающие байты после корня: %s" % str(r.error_messages()))
+	assert_eq(r.workout.steps.size(), 4)
+	var bom := ZwoParser.parse(String.chr(0xFEFF) + _fixture("simple.zwo") + "\n")
+	assert_true(bom.ok(), "BOM в начале строки: %s" % str(bom.error_messages()))
+
+
+func test_cdata_description_is_kept_without_engine_error() -> void:
+	var xml := "<workout_file><name>N</name><description><![CDATA[Текст <в CDATA> & co]]></description><workout><SteadyState Duration=\"60\" Power=\"0.7\"/></workout></workout_file>"
+	var r := ZwoParser.parse(xml)
+	assert_true(r.ok(), str(r.error_messages()))
+	assert_eq(r.workout.description, "Текст <в CDATA> & co", "Д-2: CDATA через get_node_name")
+
+
 func test_parsed_workout_is_valid_for_domain() -> void:
 	for name in ["simple.zwo", "intervals_textevent.zwo"]:
 		var r := _parse_fixture(name)

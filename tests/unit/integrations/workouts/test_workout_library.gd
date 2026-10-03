@@ -178,7 +178,12 @@ func test_corrupted_record_file_is_skipped() -> void:
 	var f := FileAccess.open(_lib.profile_dir(A) + "broken.json", FileAccess.WRITE)
 	f.store_string("{ not json")
 	f.close()
-	assert_eq(_lib.list(A).size(), 1)
+	var g := FileAccess.open(_lib.profile_dir(A) + "noworkout.json", FileAccess.WRITE)
+	g.store_string(JSON.stringify({"id": "noworkout", "name": "без плана", "duration_sec": 10}))
+	g.close()
+	assert_eq(_lib.list(A).size(), 1, "записи без поля workout и битый JSON пропущены")
+	assert_eq(_lib.get_entry(A, "noworkout"), {})
+	assert_null(_lib.get_workout(A, "noworkout"))
 
 
 # ---------------------------------------------------------------------------

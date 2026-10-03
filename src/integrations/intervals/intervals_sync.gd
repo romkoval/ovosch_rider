@@ -33,9 +33,12 @@ const MAX_ZONES: int = 9
 const MIN_ZONES: int = 2
 ## Порог авто-распознавания: граница (кроме открытой) > 250 считается ваттами —
 ## процентные границы Coggan не превышают 150 %, а ваттовые при FTP ≥ 170 дают ≥ 255.
+## Значение действует до получения реальной фикстуры ответа Intervals.icu (решение 19).
 const AUTO_WATTS_THRESHOLD: float = 250.0
-## Открытая верхняя граница в процентах (999 в Intervals.icu).
+## Открытая верхняя граница в процентах (999 в Intervals.icu); сентинел 999 — открытая
+## граница при любых единицах (D-7).
 const OPEN_PERCENT_BOUND: float = 300.0
+const OPEN_SENTINEL: float = 999.0
 ## Открытая верхняя граница в ваттах — кратно FTP.
 const OPEN_WATTS_FACTOR: float = 10.0
 
@@ -47,6 +50,7 @@ const WARN_POWER_ZONES_COUNT: String = "power_zones_count"
 const WARN_POWER_ZONES_INVALID: String = "power_zones_invalid"
 const WARN_HR_ZONES_MISSING: String = "hr_zones_missing"
 const WARN_HR_ZONES_INVALID: String = "hr_zones_invalid"
+const WARN_HR_ZONES_COUNT: String = "hr_zones_count"
 const WARN_MAX_HR_MISSING: String = "max_hr_missing"
 const WARN_NO_BIKE_SETTINGS: String = "no_bike_settings"
 
@@ -154,6 +158,7 @@ static func power_zones_to_pct(values: Array, ftp: int, units: String = "auto", 
 			in_watts = true
 	var last := nums[nums.size() - 1]
 	var open_top := (names.size() == nums.size()) \
+			or last >= OPEN_SENTINEL \
 			or (in_watts and ftp > 0 and last >= OPEN_WATTS_FACTOR * float(ftp)) \
 			or (not in_watts and last >= OPEN_PERCENT_BOUND)
 	if open_top:
@@ -247,6 +252,8 @@ static func apply_athlete_to_profile(profile: Profile, athlete: Dictionary, over
 		if max_hr >= Profile.MIN_MAX_HR and max_hr <= Profile.MAX_MAX_HR:
 			profile.max_hr = max_hr
 		zones_changed = true
+	elif not hr_bounds.is_empty():
+		warnings.append(WARN_HR_ZONES_COUNT)  # > 9 зон пульса — зоны профиля не трогаем (как для мощности)
 	elif max_hr >= Profile.MIN_MAX_HR and max_hr <= Profile.MAX_MAX_HR:
 		profile.max_hr = max_hr
 		profile.hr_zones = null

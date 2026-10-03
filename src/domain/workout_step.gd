@@ -13,6 +13,23 @@ enum TargetKind { NONE, PERCENT_FTP, WATTS }
 ## Семантический тип шага. На расчёт мощности не влияет — нужен UI/исполнителю.
 enum StepKind { WARMUP, STEADY, INTERVAL_ON, INTERVAL_OFF, RAMP, FREE_RIDE, COOLDOWN }
 
+## Строковые имена перечислений для `to_dict()/from_dict()` — файл читаем и
+## устойчив к перенумерации.
+const TARGET_KIND_NAMES: Dictionary = {
+	TargetKind.NONE: "none",
+	TargetKind.PERCENT_FTP: "percent_ftp",
+	TargetKind.WATTS: "watts",
+}
+const STEP_KIND_NAMES: Dictionary = {
+	StepKind.WARMUP: "warmup",
+	StepKind.STEADY: "steady",
+	StepKind.INTERVAL_ON: "interval_on",
+	StepKind.INTERVAL_OFF: "interval_off",
+	StepKind.RAMP: "ramp",
+	StepKind.FREE_RIDE: "free_ride",
+	StepKind.COOLDOWN: "cooldown",
+}
+
 ## Длительность шага, с (> 0 для валидного шага).
 var duration_sec: int = 0
 var target_kind: TargetKind = TargetKind.NONE
@@ -122,6 +139,52 @@ func duplicate_step() -> WorkoutStep:
 	for cue in text_cues:
 		s.text_cues.append(cue.duplicate_cue())
 	return s
+
+
+## Сериализация в словарь (JSON-совместимый): `{duration_sec, target_kind, target_start,
+## target_end, cadence_rpm, kind, text_cues: [{at_sec, text}]}`; перечисления — строками.
+func to_dict() -> Dictionary:
+	var cues: Array = []
+	for c in text_cues:
+		cues.append(c.to_dict())
+	return {
+		"duration_sec": duration_sec,
+		"target_kind": TARGET_KIND_NAMES.get(target_kind, "none"),
+		"target_start": target_start,
+		"target_end": target_end,
+		"cadence_rpm": cadence_rpm,
+		"kind": STEP_KIND_NAMES.get(kind, "steady"),
+		"text_cues": cues,
+	}
+
+
+## Восстановление из словаря; null, если нет `duration_sec`. Неизвестные имена
+## перечислений → NONE/STEADY, битые подсказки пропускаются. Не падает на любом входе.
+static func from_dict(data: Dictionary) -> WorkoutStep:
+	if not data.has("duration_sec"):
+		return null
+	var s := WorkoutStep.new()
+	s.duration_sec = int(data.get("duration_sec", 0))
+	s.target_kind = _enum_from_name(TARGET_KIND_NAMES, str(data.get("target_kind", "none")), TargetKind.NONE) as TargetKind
+	s.target_start = float(data.get("target_start", 0.0))
+	s.target_end = float(data.get("target_end", s.target_start))
+	s.cadence_rpm = int(data.get("cadence_rpm", 0))
+	s.kind = _enum_from_name(STEP_KIND_NAMES, str(data.get("kind", "steady")), StepKind.STEADY) as StepKind
+	var cues: Variant = data.get("text_cues", [])
+	if cues is Array:
+		for c in cues:
+			if c is Dictionary:
+				var cue := TextCue.from_dict(c)
+				if cue != null:
+					s.text_cues.append(cue)
+	return s
+
+
+static func _enum_from_name(names: Dictionary, wanted: String, fallback: int) -> int:
+	for k in names.keys():
+		if names[k] == wanted:
+			return int(k)
+	return fallback
 
 
 ## Ошибки шага (пусто — шаг валиден). Используется `Workout.validate()`.

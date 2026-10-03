@@ -20,5 +20,17 @@ func duplicate_cue() -> TextCue:
 	return TextCue.make(at_sec, text)
 
 
+## Сериализация: `{at_sec, text}`.
+func to_dict() -> Dictionary:
+	return {"at_sec": at_sec, "text": text}
+
+
+## Восстановление из словаря; null, если нет поля `text`.
+static func from_dict(data: Dictionary) -> TextCue:
+	if not data.has("text"):
+		return null
+	return TextCue.make(int(data.get("at_sec", 0)), str(data["text"]))
+
+
 func _to_string() -> String:
 	return "TextCue(%d s: %s)" % [at_sec, text]
