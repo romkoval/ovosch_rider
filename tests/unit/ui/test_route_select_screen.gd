@@ -240,7 +240,7 @@ func test_app_bar_title_and_back_goes_back() -> void:
 	var s := _screen()
 	assert_eq(s.app_bar().title_text(), "Свободная езда")
 	assert_true(_state.navigate(AppState.Screen.ROUTE_SELECT))
-	(s.get_node("%BackButton") as Button).pressed.emit()
+	s.app_bar().back_button().pressed.emit()  # видимая кнопка «назад» AppBar
 	assert_eq(_state.current_screen, AppState.Screen.HOME, "«назад» — откуда пришли")
 	assert_false(s.handle_back(), "regular: «назад» решает стек")
 

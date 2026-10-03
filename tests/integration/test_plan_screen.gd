@@ -2,6 +2,8 @@ extends GutTest
 ## Интеграционные тесты экрана выбора тренировки PlanScreen (REQ-INT-04 крит. 1–3, REQ-INT-05 крит. 1–4,
 ## REQ-INT-07 крит. 2–5, REQ-IMP-03 крит. 1, 2 (хук), REQ-IMP-04 крит. 1, 3, REQ-IMP-05 крит. 1, 3, REQ-NFR-03 крит. 1, 2).
 ## Сеть — MockHttpTransport с фикстурами tests/fixtures/intervals/, кэш и библиотека — временные каталоги.
+## После T-082: список — карточки `cards()` (видимые подписи, `disabled`, подсказка), предпросмотр —
+## крупный `PlanPreview` и его модель `PlanChartModel`; скрытый `%WorkoutList` и `WorkoutChart` не нужны.
 
 const SCENE: String = "res://src/ui/plan/plan_screen.tscn"
 const MAIN_SCENE: String = "res://src/app/main.tscn"
@@ -107,6 +109,44 @@ func _screen() -> PlanScreen:
 	return s
 
 
+## Видимые подписи карточки `index` через « | ».
+func _card_text(s: PlanScreen, index: int) -> String:
+	var all := s.cards()
+	assert_true(index >= 0 and index < all.size(), "карточка %d есть" % index)
+	if index < 0 or index >= all.size():
+		return ""
+	var parts: Array[String] = []
+	for node in all[index].find_children("*", "Label", true, false):
+		var label := node as Label
+		if label.is_visible_in_tree() and not label.text.is_empty():
+			parts.append(label.text)
+	return " | ".join(parts)
+
+
+## Крупное превью (`PlanPreview`): `large_preview()`, если есть, иначе `chart()`.
+func _large_preview(s: PlanScreen) -> PlanPreview:
+	for method in ["large_preview", "chart"]:
+		if s.has_method(method):
+			return s.call(method) as PlanPreview
+	return null
+
+
+## Точки (t, Вт) модели превью: начало и конец каждого шага.
+static func _model_points(model: PlanChartModel) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if model == null:
+		return out
+	for seg in model.segments():
+		out.append(Vector2(float(seg["start_sec"]), float(seg["start_watts"])))
+		out.append(Vector2(float(seg["end_sec"]), float(seg["end_watts"])))
+	return out
+
+
+func _preview_points(s: PlanScreen) -> PackedVector2Array:
+	var pv := _large_preview(s)
+	return _model_points(pv.plan_model() if pv != null else null)
+
+
 func _main() -> AppMain:
 	var main: AppMain = load(MAIN_SCENE).instantiate()
 	main.data_dir = _dir
@@ -140,13 +180,14 @@ func test_events_fixture_lists_bike_workouts_with_duration_and_load() -> void:
 	assert_true(r.ok)
 	var items := s.intervals_items()
 	assert_true(items.size() >= 2, "REQ-INT-04 крит. 2: ≥ 2 велотренировок из фикстуры")
-	var list: ItemList = s.get_node("%WorkoutList")
-	assert_eq(list.item_count, s.items().size())
-	assert_string_contains(list.get_item_text(0), "Threshold 3x5")
-	assert_string_contains(list.get_item_text(0), "39:00", "длительность плана мм:сс")
-	assert_string_contains(list.get_item_text(0), "load 65", "целевая нагрузка")
-	assert_string_contains(list.get_item_text(0), "Intervals.icu", "пометка источника")
-	assert_string_contains(list.get_item_text(1), "Endurance text")
+	assert_eq(s.cards().size(), s.items().size(), "по карточке на тренировку")
+	var first := _card_text(s, 0)
+	gut.p("card 0: " + first)
+	assert_string_contains(first, "Threshold 3x5")
+	assert_string_contains(first, "39:00", "длительность плана мм:сс")
+	assert_string_contains(first, "65", "REQ-INT-04 крит. 2: целевая нагрузка из ответа (load 65)")
+	assert_string_contains(first, "Intervals.icu", "пометка источника")
+	assert_string_contains(_card_text(s, 1), "Endurance text")
 	assert_eq(s.status_text(), "Workouts loaded: %d" % items.size())
 	assert_null(s.selected_workout(), "при нескольких тренировках авто-выбора нет")
 
@@ -167,9 +208,10 @@ func test_unparsable_event_stays_in_list_disabled_with_reason() -> void:
 		return
 	assert_eq(broken[0]["name"], "Broken plan")
 	assert_false(str(broken[0]["error"]).is_empty(), "с сообщением об ошибке разбора")
-	var list: ItemList = s.get_node("%WorkoutList")
 	var idx := s.items().find(broken[0])
-	assert_true(list.is_item_disabled(idx), "нельзя выбрать для запуска")
+	assert_true(s.cards()[idx].disabled, "карточку нельзя выбрать для запуска")
+	s.cards()[idx].pressed.emit()
+	assert_null(s.selected_workout(), "нажатие по неразобранной карточке не выбирает её")
 
 
 func test_single_workout_is_preselected_without_choosing() -> void:
@@ -193,25 +235,37 @@ func test_select_shows_preview_with_power_points_and_zone_colored_segments() -> 
 	var w := s.selected_workout()
 	assert_not_null(w)
 	assert_eq(s.preview_name_text(), "Threshold 3x5")
-	assert_eq(s.preview_points(), w.power_points(200, 1.0), "REQ-INT-05 крит. 1: точки графика = power_points")
+	assert_eq(_preview_points(s), w.power_points(200, 1.0), "REQ-INT-05 крит. 1: точки превью = power_points")
 	assert_string_contains(s.preview_duration_text(), "Duration 39:00")
 	assert_string_contains(s.preview_duration_text(), "FTP 200")
-	var chart := s.chart()
-	assert_eq(chart.segments().size(), w.steps.size())
-	for seg in chart.segments():
+	var pv := _large_preview(s)
+	assert_not_null(pv, "крупное превью — PlanPreview")
+	if pv == null or pv.plan_model() == null:
+		return
+	assert_true(pv.detailed, "крупное превью — со шкалой времени и FTP")
+	var model := pv.plan_model()
+	assert_eq(model.segments().size(), w.steps.size())
+	for seg in model.segments():
 		if int(seg["start_watts"]) > 0:
-			assert_eq(WorkoutChart.segment_color(seg), ZonePalette.color(ZonePalette.power_token(int(seg["zone"]))), "REQ-INT-05 крит. 3: цвет по зоне")
-	assert_eq(chart.axis_minutes()[0], 0)
-	assert_eq(chart.axis_minutes()[1], 5, "ось времени в минутах, шаг 5")
-	assert_true(chart.axis_minutes().back() >= 35)
+			assert_eq(str(seg["zone_token"]), ZonePalette.power_token(int(seg["zone"])), "REQ-INT-05 крит. 3: цвет по зоне")
+	var minutes: Array[int] = []
+	for label in model.time_labels():
+		minutes.append(int(label["sec"]) / 60)
+	assert_eq(minutes[0], 0)
+	assert_eq(minutes[1], 5, "ось времени в минутах, шаг 5")
+	assert_true(minutes.back() >= 35)
 
 
 func test_preview_for_steps_and_ramp_uses_power_points_rules() -> void:
 	var steps: Array[WorkoutStep] = [WorkoutStep.percent(600, 50.0), WorkoutStep.percent(300, 100.0), WorkoutStep.ramp_percent(120, 50.0, 100.0)]
 	var w := Workout.make("steps", steps)
 	var s := _screen()
-	s.chart().set_workout(w, 200)
-	var pts := s.chart().points()
+	var pv := _large_preview(s)
+	pv.set_workout(w, 200)
+	var pts := _model_points(pv.plan_model())
+	assert_eq(pts.size(), 6)
+	if pts.size() < 6:
+		return
 	assert_eq(pts[0], Vector2(0, 100))
 	assert_eq(pts[1], Vector2(600, 100), "REQ-INT-05 крит. 1: 100 Вт на [0; 600)")
 	assert_eq(pts[2], Vector2(600, 200))
@@ -353,12 +407,11 @@ func test_import_valid_file_adds_library_entry_and_selects_it() -> void:
 	assert_true(r.ok(), "REQ-IMP-03 крит. 1: .zwo разобран")
 	assert_eq(_library.count(_profile.id), 1, "REQ-IMP-04 крит. 1: запись в библиотеке")
 	assert_eq(s.library_items().size(), 1)
-	var list: ItemList = s.get_node("%WorkoutList")
-	assert_string_contains(list.get_item_text(0), "library", "REQ-INT-04 крит. 3: пометка источника")
+	assert_string_contains(_card_text(s, 0).to_lower(), "library", "REQ-INT-04 крит. 3: пометка источника")
 	assert_not_null(s.selected_workout(), "импортированная выбрана")
 	assert_eq(s.selected_item()["source"], PlanScreen.SOURCE_LIBRARY)
 	assert_string_contains(s.library_status_text(), "Imported: ")
-	assert_eq(s.preview_points(), s.selected_workout().power_points(200, 1.0))
+	assert_eq(_preview_points(s), s.selected_workout().power_points(200, 1.0))
 
 
 func test_import_broken_file_shows_dialog_with_user_message() -> void:
@@ -417,8 +470,7 @@ func test_unparsable_event_tooltip_is_in_interface_language() -> void:
 	_mock.enqueue_json("GET", "/events", 200, events)
 	var s := _screen()
 	await s.load_today()
-	var list: ItemList = s.get_node("%WorkoutList")
-	var tip := list.get_item_tooltip(0)
+	var tip := s.cards()[0].tooltip_text
 	assert_false(tip.is_empty())
 	var cyr := RegEx.create_from_string("[\\p{Cyrillic}]")
 	assert_null(cyr.search(tip), "подсказка неразобранного события без кириллицы в en: " + tip)
@@ -449,10 +501,16 @@ func test_chart_segment_zones_follow_profile_zones_not_coggan() -> void:
 	_repo.save(_profile)
 	var s := _screen()
 	assert_true(s.import_path(WORKOUT_FIXTURES + "simple.zwo").ok())
-	var segs := s.chart().segments()
+	var pv := _large_preview(s)
+	var segs: Array[Dictionary] = pv.plan_model().segments() if pv != null and pv.plan_model() != null else ([] as Array[Dictionary])
 	assert_true(segs.size() > 0)
 	var saw_difference := false
 	for seg in segs:
+		if bool(seg["free"]):
+			# FreeRide — сегмент «свободно» без зоны (HUD-10.6), цвет `hud.free`.
+			assert_eq(int(seg["zone"]), 0, "FreeRide без зоны")
+			assert_eq(str(seg["color_token"]), PlanChartModel.FREE_TOKEN)
+			continue
 		var w := int(seg["start_watts"])
 		assert_eq(int(seg["zone"]), _profile.power_zone_of(w), "%d Вт — зона профиля" % w)
 		if _profile.power_zone_of(w) != Zones.power_zone(w, 200):

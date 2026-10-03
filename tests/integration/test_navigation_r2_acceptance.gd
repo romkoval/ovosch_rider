@@ -130,7 +130,7 @@ func test_req_uix_04_c1_route_select_back_to_where_came_from() -> void:
 	_esc()
 	assert_eq(_screen(main), "home", "Esc с выбора трассы → главный")
 	main.app_state.navigate(AppState.Screen.ROUTE_SELECT)
-	_press(main.route_select_screen(), "BackButton")
+	main.route_select_screen().app_bar().back_button().pressed.emit()  # «назад» AppBar (T-080)
 	assert_eq(_screen(main), "home", "кнопка «назад» выбора трассы → главный")
 	# Пришли с настроек — туда и возвращаемся.
 	main.app_state.navigate(AppState.Screen.SETTINGS)

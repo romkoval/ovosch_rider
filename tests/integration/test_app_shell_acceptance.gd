@@ -503,12 +503,18 @@ static func _collect_texts(node: Node, out: Array[Node]) -> void:
 		_collect_texts(child, out)
 
 
-## Возврат на главный: видимой пользователю кнопкой `%HomeButton`/`%BackButton`, если экран её показывает
-## (у WorkoutScreen кнопка живёт в сводке и до финиша тренировки скрыта), иначе через `AppState.navigate(HOME)` —
-## критерий REQ-PRF-05 о состоянии навигации, не о кнопке.
+## Возврат на главный: видимой пользователю кнопкой «назад» `AppBar` (экраны T-076+) или `%HomeButton`/`%BackButton`,
+## если экран её показывает (у WorkoutScreen кнопка живёт в сводке и до финиша тренировки скрыта), иначе через
+## `AppState.navigate(HOME)` — критерий REQ-PRF-05 о состоянии навигации, не о кнопке.
 func _return_home(main: AppMain, screen_node: Control) -> void:
 	var back: Button = null
+	if screen_node.has_method("app_bar"):
+		var bar := screen_node.call("app_bar") as AppBar
+		if bar != null and bar.back_button() != null and bar.back_button().is_visible_in_tree():
+			back = bar.back_button()
 	for unique_name in ["%HomeButton", "%BackButton"]:
+		if back != null:
+			break
 		var candidate := screen_node.get_node_or_null(unique_name) as Button
 		if candidate != null and candidate.is_visible_in_tree():
 			back = candidate

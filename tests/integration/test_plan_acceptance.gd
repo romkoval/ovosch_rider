@@ -4,11 +4,17 @@ extends GutTest
 ## автоматически проверяемая конфигурация диалога), REQ-IMP-05 п.1/3/4 (ошибка импорта на экране),
 ## связка «нет станка → эмулятор» (REQ-WRK-01 п.5 / T-040), строки UI через ключи `ui.plan.*`.
 ## Сеть — MockHttpTransport; события Intervals.icu строятся в тесте или берутся из tests/fixtures/intervals/.
+## После T-082 (карточки, ТЗ ред. 2) тесты читают то, что видит пользователь: карточки `PlanScreen.cards()`
+## (тексты подписей карточки, «выбрано», `disabled`, подсказка) и крупное превью `PlanPreview` (модель
+## `PlanChartModel` — сегменты HUD-10.1, зоны, шкала времени). Скрытый `%WorkoutList` и `WorkoutChart`
+## тестами не используются — их можно удалить.
 
 const SCENE: String = "res://src/ui/plan/plan_screen.tscn"
 const MAIN_SCENE: String = "res://src/app/main.tscn"
-const SCRIPT_PATHS: Array[String] = ["res://src/ui/plan/plan_screen.gd", "res://src/ui/plan/workout_chart.gd"]
-const STRINGS_CSV: String = "res://assets/i18n/strings.csv"
+## Скрипты экрана — все `.gd` каталога экрана (после удаления `workout_chart.gd` список сократится сам).
+const SCRIPT_DIR: String = "res://src/ui/plan/"
+## Таблицы переводов — все `strings*.csv` (T-060: переводы разнесены по областям).
+const I18N_DIR: String = "res://assets/i18n/"
 const INTERVALS_FIXTURES: String = "res://tests/fixtures/intervals/"
 const WORKOUT_FIXTURES: String = "res://tests/fixtures/workouts/"
 const TODAY: String = "2026-10-02"
@@ -114,8 +120,69 @@ static func _zwo(workout_name: String, body: String) -> String:
 	return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<workout_file>\n<name>%s</name>\n<sportType>bike</sportType>\n<workout>\n%s\n</workout>\n</workout_file>\n" % [workout_name, body]
 
 
-func _list(s: PlanScreen) -> ItemList:
-	return s.get_node("%WorkoutList") as ItemList
+## Карточка тренировки по индексу `items()`.
+func _card(s: PlanScreen, index: int) -> ListRow:
+	var all := s.cards()
+	assert_true(index >= 0 and index < all.size(), "карточка %d есть (всего %d)" % [index, all.size()])
+	return all[index] if index >= 0 and index < all.size() else null
+
+
+## Всё, что пользователь читает на карточке: видимые подписи через « | ».
+func _card_text(s: PlanScreen, index: int) -> String:
+	var card := _card(s, index)
+	if card == null:
+		return ""
+	var parts: Array[String] = []
+	for node in card.find_children("*", "Label", true, false):
+		var label := node as Label
+		if label.is_visible_in_tree() and not label.text.is_empty():
+			parts.append(label.text)
+	return " | ".join(parts)
+
+
+## Нажатие пользователя по карточке; после него выбрана ровно она (REQ-UIX-03 крит. 3).
+func _click_card(s: PlanScreen, index: int) -> void:
+	var card := _card(s, index)
+	if card == null:
+		return
+	card.pressed.emit()
+	var selected := s.selected_cards()
+	assert_eq(selected.size(), 1, "ровно одна карточка «выбрано»")
+	if selected.size() == 1:
+		assert_eq(selected[0], card, "«выбрано» — нажатая карточка")
+
+
+## Крупное превью предпросмотра (`PlanPreview`): `large_preview()`, если экран его даёт, иначе `chart()`.
+func _large_preview(s: PlanScreen) -> PlanPreview:
+	for method in ["large_preview", "chart"]:
+		if s.has_method(method):
+			return s.call(method) as PlanPreview
+	return null
+
+
+## Модель крупного превью (null — превью пусто).
+func _preview_model(s: PlanScreen) -> PlanChartModel:
+	var pv := _large_preview(s)
+	assert_not_null(pv, "крупное превью — PlanPreview")
+	return pv.plan_model() if pv != null else null
+
+
+## Точки (t, Вт) того, что рисует превью: начало и конец каждого шага модели сегментов HUD-10.1.
+func _preview_points(s: PlanScreen) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var model := _preview_model(s)
+	if model == null:
+		return out
+	for seg in model.segments():
+		out.append(Vector2(float(seg["start_sec"]), float(seg["start_watts"])))
+		out.append(Vector2(float(seg["end_sec"]), float(seg["end_watts"])))
+	return out
+
+
+## Сегменты шагов крупного превью.
+func _preview_segments(s: PlanScreen) -> Array[Dictionary]:
+	var model := _preview_model(s)
+	return model.segments() if model != null else ([] as Array[Dictionary])
 
 
 func _start_button(s: PlanScreen) -> Button:
@@ -147,22 +214,39 @@ func _main() -> AppMain:
 	return main
 
 
-## Таблица переводов: ключ → {ru, en}.
+## Таблица переводов из всех `strings*.csv`: ключ → {ru, en, files: [имя файла…]}.
 func _strings() -> Dictionary:
 	var out := {}
-	var f := FileAccess.open(STRINGS_CSV, FileAccess.READ)
-	assert_not_null(f, "strings.csv читается")
-	if f == null:
-		return out
-	var header := f.get_csv_line()
-	var ru_col := header.find("ru")
-	var en_col := header.find("en")
-	while not f.eof_reached():
-		var row := f.get_csv_line()
-		if row.size() <= maxi(ru_col, en_col) or row[0].is_empty():
+	var files := Array(DirAccess.get_files_at(I18N_DIR)).filter(
+		func(n: String) -> bool: return n.begins_with("strings") and n.ends_with(".csv"))
+	assert_true(files.size() >= 2, "таблицы переводов strings*.csv найдены: %s" % [files])
+	for file_name: String in files:
+		var f := FileAccess.open(I18N_DIR + file_name, FileAccess.READ)
+		assert_not_null(f, "%s читается" % file_name)
+		if f == null:
 			continue
-		out[row[0]] = {"ru": row[ru_col], "en": row[en_col]}
-	f.close()
+		var header := f.get_csv_line()
+		var ru_col := header.find("ru")
+		var en_col := header.find("en")
+		while not f.eof_reached():
+			var row := f.get_csv_line()
+			if row.size() <= maxi(ru_col, en_col) or row[0].is_empty():
+				continue
+			var entry: Dictionary = out.get(row[0], {"files": []})
+			entry["ru"] = row[ru_col]
+			entry["en"] = row[en_col]
+			(entry["files"] as Array).append(file_name)
+			out[row[0]] = entry
+		f.close()
+	return out
+
+
+## Скрипты экрана выбора тренировки.
+static func _script_paths() -> Array[String]:
+	var out: Array[String] = []
+	for f in DirAccess.get_files_at(SCRIPT_DIR):
+		if f.ends_with(".gd"):
+			out.append(SCRIPT_DIR + f)
 	return out
 
 
@@ -221,21 +305,41 @@ func test_req_int_04_c2_list_shows_name_duration_and_load_when_present() -> void
 	assert_eq(s.intervals_items().size(), 2)
 	assert_null(s.selected_workout(), "при двух и более — без автоматического выбора")
 	assert_true(_start_button(s).disabled, "до выбора «Начать» недоступна")
-	var list := _list(s)
+	assert_eq(s.cards().size(), 2, "по карточке на тренировку")
+	assert_eq(s.selected_cards().size(), 0, "до выбора ни одна карточка не «выбрано»")
 	var i_short := _index_by_name(s, "Short Steps")
 	var i_long := _index_by_name(s, "Long Endurance")
 	assert_true(i_short >= 0 and i_long >= 0)
 	if i_short < 0 or i_long < 0:
 		return
-	var t_short := list.get_item_text(i_short)
-	var t_long := list.get_item_text(i_long)
-	gut.p("item texts: [%s] [%s]" % [t_short, t_long])
+	var t_short := _card_text(s, i_short)
+	var t_long := _card_text(s, i_long)
+	gut.p("card texts: [%s] [%s]" % [t_short, t_long])
 	assert_string_contains(t_short, "Short Steps")
 	assert_string_contains(t_short, "15:00", "длительность мм:сс")
-	assert_string_contains(t_short, "42", "целевая нагрузка из ответа")
 	assert_string_contains(t_long, "Long Endurance")
 	assert_string_contains(t_long, "1:10:00", "длительность ≥ 1 ч — ч:мм:сс")
 	assert_false(t_long.contains("load"), "нагрузки нет в ответе — не показывается")
+
+
+## REQ-INT-04 крит. 2: целевая нагрузка из ответа Intervals.icu (`icu_training_load`) видна в списке.
+## После T-082 карточка показывает «длительность · шагов · макс. цель» (UIX-03.1), нагрузки на ней нет.
+func test_req_int_04_c2_card_shows_training_load_when_present_in_response() -> void:
+	var s := _screen_with_events([
+		_event(3111, "Loaded A", "- 10m 50%\n- 5m 100%", 42),
+		_event(3112, "Loaded B", "- 20m 60%", 77),
+	])
+	await s.load_today()
+	var i_a := _index_by_name(s, "Loaded A")
+	var i_b := _index_by_name(s, "Loaded B")
+	assert_true(i_a >= 0 and i_b >= 0)
+	if i_a < 0 or i_b < 0:
+		return
+	var t_a := _card_text(s, i_a)
+	var t_b := _card_text(s, i_b)
+	gut.p("card texts: [%s] [%s]" % [t_a, t_b])
+	assert_string_contains(t_a, "42", "целевая нагрузка 42 из ответа видна на карточке")
+	assert_string_contains(t_b, "77", "целевая нагрузка 77 из ответа видна на карточке")
 
 
 func test_req_int_04_c2_selecting_list_item_makes_it_current_plan() -> void:
@@ -248,7 +352,7 @@ func test_req_int_04_c2_selecting_list_item_makes_it_current_plan() -> void:
 	await s.load_today()
 	var idx := _index_by_name(s, "Second")
 	assert_true(idx >= 0)
-	_list(s).item_selected.emit(idx)  # клик пользователя по строке
+	_click_card(s, idx)  # нажатие пользователя по карточке
 	assert_eq(s.selected_index(), idx)
 	assert_eq(s.preview_name_text(), "Second", "предпросмотр выбранной")
 	assert_false(_start_button(s).disabled)
@@ -259,7 +363,7 @@ func test_req_int_04_c2_selecting_list_item_makes_it_current_plan() -> void:
 		assert_eq(chosen[0].total_duration_sec(), 1200)
 	# Переключение выбора меняет текущий план.
 	var first := _index_by_name(s, "First")
-	_list(s).item_selected.emit(first)
+	_click_card(s, first)
 	_start_button(s).pressed.emit()
 	assert_eq(chosen.size(), 2)
 	if chosen.size() == 2:
@@ -279,14 +383,16 @@ func test_req_int_04_c3_library_items_listed_with_source_mark_and_startable() ->
 	assert_true(lib_idx >= 0)
 	if lib_idx < 0:
 		return
-	var text_en := _list(s).get_item_text(lib_idx)
-	assert_string_contains(text_en, "library", "пометка источника (en)")
+	var text_en := _card_text(s, lib_idx)
+	gut.p("library card (en): " + text_en)
+	assert_string_contains(text_en.to_lower(), "library", "пометка источника (en)")
 	assert_false(text_en.contains("Intervals.icu"), "библиотечная запись не помечена как Intervals.icu")
-	var icu_text := _list(s).get_item_text(_index_by_name(s, "Today A"))
-	assert_false(icu_text.contains("library"), "запись Intervals.icu не помечена как библиотека")
+	var icu_text := _card_text(s, _index_by_name(s, "Today A"))
+	assert_string_contains(icu_text, "Intervals.icu", "запись Intervals.icu помечена источником")
+	assert_false(icu_text.to_lower().contains("library"), "запись Intervals.icu не помечена как библиотека")
 	var chosen: Array = []
 	s.workout_chosen.connect(func(w: Workout, src: String) -> void: chosen.append([w, src]))
-	_list(s).item_selected.emit(lib_idx)
+	_click_card(s, lib_idx)
 	_start_button(s).pressed.emit()
 	assert_eq(chosen.size(), 1)
 	if chosen.size() == 1:
@@ -299,9 +405,9 @@ func test_req_int_04_c3_library_source_mark_in_russian() -> void:
 	TranslationServer.set_locale("ru")
 	var s := _screen()
 	assert_eq(s.library_items().size(), 1)
-	var text_ru := _list(s).get_item_text(0)
-	gut.p("ru item: " + text_ru)
-	assert_string_contains(text_ru, "библиотек", "пометка источника (ru)")
+	var text_ru := _card_text(s, 0)
+	gut.p("ru card: " + text_ru)
+	assert_string_contains(text_ru.to_lower(), "библиотек", "пометка источника (ru)")
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +424,8 @@ func test_edge_empty_plan_today_nothing_selected_library_still_available() -> vo
 	assert_null(s.selected_workout(), "пустой план — ничего не выбрано")
 	assert_true(_start_button(s).disabled, "«Начать» недоступна без выбора")
 	assert_eq(s.preview_name_text(), "Select a workout")
-	assert_eq(s.preview_points().size(), 0, "пустой график")
+	assert_eq(_preview_points(s).size(), 0, "пустой график")
+	assert_eq(s.selected_cards().size(), 0, "ни одной карточки «выбрано»")
 	assert_eq(s.library_items().size(), 1, "библиотека доступна при пустом плане")
 	s.select_index(0)
 	assert_false(_start_button(s).disabled)
@@ -369,11 +476,14 @@ func test_edge_cache_of_other_date_not_offered_as_today() -> void:
 func test_req_int_05_c1_preview_points_steps_10m50_5m100_ftp200() -> void:
 	var s := _screen_with_events([_event(3601, "Steps", "- 10m 50%\n- 5m 100%")])
 	await s.load_today()
-	var pts := s.preview_points()
-	gut.p("points: " + str(pts))
 	var expected := PackedVector2Array([Vector2(0, 100), Vector2(600, 100), Vector2(600, 200), Vector2(900, 200)])
-	assert_eq(pts, expected, "100 Вт на [0; 600), 200 Вт на [600; 900)")
-	assert_eq(s.chart().total_sec(), 900)
+	assert_eq(s.selected_workout().power_points(200, 1.0), expected, "функция построения профиля: 100 Вт на [0; 600), 200 Вт на [600; 900)")
+	var pts := _preview_points(s)
+	gut.p("preview points: " + str(pts))
+	assert_eq(pts, expected, "крупное превью рисует те же ступени")
+	var model := _preview_model(s)
+	assert_eq(model.total_sec() if model != null else -1, 900)
+	assert_eq(model.ftp_w if model != null else -1, 200, "FTP профиля")
 
 
 func test_req_int_05_c1_preview_uses_profile_ftp() -> void:
@@ -381,7 +491,7 @@ func test_req_int_05_c1_preview_uses_profile_ftp() -> void:
 	_repo.save(_profile)
 	var s := _screen_with_events([_event(3602, "Steps", "- 10m 50%\n- 5m 100%")])
 	await s.load_today()
-	var pts := s.preview_points()
+	var pts := _preview_points(s)
 	assert_eq(pts.size(), 4)
 	if pts.size() == 4:
 		assert_eq(pts[0], Vector2(0, 125), "50 % от FTP профиля 250")
@@ -400,7 +510,7 @@ func test_req_int_05_c2_ramp_from_imported_zwo_start_and_end_points() -> void:
 	var r := s.import_path(path)
 	assert_true(r != null and r.ok(), "ZWO с рампой импортирован")
 	assert_eq(str(s.selected_item().get("name", "")), "Ramp Only")
-	var pts := s.preview_points()
+	var pts := _preview_points(s)
 	gut.p("ramp points: " + str(pts))
 	assert_eq(pts.size(), 4)
 	if pts.size() == 4:
@@ -408,15 +518,19 @@ func test_req_int_05_c2_ramp_from_imported_zwo_start_and_end_points() -> void:
 		assert_eq(pts[1], Vector2(600, 200), "конец рампы = 100 % FTP")
 		assert_eq(pts[2], Vector2(600, 150))
 		assert_eq(pts[3], Vector2(900, 150))
-	var seg: Dictionary = s.chart().segments()[0]
-	assert_eq(int(seg["start_watts"]), 100)
-	assert_eq(int(seg["end_watts"]), 200, "сегмент рампы рисуется трапецией начало→конец")
+	var segs := _preview_segments(s)
+	assert_true(segs.size() >= 1)
+	if segs.is_empty():
+		return
+	assert_eq(int(segs[0]["start_watts"]), 100)
+	assert_eq(int(segs[0]["end_watts"]), 200, "сегмент рампы рисуется трапецией начало→конец")
+	assert_true(bool(segs[0]["ramp"]), "сегмент — рампа")
 
 
 func test_req_int_05_c2_warmup_and_cooldown_ramps_of_fixture() -> void:
 	var s := _screen()
 	assert_true(s.import_path(WORKOUT_FIXTURES + "simple.zwo").ok())
-	var pts := s.preview_points()
+	var pts := _preview_points(s)
 	assert_eq(pts.size(), 8)
 	if pts.size() == 8:
 		assert_eq(pts[0], Vector2(0, 80), "Warmup 40 %")
@@ -432,12 +546,12 @@ func test_req_int_05_c2_warmup_and_cooldown_ramps_of_fixture() -> void:
 func test_req_int_05_c3_segment_colors_follow_default_zones() -> void:
 	var s := _screen_with_events([_event(3701, "Zones", "- 1m 50%\n- 1m 65%\n- 1m 80%\n- 1m 100%\n- 1m 110%\n- 1m 130%\n- 1m 160%")])
 	await s.load_today()
-	var segs := s.chart().segments()
+	var segs := _preview_segments(s)
 	assert_eq(segs.size(), 7)
 	var names := ["gray", "blue", "green", "yellow", "orange", "red", "purple"]
 	for i in mini(segs.size(), 7):
 		assert_eq(int(segs[i]["zone"]), i + 1, "шаг %d → Z%d" % [i, i + 1])
-		assert_eq(WorkoutChart.segment_color(segs[i]), ZonePalette.COLORS[names[i]], "Z%d — %s" % [i + 1, names[i]])
+		assert_eq(ZonePalette.color(str(segs[i]["color_token"])), ZonePalette.COLORS[names[i]], "Z%d — %s" % [i + 1, names[i]])
 
 
 func test_req_int_05_c3_segment_colors_follow_profile_custom_zones() -> void:
@@ -449,13 +563,13 @@ func test_req_int_05_c3_segment_colors_follow_profile_custom_zones() -> void:
 	assert_eq(saved.power_zone_of(130), 1, "предусловие: 130 Вт (65 %) — Z1 по зонам профиля")
 	var s := _screen_with_events([_event(3702, "Custom Zones", "- 5m 65%\n- 5m 100%")])
 	await s.load_today()
-	var segs := s.chart().segments()
+	var segs := _preview_segments(s)
 	assert_eq(segs.size(), 2)
 	for seg in segs:
 		var w := int(seg["start_watts"])
 		var expected_zone := saved.power_zone_of(w)
 		gut.p("seg %d W: chart zone %d, profile zone %d" % [w, int(seg["zone"]), expected_zone])
-		assert_eq(WorkoutChart.segment_color(seg), ZonePalette.color(ZonePalette.power_token(expected_zone)),
+		assert_eq(ZonePalette.color(str(seg["color_token"])), ZonePalette.color(ZonePalette.power_token(expected_zone)),
 				"%d Вт окрашен по зоне профиля Z%d" % [w, expected_zone])
 
 
@@ -611,27 +725,35 @@ func test_trainer_start_with_connected_trainer_runs_without_emulator_prompt() ->
 # Строки UI — через ключи ui.plan.* в strings.csv
 # ---------------------------------------------------------------------------
 
+## Ключи экрана: `tr("…")`, строковые константы и литералы `"ui.…"` в скриптах (ключи T-082 заданы
+## константами `KEY_*`), тексты сцены. Каждый ключ — ровно в одном из `strings*.csv`, ru и en не пусты.
 func test_i18n_all_tr_keys_and_scene_texts_exist_with_ru_and_en() -> void:
 	var table := _strings()
 	var used: Array[String] = []
 	var rx := RegEx.create_from_string("tr\\(\"([^\"]+)\"\\)")
-	for p in SCRIPT_PATHS:
-		for m in rx.search_all(FileAccess.get_file_as_string(p)):
+	var literal_rx := RegEx.create_from_string("\"(ui\\.[a-z0-9_]+(?:\\.[a-z0-9_]+)+)\"")
+	for p in _script_paths():
+		var src := FileAccess.get_file_as_string(p)
+		for m in rx.search_all(src):
 			used.append(m.get_string(1))
+		for m in literal_rx.search_all(src):
+			if not used.has(m.get_string(1)):
+				used.append(m.get_string(1))
 	var scene_rx := RegEx.create_from_string("(?m)^(?:text|title|ok_button_text|cancel_button_text|dialog_text) = \"([^\"]*)\"")
 	for m in scene_rx.search_all(FileAccess.get_file_as_string(SCENE)):
 		used.append(m.get_string(1))
 	assert_true(used.size() > 20, "найдено ключей: %d" % used.size())
 	for key in used:
 		assert_true(key.begins_with("ui.plan.") or key.begins_with("ui.common."), "строка экрана — ключ ui.plan.*/ui.common.*: '%s'" % key)
-		assert_true(table.has(key), "ключ есть в strings.csv: %s" % key)
+		assert_true(table.has(key), "ключ есть в strings*.csv: %s" % key)
 		if table.has(key):
+			assert_eq((table[key]["files"] as Array).size(), 1, "ключ %s ровно в одном файле: %s" % [key, table[key]["files"]])
 			assert_false(str(table[key]["ru"]).strip_edges().is_empty(), "ru не пуст: %s" % key)
 			assert_false(str(table[key]["en"]).strip_edges().is_empty(), "en не пуст: %s" % key)
 
 
 func test_i18n_no_cyrillic_literals_in_plan_screen_code() -> void:
-	for p in SCRIPT_PATHS:
+	for p in _script_paths():
 		var lines := FileAccess.get_file_as_string(p).split("\n")
 		for i in lines.size():
 			var code := lines[i].strip_edges()
@@ -651,4 +773,6 @@ func test_i18n_screen_renders_in_russian_without_english_keys_left() -> void:
 	assert_string_contains(s.preview_duration_text(), "Длительность")
 	assert_string_contains(s.status_text(), "Ключ API", "статус без ключа — на русском")
 	assert_false(s.preview_duration_text().contains("ui.plan"), "ключ переведён")
-	assert_false(_list(s).get_item_text(0).contains("ui.plan"))
+	var card_ru := _card_text(s, 0)
+	assert_false(card_ru.is_empty(), "карточка с текстом")
+	assert_false(card_ru.contains("ui.plan"), "тексты карточки переведены: " + card_ru)

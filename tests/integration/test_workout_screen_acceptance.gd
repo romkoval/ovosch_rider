@@ -1,7 +1,9 @@
 extends GutTest
-## Независимые приёмочные тесты экрана тренировки (тестировщик; T-031/T-024, HEAD c5d7c59).
+## Независимые приёмочные тесты экрана тренировки (тестировщик; T-031/T-024, HEAD c5d7c59;
+## под ТЗ ред. 2 — HUD-01 крит. 3 (факт — герой), HUD-02 крит. 4 (●/▲/▼, разница, токены `hud.*`),
+## HUD-03/04 («нет данных» — пустая фишка `hud.text2`), HUD-06 (акцент `hud.warn`) — после T-073).
 ## Покрытие на уровне сцены: REQ-HUD-01 крит. 1–3; REQ-HUD-02..08 (тексты узлов, цвета
-## `ZonePalette`, стрелка/цвет отклонения, акцент отсчёта, подсказка); REQ-WRK-03 крит. 1;
+## `ZonePalette`, значок/разница/цвет отклонения, акцент отсчёта, подсказка); REQ-WRK-03 крит. 1;
 ## REQ-WRK-04 крит. 1; REQ-WRK-05 крит. 4; REQ-WRK-06 крит. 2; REQ-WRK-07 крит. 1, 4;
 ## REQ-NFR-04 крит. 1, 2; REQ-NFR-08 крит. 1; REQ-DEV-08 крит. 1–4 и REQ-DEV-07 крит. 1
 ## (экран + сессия на `TrainerFactory.create_ble(StubBleBridge)`).
@@ -170,89 +172,156 @@ func test_req_hud_01_c2_free_ride_shows_dash_and_hides_deviation() -> void:
 	assert_eq(s.target_text(), "100 W")
 
 
-func test_req_hud_01_c3_target_font_at_least_twice_metric_fonts() -> void:
+## REQ-HUD-01 крит. 3 (ред. 2026-10-03, вариант B `hud.md` п. 5.1): крупнее всего — факт мощности,
+## он ≥ 2× шрифта пульса и каденса; цель мельче факта, но не мельче пульса и каденса; ни одна
+## другая числовая подпись HUD не набрана шрифтом ≥ шрифта факта.
+func test_req_hud_01_c3_hero_power_largest_target_between_and_no_numeric_label_as_large() -> void:
 	var s := _screen()
-	var target_size := _label(s, "TargetLabel").get_theme_font_size("font_size")
-	assert_gte(target_size, 2 * _label(s, "PowerLabel").get_theme_font_size("font_size"))
-	for name in ["HrLabel", "CadenceLabel", "SpeedLabel", "ElapsedLabel", "CountdownLabel"]:
-		assert_gte(target_size, 2 * _label(s, name).get_theme_font_size("font_size"), "цель ≥ 2× %s" % name)
-	assert_gt(target_size, 0)
+	_advance(s, 2.0)
+	var hero := _label(s, "PowerLabel").get_theme_font_size("font_size")
+	var target := _label(s, "TargetLabel").get_theme_font_size("font_size")
+	var hr := _label(s, "HrLabel").get_theme_font_size("font_size")
+	var cadence := _label(s, "CadenceLabel").get_theme_font_size("font_size")
+	gut.p("кегли: факт %d, цель %d, пульс %d, каденс %d" % [hero, target, hr, cadence])
+	assert_gt(hr, 0)
+	assert_gte(hero, 2 * hr, "факт ≥ 2× пульса")
+	assert_gte(hero, 2 * cadence, "факт ≥ 2× каденса")
+	assert_lt(target, hero, "цель мельче факта")
+	assert_gte(target, hr, "цель не мельче пульса")
+	assert_gte(target, cadence, "цель не мельче каденса")
+	# Все подписи HUD с цифрами (и узлы-значения панели, даже с «—»).
+	var numeric_names := ["TargetLabel", "CountdownLabel", "ElapsedLabel", "SpeedLabel", "HrLabel", "CadenceLabel",
+		"PowerZoneLabel", "HrZoneLabel"]
+	var checked := 0
+	for node in (s.get_node("%HudRoot") as Node).find_children("*", "Label", true, false):
+		var label := node as Label
+		if label == _label(s, "PowerLabel"):
+			continue
+		var has_digit := RegEx.create_from_string("[0-9]").search(label.text) != null
+		if not has_digit and not numeric_names.has(str(label.name)):
+			continue
+		checked += 1
+		var size := label.get_theme_font_size("font_size")
+		assert_lt(size, hero, "%s («%s») кеглем %d мельче факта %d" % [label.name, label.text, size, hero])
+	assert_gt(checked, 8, "проверено числовых подписей: %d" % checked)
 
 
 # ===========================================================================
-# REQ-HUD-02 — фактическая мощность и отклонение (стрелка/цвет)
+# REQ-HUD-02 — фактическая мощность и отклонение: ●/▲/▼, разница со знаком, токены hud.*
 # ===========================================================================
 
-func test_req_hud_02_power_text_arrow_and_color_follow_deviation() -> void:
+func _deviation(s: WorkoutScreen) -> Array:
+	var p := s.metric_panel()
+	return [p.deviation_text(), p.deviation_delta_text(), p.deviation_color()]
+
+
+func test_req_hud_02_power_text_glyph_signed_delta_and_tokens_follow_deviation() -> void:
 	var s := _screen(_plan([WorkoutStep.watts(60, 100.0)]))
 	_trainer.inject_silence(1_000_000.0)
 	assert_eq(s.power_text(), "—", "до данных")
 	assert_eq(s.deviation_text(), "")
+	assert_eq(s.metric_panel().deviation_delta_text(), "", "до данных разницы нет")
 	_manual_second(s, 130)
 	assert_eq(s.power_text(), "130 W")
-	assert_eq(s.deviation_text(), "▲")
-	assert_eq(_label(s, "DeviationLabel").modulate, ZonePalette.COLORS["orange"])
+	assert_eq(_deviation(s), ["▲", "+30", UiTokens.HUD_WARN], "выше: ▲, +30, hud.warn")
 	_manual_second(s, 70) # среднее 100
 	assert_eq(s.power_text(), "100 W", "сглаженное за 3 с")
-	assert_eq(s.deviation_text(), "●")
-	assert_eq(_label(s, "DeviationLabel").modulate, ZonePalette.COLORS["green"])
+	assert_eq(_deviation(s), ["●", "0", UiTokens.HUD_DEV_ON], "в цели: ●, 0, hud.dev_on")
 	_manual_second(s, 10) # среднее 70
-	assert_eq(s.deviation_text(), "▼")
-	assert_eq(_label(s, "DeviationLabel").modulate, ZonePalette.COLORS["blue"])
+	assert_eq(_deviation(s), ["▼", "−30", UiTokens.HUD_DEV_BELOW], "ниже: ▼, −30 (U+2212), hud.dev_below")
 	_manual_second(s, 110)
 	_manual_second(s, 110)
 	_manual_second(s, 110)
-	assert_eq(s.deviation_text(), "●", "110 при цели 100 — в пороге 10 Вт")
+	assert_eq(_deviation(s), ["●", "+10", UiTokens.HUD_DEV_ON], "110 при цели 100 — в пороге 10 Вт, разница +10")
 	_manual_second(s, 111)
 	_manual_second(s, 111)
 	_manual_second(s, 111)
-	assert_eq(s.deviation_text(), "▲", "111 — выше")
+	assert_eq(_deviation(s), ["▲", "+11", UiTokens.HUD_WARN], "111 — выше")
 
 
-# ===========================================================================
-# REQ-HUD-03 / REQ-HUD-04 — зоны с цветом
-# ===========================================================================
-
-func test_req_hud_03_zone_label_text_and_color_from_palette_and_dash_without_data() -> void:
-	var s := _screen(_plan([WorkoutStep.watts(60, 100.0)]))
+func test_req_hud_02_c4_example_247_vs_300_and_tokens_differ_from_zone_palette() -> void:
+	var s := _screen(_plan([WorkoutStep.watts(60, 300.0)]))
 	_trainer.inject_silence(1_000_000.0)
-	for p in [181, 181, 181]:
-		_manual_second(s, p)
+	for i in 3:
+		_manual_second(s, 247)
+	assert_eq(s.power_text(), "247 W")
+	assert_eq(_deviation(s), ["▼", "−53", UiTokens.HUD_DEV_BELOW], "факт 247, цель 300 → ▼ «−53»")
+	for i in 3:
+		_manual_second(s, 285)
+	assert_eq(s.metric_panel().deviation_text(), "●", "|285 − 300| = 15 ≤ max(5 %% · 300, 10)")
+	assert_eq(s.metric_panel().deviation_delta_text(), "−15")
+	assert_eq(UiTokens.HUD_DEV_ON, Color("#2CC9B4"), "hud.dev_on")
+	assert_eq(UiTokens.HUD_WARN, Color("#FFC24D"), "hud.warn")
+	assert_eq(UiTokens.HUD_DEV_BELOW, Color("#8FC2FF"), "hud.dev_below")
+	for token: String in ZonePalette.POWER_TOKENS:
+		for c: Color in [UiTokens.HUD_DEV_ON, UiTokens.HUD_WARN, UiTokens.HUD_DEV_BELOW]:
+			assert_false(c.is_equal_approx(ZonePalette.color(token)), "цвет отклонения %s ≠ цвету зоны %s" % [c.to_html(false), token])
+
+
+# ===========================================================================
+# REQ-HUD-03 / REQ-HUD-04 — фишки зон: цвет зоны; «нет данных» — без заливки, рамка и «—» hud.text2
+# ===========================================================================
+
+## Фишка «нет данных» (`hud.md` п. 5, 11): без заливки, текст «—» цветом `hud.text2`, рамка `hud.text2`.
+func _assert_empty_chip(s: WorkoutScreen, chip_name: String, text: String, fill: Color, msg: String) -> void:
+	assert_eq(text, "—", "%s: «—»" % msg)
+	assert_eq(fill, Color.TRANSPARENT, "%s: без заливки цветом зоны" % msg)
+	var chip := _label(s, chip_name)
+	assert_eq(chip.get_theme_color("font_color"), UiTokens.HUD_TEXT2, "%s: «—» цветом hud.text2" % msg)
+	assert_eq(chip.modulate, Color.WHITE, "%s: текст не тонирован цветом зоны" % msg)
+	var box: Variant = s.metric_panel().get("_chip_empty_box")
+	if box is StyleBoxFlat:
+		var b := box as StyleBoxFlat
+		assert_false(b.draw_center, "%s: рамка без заливки" % msg)
+		assert_eq(b.border_color, UiTokens.HUD_TEXT2, "%s: рамка hud.text2" % msg)
+		assert_gte(b.border_width_left, 1, "%s: рамка 1·s" % msg)
+
+
+func test_req_hud_03_zone_chip_text_and_color_from_palette_and_empty_chip_without_data() -> void:
+	var s := _screen(_plan([WorkoutStep.watts(60, 100.0)]))
+	var p := s.metric_panel()
+	_trainer.inject_silence(1_000_000.0)
+	for pw in [181, 181, 181]:
+		_manual_second(s, pw)
 	assert_eq(s.power_zone_text(), "Z4")
-	assert_eq(_label(s, "PowerZoneLabel").modulate, ZonePalette.color("z4"))
+	assert_eq(p.power_zone_color(), ZonePalette.color("z4"))
 	assert_eq(ZonePalette.color_name("z4"), "yellow")
-	for p in [301, 301, 301]:
-		_manual_second(s, p)
+	assert_eq(_label(s, "PowerZoneLabel").get_theme_color("font_color"), UiTokens.HUD_INK, "текст на заливке зоны — hud.ink")
+	for pw in [301, 301, 301]:
+		_manual_second(s, pw)
 	assert_eq(s.power_zone_text(), "Z7")
-	assert_eq(_label(s, "PowerZoneLabel").modulate, ZonePalette.COLORS["purple"])
-	for p in [0, 0, 0]:
-		_manual_second(s, p)
+	assert_eq(p.power_zone_color(), ZonePalette.COLORS["purple"])
+	for pw in [0, 0, 0]:
+		_manual_second(s, pw)
 	assert_eq(s.power_zone_text(), "Z1", "0 Вт → Z1")
+	assert_eq(p.power_zone_color(), ZonePalette.COLORS["gray"], "Z1 — серая фишка")
 	for i in 3:
 		_manual_second(s, -1)
-	assert_eq(s.power_zone_text(), "—", "нет данных")
-	assert_eq(_label(s, "PowerZoneLabel").modulate, ZonePalette.NO_ZONE_COLOR)
 	assert_eq(s.power_text(), "—")
+	_assert_empty_chip(s, "PowerZoneLabel", s.power_zone_text(), p.power_zone_color(), "мощность «нет данных»")
 
 
-func test_req_hud_04_hr_label_zone_and_color_and_dash_without_sensor_or_max_hr() -> void:
+func test_req_hud_04_hr_chip_zone_and_color_and_empty_chip_without_sensor_or_max_hr() -> void:
 	var s := _screen()
+	var p := s.metric_panel()
 	_trainer.inject_silence(1_000_000.0)
 	_manual_second(s, 100, 150)
 	assert_eq(s.hr_text(), "150")
-	assert_eq(_label(s, "HrZoneLabel").text, "Z4", "150/180 = 83 %% → Z4")
-	assert_eq(_label(s, "HrZoneLabel").modulate, ZonePalette.color("hr4"))
-	_manual_second(s, 100, 107)
-	assert_eq(_label(s, "HrZoneLabel").text, "Z1")
+	assert_eq(p.hr_zone_text(), "Z4", "150/180 = 83 %% → Z4")
+	assert_eq(p.hr_zone_color(), ZonePalette.color("hr4"))
+	# Таблица крит. 1 при max_hr 180.
+	for row in [[107, "Z1", "hr1"], [108, "Z2", "hr2"], [126, "Z3", "hr3"], [144, "Z4", "hr4"], [162, "Z5", "hr5"]]:
+		_manual_second(s, 100, row[0])
+		assert_eq(p.hr_zone_text(), row[1], "%d уд/мин → %s" % [row[0], row[1]])
+		assert_eq(p.hr_zone_color(), ZonePalette.color(row[2]), "%d уд/мин — цвет %s" % [row[0], row[2]])
 	_manual_second(s, 100)
 	assert_eq(s.hr_text(), "—", "без датчика")
-	assert_eq(_label(s, "HrZoneLabel").text, "—")
-	assert_eq(_label(s, "HrZoneLabel").modulate, ZonePalette.NO_ZONE_COLOR)
+	_assert_empty_chip(s, "HrZoneLabel", p.hr_zone_text(), p.hr_zone_color(), "нет датчика пульса")
 	_profile.max_hr = 0
 	var s2 := _screen()
 	_manual_second(s2, 100, 150)
 	assert_eq(s2.hr_text(), "150")
-	assert_eq(_label(s2, "HrZoneLabel").text, "—", "без max_hr зоны нет")
+	_assert_empty_chip(s2, "HrZoneLabel", s2.metric_panel().hr_zone_text(), s2.metric_panel().hr_zone_color(), "без max_hr зоны нет")
 
 
 # ===========================================================================
@@ -283,13 +352,15 @@ func test_req_hud_06_countdown_text_accent_in_last_5s_and_new_duration_on_transi
 	_advance(s, 4.0)
 	assert_eq(s.countdown_text(), "00:06")
 	assert_false(s.is_countdown_accented(), "6 с — без акцента")
+	assert_ne(_label(s, "CountdownLabel").modulate, UiTokens.HUD_WARN, "6 с — не hud.warn")
 	_advance(s, 1.0)
 	assert_eq(s.countdown_text(), "00:05")
 	assert_true(s.is_countdown_accented(), "за 5 с — акцент")
-	assert_eq(_label(s, "CountdownLabel").modulate, ZonePalette.COLORS["orange"])
+	assert_eq(_label(s, "CountdownLabel").modulate, UiTokens.HUD_WARN, "отсчёт цветом hud.warn (HUD-13.7, H10)")
 	_advance(s, 5.0)
 	assert_eq(s.countdown_text(), "01:30", "на переходе — длительность нового шага")
 	assert_false(s.is_countdown_accented())
+	assert_ne(_label(s, "CountdownLabel").modulate, UiTokens.HUD_WARN, "после смены шага акцент снят")
 	assert_eq(s.step_text(), "Step 2/2")
 
 

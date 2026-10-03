@@ -115,7 +115,7 @@ func test_route_select_back_button_and_preselected_route() -> void:
 	main.app_state.navigate(AppState.Screen.ROUTE_SELECT)
 	assert_eq(route.preselected_route_id(), "hills", "последняя трасса предвыбрана")
 	assert_eq(route.preselected_sim_steepness_pct(), 35)
-	(route.get_node("%BackButton") as Button).pressed.emit()
+	route.app_bar().back_button().pressed.emit()  # «назад» AppBar (T-080)
 	assert_eq(main.app_state.current_screen, AppState.Screen.HOME)
 
 

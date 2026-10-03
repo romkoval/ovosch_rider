@@ -136,12 +136,20 @@ func test_countdown_accent_in_last_5_seconds() -> void:
 	assert_false(s.is_countdown_accented())
 
 
-func test_target_font_is_at_least_twice_metrics() -> void:
+## REQ-HUD-01 крит. 3 (ред. 2026-10-03): факт мощности ≥ 2× пульса и каденса; цель мельче факта,
+## но не мельче пульса и каденса; скорость, время и отсчёт мельче факта.
+func test_hero_power_font_largest_and_target_between_metrics() -> void:
 	var s := _screen()
-	var target_size: int = (s.get_node("%TargetLabel") as Label).get_theme_font_size("font_size")
-	for name in ["%HrLabel", "%CadenceLabel", "%SpeedLabel", "%PowerLabel"]:
-		var metric_size: int = (s.get_node(name) as Label).get_theme_font_size("font_size")
-		assert_true(target_size >= 2 * metric_size, "REQ-HUD-01 крит. 3: %d ≥ 2×%d (%s)" % [target_size, metric_size, name])
+	var size_of := func(unique: String) -> int: return (s.get_node(unique) as Label).get_theme_font_size("font_size")
+	var hero: int = size_of.call("%PowerLabel")
+	var target: int = size_of.call("%TargetLabel")
+	for name in ["%HrLabel", "%CadenceLabel"]:
+		var metric: int = size_of.call(name)
+		assert_true(hero >= 2 * metric, "REQ-HUD-01 крит. 3: факт %d ≥ 2×%d (%s)" % [hero, metric, name])
+		assert_true(target >= metric, "цель %d не мельче %s %d" % [target, name, metric])
+	assert_true(target < hero, "цель %d мельче факта %d" % [target, hero])
+	for name in ["%SpeedLabel", "%ElapsedLabel", "%CountdownLabel"]:
+		assert_true(size_of.call(name) < hero, "%s мельче факта" % name)
 
 
 func test_200_seconds_finish_plan_shows_summary_and_emits_hook() -> void:
