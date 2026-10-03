@@ -1,2 +1,31 @@
 keys,ru,en
 meta.area.hud_controls,Управление во время заезда,Ride controls
+ui.hud_controls.next.caption,ДАЛЕЕ,NEXT
+ui.hud_controls.next.line,{duration} · {target},{duration} · {target}
+ui.hud_controls.next.watts,{value} Вт,{value} W
+ui.hud_controls.next.ramp,{from}→{to} Вт,{from}→{to} W
+ui.hud_controls.next.free,свободно,free ride
+ui.hud_controls.pause.title,Пауза,Paused
+ui.hud_controls.pause.subtitle,время и запись остановлены,time and recording are stopped
+ui.hud_controls.pause.resume,Продолжить,Resume
+ui.hud_controls.pause.skip,Пропустить шаг,Skip step
+ui.hud_controls.pause.finish,Завершить,End
+ui.hud_controls.finish.title,Завершить заезд?,End the ride?
+ui.hud_controls.finish.body_plan,Тренировка сохранится как завершённая досрочно.,The workout will be saved as ended early.
+ui.hud_controls.finish.body_free_ride,Заезд сохранится в историю.,The ride will be saved to history.
+ui.hud_controls.finish.confirm,Завершить,End ride
+ui.hud_controls.finish.cancel,Отмена,Cancel
+ui.hud_controls.toolbar.erg_on,ERG вкл,ERG on
+ui.hud_controls.toolbar.erg_off,ERG выкл,ERG off
+ui.hud_controls.toolbar.sim,SIM,SIM
+ui.hud_controls.toolbar.fixed,СОПР.,RES.
+ui.hud_controls.toolbar.intensity,Интенсивность,Intensity
+ui.hud_controls.toolbar.resistance,Сопротивление,Resistance
+ui.hud_controls.toolbar.steepness,Крутизна SIM,SIM steepness
+ui.hud_controls.toolbar.percent,{value} %,{value} %
+ui.hud_controls.toolbar.minus_pct,−{value} %,−{value} %
+ui.hud_controls.toolbar.plus_pct,+{value} %,+{value} %
+ui.hud_controls.toolbar.minus,−{value},−{value}
+ui.hud_controls.toolbar.plus,+{value},+{value}
+ui.hud_controls.toolbar.skip,Пропуск,Skip
+ui.hud_controls.toolbar.finish,Завершить,End

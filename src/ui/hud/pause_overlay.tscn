@@ -1,0 +1,116 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/hud/pause_overlay.gd" id="1_script"]
+
+[node name="PauseOverlay" type="Control"]
+visible = false
+modulate = Color(1, 1, 1, 0)
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_script")
+
+[node name="Veil" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Card" type="PanelContainer" parent="Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+
+[node name="PauseView" type="VBoxContainer" parent="Center/Card"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Stack8"
+
+[node name="Title" type="Label" parent="Center/Card/PauseView"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H1Label"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/Card/PauseView"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudUnitLabel"
+horizontal_alignment = 1
+
+[node name="Gap" type="Control" parent="Center/Card/PauseView"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ResumeButton" type="Button" parent="Center/Card/PauseView"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+
+[node name="Secondary" type="HBoxContainer" parent="Center/Card/PauseView"]
+layout_mode = 2
+alignment = 1
+
+[node name="SkipButton" type="Button" parent="Center/Card/PauseView/Secondary"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"GhostButton"
+
+[node name="FinishButton" type="Button" parent="Center/Card/PauseView/Secondary"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"GhostButton"
+
+[node name="ConfirmView" type="VBoxContainer" parent="Center/Card"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"Stack12"
+
+[node name="ConfirmTitle" type="Label" parent="Center/Card/ConfirmView"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"H2Label"
+horizontal_alignment = 1
+
+[node name="ConfirmBody" type="Label" parent="Center/Card/ConfirmView"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"HudUnitLabel"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ConfirmButtons" type="HBoxContainer" parent="Center/Card/ConfirmView"]
+layout_mode = 2
+alignment = 1
+
+[node name="CancelButton" type="Button" parent="Center/Card/ConfirmView/ConfirmButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"GhostButton"
+
+[node name="ConfirmButton" type="Button" parent="Center/Card/ConfirmView/ConfirmButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DangerButton"
