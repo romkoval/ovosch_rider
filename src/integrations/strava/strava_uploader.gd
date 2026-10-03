@@ -8,12 +8,14 @@ extends RefCounted
 ##    `description`, `external_id`, `trainer=1`, `sport_type=VirtualRide`,
 ##    `activity_type=VirtualRide`;
 ## 3. 401 → принудительное обновление токена и один повтор; повторный 401 →
-##    `reauth_required`;
+##    `reauth_required` (REQ-STR-01 крит. 4 — для каждого запроса API, включая опрос);
 ## 4. ответ 201/200 `{id, status, error, activity_id}` → опрос `GET /api/v3/uploads/{id}`
 ##    (до `max_polls` раз с паузой `poll_interval_sec` через `wait_fn`) до `activity_id`
 ##    (`done`) или `error` (`failed` с текстом; «duplicate» → `duplicate`, без повторов).
+##    Опрос идёт с тем токеном, которым принят POST (после обновления — с новым).
 ##    Если обработка не завершилась — `uploading` с `upload_id` (очередь опросит позже).
-## Сетевые ошибки/5xx → `failed` с `can_retry`; 429 → `can_retry` и `retry_after_sec`.
+## Сетевые ошибки/5xx → `failed` с `can_retry`; 429 → `can_retry` и `retry_after_sec`
+## (в том числе 429 на обновлении токена — REQ-STR-04 крит. 3).
 
 const DEFAULT_API_BASE: String = "https://www.strava.com/api/v3"
 const UPLOADS_PATH: String = "uploads"
@@ -46,7 +48,8 @@ func upload_fit(fit_bytes: PackedByteArray, name: String, description: String, e
 		return UploadResult.failed("пустой FIT-файл", ApiResult.CODE_BAD_RESPONSE)
 	var token_result: ApiResult = await _oauth.ensure_fresh_token()
 	if not token_result.ok:
-		return UploadResult.failed(token_result.message, token_result.code, token_result.can_retry)
+		return _token_failure(token_result)
+	var access := str(token_result.data)
 	var boundary := make_boundary()
 	var fields := {
 		"data_type": DATA_TYPE_FIT,
@@ -59,12 +62,13 @@ func upload_fit(fit_bytes: PackedByteArray, name: String, description: String, e
 	}
 	var body := build_multipart(fields, "file", external_id + ".fit", fit_bytes, boundary)
 	var url := HttpTransport.build_url(api_base, UPLOADS_PATH)
-	var response: HttpResponse = await _transport.request("POST", url, _upload_headers(str(token_result.data), boundary), body, TIMEOUT_SEC)
+	var response: HttpResponse = await _transport.request("POST", url, _upload_headers(access, boundary), body, TIMEOUT_SEC)
 	if response.status == 401:
 		var refreshed: ApiResult = await _oauth.ensure_fresh_token(true)
 		if not refreshed.ok:
-			return UploadResult.failed(refreshed.message, refreshed.code, refreshed.can_retry)
-		response = await _transport.request("POST", url, _upload_headers(str(refreshed.data), boundary), body, TIMEOUT_SEC)
+			return _token_failure(refreshed)
+		access = str(refreshed.data)
+		response = await _transport.request("POST", url, _upload_headers(access, boundary), body, TIMEOUT_SEC)
 		if response.status == 401:
 			return UploadResult.failed("требуется повторный вход в Strava", ApiResult.CODE_REAUTH_REQUIRED)
 	var failure := _http_failure(response)
@@ -76,10 +80,12 @@ func upload_fit(fit_bytes: PackedByteArray, name: String, description: String, e
 	var first := interpret_upload_status(payload)
 	if first.is_final():
 		return first
-	return await poll_upload(first.upload_id, str(token_result.data))
+	return await poll_upload(first.upload_id, access)
 
 
 ## Опрос статуса загрузки до результата или `max_polls` попыток (REQ-STR-02 крит. 3).
+## 401 на опросе → одно обновление токена и повтор того же запроса; повторный 401 →
+## `reauth_required` (REQ-STR-01 крит. 4).
 func poll_upload(upload_id: String, token: String = "") -> UploadResult:
 	if upload_id.is_empty():
 		return UploadResult.failed("Strava не вернула идентификатор загрузки", ApiResult.CODE_BAD_RESPONSE)
@@ -87,14 +93,22 @@ func poll_upload(upload_id: String, token: String = "") -> UploadResult:
 	if access.is_empty():
 		var t: ApiResult = await _oauth.ensure_fresh_token()
 		if not t.ok:
-			return UploadResult.failed(t.message, t.code, t.can_retry, upload_id)
+			return _token_failure(t, upload_id)
 		access = str(t.data)
 	var url := HttpTransport.build_url(api_base, UPLOADS_PATH + "/" + upload_id)
 	var headers := StravaOAuth.bearer_headers(access)
+	var refreshed_once := false
 	for i in max_polls:
 		if i > 0:
 			await wait_fn.call(poll_interval_sec)
 		var response: HttpResponse = await _transport.request("GET", url, headers, PackedByteArray(), TIMEOUT_SEC)
+		if response.status == 401 and not refreshed_once:
+			refreshed_once = true
+			var refreshed: ApiResult = await _oauth.ensure_fresh_token(true)
+			if not refreshed.ok:
+				return _token_failure(refreshed, upload_id)
+			headers = StravaOAuth.bearer_headers(str(refreshed.data))
+			response = await _transport.request("GET", url, headers, PackedByteArray(), TIMEOUT_SEC)
 		var failure := _http_failure(response)
 		if failure != null:
 			failure.upload_id = upload_id
@@ -166,6 +180,14 @@ static func activity_url(activity_id: String) -> String:
 
 static func _upload_headers(token: String, boundary: String) -> Dictionary:
 	return StravaOAuth.bearer_headers(token, {"Content-Type": "multipart/form-data; boundary=" + boundary})
+
+
+## Ошибка получения токена → `failed` с сохранением `retry_after_sec` (429 на обновлении —
+## REQ-STR-04 крит. 3).
+static func _token_failure(t: ApiResult, upload_id: String = "") -> UploadResult:
+	var r := UploadResult.failed(t.message, t.code, t.can_retry, upload_id)
+	r.retry_after_sec = t.retry_after_sec
+	return r
 
 
 ## Ошибка HTTP → UploadResult или null, если ответ пригоден для разбора.

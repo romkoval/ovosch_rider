@@ -266,13 +266,54 @@ func test_no_uploads_during_active_session() -> void:
 	assert_eq(await _queue.tick(NOW), "ride-1")
 
 
-func test_remove_drops_item_without_touching_status() -> void:
+func test_remove_drops_item_and_resets_queued_status_to_none() -> void:
+	# REQ-STR-04 крит. 2 (ручная отмена), REQ-STR-05 крит. 1: отменённый заезд — «не выгружен».
+	var changes: Array[String] = []
+	_queue.item_changed.connect(func(_id: String, s: Dictionary) -> void: changes.append(str(s["status"])))
 	_queue.enqueue("ride-1", _provider(), "N", "", NOW)
+	_mock.offline = true
+	await _queue.tick(NOW)
+	assert_eq(str(_status.get_upload_status("ride-1")["status"]), UploadResult.STATUS_QUEUED)
 	assert_true(_queue.remove("ride-1"))
 	assert_false(_queue.has("ride-1"))
 	assert_false(_queue.remove("ride-1"))
-	assert_eq(str(_status.get_upload_status("ride-1")["status"]), UploadResult.STATUS_QUEUED, "статус меняет владелец заезда")
+	var st := _status.get_upload_status("ride-1")
+	assert_eq(str(st["status"]), UploadResult.STATUS_NONE, "после отмены — «не выгружен»")
+	assert_eq(int(st["attempts"]), 1, "число попыток сохраняется")
+	assert_eq(changes, ["queued", "uploading", "queued", "none"], "сигнал об отмене")
 	assert_eq(_make_queue().size(), 0, "удаление сохранено")
+	assert_eq(await _queue.tick(NOW + 60), "", "отменённый элемент не выгружается")
+
+
+func test_remove_resets_failed_but_keeps_done_and_duplicate() -> void:
+	# `failed` в хранилище (например, выставлен владельцем заезда) → `none`; `done`/`duplicate` неизменны.
+	_queue.enqueue("ride-f", _provider(), "N", "", NOW)
+	_status.update_upload_status("ride-f", UploadResult.failed("x", ApiResult.CODE_BAD_RESPONSE).to_status_dict(2, NOW))
+	assert_true(_queue.remove("ride-f"))
+	assert_eq(str(_status.get_upload_status("ride-f")["status"]), UploadResult.STATUS_NONE)
+	_queue.enqueue("ride-d", _provider(), "N", "", NOW)
+	_status.update_upload_status("ride-d", UploadResult.done("77").to_status_dict(1, NOW))
+	assert_true(_queue.remove("ride-d"))
+	assert_eq(str(_status.get_upload_status("ride-d")["status"]), UploadResult.STATUS_DONE, "done не трогаем")
+	assert_eq(str(_status.get_upload_status("ride-d")["activity_id"]), "77")
+	_queue.enqueue("ride-u", _provider(), "N", "", NOW)
+	_status.update_upload_status("ride-u", UploadResult.duplicate_of("duplicate").to_status_dict(1, NOW))
+	assert_true(_queue.remove("ride-u"))
+	assert_eq(str(_status.get_upload_status("ride-u")["status"]), UploadResult.STATUS_DUPLICATE, "duplicate не трогаем")
+
+
+func test_429_on_token_refresh_waits_retry_after() -> void:
+	# REQ-STR-04 крит. 3: 429 на обновлении токена перед выгрузкой — пауза по Retry-After, не 60 с.
+	_store.set_secret(_oauth.secret_key(SecureStore.ITEM_EXPIRES_AT), str(NOW + 10))
+	_queue.enqueue("ride-1", _provider(), "N", "", NOW)
+	_mock.enqueue_json("POST", "/oauth/token", 429, {"message": "Rate Limit Exceeded"}, {"Retry-After": "900"})
+	assert_eq(await _queue.tick(NOW), "ride-1")
+	assert_eq(_mock.request_count("POST", "/uploads"), 0)
+	assert_true(_queue.has("ride-1"))
+	assert_eq(str(_status.get_upload_status("ride-1")["status"]), UploadResult.STATUS_QUEUED)
+	assert_eq(int(_queue.get_item("ride-1")["attempts"]), 1)
+	assert_eq(int(_queue.get_item("ride-1")["next_attempt_at"]), NOW + 900)
+	assert_eq(await _queue.tick(NOW + 899), "")
 
 
 func test_retry_delay_table_and_item_changed_signal() -> void:

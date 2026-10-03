@@ -170,6 +170,75 @@ func test_refresh_failure_during_401_is_reauth_required() -> void:
 	assert_eq(_mock.request_count("POST", "/uploads"), 1)
 
 
+func test_poll_401_refreshes_token_once_and_retries_with_new_token() -> void:
+	# REQ-STR-01 крит. 4 для опроса GET /uploads/{id}.
+	_mock.enqueue_json("GET", "/uploads/700", 401, {"message": "Authorization Error"})
+	_mock.enqueue_json("POST", "/oauth/token", 200, {"access_token": NEW_ACCESS, "refresh_token": "fixture-refresh-token-ssss", "expires_at": NOW + 20000})
+	_mock.enqueue_json("GET", "/uploads/700", 200, {"id": 700, "activity_id": 4242})
+	var r: UploadResult = await _uploader.poll_upload("700")
+	assert_eq(r.status, UploadResult.STATUS_DONE, str(r))
+	assert_eq(r.activity_id, "4242")
+	assert_eq(_mock.request_count("POST", "/oauth/token"), 1, "одно обновление")
+	assert_eq(_mock.request_count("GET", "/uploads/700"), 2, "один повтор опроса")
+	assert_eq(str(_mock.requests[2]["headers"]["Authorization"]), "Bearer " + NEW_ACCESS, "повтор с новым токеном")
+	assert_eq(_waits, [] as Array[float], "повтор после обновления — без паузы опроса")
+
+
+func test_poll_second_401_is_reauth_required_without_more_polls() -> void:
+	_mock.enqueue_json("GET", "/uploads/701", 401, {}, {}, -1)
+	_mock.enqueue_json("POST", "/oauth/token", 200, {"access_token": NEW_ACCESS, "refresh_token": "r2", "expires_at": NOW + 20000})
+	var r: UploadResult = await _uploader.poll_upload("701")
+	assert_eq(r.status, UploadResult.STATUS_FAILED)
+	assert_eq(r.code, ApiResult.CODE_REAUTH_REQUIRED)
+	assert_false(r.can_retry)
+	assert_eq(r.upload_id, "701")
+	assert_eq(_mock.request_count("GET", "/uploads/701"), 2, "ровно один повтор, не max_polls")
+	assert_eq(_mock.request_count("POST", "/oauth/token"), 1)
+
+
+func test_poll_refresh_failure_after_401_is_reauth_required() -> void:
+	_mock.enqueue_json("GET", "/uploads/702", 401, {})
+	_mock.enqueue_json("POST", "/oauth/token", 401, {})
+	var r: UploadResult = await _uploader.poll_upload("702")
+	assert_eq(r.code, ApiResult.CODE_REAUTH_REQUIRED)
+	assert_eq(_mock.request_count("GET", "/uploads/702"), 1)
+
+
+func test_poll_after_401_on_post_uses_refreshed_token() -> void:
+	# REQ-STR-01 крит. 4: после обновления токена опрос статуса идёт с новым токеном.
+	_mock.enqueue_json("POST", "/uploads", 401, {"message": "Authorization Error"})
+	_mock.enqueue_json("POST", "/oauth/token", 200, {"access_token": NEW_ACCESS, "refresh_token": "fixture-refresh-token-ssss", "expires_at": NOW + 20000})
+	_mock.enqueue_json("POST", "/uploads", 201, {"id": 703, "activity_id": null, "error": null})
+	_mock.enqueue_json("GET", "/uploads/703", 200, {"id": 703, "activity_id": null, "error": null})
+	_mock.enqueue_json("GET", "/uploads/703", 200, {"id": 703, "activity_id": 99})
+	var r: UploadResult = await _upload()
+	assert_eq(r.status, UploadResult.STATUS_DONE, str(r))
+	var polls: Array[String] = []
+	for req in _mock.requests:
+		if str(req["method"]) == "GET":
+			polls.append(str(req["headers"]["Authorization"]))
+	assert_eq(polls, ["Bearer " + NEW_ACCESS, "Bearer " + NEW_ACCESS] as Array[String], "все опросы — с обновлённым токеном")
+	assert_eq(_mock.request_count("POST", "/oauth/token"), 1, "обновление не повторяется при опросе")
+
+
+func test_429_on_token_refresh_keeps_retry_after() -> void:
+	# REQ-STR-04 крит. 3: 429 на обновлении токена перед выгрузкой несёт Retry-After.
+	_store.set_secret(_oauth.secret_key(SecureStore.ITEM_EXPIRES_AT), str(NOW + 10))
+	_mock.enqueue_json("POST", "/oauth/token", 429, {"message": "Rate Limit Exceeded"}, {"Retry-After": "900"})
+	var r: UploadResult = await _upload()
+	assert_eq(r.status, UploadResult.STATUS_FAILED)
+	assert_eq(r.code, ApiResult.CODE_RATE_LIMITED)
+	assert_true(r.can_retry)
+	assert_eq(r.retry_after_sec, 900)
+	assert_eq(_mock.request_count("POST", "/uploads"), 0, "без свежего токена выгрузки нет")
+	# То же при опросе без переданного токена.
+	_mock.enqueue_json("POST", "/oauth/token", 429, {}, {"Retry-After": "120"})
+	var p: UploadResult = await _uploader.poll_upload("704")
+	assert_eq(p.code, ApiResult.CODE_RATE_LIMITED)
+	assert_eq(p.retry_after_sec, 120)
+	assert_eq(p.upload_id, "704")
+
+
 func test_rate_limit_and_network_are_retryable() -> void:
 	_mock.enqueue("POST", "/uploads", HttpResponse.json_response(429, {}, {"Retry-After": "120"}))
 	var limited: UploadResult = await _upload()

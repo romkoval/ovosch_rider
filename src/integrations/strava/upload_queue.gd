@@ -18,7 +18,8 @@ extends RefCounted
 ## - 429 → не раньше `Retry-After` (крит. 3);
 ## - `uploading` (Strava ещё обрабатывает) → повтор опроса через `poll_retry_sec`.
 ## Статусы заезда: `queued` при постановке, `uploading` на время попытки, затем
-## `done|failed|duplicate` или снова `queued` с `last_error` (REQ-STR-05 крит. 1).
+## `done|failed|duplicate` или снова `queued` с `last_error`; ручная отмена (`remove`) —
+## `none` (REQ-STR-05 крит. 1).
 
 const RETRY_DELAYS_SEC: Array[int] = [60, 300, 900, 3600]
 const DEFAULT_DIR: String = "user://"
@@ -106,13 +107,18 @@ func retry_now(ride_id: String) -> bool:
 	return true
 
 
-## Удалить элемент (отмена, удаление заезда). Статус заезда не трогается.
+## Удалить элемент (ручная отмена, удаление заезда). Заезд, ожидавший выгрузки
+## (`queued`/`failed`), становится «не выгружен» (`none`) — он больше не в очереди
+## (REQ-STR-04 крит. 2, REQ-STR-05 крит. 1); `done`/`duplicate` не трогаются.
 func remove(ride_id: String) -> bool:
 	var item := _find(ride_id)
 	if item.is_empty():
 		return false
 	_items.erase(item)
 	_providers.erase(ride_id)
+	var current := str(_status_store.get_upload_status(ride_id).get("status", UploadResult.STATUS_NONE))
+	if current == UploadResult.STATUS_QUEUED or current == UploadResult.STATUS_FAILED:
+		_set_status(ride_id, UploadResult.new(), int(item["attempts"]))
 	save()
 	return true
 
