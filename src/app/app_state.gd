@@ -7,6 +7,14 @@ extends RefCounted
 ## создания первого профиля; 1 профиль → он становится активным, сразу HOME;
 ## ≥2 профилей → экран выбора, главный экран недоступен до явного выбора
 ## (`select_profile`) — даже если в репозитории сохранён активный с прошлого запуска.
+##
+## Стек «назад» (REQ-UIX-04 крит. 1, 2): `navigate` запоминает экран, с которого ушли;
+## `go_back` возвращает на него. Корневые экраны (`HOME`, `PROFILE_SELECT`) стек очищают —
+## с главного и с выбора профиля «назад» некуда. Переход на экран, который уже есть в стеке,
+## срезает стек до него (циклов «план → устройства → план → …» нет). Экраны сессии
+## (`WORKOUT`, `FREE_RIDE`) в стек не попадают (вход в сессию оставляет в стеке только
+## `HOME`), а `go_back` на них ничего не делает: «назад» там — досрочное завершение
+## с подтверждением (WRK-05 крит. 4), его решает экран.
 
 enum Screen {
 	PROFILE_SELECT,
@@ -17,7 +25,16 @@ enum Screen {
 	DEV,
 	DEVICES,
 	PLAN,
+	## Выбор трассы свободной езды (FRD-02, `ui.md` п. 8.4).
+	ROUTE_SELECT,
+	## Свободная езда (FRD-01, FRD-06).
+	FREE_RIDE,
 }
+
+## Корневые экраны: переход на них очищает стек «назад».
+const ROOT_SCREENS: Array[int] = [Screen.PROFILE_SELECT, Screen.HOME]
+## Экраны сессии: «назад» на них решает экран (подтверждение досрочного завершения).
+const SESSION_SCREENS: Array[int] = [Screen.WORKOUT, Screen.FREE_RIDE]
 
 ## Экран сменился.
 signal screen_changed(screen: int)
@@ -42,6 +59,8 @@ var _profile_chosen: bool = false
 var _last_select_error: String = ""
 ## Результат записи настроек последним `set_locale` (`OK` — сохранено или настроек нет).
 var _last_settings_error: Error = OK
+## Стек «назад»: экраны, с которых пришли (последний — куда вернёт `go_back`).
+var _back_stack: Array[int] = []
 
 
 ## `settings` — хранилище настроек приложения (язык); null — язык не сохраняется.
@@ -95,6 +114,7 @@ func settings() -> AppSettings:
 ## не удался (не записан активный профиль) — остаётся экран выбора с ошибкой в `last_select_error()`.
 func start() -> void:
 	_profile_chosen = false
+	_back_stack.clear()
 	create_mode = _repo.count() == 0
 	if _repo.count() == 1:
 		var only: Profile = _repo.list()[0]
@@ -142,19 +162,87 @@ func select_profile(id: String) -> bool:
 ## Вернуться к выбору профиля; главный экран снова недоступен до выбора.
 func switch_profile() -> void:
 	_profile_chosen = false
+	_back_stack.clear()
 	create_mode = _repo.count() == 0
 	_set_screen(Screen.PROFILE_SELECT)
 
 
 ## Перейти на экран. Экраны кроме PROFILE_SELECT требуют выбранного профиля → иначе false.
+## Текущий экран запоминается в стеке «назад» (правила — в описании класса).
 func navigate(screen: int) -> bool:
+	if not _is_known_screen(screen):
+		return false
 	if screen != Screen.PROFILE_SELECT and not can_open_main():
 		return false
 	_set_screen(screen)
 	return true
 
 
+## «Назад» (кнопка панели приложения, Esc, системный «назад» Android — REQ-UIX-04 крит. 1):
+## вернуться на экран, с которого пришли. false — некуда (корневой экран, пустой стек) или
+## текущий экран — экран сессии (там «назад» решает сам экран, крит. 2); экран не меняется.
+func go_back() -> bool:
+	if not can_go_back():
+		return false
+	var target: int = _back_stack[_back_stack.size() - 1]
+	if target != Screen.PROFILE_SELECT and not can_open_main():
+		_back_stack.clear()
+		return false
+	_set_screen(target)
+	return true
+
+
+## Есть ли куда вернуться по `go_back`.
+func can_go_back() -> bool:
+	return not is_session_screen(current_screen) and not _back_stack.is_empty()
+
+
+## Экран, на который вернёт `go_back`, или -1.
+func back_target() -> int:
+	return _back_stack[_back_stack.size() - 1] if can_go_back() else -1
+
+
+## Копия стека «назад» (от старого к новому) — для отладки и тестов.
+func back_stack() -> Array[int]:
+	return _back_stack.duplicate()
+
+
+static func is_session_screen(screen: int) -> bool:
+	return SESSION_SCREENS.has(screen)
+
+
+static func is_root_screen(screen: int) -> bool:
+	return ROOT_SCREENS.has(screen)
+
+
+static func _is_known_screen(screen: int) -> bool:
+	return Screen.values().has(screen)
+
+
+## Сменить экран и обновить стек «назад».
 func _set_screen(screen: int) -> void:
+	if screen != current_screen:
+		_update_back_stack(screen)
+	_emit_screen(screen)
+
+
+func _update_back_stack(target: int) -> void:
+	if is_root_screen(target):
+		_back_stack.clear()
+		return
+	if is_session_screen(target):
+		# После сессии путь выбора (план, трасса) не нужен: экраны, открытые из итога, ведут на главный.
+		_back_stack.assign([Screen.HOME])
+		return
+	var index: int = _back_stack.find(target)
+	if index >= 0:
+		_back_stack.resize(index)
+		return
+	if not is_session_screen(current_screen):
+		_back_stack.append(current_screen)
+
+
+func _emit_screen(screen: int) -> void:
 	var changed_screen: bool = screen != current_screen
 	current_screen = screen
 	if changed_screen:

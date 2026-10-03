@@ -1,0 +1,33 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/tracks/route_select_screen.gd" id="1_script"]
+
+[node name="RouteSelectScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center"]
+layout_mode = 2
+
+[node name="ComingSoonLabel" type="Label" parent="Center/VBox"]
+layout_mode = 2
+text = "ui.common.coming_soon"
+horizontal_alignment = 1
+
+[node name="BackButton" type="Button" parent="Center/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.plan.back"

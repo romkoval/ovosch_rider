@@ -34,6 +34,15 @@ const MAX_INTENSITY_PCT: int = 150
 ## Уровень сопротивления вне ERG, % (REQ-WRK-04, «Открытые решения» п. 9).
 const MIN_RESISTANCE_PCT: int = 0
 const MAX_RESISTANCE_PCT: int = 100
+## Крутизна SIM, % (REQ-FRD-05 крит. 1): 0–100 с шагом 5, по умолчанию 50.
+const MIN_SIM_STEEPNESS_PCT: int = 0
+const MAX_SIM_STEEPNESS_PCT: int = 100
+const SIM_STEEPNESS_STEP_PCT: int = 5
+const DEFAULT_SIM_STEEPNESS_PCT: int = 50
+## Трасса свободной езды, если в профиле её ещё нет (REQ-FRD-02 крит. 3; Н-14 — подтвердить).
+const DEFAULT_ROUTE_ID: String = "flat"
+## Идентификатор трассы: латиница в нижнем регистре, цифры, `_`, `-`; не длиннее 64.
+const MAX_ROUTE_ID_LENGTH: int = 64
 
 ## Коды ошибок валидации.
 const ERR_ID_EMPTY: String = "id_empty"
@@ -90,6 +99,12 @@ var intervals_override_local: bool = false
 var strava_auto_upload: bool = true
 ## Источник мощности по умолчанию: `POWER_SOURCE_TRAINER` | `POWER_SOURCE_POWER_METER`.
 var power_source: String = POWER_SOURCE_TRAINER
+## Последняя выбранная трасса свободной езды (REQ-FRD-02 крит. 3); "" — не выбиралась,
+## тогда действует `DEFAULT_ROUTE_ID` (см. `effective_route_id`). Есть ли такая трасса
+## в каталоге, проверяет экран выбора трассы, не профиль.
+var last_route_id: String = ""
+## Крутизна SIM, % (REQ-FRD-05 крит. 1): доля уклона трассы, уходящая на станок.
+var sim_steepness_pct: int = DEFAULT_SIM_STEEPNESS_PCT
 
 
 ## Новый профиль с именем, свежим id и временем создания.
@@ -138,6 +153,35 @@ func set_hr_zones_local(zones: HrZones) -> void:
 	zones_source = SOURCE_LOCAL
 
 
+## Трасса для свободной езды: последняя выбранная или `DEFAULT_ROUTE_ID` (REQ-FRD-02 крит. 3).
+func effective_route_id() -> String:
+	return DEFAULT_ROUTE_ID if last_route_id.is_empty() else last_route_id
+
+
+## Формат идентификатора трассы: пустая строка («не выбиралась») или `[a-z0-9_-]{1,64}`.
+static func is_valid_route_id(route_id: String) -> bool:
+	if route_id.length() > MAX_ROUTE_ID_LENGTH:
+		return false
+	for i in route_id.length():
+		var c: int = route_id.unicode_at(i)
+		var ok: bool = (c >= 0x61 and c <= 0x7A) or (c >= 0x30 and c <= 0x39) or c == 0x5F or c == 0x2D
+		if not ok:
+			return false
+	return true
+
+
+## Крутизна SIM в допустимом диапазоне и на шаге 5 % (REQ-FRD-05 крит. 1).
+static func is_valid_sim_steepness(pct: int) -> bool:
+	return pct >= MIN_SIM_STEEPNESS_PCT and pct <= MAX_SIM_STEEPNESS_PCT \
+			and pct % SIM_STEEPNESS_STEP_PCT == 0
+
+
+## Привести крутизну к допустимой: ограничить 0–100 и округлить до шага 5 % (52 → 50, 53 → 55).
+static func snap_sim_steepness(pct: float) -> int:
+	var clamped: float = clampf(pct, MIN_SIM_STEEPNESS_PCT, MAX_SIM_STEEPNESS_PCT)
+	return int(roundf(clamped / SIM_STEEPNESS_STEP_PCT)) * SIM_STEEPNESS_STEP_PCT
+
+
 ## Доступны ли зоны пульса (REQ-PRF-02 крит. 4): задан `max_hr` или переопределены абсолютные границы.
 func has_hr_zones() -> bool:
 	return has_max_hr() or _has_absolute_hr_zones()
@@ -179,11 +223,17 @@ func hr_zone_of(bpm: int) -> int:
 
 
 ## Привести поля к хранимому виду: имя без краевых пробелов, вес с шагом 0.1
-## (19.96 → 20.0). Вызывается репозиторием перед валидацией и записью, чтобы
-## введённое и сохранённое совпадали.
+## (19.96 → 20.0), крутизна SIM — в 0–100 % на шаг 5 % (52 → 50), идентификатор трассы
+## неверного формата — "" (трасса по умолчанию). Вызывается репозиторием перед валидацией
+## и записью, чтобы введённое и сохранённое совпадали. Поля свободной езды приводятся, а не
+## отклоняются: правят их слайдер и выбор из каталога, отдельных кодов ошибок (и строк
+## перевода) для них нет.
 func normalize() -> void:
 	name = name.strip_edges()
 	weight_kg = snappedf(weight_kg, WEIGHT_STEP_KG)
+	sim_steepness_pct = snap_sim_steepness(sim_steepness_pct)
+	if not is_valid_route_id(last_route_id):
+		last_route_id = ""
 
 
 ## Коды ошибок; пустой массив — профиль корректен. Вес проверяется с шагом 0.1.
@@ -252,6 +302,8 @@ func to_dict() -> Dictionary:
 		"intervals_override_local": intervals_override_local,
 		"strava_auto_upload": strava_auto_upload,
 		"power_source": power_source,
+		"last_route_id": last_route_id,
+		"sim_steepness_pct": sim_steepness_pct,
 	}
 
 
@@ -259,6 +311,9 @@ func to_dict() -> Dictionary:
 ## Отсутствующие поля (или null) получают значения по умолчанию; значения
 ## неподходящего типа приводятся к 0/"" — так `validate()` их отклонит, а не
 ## подменит умолчанием. Не падает ни на каких входных типах.
+## Исключение — поля свободной езды (`last_route_id`, `sim_steepness_pct`): они не
+## валидируются, а приводятся к допустимому, как в `normalize` (трасса неверного формата —
+## "" → `DEFAULT_ROUTE_ID`, крутизна — к шагу 5 % в пределах 0–100, нечисловая — 50).
 static func from_dict(data: Dictionary) -> Profile:
 	var p := Profile.new()
 	p.id = _to_text(data.get("id", ""))
@@ -281,6 +336,11 @@ static func from_dict(data: Dictionary) -> Profile:
 	p.power_source = _to_text(data.get("power_source", POWER_SOURCE_TRAINER))
 	if p.power_source.is_empty():
 		p.power_source = POWER_SOURCE_TRAINER
+	var route: Variant = data.get("last_route_id", "")
+	p.last_route_id = route if route is String and is_valid_route_id(route) else ""
+	var steepness: Variant = data.get("sim_steepness_pct", null)
+	if steepness is int or steepness is float:
+		p.sim_steepness_pct = snap_sim_steepness(float(steepness))
 	var pz: Variant = data.get("power_zone_bounds_pct", null)
 	if pz is Array:
 		p.power_zones = PowerZones.custom(p.ftp_w, _array_to_bounds(pz))

@@ -14,6 +14,8 @@ const WORKOUT_SCENE: String = "res://src/ui/workout/workout_screen.tscn"
 const SETTINGS_SCENE: String = "res://src/ui/settings/settings_screen.tscn"
 const PLAN_SCENE: String = "res://src/ui/plan/plan_screen.tscn"
 const HISTORY_SCENE: String = "res://src/ui/history/history_screen.tscn"
+const ROUTE_SELECT_SCENE: String = "res://src/ui/tracks/route_select_screen.tscn"
+const FREE_RIDE_SCENE: String = "res://src/ui/free_ride/free_ride_screen.tscn"
 
 @export var data_dir: String = "user://"
 ## Implementation of the trainer for `ConnectionManager`: "ble" (default) or "fake" (dev builds).
@@ -84,6 +86,9 @@ func _ready() -> void:
 	app_state.profile_selected.connect(_on_profile_selected)
 	app_state.locale_changed.connect(_on_locale_changed)
 	_build_screens()
+	# «Назад» Android обрабатывает оболочка (REQ-UIX-04 крит. 1): движок не должен закрывать
+	# приложение на любом экране. На корневом экране «назад» ничего не делает.
+	get_tree().quit_on_go_back = false
 	app_state.start()
 	_show_screen(app_state.current_screen)
 
@@ -136,6 +141,12 @@ func _build_screens() -> void:
 	history.upload_requested.connect(_on_upload_requested)
 	history.ride_deleted.connect(_on_ride_deleted)
 	_add_screen(AppState.Screen.HISTORY, history)
+	var route_select: RouteSelectScreen = load(ROUTE_SELECT_SCENE).instantiate()
+	route_select.setup(repo, app_state)
+	_add_screen(AppState.Screen.ROUTE_SELECT, route_select)
+	var free_ride: FreeRideScreen = load(FREE_RIDE_SCENE).instantiate()
+	free_ride.setup(app_state)
+	_add_screen(AppState.Screen.FREE_RIDE, free_ride)
 
 
 func _add_screen(screen: int, node: Control) -> void:
@@ -295,6 +306,86 @@ func _show_screen(screen: int) -> void:
 		(node as PlanScreen).refresh()
 	elif node is HistoryScreen:
 		(node as HistoryScreen).refresh()
+	elif node is RouteSelectScreen:
+		(node as RouteSelectScreen).refresh()
+
+
+func route_select_screen() -> RouteSelectScreen:
+	return screen_node(AppState.Screen.ROUTE_SELECT) as RouteSelectScreen
+
+
+func free_ride_screen() -> FreeRideScreen:
+	return screen_node(AppState.Screen.FREE_RIDE) as FreeRideScreen
+
+
+# ---------------------------------------------------------------------------
+# «Назад»: Esc на компьютере и системный «назад» Android (REQ-UIX-04 крит. 1, 2)
+# ---------------------------------------------------------------------------
+
+## Единая обработка «назад» для Esc и Android. По порядку: открытый диалог экрана закрывается
+## как отменённый; экран перехватывает «назад» сам (тренировка — запрос досрочного завершения
+## с подтверждением, WRK-05 крит. 4; история — карточка заезда → список; режим разработки —
+## остановка прогона); на экране сессии без идущей сессии — на главный; иначе — стек
+## `AppState.go_back`. true — «назад» обработан.
+func handle_back() -> bool:
+	if app_state == null:
+		return false
+	if _close_top_dialog():
+		return true
+	if _screen_handles_back(visible_screen_node()):
+		return true
+	if AppState.is_session_screen(app_state.current_screen):
+		return app_state.navigate(AppState.Screen.HOME)
+	return app_state.go_back()
+
+
+func _screen_handles_back(node: Control) -> bool:
+	if node is WorkoutScreen:
+		var workout := node as WorkoutScreen
+		if workout.is_stop_confirmation_pending():
+			workout.cancel_stop()
+			return true
+		return workout.request_stop()
+	if node is FreeRideScreen:
+		return (node as FreeRideScreen).handle_back()
+	if node is HistoryScreen:
+		var history := node as HistoryScreen
+		if history.is_detail_visible():
+			history.back_to_list()
+			return true
+		return false
+	if node is DevScreen:
+		# Прогон на эмуляторе останавливается так же, как кнопкой экрана (на главный).
+		(node as DevScreen).back()
+		return true
+	if node is RouteSelectScreen:
+		return (node as RouteSelectScreen).handle_back()
+	return false
+
+
+## Закрыть верхний видимый диалог (окно) внутри оболочки так же, как крестиком или Esc:
+## `NOTIFICATION_WM_CLOSE_REQUEST` → у `AcceptDialog` это «Отмена» (сигнал `canceled`).
+## Нужно для Android: системный «назад» приходит уведомлением, а не событием ввода в окно.
+func _close_top_dialog() -> bool:
+	var windows: Array[Window] = get_viewport().get_embedded_subwindows()
+	for i in range(windows.size() - 1, -1, -1):
+		var window: Window = windows[i]
+		if window.visible and is_ancestor_of(window):
+			window.notification(NOTIFICATION_WM_CLOSE_REQUEST)
+			if window.visible:
+				window.hide()
+			return true
+	return false
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel", false, true) and handle_back():
+		get_viewport().set_input_as_handled()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		handle_back()
 
 
 func settings_screen() -> SettingsScreen:

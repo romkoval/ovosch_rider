@@ -152,6 +152,30 @@ func save(profile: Profile) -> Array[String]:
 	return errors
 
 
+## Запомнить выбранную трассу свободной езды в профиле (REQ-FRD-02 крит. 3): правка одного
+## поля поверх сохранённого снимка, остальные поля не трогаются. Идентификатор неверного
+## формата сохраняется как "" (трасса по умолчанию, `Profile.normalize`). Коды ошибок — как
+## у `save()`, плюс `profile_not_found`; пустой массив — сохранено на диск.
+func set_last_route_id(profile_id: String, route_id: String) -> Array[String]:
+	var profile := get_by_id(profile_id)
+	if profile == null:
+		last_errors = [ERR_PROFILE_NOT_FOUND]
+		return last_errors.duplicate()
+	profile.last_route_id = route_id
+	return save(profile)
+
+
+## Сохранить крутизну SIM профиля (REQ-FRD-05 крит. 1: 0–100 % с шагом 5, между сессиями).
+## Значение приводится `Profile.normalize` (ограничение 0–100, округление до шага 5 %).
+func set_sim_steepness_pct(profile_id: String, pct: int) -> Array[String]:
+	var profile := get_by_id(profile_id)
+	if profile == null:
+		last_errors = [ERR_PROFILE_NOT_FOUND]
+		return last_errors.duplicate()
+	profile.sim_steepness_pct = pct
+	return save(profile)
+
+
 ## Удалить профиль. Возвращает "" при успехе или код ошибки
 ## (`profile_not_found`, `last_profile`, `storage_write_failed`). Каскад: хуки, затем
 ## `profile_deleted`. Если файл не записан — профиль остаётся в памяти, активный не меняется,
