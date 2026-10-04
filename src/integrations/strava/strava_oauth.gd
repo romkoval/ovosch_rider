@@ -190,6 +190,15 @@ func pending_connection_count() -> int:
 	return _peers.size()
 
 
+## Байт, принятых от незавершённых соединений (диагностика и тесты: дочитаны ли уже
+## отправленные клиентом данные — от их прихода отсчитывается простой соединения).
+func pending_request_bytes() -> int:
+	var total: int = 0
+	for entry in _peers:
+		total += (entry["buffer"] as PackedByteArray).size()
+	return total
+
+
 ## Опрос слушателя (вызывать каждый кадр). Пустой словарь — ждём; `{code, state}` — код
 ## принят (сервер остановлен); `{error}` — отказ (`timeout`, `state_mismatch`,
 ## `access_denied`, `bad_request`), сервер остановлен. Чужие пути (`/favicon.ico`) получают

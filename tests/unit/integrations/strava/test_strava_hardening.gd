@@ -15,6 +15,10 @@ const NEW_REFRESH: String = "fixture-refresh-token-nnnn"
 const NOW: int = 1_800_000_000
 const PORT_FROM: int = 49460
 const PORT_TO: int = 49499
+## Предел ожидания сетевых событий loopback по стенным часам, мс. Не число кадров: headless-кадры
+## бывают и микросекундными, и (под нагрузкой) очень долгими. Логика простоя считается по
+## подменённым часам `_now`, этот предел только ограничивает ожидание сокета.
+const NET_WAIT_MS: int = 10000
 var FIT: PackedByteArray = PackedByteArray([0x0E, 0x10, 0x5A, 0x08, 0x2E, 0x46, 0x49, 0x54])
 
 var _mock: MockHttpTransport
@@ -111,7 +115,8 @@ func _token_payload(access: String, refresh: String) -> Dictionary:
 func _connect_client() -> StreamPeerTCP:
 	var client := StreamPeerTCP.new()
 	assert_eq(client.connect_to_host("127.0.0.1", _oauth.listener_port()), OK)
-	for i in 300:
+	var deadline := Time.get_ticks_msec() + NET_WAIT_MS
+	while Time.get_ticks_msec() < deadline:
 		client.poll()
 		if client.get_status() == StreamPeerTCP.STATUS_CONNECTED:
 			break
@@ -121,9 +126,10 @@ func _connect_client() -> StreamPeerTCP:
 	return client
 
 
-## Крутить `poll_listener`, пока не появится результат (или до лимита кадров).
-func _poll_until_result(frames: int = 120) -> Dictionary:
-	for i in frames:
+## Крутить `poll_listener`, пока не появится результат (или до `NET_WAIT_MS`).
+func _poll_until_result() -> Dictionary:
+	var deadline := Time.get_ticks_msec() + NET_WAIT_MS
+	while Time.get_ticks_msec() < deadline:
 		var r := _oauth.poll_listener()
 		if not r.is_empty():
 			return r
@@ -133,16 +139,29 @@ func _poll_until_result(frames: int = 120) -> Dictionary:
 
 ## Дождаться, пока слушатель примет соединения (число незавершённых ≥ n).
 func _poll_until_pending(n: int) -> void:
-	for i in 120:
+	var deadline := Time.get_ticks_msec() + NET_WAIT_MS
+	while Time.get_ticks_msec() < deadline:
 		_oauth.poll_listener()
 		if _oauth.pending_connection_count() >= n:
 			return
 		await get_tree().process_frame
 
 
+## Дождаться, пока слушатель дочитает `n` байт незавершённых запросов. Без этого байты,
+## пришедшие уже после продвижения `_now`, сдвигают начало простоя (гонка под нагрузкой).
+func _poll_until_buffered(n: int) -> void:
+	var deadline := Time.get_ticks_msec() + NET_WAIT_MS
+	while Time.get_ticks_msec() < deadline:
+		_oauth.poll_listener()
+		if _oauth.pending_request_bytes() >= n:
+			return
+		await get_tree().process_frame
+
+
 func _read_response(client: StreamPeerTCP) -> String:
 	var response := ""
-	for i in 100:
+	var deadline := Time.get_ticks_msec() + NET_WAIT_MS
+	while Time.get_ticks_msec() < deadline:
 		client.poll()
 		var n := client.get_available_bytes()
 		if n > 0:
@@ -174,7 +193,8 @@ func test_connection_closed_before_headers_is_dropped_and_callback_still_works()
 	gone.put_data("GET /call".to_utf8_buffer())
 	await _poll_until_pending(1)
 	gone.disconnect_from_host()
-	for i in 120:
+	var deadline := Time.get_ticks_msec() + NET_WAIT_MS
+	while Time.get_ticks_msec() < deadline:
 		_oauth.poll_listener()
 		if _oauth.pending_connection_count() == 0:
 			break
@@ -191,9 +211,14 @@ func test_idle_connection_is_dropped_after_5_seconds() -> void:
 	_oauth.start_loopback_listener(PORT_FROM, PORT_TO)
 	_oauth.authorize_url("st-idle")
 	var idle: StreamPeerTCP = await _connect_client()
-	idle.put_data("GET /".to_utf8_buffer())
+	var sent := "GET /".to_utf8_buffer()
+	idle.put_data(sent)
+	# Часы `_now` стоят, пока слушатель не принял соединение и не дочитал всё отправленное:
+	# последняя активность — ровно NOW, сколько бы стенного времени это ни заняло.
 	await _poll_until_pending(1)
+	await _poll_until_buffered(sent.size())
 	assert_eq(_oauth.pending_connection_count(), 1)
+	assert_eq(_oauth.pending_request_bytes(), sent.size(), "отправленное клиентом дочитано до сдвига часов")
 	_now = NOW + StravaOAuth.PEER_IDLE_TIMEOUT_SEC - 1
 	_oauth.poll_listener()
 	assert_eq(_oauth.pending_connection_count(), 1, "4 с простоя — ещё ждём")
