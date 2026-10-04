@@ -236,6 +236,7 @@ horizontal_alignment = 1
 [node name="StatsGrid" type="GridContainer" parent="SummaryRoot/Center/SummaryCard/SummaryVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"Grid16"
 columns = 3
 
 [node name="Buttons" type="HBoxContainer" parent="SummaryRoot/Center/SummaryCard/SummaryVBox"]

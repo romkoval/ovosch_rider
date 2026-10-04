@@ -17,6 +17,9 @@ var _current: Ride = null
 
 func _init() -> void:
 	title = "ui.history.recovery.title"
+	# Ширина диалога 480 lp, текст переносится (`ui.md` п. 6 «Диалог / лист»).
+	size = Vector2i(480, 160)
+	dialog_autowrap = true
 	ok_button_text = "ui.history.recovery.keep"
 	# Без явного ключа ConfirmationDialog показывает встроенное «Cancel» движка (не из strings.csv).
 	cancel_button_text = "ui.common.cancel"

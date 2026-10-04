@@ -9,7 +9,7 @@ script = ExtResource("1_script")
 
 [node name="Row" type="HBoxContainer" parent="."]
 layout_mode = 2
-theme_type_variation = &"Stack12"
+theme_type_variation = &"Row12"
 
 [node name="Icon" type="TextureRect" parent="Row"]
 unique_name_in_owner = true

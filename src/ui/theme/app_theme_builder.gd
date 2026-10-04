@@ -54,6 +54,11 @@ const OVERLINE_SPACING_PX: int = 1
 const SPINBOX_FIELD: String = "SpinBoxInnerLineEdit"
 ## Шаги вертикальных (`StackN`) и горизонтальных (`RowN`) контейнеров, lp.
 const STACK_GAPS: Array[int] = [0, 8, 12, 16, 24]
+## Разрывы сеток (`GridN`: `h_separation` и `v_separation` = N) и переносимых рядов
+## (`FlowN`: между элементами в строке N, между строками 8), lp.
+const GRID_GAPS: Array[int] = [8, 12, 16, 24]
+const FLOW_GAPS: Array[int] = [8, 12, 16]
+const FLOW_LINE_GAP: int = 8
 
 ## Радиусы и поля (`ui.md` п. 3, 6, 9).
 const RADIUS_CHIP: int = 6
@@ -93,9 +98,12 @@ const VARIATIONS: Dictionary = {
 	"HudChipSeconds": "HudChipLabel", "HudChipLabelCompact": "HudChipLabel",
 	"HudChipSecondsCompact": "HudChipSeconds", "HudHintCompact": "BodyStrongLabel",
 	"HudToolButton": "HudButton",
-	"NumLabel": "Label", SPINBOX_FIELD: "LineEdit",
+	"NumLabel": "Label", "CaptionNumLabel": "CaptionLabel", SPINBOX_FIELD: "LineEdit",
+	"FormDialog": "AcceptDialog",
 	"Stack0": "VBoxContainer", "Stack8": "VBoxContainer", "Stack12": "VBoxContainer", "Stack16": "VBoxContainer", "Stack24": "VBoxContainer",
 	"Row0": "HBoxContainer", "Row8": "HBoxContainer", "Row12": "HBoxContainer", "Row16": "HBoxContainer", "Row24": "HBoxContainer",
+	"Grid8": "GridContainer", "Grid12": "GridContainer", "Grid16": "GridContainer", "Grid24": "GridContainer",
+	"Flow8": "HFlowContainer", "Flow12": "HFlowContainer", "Flow16": "HFlowContainer",
 	"ScreenMargin": "MarginContainer", "ScreenMarginCompact": "MarginContainer", "CardMargin": "MarginContainer",
 }
 
@@ -190,6 +198,19 @@ static func _base_types(t: Theme, fonts: Dictionary) -> void:
 	t.set_color("clear_button_color", "LineEdit", UiTokens.TEXT2)
 	t.set_color("clear_button_color_pressed", "LineEdit", UiTokens.TEXT)
 	t.set_constant("minimum_character_width", "LineEdit", 4)
+	# Многострочное поле (описание заезда для Strava, `ui.md` п. 8.5) — как `LineEdit`.
+	t.set_stylebox("normal", "TextEdit", field)
+	t.set_stylebox("focus", "TextEdit", field_focus)
+	t.set_stylebox("read_only", "TextEdit", field_read_only)
+	t.set_font("font", "TextEdit", fonts["inter_500"])
+	t.set_font_size("font_size", "TextEdit", 16)
+	t.set_color("font_color", "TextEdit", UiTokens.TEXT)
+	t.set_color("font_selected_color", "TextEdit", UiTokens.TEXT)
+	t.set_color("font_readonly_color", "TextEdit", UiTokens.TEXT2)
+	t.set_color("font_placeholder_color", "TextEdit", UiTokens.TEXT_DISABLED)
+	t.set_color("caret_color", "TextEdit", UiTokens.ACCENT)
+	t.set_color("selection_color", "TextEdit", Color(UiTokens.ACCENT, UiTokens.SELECTION_ALPHA))
+	t.set_constant("line_spacing", "TextEdit", 4)
 
 	# SpinBox: поле — LineEdit; стрелки — шевроны Lucide 16 lp.
 	var up := _lucide("chevron-up", 16)
@@ -315,6 +336,9 @@ static func _base_types(t: Theme, fonts: Dictionary) -> void:
 	t.set_color("title_color", "Window", UiTokens.TEXT)
 	t.set_stylebox("panel", "AcceptDialog", _box(UiTokens.SURFACE1, 0, Vector2(24, 24)))
 	t.set_constant("buttons_separation", "AcceptDialog", 12)
+	# Диалог-форма со своими кнопками внутри содержимого (создание профиля): ряд кнопок окна
+	# скрыт, поэтому разрыв до него не нужен — снизу остаётся только поле 24, как сверху.
+	t.set_constant("buttons_separation", "FormDialog", 0)
 
 	# Подсказки.
 	t.set_stylebox("panel", "TooltipPanel", _box(UiTokens.SURFACE3, 8, Vector2(10, 6)))
@@ -359,6 +383,10 @@ static func _label_variations(t: Theme, fonts: Dictionary) -> void:
 	_label(t, "OverlineLabel", fonts["inter_700_overline"], OVERLINE_FONT_SIZE, UiTokens.TEXT2)
 	# Цифры в колонках списков (U4, `ui.md` п. 11): Body 16 с `tnum`.
 	_label(t, "NumLabel", fonts["inter_num_600"], 16)
+	# Caption с цифрами (дата, «вчера · 1:02:15 · 34.1 км», доли зон): Caption 13 `text2` с `tnum`.
+	# Вес 600, а не 500: цифрового начертания 500 нет — то же решение, что у `HudStepLabel`
+	# (`hud.md` п. 6), отдельное начертание ради подписи не заводится.
+	_label(t, "CaptionNumLabel", fonts["inter_num_600"], 13, UiTokens.TEXT2)
 	_label(t, "StatLabel", fonts["inter_num_700"], 22)
 	_label(t, "StatLargeLabel", fonts["inter_num_750"], 32)
 	_label(t, "ErrorLabel", fonts["inter_500"], 13, UiTokens.DANGER_TEXT)
@@ -523,6 +551,12 @@ static func _container_variations(t: Theme) -> void:
 	for gap in STACK_GAPS:
 		t.set_constant("separation", "Stack%d" % gap, gap)
 		t.set_constant("separation", "Row%d" % gap, gap)
+	for gap in GRID_GAPS:
+		t.set_constant("h_separation", "Grid%d" % gap, gap)
+		t.set_constant("v_separation", "Grid%d" % gap, gap)
+	for gap in FLOW_GAPS:
+		t.set_constant("h_separation", "Flow%d" % gap, gap)
+		t.set_constant("v_separation", "Flow%d" % gap, FLOW_LINE_GAP)
 	_margins(t, "ScreenMargin", 32, 24)
 	_margins(t, "ScreenMarginCompact", 24, 16)
 	_margins(t, "CardMargin", 16, 16)

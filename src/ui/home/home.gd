@@ -22,8 +22,8 @@ extends Control
 ## Раскладка: контент не шире 1216 lp по центру, поля `ScreenMargin` (compact —
 ## `ScreenMarginCompact`) плюс безопасная зона `UiScaleRuntime`; высота карточек
 ## clamp(0.56·H, 300, 460), но не больше остатка окна — плитки и отладочные кнопки
-## без прокрутки. Все стили — вариации темы; акцентные цвета знака и надзаголовков —
-## `self_modulate` от цвета темы (вариаций с этими цветами в теме нет).
+## без прокрутки. Все стили — вариации темы, включая знак (`LogoLabel` / `LogoAccentLabel`) и
+## надзаголовки сценариев (`OverlineAccent` / `OverlineSim`).
 ## Строки — ключи `ui.home.*` (`strings_menu.csv`, `strings.csv`).
 
 ## Временная кнопка (отладка): тренировка на эмуляторе.
@@ -114,6 +114,8 @@ var _tile_captions: Dictionary = {}
 @onready var _profile_chip: Button = %SwitchProfileButton
 @onready var _dev_menu_button: Button = %DevMenuButton
 @onready var _cards: HBoxContainer = %Cards
+## Ширина колонки контента (без полей и безопасной зоны), lp; считается в `_update_layout`.
+var _content_width: float = 0.0
 @onready var _plan_card: Button = %PlanCard
 @onready var _plan_content: VBoxContainer = %PlanContent
 @onready var _plan_header: HBoxContainer = %PlanHeader
@@ -214,7 +216,6 @@ func _ready() -> void:
 	var runtime := TouchTarget.default_runtime()
 	if runtime != null:
 		runtime.scale_changed.connect(_on_scale_changed)
-	_apply_tints()
 	_apply_card_insets()
 	refresh()
 
@@ -237,8 +238,10 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE:
 		_disconnect_connections()
 	elif what == NOTIFICATION_THEME_CHANGED and is_node_ready():
-		_apply_tints()
 		_apply_card_insets()
+	elif what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		# Надзаголовки задаются переведённым текстом (`_set_overline`) — пересчитать.
+		_update_layout()
 
 
 # ---------------------------------------------------------------------------
@@ -649,6 +652,7 @@ func _update_layout() -> void:
 	var left: float = mh + safe.x
 	var right: float = mh + safe.z
 	var extra: float = maxf(0.0, (size.x - left - right - CONTENT_MAX_WIDTH) * 0.5)
+	_content_width = size.x - left - right - 2.0 * extra
 	_column.offset_left = left + extra
 	_column.offset_right = -(right + extra)
 	# Панель сверху — как `AppBar`: от верхнего края (её высота 72/64 уже включает поля).
@@ -665,11 +669,12 @@ func _update_layout() -> void:
 	_plan_steps.visible = not compact
 	_ride_max_grade.visible = not compact
 	_plan_source_label.visible = not compact
-	# На compact рядом с надзаголовком стоит «Другая тренировка»: полный надзаголовок не влезает (U9).
-	_plan_overline.text = "ui.home.plan.overline_short" if compact else "ui.home.plan.overline"
 	_ride_kind.visible = not compact
 	_apply_card_insets()
 	_apply_card_buttons()
+	# На compact рядом с надзаголовком стоит «Другая тренировка»: полный надзаголовок не влезает (U9).
+	_set_overline(_plan_overline, "ui.home.plan.overline_short" if compact else "ui.home.plan.overline", _workout_button)
+	_set_overline(_ride_overline, "ui.home.ride.overline", _route_button)
 	if compact_changed:
 		_refresh_profile_chip()
 		_refresh_devices()
@@ -699,8 +704,8 @@ func _card_content_min_height() -> float:
 
 
 ## Кнопки карточек: regular — основная 200 lp и вторичная рядом; compact — основная на всю
-## ширину, вторичная текстовой кнопкой справа от надзаголовка. Пустой план: «Из библиотеки»
-## основной, «Импорт файла» вторичной в ряду кнопок.
+## ширину, вторичная текстовой кнопкой справа от надзаголовка (`_set_overline`). Пустой план:
+## «Из библиотеки» основной, «Импорт файла» вторичной в ряду кнопок.
 func _apply_card_buttons() -> void:
 	var has_plan: bool = _plan_workout != null
 	_place_secondary(_workout_button, _plan_header, _plan_buttons, _compact and has_plan)
@@ -721,6 +726,47 @@ func _apply_card_buttons() -> void:
 		if helper != null:
 			helper.floor_size.x = button.custom_minimum_size.x
 			helper.apply()
+
+
+## Надзаголовок карточки — ключ `key` на языке интерфейса. Если рядом в той же строке стоит
+## текстовая кнопка `beside` и вместе они не помещаются (узкая карточка: телефон с вырезом,
+## ru), надзаголовок делится по словам на две строки, а не обрезается (UIX-05 крит. 3); две
+## строки Overline (32 lp) ниже кнопки (52 lp), высота карточки не меняется.
+func _set_overline(label: Label, key: String, beside: Button) -> void:
+	var text := tr(key)
+	if _compact and beside.get_parent() == label.get_parent():
+		var avail: float = card_inner_width() - float(label.get_parent().get_theme_constant("separation")) \
+				- beside.get_combined_minimum_size().x
+		text = split_to_fit(label, text, avail)
+	label.text = text
+
+
+## Ширина содержимого карточки сценария, lp (0 — раскладки ещё не было).
+func card_inner_width() -> float:
+	if _content_width <= 0.0:
+		return 0.0
+	var card_w: float = (_content_width - float(_cards.get_theme_constant("separation"))) * 0.5
+	var insets := _card_insets(_plan_card)
+	return card_w - insets.x - insets.z
+
+
+## Текст подписи `label`, который не шире `width`: как есть, если помещается, иначе две
+## строки — первая из стольких слов, сколько помещается.
+static func split_to_fit(label: Label, text: String, width: float) -> String:
+	if width <= 0.0 or _text_width(label, text) <= width:
+		return text
+	var words := text.split(" ")
+	for i in range(words.size() - 1, 0, -1):
+		var first := " ".join(words.slice(0, i))
+		if _text_width(label, first) <= width:
+			return first + "\n" + " ".join(words.slice(i))
+	return text
+
+
+static func _text_width(label: Label, text: String) -> float:
+	var shown := text.to_upper() if label.uppercase else text
+	return label.get_theme_font("font").get_string_size(shown, HORIZONTAL_ALIGNMENT_LEFT, -1,
+		label.get_theme_font_size("font_size")).x
 
 
 static func _place_secondary(button: Button, header: HBoxContainer, row: HBoxContainer, in_header: bool) -> void:
@@ -763,17 +809,6 @@ func _card_insets(card: Button) -> Vector4:
 	return Vector4(box.get_margin(SIDE_LEFT), box.get_margin(SIDE_TOP), box.get_margin(SIDE_RIGHT), box.get_margin(SIDE_BOTTOM))
 
 
-## Акцент знака и надзаголовков (`ui.md` п. 5, 6): цвет темы подписи × модуляция = токен.
-func _apply_tints() -> void:
-	_tint(_logo_accent, UiTokens.ACCENT)
-	_tint(_plan_overline, UiTokens.ACCENT)
-	_tint(_ride_overline, UiTokens.SIM)
-
-
-static func _tint(label: Label, target: Color) -> void:
-	label.self_modulate = tint_for(label.get_theme_color("font_color"), target)
-
-
 ## Модуляция, переводящая цвет `base` в `target` (покомпонентно; каналы > 1 допустимы).
 static func tint_for(base: Color, target: Color) -> Color:
 	return Color(
@@ -791,7 +826,7 @@ func _setup_icons() -> void:
 
 
 ## Плитка: иконка и заголовок — сама кнопка `CardButton` (заголовок первой строкой текста,
-## вторая строка пустая — под подпись), подпись `CaptionLabel` и шеврон — дочерние узлы.
+## вторая строка пустая — под подпись), подпись `CaptionNumLabel` и шеврон — дочерние узлы.
 func _setup_tiles() -> void:
 	var tiles := {
 		_history_button: ["history", "ui.home.history"],
@@ -809,7 +844,7 @@ func _setup_tiles() -> void:
 		var text_x: float = pad_left + float(tile.get_theme_constant("icon_max_width")) + float(tile.get_theme_constant("h_separation"))
 		var caption := Label.new()
 		caption.name = "Caption"
-		caption.theme_type_variation = &"CaptionLabel"
+		caption.theme_type_variation = &"CaptionNumLabel"
 		caption.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		caption.clip_text = true

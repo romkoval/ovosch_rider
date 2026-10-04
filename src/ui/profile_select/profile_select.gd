@@ -97,6 +97,8 @@ func _ready() -> void:
 	_save_button.pressed.connect(_on_save_pressed)
 	_cancel_button.pressed.connect(close_create_form)
 	_name_edit.text_submitted.connect(_on_name_submitted)
+	# Кнопки формы — внутри содержимого; ряд кнопок окна скрыт, разрыв до него убирает вариация
+	# `FormDialog` (снизу остаётся только поле окна, как сверху).
 	_create_dialog.get_ok_button().visible = false
 	_create_dialog.canceled.connect(close_create_form)
 	_delete_dialog.confirmed.connect(_on_delete_confirmed)

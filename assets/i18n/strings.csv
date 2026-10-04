@@ -3,12 +3,9 @@ ui.common.coming_soon,Этот экран появится позже,This scree
 ui.common.cancel,Отмена,Cancel
 ui.common.delete,Удалить,Delete
 ui.profile_select.title,Выбор профиля,Choose a profile
-ui.profile_select.select,Выбрать,Select
-ui.profile_select.create,Создать,Create
 ui.profile_select.delete,Удалить,Delete
 ui.profile_select.empty_hint,Профилей пока нет — создайте первый,No profiles yet — create the first one
 ui.profile_select.delete_confirm,Удалить профиль «{name}»? Будут удалены его заезды; токены и датчики; общий станок останется.,Delete profile “{name}”? Its rides; tokens and sensors will be removed; the shared trainer stays.
-ui.profile_select.item_ftp,FTP {ftp} Вт,FTP {ftp} W
 ui.profile_create.title,Новый профиль,New profile
 ui.profile_create.name,Имя,Name
 ui.profile_create.ftp,FTP (Вт),FTP (W)
@@ -18,7 +15,6 @@ ui.profile_create.save,Сохранить,Save
 ui.profile_create.cancel,Отмена,Cancel
 ui.home.title,Главный экран,Home
 ui.home.active_profile,Профиль: {name},Profile: {name}
-ui.home.workout,Тренировка,Workout
 ui.home.history,История,History
 ui.home.settings,Настройки,Settings
 ui.home.dev,Режим разработки,Developer mode
@@ -65,7 +61,6 @@ ui.devices.title,Устройства,Devices
 ui.devices.scan,Сканировать,Scan
 ui.devices.stop_scan,Остановить поиск,Stop scanning
 ui.devices.auto_connect,Автоподключение,Auto-connect
-ui.devices.back,На главный,Back to home
 ui.devices.remembered,Запомненные устройства,Remembered devices
 ui.devices.found,Найденные устройства,Discovered devices
 ui.devices.connect,Подключить,Connect
@@ -97,37 +92,20 @@ ui.hud.connection.connected,Станок подключён,Trainer connected
 ui.hud.connection.reconnecting,Переподключение…,Reconnecting…
 ui.hud.connection.unknown,Состояние неизвестно,Unknown state
 ui.workout.no_session,Тренировка не выбрана,No workout selected
-ui.workout.target_title,Цель,Target
 ui.workout.target_value,{value} Вт,{value} W
 ui.workout.unit_w,Вт,W
-ui.workout.hr,Пульс,Heart rate
-ui.workout.cadence,Каденс,Cadence
-ui.workout.speed,Скорость,Speed
-ui.workout.elapsed,Время,Elapsed
-ui.workout.countdown,До конца интервала,Interval remaining
 ui.workout.step,Шаг {step},Step {step}
 ui.workout.pause,Пауза,Pause
 ui.workout.resume,Продолжить,Resume
-ui.workout.skip,Пропустить,Skip
-ui.workout.stop,Стоп,Stop
-ui.workout.stop_confirm,Завершить тренировку досрочно? Заезд будет сохранён как завершённый досрочно.,End the workout early? The ride will be saved as ended early.
 ui.workout.erg_on,ERG вкл,ERG on
 ui.workout.erg_off,ERG выкл,ERG off
-ui.workout.resistance,Сопротивление {value} %,Resistance {value} %
-ui.workout.intensity,Интенсивность {value} %,Intensity {value} %
 ui.workout.finished,Тренировка завершена,Workout finished
 ui.workout.summary,{name} · {time} · {distance} км · сэмплов {samples} {early},{name} · {time} · {distance} km · samples {samples} {early}
 ui.workout.stopped_early,(завершена досрочно),(ended early)
 ui.workout.home,На главный,Back to home
-ui.workout.minus_5,−5,−5
-ui.workout.plus_5,+5,+5
-ui.workout.minus_5pct,−5 %,−5 %
-ui.workout.plus_5pct,+5 %,+5 %
 ui.devices.ble_unavailable,Bluetooth недоступен: нативный модуль не загружен или адаптер выключен,Bluetooth unavailable: native module not loaded or adapter is off
 ui.workout.summary_paused,Пауз: {paused},Paused: {paused}
 ui.common.ok,ОК,OK
-ui.plan.title,Тренировка на сегодня,Today's workout
-ui.plan.intervals_title,Intervals.icu сегодня,Intervals.icu today
 ui.plan.library_title,Библиотека,Library
 ui.plan.reload,Обновить,Reload
 ui.plan.back,На главный,Back to home
@@ -143,20 +121,16 @@ ui.plan.status.network_error,Сеть недоступна; кэшированн
 ui.plan.status.rate_limited,Слишком много запросов к Intervals.icu — попробуйте позже,Too many requests to Intervals.icu — try again later
 ui.plan.status.bad_response,Неожиданный ответ Intervals.icu,Unexpected response from Intervals.icu
 ui.plan.status.no_profile,Профиль не выбран,No profile selected
-ui.plan.key.button,Указать API-ключ,Set API key
 ui.plan.key.rejected,Ключ не принят Intervals.icu (401),Key rejected by Intervals.icu (401)
 ui.plan.key.fill_both,Введите Athlete ID и ключ API,Enter Athlete ID and API key
 ui.plan.key.failed,Не удалось проверить ключ: {reason},Could not verify the key: {reason}
 ui.plan.key.verified,Атлет: {name} — профиль синхронизирован,Athlete: {name} — profile synced
-ui.plan.item.load,нагрузка {load},load {load}
 ui.plan.item.unparsed,не удалось разобрать,could not be parsed
 ui.plan.item.no_plan,В событии нет структуры тренировки,The event has no workout structure
 ui.plan.source_intervals,Intervals.icu,Intervals.icu
 ui.plan.source_library,библиотека,library
-ui.plan.preview.title,Предпросмотр,Preview
 ui.plan.preview.empty,Выберите тренировку,Select a workout
 ui.plan.preview.duration,Длительность {duration} · FTP {ftp} Вт,Duration {duration} · FTP {ftp} W
-ui.plan.import.button,Импортировать файл…,Import file…
 ui.plan.import.dialog_title,Выберите файл тренировки (.zwo; .erg; .mrc),Choose a workout file (.zwo; .erg; .mrc)
 ui.plan.import.open,Открыть,Open
 ui.plan.import.error_title,Ошибка импорта,Import error
@@ -167,7 +141,6 @@ ui.plan.trainer_choice.title,Станок не подключён,Trainer not co
 ui.plan.trainer_choice.text,Станок не подключён. Провести тренировку на эмуляторе или подключить устройства?,No trainer is connected. Ride on the emulator or connect devices?
 ui.plan.trainer_choice.emulator,Эмулятор,Emulator
 ui.plan.trainer_choice.devices,Подключить устройства,Connect devices
-ui.plan.chart.ftp_label,FTP {ftp},FTP {ftp}
 ui.plan.import.error.in_file,{file}: {text},{file}: {text}
 ui.plan.import.error.at_element,элемент {element},element {element}
 ui.plan.import.error.at_line,строка {line},line {line}
@@ -281,16 +254,11 @@ ui.settings.license_gut,GUT (Godot Unit Test) — MIT,GUT (Godot Unit Test) — 
 ui.settings.license_godot_cpp,godot-cpp — MIT,godot-cpp — MIT
 ui.settings.licenses_doc,Полный список: {path},Full list: {path}
 ui.settings.switch_profile,Сменить профиль,Switch profile
-ui.settings.back,На главный,Back to home
 ui.intervals_key.title,Ключ API Intervals.icu,Intervals.icu API key
 ui.intervals_key.hint,Athlete ID и ключ API из настроек Intervals.icu. Ключ хранится только в защищённом хранилище.,Athlete ID and API key from Intervals.icu settings. The key is stored only in the secure store.
 ui.intervals_key.athlete_id,Athlete ID (например i12345),Athlete ID (e.g. i12345)
 ui.intervals_key.key,Ключ API,API key
 ui.intervals_key.save,Проверить и сохранить,Verify and save
-ui.history.title,История заездов,Ride history
-ui.history.home,На главный,Back to home
-ui.history.back,К списку,Back to list
-ui.history.empty,Заездов пока нет,No rides yet
 ui.history.untitled,Тренировка,Workout
 ui.history.row,{date} · {name} · {time} · {distance} км · {avg} Вт · NP {np} · {strava} {flags},{date} · {name} · {time} · {distance} km · {avg} W · NP {np} · {strava} {flags}
 ui.history.row.in_progress,(не завершён),(in progress)
@@ -305,8 +273,6 @@ ui.history.detail.stopped_early,(завершён досрочно),(ended early
 ui.history.detail.recovered,(восстановлен после сбоя),(recovered after a crash)
 ui.history.detail.zones_power,Время в зонах мощности,Time in power zones
 ui.history.detail.zones_hr,Время в зонах пульса,Time in heart-rate zones
-ui.history.chart.power,Мощность (и цель плана),Power (and plan target)
-ui.history.chart.hr,Пульс,Heart rate
 ui.history.chart.cadence,Каденс,Cadence
 ui.history.speed_source.trainer,станок,trainer
 ui.history.speed_source.model,модель,model

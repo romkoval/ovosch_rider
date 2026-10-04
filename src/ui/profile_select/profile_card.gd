@@ -3,7 +3,7 @@ extends Button
 ## Карточка профиля на экране выбора (`docs/game/ui.md` п. 8.1): кнопка с вариацией
 ## `CardButton` (фокус, Enter и клавиатура работают сразу), содержимое — дочерние узлы с
 ## `mouse_filter = PASS`: аватар с инициалом, имя (`TitleLabel`, длинное сокращается «…»),
-## «FTP 250 Вт · 75 кг» (`CaptionLabel`). В правом верхнем углу — кнопка «⋯» (`IconButton`)
+## «FTP 250 Вт · 75 кг» (`CaptionNumLabel`). В правом верхнем углу — кнопка «⋯» (`IconButton`)
 ## с действиями профиля (удаление).
 ##
 ## Нажатие на карточку — выбор профиля (`chosen`), «⋯» — `menu_requested`. Выделение
@@ -49,7 +49,7 @@ func _init() -> void:
 	_avatar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_content.add_child(_avatar)
 	_name = _make_label("Name", &"TitleLabel")
-	_stats = _make_label("Stats", &"CaptionLabel")
+	_stats = _make_label("Stats", &"CaptionNumLabel")
 	_menu = Button.new()
 	_menu.name = "Menu"
 	_menu.theme_type_variation = &"IconButton"

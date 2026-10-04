@@ -20,9 +20,10 @@ extends RefCounted
 ## Ось Y (`Plot`):
 ## - миниатюра — низ поля = минимум трассы, размах max(перепад, 150 м) (`tracks.md` п. 7.1,
 ##   FRD-03 крит. 3): равнина ≈ 8 % высоты поля, приморье ≈ 30 %, холмы ≈ 65 %, горы — 100 %;
-## - крупный профиль — тот же размах max(перепад, 150 м) (`tracks.md` п. 7.2), сверху и снизу
-##   поля по `LARGE_MARGIN_FRACTION` высоты поля: место под подписи высот, линия профиля
-##   не прилипает к краям;
+## - крупный профиль — низ = минимум трассы, размах max(перепад, 40 м), как у профиля круга и
+##   «впереди 2 км» в HUD (`tracks.md` п. 7.2, решение ред. 2: в меню и в езде один рельеф);
+##   сверху и снизу поля по `LARGE_MARGIN_FRACTION` высоты поля: место под подписи высот,
+##   линия профиля не прилипает к краям;
 ## - произвольное окно (HUD «впереди 2 км», T-079) — `window_plot()` со своим минимальным
 ##   размахом.
 ##
@@ -34,16 +35,24 @@ extends RefCounted
 ## Режим превью: миниатюра карточки или крупный профиль детали.
 enum Mode { THUMB, LARGE }
 
-## Минимальный размах шкалы высот превью, м (`tracks.md` п. 7.1, 7.2; FRD-03 крит. 3).
+## Минимальный размах шкалы высот миниатюры, м (`tracks.md` п. 7.1; FRD-03 крит. 3): общий для
+## всех трасс, чтобы миниатюры сравнивались между собой.
 const MIN_SPAN_M: float = 150.0
+## Минимальный размах шкалы крупного профиля, м (`tracks.md` п. 7.2, решение ред. 2) — тот же,
+## что у профиля круга и «впереди 2 км» в HUD (`hud.md` п. 8).
+const LARGE_MIN_SPAN_M: float = 40.0
+## Подписи высот крупного профиля ближе этого друг к другу (lp) — остаётся только максимум
+## (`tracks.md` п. 7.2).
+const HEIGHT_LABEL_MIN_GAP: float = 14.0
 ## Поля крупного профиля сверху и снизу — доля высоты поля (не меньше 10 %, T-075).
 const LARGE_MARGIN_FRACTION: float = 0.10
 ## Минимальная ширина куска заливки одного цвета, px (lp) (`tracks.md` п. 7.1).
 const MIN_PIECE_PX: float = 2.0
-## Подписей подъёмов в полной форме — не больше стольких, самые длинные (FRD-03 крит. 6).
+## Подъёмов не больше стольких — подписаны все, в полной форме «подъём 7.0 км · 6.0 %»
+## (FRD-03 крит. 6, `tracks.md` п. 7.2, решение ред. 2).
 const MAX_CLIMB_LABELS: int = 3
-## Если подъёмов больше `MAX_CLIMB_LABELS`, но не больше этого числа, подписываются все
-## в краткой форме (холмы — четыре, FRD-03 крит. 6, `tracks.md` п. 7.2).
+## Подъёмов больше `MAX_CLIMB_LABELS` — подписаны столько самых длинных, в краткой форме
+## «1.2 км · 5.7 %» (холмы — все четыре).
 const MAX_SHORT_CLIMB_LABELS: int = 4
 ## Ряд шагов шкалы км (FRD-03 крит. 6, как HUD-10.4); дальше — кратные последнему.
 const KM_STEPS: Array[int] = [1, 2, 5, 10]
@@ -161,8 +170,9 @@ static func y_range_for(h_min: float, h_max: float, min_span_m: float, margin_fr
 func y_range(mode: Mode) -> Vector2:
 	if not is_valid():
 		return Vector2(0.0, MIN_SPAN_M)
-	var margin: float = LARGE_MARGIN_FRACTION if mode == Mode.LARGE else 0.0
-	return y_range_for(profile.min_height_m(), profile.max_height_m(), MIN_SPAN_M, margin)
+	if mode == Mode.LARGE:
+		return y_range_for(profile.min_height_m(), profile.max_height_m(), LARGE_MIN_SPAN_M, LARGE_MARGIN_FRACTION)
+	return y_range_for(profile.min_height_m(), profile.max_height_m(), MIN_SPAN_M)
 
 
 ## Доля высоты поля, которую занимает профиль круга (перепад / высота шкалы).
@@ -306,19 +316,20 @@ func fill(p: Plot) -> Array[Dictionary]:
 # Подписи
 # ---------------------------------------------------------------------------
 
-## Подъёмы для подписей (FRD-03 крит. 6, `tracks.md` п. 7.2) в порядке s:
-## `{start_m, length_m, mid_m, avg_grade_pct, short, text}`. До `MAX_CLIMB_LABELS` — все,
-## полная форма «подъём 7.0 км · 6.0 %»; до `MAX_SHORT_CLIMB_LABELS` — все, краткая форма
-## «1.2 км · 5.7 %»; больше — `MAX_CLIMB_LABELS` самых длинных в полной форме.
+## Подъёмы для подписей (FRD-03 крит. 6, `tracks.md` п. 7.2, решение ред. 2) в порядке s:
+## `{start_m, length_m, mid_m, avg_grade_pct, short, text}`. Подъёмов до `MAX_CLIMB_LABELS` —
+## все, полная форма «подъём 7.0 км · 6.0 %»; больше — `MAX_SHORT_CLIMB_LABELS` самых длинных,
+## краткая форма «1.2 км · 5.7 %». Пересечение подписей на графике разрешает
+## `without_overlaps()` (зависит от ширины поля и шрифта).
 func climb_labels() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if not is_valid():
 		return out
 	var climbs := profile.climbs()
-	var short: bool = climbs.size() > MAX_CLIMB_LABELS and climbs.size() <= MAX_SHORT_CLIMB_LABELS
+	var short: bool = climbs.size() > MAX_CLIMB_LABELS
 	if climbs.size() > MAX_SHORT_CLIMB_LABELS:
 		climbs.sort_custom(func(a: RouteProfile.Climb, b: RouteProfile.Climb) -> bool: return a.length_m > b.length_m)
-		climbs = climbs.slice(0, MAX_CLIMB_LABELS)
+		climbs = climbs.slice(0, MAX_SHORT_CLIMB_LABELS)
 		climbs.sort_custom(func(a: RouteProfile.Climb, b: RouteProfile.Climb) -> bool: return a.start_m < b.start_m)
 	for c in climbs:
 		var body: String = "%s · %s" % [format_length_km(c.length_m), format_grade_pct(c.avg_grade_pct)]
@@ -330,6 +341,29 @@ func climb_labels() -> Array[Dictionary]:
 			"short": short,
 			"text": body if short else _tr(KEY_CLIMB).format({"value": body}),
 		})
+	return out
+
+
+## Подписи без пересечений (`tracks.md` п. 7.2): у каждой — `rect` (место на графике) и
+## `length_m`; из двух пересекающихся остаётся подпись более длинного подъёма. Порядок —
+## исходный.
+static func without_overlaps(labels: Array[Dictionary]) -> Array[Dictionary]:
+	var by_length := labels.duplicate()
+	by_length.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["length_m"]) > float(b["length_m"]))
+	var kept: Array[Dictionary] = []
+	for label: Dictionary in by_length:
+		var rect: Rect2 = label["rect"]
+		var free := true
+		for other in kept:
+			if rect.intersects(other["rect"] as Rect2):
+				free = false
+				break
+		if free:
+			kept.append(label)
+	var out: Array[Dictionary] = []
+	for label in labels:
+		if kept.has(label):
+			out.append(label)
 	return out
 
 
@@ -369,6 +403,17 @@ func height_labels() -> Array[Dictionary]:
 		{"h_m": profile.max_height_m(), "text": format_height_m(profile.max_height_m())},
 		{"h_m": profile.min_height_m(), "text": format_height_m(profile.min_height_m())},
 	] as Array[Dictionary]
+
+
+## Подписи высот, которые видны на крупном профиле `p` (`tracks.md` п. 7.2): обе, если их
+## линии не ближе `HEIGHT_LABEL_MIN_GAP` lp, иначе только максимум.
+func visible_height_labels(p: Plot) -> Array[Dictionary]:
+	var labels := height_labels()
+	if labels.size() < 2 or p == null:
+		return labels
+	if absf(p.y(labels[1]["h_m"]) - p.y(labels[0]["h_m"])) < HEIGHT_LABEL_MIN_GAP:
+		return [labels[0]] as Array[Dictionary]
+	return labels
 
 
 ## s самой высокой точки выборки, м (вершина для треугольника гор).

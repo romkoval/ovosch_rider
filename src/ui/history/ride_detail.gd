@@ -10,11 +10,13 @@ extends Control
 ## трогается) и название заезда; справа «⋯» — меню «Экспорт FIT» / «Удалить заезд». Под ним
 ## метка режима «ПЛАН»/«SIM» и дата с отметками; сетка плиток Stat Large (время, дистанция,
 ## ср. мощность, NP, макс., работа, ср. пульс, ср. каденс; у свободной езды — набор), regular —
-## 4 в ряд, compact — 3; строка параметров заезда (FTP, вес, интенсивность, источник скорости,
-## средняя цель плана — у свободной езды «—», трасса и крутизна SIM). Общий график мощности и
-## пульса (`RideEffortChart` — рисовальщик HUD: план призраком + белая линия факта + красная
-## линия пульса со своей шкалой); у свободной езды — профиль высоты по дистанции
-## (`RideAltitudeChart`: круги подряд, граница круга пунктиром); каденс (`RideChart`); время
+## 4 в ряд, compact — 3; строка параметров заезда (FTP, вес, интенсивность, источник скорости;
+## у плана — средняя цель, у свободной езды вместо неё — трасса и крутизна SIM). Общий график
+## мощности и пульса (`RideEffortChart` — рисовальщик HUD: план призраком + белая линия факта +
+## красная линия пульса со своей шкалой; у свободной езды мощность — площадь по зонам, как в HUD
+## свободной езды); у свободной езды — профиль высоты по дистанции (`RideAltitudeChart`: круги
+## подряд, граница круга пунктиром); каденс (`RideChart`, высота 96, шкала 40…120+, подписи 60
+## и 90, поля и шкала времени — как у графика мощности; без данных каденса блока нет); время
 ## в зонах (полосы 12 lp с подписями долей); карточка «Strava»: статус, поля «Название»
 ## и «Описание» (REQ-STR-03 крит. 3: значения по умолчанию на языке интерфейса, доступны,
 ## пока заезд не выгружен), «Выгрузить в Strava» (без привязки недоступна с подсказкой).
@@ -56,18 +58,18 @@ const CONTENT_MAX_WIDTH: float = 1216.0
 ## Плиток в ряд: regular — 4, compact — 3 (`ui.md` п. 8.5).
 const STAT_COLUMNS: int = 4
 const STAT_COLUMNS_COMPACT: int = 3
-## Высота плитки Stat Large (значение 38 + подпись 18 + отступ до следующего ряда), lp.
-const STAT_TILE_HEIGHT: float = 76.0
+## Высота плитки Stat Large (значение 38 + подпись 18 + 4), lp; разрыв рядов — `Grid16` сетки.
+const STAT_TILE_HEIGHT: float = 60.0
 ## Высоты графиков, lp: regular / compact.
 const EFFORT_HEIGHT: float = 240.0
 const EFFORT_HEIGHT_COMPACT: float = 180.0
 const ALTITUDE_HEIGHT: float = 160.0
 const ALTITUDE_HEIGHT_COMPACT: float = 120.0
-const CADENCE_HEIGHT: float = 100.0
-const CADENCE_HEIGHT_COMPACT: float = 80.0
-## Цветная метка доли зоны и промежуток между подписями, lp.
+## Каденс — отдельный график высотой 96 (`ui.md` п. 8.5, решение ред. 2).
+const CADENCE_HEIGHT: float = 96.0
+const CADENCE_HEIGHT_COMPACT: float = 96.0
+## Цветная метка доли зоны, lp (разрыв между подписями — вариация `Flow16` ряда подписей).
 const ZONE_SWATCH: float = 12.0
-const ZONE_CAPTION_GAP: float = 8.0
 ## Меню «⋯»: отступ панели от правого края (поля AppBar), lp.
 const MENU_RIGHT_INSET: float = 24.0
 const KEY_ZONE_SHARE: String = "ui.plan.zones.share"
@@ -118,6 +120,7 @@ var _more_button: Button = null
 @onready var _hr_zone_bar: ZoneBar = %HrZoneBar
 @onready var _hr_zones_label: Label = %HrZonesLabel
 @onready var _hr_zone_captions: HFlowContainer = %HrZoneCaptions
+@onready var _cadence_section: Control = %CadenceSection
 @onready var _cadence_chart: RideChart = %CadenceChart
 @onready var _menu_layer: Control = %MenuLayer
 @onready var _menu_panel: PanelContainer = %MenuPanel
@@ -556,6 +559,7 @@ func _render() -> void:
 		_altitude_chart.clear()
 		_altitude_section.visible = false
 		_cadence_chart.clear()
+		_cadence_section.visible = false
 		_render_upload_fields()
 		_render_buttons()
 		return
@@ -577,8 +581,15 @@ func _render() -> void:
 		_altitude_chart.set_profile(RideSeries.altitude_by_distance(_ride.samples), _lap_length_m(_ride.route_id()))
 	else:
 		_altitude_chart.clear()
-	var duration := float(maxi(_series.duration_sec, 1))
-	_cadence_chart.set_series(_series.time_sec, _series.values(RideSeries.CADENCE), CADENCE_COLOR, duration)
+	# Каденс — в той же шкале времени и с теми же полями, что общий график мощности: минуты
+	# совпадают по вертикали (`ui.md` п. 8.5). Без данных каденса блока нет.
+	var span: float = _effort_chart.time_span_sec()
+	if span <= 0.0:
+		span = float(maxi(_series.duration_sec, 1))
+	_cadence_chart.field_left = _effort_chart.inset_left
+	_cadence_chart.field_right = _effort_chart.inset_right
+	_cadence_chart.set_series(_series.time_sec, _series.values(RideSeries.CADENCE), CADENCE_COLOR, span)
+	_cadence_section.visible = _cadence_chart.point_count() > 0
 	_render_upload_fields()
 	_render_buttons()
 
@@ -623,13 +634,20 @@ func _render_summary_text(s: RideSummary) -> void:
 		"intensity": roundi(float(_ride.metadata.get("intensity", 1.0)) * 100.0),
 		"speed_source": tr("ui.history.speed_source.trainer") if _ride.speed_source() == SampleStream.SPEED_SOURCE_TRAINER else tr("ui.history.speed_source.model"),
 	})]
-	meta.append(tr(KEY_TARGET).format({"target": number_text(s.avg_target_w)}))
+	var target := tr(KEY_TARGET).format({"target": number_text(s.avg_target_w)})
 	if _ride.is_free_ride():
+		# Свободная езда: цели плана нет — в строке параметров её не показываем (`ui.md` п. 8.5,
+		# решение ред. 2), в сводке текстом поле остаётся «—» (REQ-FRD-07 крит. 6).
+		lines.append_array(meta)
+		lines.append(target)
 		meta.append(tr(KEY_TRACK).format({
 			"track": StravaService.track_display_name(_ride.route_id()),
 			"pct": roundi(_ride.sim_steepness_start_pct()),
 		}))
-	lines.append_array(meta)
+		lines.append(meta[-1])
+	else:
+		meta.append(target)
+		lines.append_array(meta)
 	_summary_text = "\n".join(lines)
 	_meta_label.text = HistoryFormat.DOT.join(meta)
 
@@ -680,14 +698,10 @@ func _fill_zone_captions(flow: HFlowContainer, bar: ZoneBar) -> void:
 		swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		item.add_child(swatch)
 		var label := Label.new()
-		label.theme_type_variation = &"CaptionLabel"
+		label.theme_type_variation = &"CaptionNumLabel"
 		label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		label.text = tr(KEY_ZONE_SHARE).format({"zone": share["zone"], "pct": share["pct"]})
 		item.add_child(label)
-		var gap := Control.new()
-		gap.custom_minimum_size = Vector2(ZONE_CAPTION_GAP, 0)
-		gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		item.add_child(gap)
 		flow.add_child(item)
 	flow.visible = flow.get_child_count() > 0
 

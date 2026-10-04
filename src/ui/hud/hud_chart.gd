@@ -107,6 +107,11 @@ const _FONT_DIR: String = "res://src/ui/theme/fonts/"
 	set(value):
 		fade_height = maxf(value, 0.0)
 		_invalidate()
+## Скругление фона `INSET`, lp (превью 12, миниатюра в строке списка — 10, `ui.md` п. 6).
+@export var inset_radius: float = INSET_RADIUS:
+	set(value):
+		inset_radius = maxf(value, 0.0)
+		_invalidate()
 @export var inset_left: float = HUD_INSET_LEFT:
 	set(value):
 		inset_left = value
@@ -461,7 +466,7 @@ func _paint_background(p: Painter) -> void:
 				p.gradient_rect(TAG_BACKGROUND, Rect2(0.0, 0.0, size.x, top), clear, UiTokens.HUD_PLATE)
 			p.rect(TAG_BACKGROUND, Rect2(0.0, top, size.x, maxf(size.y - top, 0.0)), UiTokens.HUD_PLATE)
 		Background.INSET:
-			p.rounded_rect(TAG_BACKGROUND, Rect2(Vector2.ZERO, size), UiTokens.INSET, INSET_RADIUS)
+			p.rounded_rect(TAG_BACKGROUND, Rect2(Vector2.ZERO, size), UiTokens.INSET, inset_radius)
 		_:
 			pass
 

@@ -204,6 +204,7 @@ theme_type_variation = &"CaptionLabel"
 [node name="ZoneCaptions" type="HFlowContainer" parent="Layout/Body/Columns/PreviewSlot/Preview/Zones"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"Flow16"
 
 [node name="Spacer" type="Control" parent="Layout/Body/Columns/PreviewSlot/Preview"]
 layout_mode = 2
@@ -254,6 +255,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 0
+theme_type_variation = &"SheetPanel"
 
 [node name="SheetBox" type="VBoxContainer" parent="Sheet/SheetPanel"]
 layout_mode = 2
@@ -292,9 +294,13 @@ use_native_dialog = true
 unique_name_in_owner = true
 title = "ui.plan.import.error_title"
 ok_button_text = "ui.common.ok"
+size = Vector2i(480, 160)
+dialog_autowrap = true
 
 [node name="TrainerDialog" type="ConfirmationDialog" parent="."]
 unique_name_in_owner = true
 title = "ui.plan.trainer_choice.title"
 ok_button_text = "ui.plan.trainer_choice.devices"
 cancel_button_text = "ui.common.cancel"
+size = Vector2i(480, 160)
+dialog_autowrap = true

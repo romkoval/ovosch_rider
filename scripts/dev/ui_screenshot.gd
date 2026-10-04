@@ -78,6 +78,8 @@ const KIND_FREE_RIDE_AT: String = "free_ride_at"
 const KIND_FREE_RIDE_PAUSED: String = "free_ride_paused"
 const KIND_FREE_RIDE_FINISH: String = "free_ride_finish"
 const KIND_FREE_RIDE_NO_SIM: String = "free_ride_no_sim"
+const KIND_HISTORY_ROWS: String = "history_rows"
+const KIND_DIALOG: String = "dialog"
 
 ## Таблица сценариев, выполняется по порядку (тренировка продолжается от сценария к сценарию).
 ## Новые сценарии (свободная езда — T-084) добавляются строками и веткой в `_run_scenario`.
@@ -86,7 +88,11 @@ const KIND_FREE_RIDE_NO_SIM: String = "free_ride_no_sim"
 ## `offset_sec` — сдвиг от начала последнего шага. Свободная езда: `s_m` — дистанция от старта
 ## по трассе `FREE_ROUTE` (на первом круге — позиция на круге), `at_sec` — время сессии,
 ## `power_w` — мощность эмулятора на переезде, `toolbar` — показать панель инструментов,
-## `confirm_id` — снять ещё и подтверждение завершения.
+## `confirm_id` — снять ещё и подтверждение завершения. Карточка заезда: `scroll_end` — снять
+## низ карточки (каденс, зоны, Strava). История (`history_rows`): `rides` — 0 (второй профиль,
+## без заездов) или сколько заездов показать (недостающие — синтетические, план и свободная
+## езда вперемешку). Диалоги (`dialog`): `profile_create` — «Новый профиль», `forget_intervals` —
+## подтверждение «Отвязать Intervals.icu».
 const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_0030", "kind": KIND_WORKOUT_AT, "at_sec": 30},
 	{"id": "hud_1700", "kind": KIND_WORKOUT_AT, "at_sec": 1020},
@@ -95,14 +101,21 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_last_step", "kind": KIND_WORKOUT_LAST_STEP, "offset_sec": 30},
 	{"id": "hud_summary", "kind": KIND_WORKOUT_SUMMARY},
 	{"id": "screen", "kind": KIND_APP_SCREENS},
+	{"id": "dialog_profile_create", "kind": KIND_DIALOG, "dialog": "profile_create"},
+	{"id": "dialog_forget_intervals", "kind": KIND_DIALOG, "dialog": "forget_intervals"},
 	{"id": "history_ride_detail", "kind": KIND_RIDE_DETAIL},
+	{"id": "history_ride_detail_end", "kind": KIND_RIDE_DETAIL, "scroll_end": true},
 	{"id": "free_start", "kind": KIND_FREE_RIDE_AT, "at_sec": 20, "power_w": 190},
 	{"id": "free_flat", "kind": KIND_FREE_RIDE_AT, "s_m": 1600.0, "power_w": 200},
 	{"id": "free_climb", "kind": KIND_FREE_RIDE_AT, "s_m": 6300.0, "power_w": 265, "toolbar": true},
 	{"id": "free_paused", "kind": KIND_FREE_RIDE_PAUSED},
 	{"id": "free_descent", "kind": KIND_FREE_RIDE_AT, "s_m": 13600.0, "power_w": 140},
 	{"id": "free_summary", "kind": KIND_FREE_RIDE_FINISH, "confirm_id": "free_finish_confirm"},
+	{"id": "history_free_ride_detail", "kind": KIND_RIDE_DETAIL},
+	{"id": "history_free_ride_detail_end", "kind": KIND_RIDE_DETAIL, "scroll_end": true},
 	{"id": "free_no_sim", "kind": KIND_FREE_RIDE_NO_SIM, "at_sec": 4},
+	{"id": "history_empty", "kind": KIND_HISTORY_ROWS, "rides": 0},
+	{"id": "history_20", "kind": KIND_HISTORY_ROWS, "rides": 20},
 ]
 
 var _out_dir: String = "screenshots/ui"
@@ -272,8 +285,17 @@ func _run_scenario(scenario: Dictionary) -> void:
 				_fail("%s: в истории нет заезда" % id)
 				return
 			history.select_index(0)
+			if bool(scenario.get("scroll_end", false)):
+				await process_frame
+				var scroll := history.detail().find_child("Scroll", true, false) as ScrollContainer
+				if scroll != null:
+					scroll.scroll_vertical = int(scroll.get_v_scroll_bar().max_value)
 			await _shoot(id)
 			history.back_to_list()
+		KIND_HISTORY_ROWS:
+			await _shoot_history_rows(id, int(scenario.get("rides", 0)))
+		KIND_DIALOG:
+			await _shoot_dialog(id, str(scenario.get("dialog", "")))
 		_:
 			_fail("неизвестный вид сценария '%s'" % kind)
 
@@ -292,6 +314,87 @@ func _shoot_app_screens(prefix: String) -> void:
 		await _shoot("%s_%s" % [prefix, screen_id])
 		if screen == AppState.Screen.PROFILE_SELECT:
 			_main.app_state.select_profile(_main.repo.list()[0].id)
+
+
+## История на `count` заездах: 0 — второй профиль (пустое состояние), иначе у активного
+## профиля добавляются синтетические заезды до `count`.
+func _shoot_history_rows(id: String, count: int) -> void:
+	var profiles: Array[Profile] = _main.repo.list()
+	if count == 0:
+		_main.app_state.select_profile(profiles[profiles.size() - 1].id)
+	else:
+		var active: Profile = _main.repo.get_active()
+		var have: int = _main.ride_repository.list(active.id).size()
+		var now: int = int(Time.get_unix_time_from_system())
+		for i in range(have, count):
+			var started: int = now - (i + 1) * 86400 - (i % 5) * 3600
+			_main.ride_repository.save(_synthetic_ride(active, started, i))
+	_main.app_state.navigate(AppState.Screen.HISTORY)
+	_main.history_screen().refresh()
+	await _shoot(id)
+	if count == 0:
+		_main.app_state.select_profile(profiles[0].id)
+
+
+## Синтетический заезд для списка истории: план (чётные) или свободная езда (нечётные).
+static func _synthetic_ride(profile: Profile, started: int, index: int) -> Ride:
+	var r := Ride.new()
+	r.id = Ride.generate_id(started)
+	r.profile_id = profile.id
+	r.started_at_unix = started
+	var n: int = 1200 + (index % 4) * 600
+	var free: bool = index % 2 == 1
+	if free:
+		var route_id: String = RouteCatalog.ids()[index % RouteCatalog.ids().size()]
+		r.metadata = Ride.free_ride_metadata(route_id, 50.0)
+		r.metadata["ftp_w"] = profile.ftp_w
+		r.metadata["max_hr"] = ACTIVE_MAX_HR
+		r.metadata["weight_kg"] = profile.weight_kg
+		r.samples.speed_source = SampleStream.SPEED_SOURCE_MODEL
+		var route := RouteCatalog.get_route(route_id).profile
+		for i in n:
+			var d: float = float(i + 1) * 9.0
+			var s: float = fposmod(d, route.length_m())
+			r.samples.append(i, TrainerSample.full(float(i), 170 + (i % 90), 88, 0.0), 135, 0, -1, false, 32.4, {},
+				{"distance_m": d, "altitude_m": route.height_at(s), "grade_pct": route.grade_at(s)})
+	else:
+		r.name = ["Sweet Spot 3×10", "Endurance 60", "VO2max 5×3", "Recovery 30"][index / 2 % 4]
+		var steps: Array[WorkoutStep] = [WorkoutStep.percent(n / 2, 60.0), WorkoutStep.percent(n - n / 2, 95.0)]
+		r.workout = WorkoutSerializer.to_dict(Workout.make(r.name, steps, "zwo"))
+		r.metadata = {"workout_name": r.name, "workout_source": "zwo", "started_at_unix": started,
+			"ftp_w": profile.ftp_w, "weight_kg": profile.weight_kg, "max_hr": ACTIVE_MAX_HR, "intensity": 1.0,
+			"stopped_early": false, "speed_source": SampleStream.SPEED_SOURCE_TRAINER, "elapsed_sec": n,
+			"paused_total_sec": 0.0}
+		r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+		for i in n:
+			var target: int = roundi(profile.ftp_w * (0.6 if i < n / 2 else 0.95))
+			r.samples.append(i, TrainerSample.full(float(i), target, 90, 30.0), 140, target, 0 if i < n / 2 else 1, true)
+	r.metadata["in_progress"] = false
+	r.metadata["recovered"] = false
+	r.events = [{"type": WorkoutSession.EVENT_START, "at_sec": 0.0, "value": 0}]
+	r.upload["strava_status"] = [Ride.UPLOAD_NONE, Ride.UPLOAD_DONE, Ride.UPLOAD_DUPLICATE, Ride.UPLOAD_QUEUED, Ride.UPLOAD_FAILED][index % 5]
+	r.compute_summary()
+	return r
+
+
+## Диалог поверх экрана: «Новый профиль» или подтверждение «Отвязать Intervals.icu».
+func _shoot_dialog(id: String, dialog: String) -> void:
+	match dialog:
+		"profile_create":
+			_main.app_state.switch_profile()
+			var select := _main.screen_node(AppState.Screen.PROFILE_SELECT) as ProfileSelectScreen
+			select.open_create_form()
+			await _shoot(id)
+			select.close_create_form()
+			_main.app_state.select_profile(_main.repo.list()[0].id)
+		"forget_intervals":
+			_main.app_state.navigate(AppState.Screen.SETTINGS)
+			var settings := _main.settings_screen()
+			settings.request_forget_intervals()
+			await _shoot(id)
+			(settings.get_node("%ForgetIntervalsDialog") as Window).hide()
+		_:
+			_fail("%s: неизвестный диалог '%s'" % [id, dialog])
 
 
 ## Запустить план на эмуляторе один раз; часы экрана тренировки — виртуальные.

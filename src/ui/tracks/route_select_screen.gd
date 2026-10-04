@@ -7,7 +7,7 @@ extends Control
 ## Раскладка regular (ширина холста ≥ 1100 lp): AppBar «Свободная езда»; слева (60 %) сетка
 ## 2 × 2 карточек трасс каталога (`RouteCard`: полоса настроения, название, тип, миниатюра
 ## `RoutePreview`, три цифры), справа (40 %) деталь выбранной: H2 название, Secondary
-## «международное название · тип», крупный профиль (≈ 38 % высоты панели), три цифры, блок
+## «тип» на языке интерфейса, крупный профиль (≈ 38 % высоты панели), три цифры, блок
 ## «Крутизна SIM» (слайдер 0–100 % с шагом 5) и основная кнопка «Поехать».
 ## Compact (телефон, < 1100 lp): сетка 2 × 2 сохраняется (с прокруткой по вертикали, если
 ## не помещается), деталь уезжает в лист снизу по нажатию на карточку (профиль 120 lp, цифры
@@ -26,10 +26,6 @@ const STAT_SCENE: PackedScene = preload("res://src/ui/common/stat_view.tscn")
 const KEY_TITLE: String = "ui.tracks.title"
 const KEY_STEEPNESS: String = "ui.tracks.steepness"
 const KEY_START: String = "ui.tracks.start"
-## Международное (английское) название во второй строке детали («Mountain Pass · горы»):
-## английская таблица трасс, независимо от языка интерфейса.
-const INTERNATIONAL_TRANSLATION: String = "res://assets/i18n/strings_tracks.en.translation"
-const SUBTITLE_SEPARATOR: String = " · "
 
 ## Брейкпоинт compact по ширине холста, lp (`ui.md` п. 3) — тот же, что у AppBar.
 const COMPACT_MAX_WIDTH: float = AppBar.COMPACT_MAX_WIDTH
@@ -498,19 +494,10 @@ func _apply_detail_texts() -> void:
 	apply_stats(_detail_stats, card.model)
 
 
-## «Mountain Pass · горы»: международное (английское) название и тип на языке интерфейса;
-## на английском интерфейсе название уже в заголовке — только тип.
+## Вторая строка детали — только тип трассы на языке интерфейса («горы»): второе название на
+## другом языке убрано (`ui.md` п. 8.4, решение ред. 2).
 func _subtitle_for(model: RoutePreviewModel) -> String:
-	var kind := tr(model.kind_key)
-	var international := _international_name(model.name_key)
-	if international.is_empty() or international == tr(model.name_key):
-		return kind
-	return international + SUBTITLE_SEPARATOR + kind
-
-
-static func _international_name(key: String) -> String:
-	var translation := load(INTERNATIONAL_TRANSLATION) as Translation
-	return String(translation.get_message(key)) if translation != null else ""
+	return tr(model.kind_key)
 
 
 func _apply_steepness_text() -> void:
@@ -564,6 +551,8 @@ func _update_layout() -> void:
 		_detail_content.theme_type_variation = &"Stack12" if compact else &"Stack16"
 		_info.vertical = not compact
 		_info.theme_type_variation = &"Row24" if compact else &"Stack16"
+		# В листе снизу — стиль листа (`SheetPanel`: скругление только сверху, тень), рядом с сеткой — панель.
+		_detail.theme_type_variation = &"SheetPanel" if compact else &""
 		var target: Container = _sheet_slot if compact else _body
 		if _detail.get_parent() != target:
 			_detail.reparent(target, false)

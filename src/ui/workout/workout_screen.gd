@@ -144,6 +144,8 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	_pause_button.pressed.connect(toggle_pause)
 	_home_button.pressed.connect(go_home)
+	# Итог — в масштабе HUD: цель `touch_hud` (на телефоне 72 lp HUD, UIX-05 крит. 1).
+	TouchTarget.attach(_home_button, TouchTarget.Kind.HUD)
 	_frame.install_escape_guard(_on_escape_on_pause_card)
 	_fit_viewport()
 	refresh()

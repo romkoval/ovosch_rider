@@ -161,9 +161,10 @@ func _ready() -> void:
 	_toolbar.finish_requested.connect(request_finish)
 	_pause_overlay.resume_requested.connect(resume)
 	_pause_overlay.finish_confirmed.connect(confirm_finish)
-	for b: Button in [_back_button, _home_button, _history_button]:
-		TouchTarget.attach(b, TouchTarget.Kind.BUTTON)
-	TouchTarget.attach(_pause_button, TouchTarget.Kind.HUD)
+	# Экран в масштабе HUD: кнопки итога и «назад» — цель `touch_hud` (на телефоне 72 lp HUD,
+	# UIX-05 крит. 1), как у кнопок HUD.
+	for b: Button in [_back_button, _home_button, _history_button, _pause_button]:
+		TouchTarget.attach(b, TouchTarget.Kind.HUD)
 	_frame.install_escape_guard(_on_escape_on_pause_card)
 	set_process(false)
 	_fit_viewport()

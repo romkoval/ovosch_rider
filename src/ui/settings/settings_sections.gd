@@ -6,10 +6,8 @@ extends RefCounted
 ## «Интерфейс», «О программе». У каждого раздела — id, ключ заголовка, иконка Lucide для
 ## навигации (regular) и путь узла раздела в сцене экрана.
 ##
-## Здесь же — тексты экрана, которые появились в T-086 (ключи в `strings_menu.csv`): путь
-## узла → ключ. Прежние тексты экрана (ключи `strings.csv`) остаются в
-## `SettingsScreen.STATIC_TEXTS`. Оба словаря применяются экраном одинаково — `tr()` при
-## каждой перерисовке, поэтому язык меняется без перезапуска (REQ-NFR-08 крит. 4).
+## Тексты узлов экрана (путь → ключ) — в `SettingsScreen.STATIC_TEXTS`: экран применяет их
+## `tr()` при каждой перерисовке, поэтому язык меняется без перезапуска (REQ-NFR-08 крит. 4).
 
 const PROFILE: String = "profile"
 const TRAINING: String = "training"
@@ -30,26 +28,6 @@ const ORDER: Array[Dictionary] = [
 	{"id": INTERFACE, "title": "ui.settings.section.interface", "icon": "settings", "node": CONTENT + "InterfaceSection"},
 	{"id": ABOUT, "title": "ui.settings.about_title", "icon": "info", "node": CONTENT + "AboutSection"},
 ]
-
-## Тексты T-086: путь узла относительно экрана → ключ перевода.
-const TEXTS: Dictionary = {
-	CONTENT + "ProfileSection/Title": "ui.settings.section.profile",
-	CONTENT + "TrainingSection/Title": "ui.settings.section.training",
-	CONTENT + "ZonesSection/Title": "ui.settings.section.zones",
-	CONTENT + "IntegrationsSection/Title": "ui.settings.section.integrations",
-	CONTENT + "InterfaceSection/Title": "ui.settings.section.interface",
-	CONTENT + "TrainingSection/Card/Rows/ResistanceRow/Texts/Hint": "ui.settings.resistance_hint",
-	CONTENT + "TrainingSection/Card/Rows/IntensityRow/Texts/Label": "ui.settings.intensity",
-	CONTENT + "TrainingSection/Card/Rows/IntensityRow/Texts/Hint": "ui.settings.intensity_hint",
-	CONTENT + "TrainingSection/Card/Rows/SteepnessRow/Texts/Label": "ui.settings.steepness",
-	CONTENT + "TrainingSection/Card/Rows/SteepnessRow/Texts/Hint": "ui.settings.steepness_hint",
-	CONTENT + "ZonesSection/Card/Rows/SourcesRow/Label": "ui.settings.sources_title",
-	CONTENT + "AboutSection/Card/Rows/VersionRow/Label": "ui.settings.version_title",
-	CONTENT + "AboutSection/Card/Rows/LicensesRow/Texts/Label": "ui.settings.licenses_row",
-	CONTENT + "AboutSection/Card/Rows/LicensesRow/Texts/Hint": "ui.settings.licenses_hint",
-	CONTENT + "AboutSection/Card/Rows/LicensesRow/LicensesButton": "ui.settings.licenses_open",
-	CONTENT + "AboutSection/Card/Rows/PrivacyRow/Texts/Label": "ui.settings.privacy_title",
-}
 
 ## Строки «О программе» о шрифте и иконках (лицензии файлов `assets/fonts/inter/OFL.txt`
 ## и `assets/icons/lucide/LICENSE`).

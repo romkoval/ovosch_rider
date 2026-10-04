@@ -23,13 +23,15 @@ extends Control
 ## - зоны: источник FTP и зон, переопределение (REQ-INT-06 крит. 5–7), баннер «зоны пульса
 ##   недоступны»;
 ## - Intervals.icu (REQ-INT-01, REQ-PRF-03 крит. 2): ключ через `SecureStore` и диалог,
-##   синхронизация, отвязка; Strava (T-049) — официальная кнопка `StravaConnectButton`;
+##   синхронизация, отвязка; Strava (T-049) — официальная кнопка `StravaConnectButton`.
+##   «Отвязать» у обеих — только через диалог подтверждения с опасной кнопкой (`ui.md` п. 8.6,
+##   решение ред. 2): кнопка вызывает `request_forget_intervals()` / `request_disconnect_strava()`,
+##   само действие — `forget_intervals()` / `disconnect_strava()` после подтверждения;
 ## - нечитаемое хранилище секретов — баннер с подтверждённым сбросом (`SecureStore.reset_store()`);
 ## - «О программе»: версия, лицензии (лист), политика конфиденциальности.
 ##
-## Тексты — ключи переводов: прежние (`strings.csv`) — `STATIC_TEXTS`, новые T-086
-## (`strings_menu.csv`) — `SettingsSections.TEXTS`; оба применяются `tr()` при каждой
-## перерисовке. Стили — только вариации темы (UIX-01 крит. 2); цвета точки статуса и полосы
+## Тексты — ключи переводов (`strings.csv` и `strings_menu.csv`) в `STATIC_TEXTS`, применяются
+## `tr()` при каждой перерисовке. Стили — только вариации темы (UIX-01 крит. 2); цвета точки статуса и полосы
 ## выбранного раздела — данные состояния, рисуются.
 
 const ERROR_KEY_PREFIX: String = "error.profile."
@@ -63,6 +65,13 @@ const API_ERROR_UNKNOWN_KEY: String = "ui.settings.err_unknown"
 const LOCALE_SAVE_FAILED_KEY: String = "ui.settings.locale_save_failed"
 const STORE_RESET_DONE_KEY: String = "ui.settings.store_reset_done"
 const STORE_RESET_FAILED_KEY: String = "ui.settings.store_reset_failed"
+## Подтверждение отвязки (`ui.md` п. 8.6, решение ред. 2): заголовок, пояснение, опасная кнопка.
+const FORGET_INTERVALS_TITLE_KEY: String = "ui.settings.intervals_forget_confirm.title"
+const FORGET_INTERVALS_BODY_KEY: String = "ui.settings.intervals_forget_confirm.body"
+const FORGET_INTERVALS_OK_KEY: String = "ui.settings.intervals_forget_confirm.ok"
+const DISCONNECT_STRAVA_TITLE_KEY: String = "ui.settings.strava_disconnect_confirm.title"
+const DISCONNECT_STRAVA_BODY_KEY: String = "ui.settings.strava_disconnect_confirm.body"
+const DISCONNECT_STRAVA_OK_KEY: String = "ui.settings.strava_disconnect_confirm.ok"
 ## Вид баннера уведомления по ключу (сброс удался — сведения, не удался — ошибка, язык не
 ## сохранён — предупреждение).
 const NOTICE_KINDS: Dictionary = {
@@ -109,10 +118,26 @@ const UNIT_PCT_KEY: String = SettingsSections.UNIT_PCT
 const UNIT_W_KEY: String = SettingsSections.UNIT_W
 
 const _C: String = SettingsSections.CONTENT
-## Static labels/buttons: node path -> key (`strings.csv`). `Control.text` keeps the
+## Static labels/buttons: node path -> key (any `strings*.csv`). `Control.text` keeps the
 ## translated text, so they are re-applied with `tr()` on every render — this is what makes
 ## the language switch take effect without a restart (REQ-NFR-08 crit. 4).
 const STATIC_TEXTS: Dictionary = {
+	_C + "ProfileSection/Title": "ui.settings.section.profile",
+	_C + "TrainingSection/Title": "ui.settings.section.training",
+	_C + "ZonesSection/Title": "ui.settings.section.zones",
+	_C + "IntegrationsSection/Title": "ui.settings.section.integrations",
+	_C + "InterfaceSection/Title": "ui.settings.section.interface",
+	_C + "TrainingSection/Card/Rows/ResistanceRow/Texts/Hint": "ui.settings.resistance_hint",
+	_C + "TrainingSection/Card/Rows/IntensityRow/Texts/Label": "ui.settings.intensity",
+	_C + "TrainingSection/Card/Rows/IntensityRow/Texts/Hint": "ui.settings.intensity_hint",
+	_C + "TrainingSection/Card/Rows/SteepnessRow/Texts/Label": "ui.settings.steepness",
+	_C + "TrainingSection/Card/Rows/SteepnessRow/Texts/Hint": "ui.settings.steepness_hint",
+	_C + "ZonesSection/Card/Rows/SourcesRow/Label": "ui.settings.sources_title",
+	_C + "AboutSection/Card/Rows/VersionRow/Label": "ui.settings.version_title",
+	_C + "AboutSection/Card/Rows/LicensesRow/Texts/Label": "ui.settings.licenses_row",
+	_C + "AboutSection/Card/Rows/LicensesRow/Texts/Hint": "ui.settings.licenses_hint",
+	_C + "AboutSection/Card/Rows/LicensesRow/LicensesButton": "ui.settings.licenses_open",
+	_C + "AboutSection/Card/Rows/PrivacyRow/Texts/Label": "ui.settings.privacy_title",
 	_C + "ProfileSection/Card/Rows/NameRow/NameLabel": "ui.settings.name",
 	_C + "ProfileSection/Card/Rows/FtpRow/FtpLabel": "ui.settings.ftp",
 	_C + "ProfileSection/Card/Rows/WeightRow/WeightLabel": "ui.settings.weight",
@@ -202,6 +227,8 @@ var _chip_placeholder: ImageTexture = null
 @onready var _store_warning: Banner = %StoreWarning
 @onready var _notice_banner: Banner = %NoticeBanner
 @onready var _reset_store_dialog: ConfirmationDialog = %ResetStoreDialog
+@onready var _forget_intervals_dialog: ConfirmationDialog = %ForgetIntervalsDialog
+@onready var _disconnect_strava_dialog: ConfirmationDialog = %DisconnectStravaDialog
 @onready var _strava_status_label: Label = %StravaStatusLabel
 @onready var _strava_connect_button: StravaConnectButton = %StravaConnectButton
 @onready var _version_label: Label = %VersionLabel
@@ -261,16 +288,20 @@ func _ready() -> void:
 	_override_check.toggled.connect(set_override_local)
 	_intervals_key_button.pressed.connect(open_key_dialog)
 	_intervals_sync_button.pressed.connect(_on_sync_pressed)
-	_intervals_forget_button.pressed.connect(forget_intervals)
+	_intervals_forget_button.pressed.connect(request_forget_intervals)
 	_intervals_dot.draw.connect(_draw_intervals_dot)
 	_key_dialog.submitted.connect(_on_key_submitted)
 	_strava_connect_button.connect_requested.connect(start_strava_connect)
-	_strava_connect_button.disconnect_requested.connect(disconnect_strava)
+	_strava_connect_button.disconnect_requested.connect(request_disconnect_strava)
 	_strava_connect_button.set_available(false)
 	_reset_store_button.pressed.connect(request_reset_store)
 	_reset_store_dialog.confirmed.connect(confirm_reset_store)
 	_reset_store_dialog.canceled.connect(cancel_reset_store)
 	_reset_store_dialog.get_ok_button().theme_type_variation = &"DangerButton"
+	_forget_intervals_dialog.confirmed.connect(confirm_forget_intervals)
+	_forget_intervals_dialog.get_ok_button().theme_type_variation = &"DangerButton"
+	_disconnect_strava_dialog.confirmed.connect(confirm_disconnect_strava)
+	_disconnect_strava_dialog.get_ok_button().theme_type_variation = &"DangerButton"
 	_licenses_button.pressed.connect(open_licenses)
 	_scroll.follow_focus = true
 	_scroll.get_v_scroll_bar().value_changed.connect(_on_scrolled)
@@ -371,11 +402,10 @@ func refresh_texts_static() -> void:
 
 
 func _render_static() -> void:
-	for texts: Dictionary in [STATIC_TEXTS, SettingsSections.TEXTS]:
-		for path: String in texts:
-			var node := get_node_or_null(path)
-			if node != null:
-				node.set("text", tr(texts[path]))
+	for path: String in STATIC_TEXTS:
+		var node := get_node_or_null(path)
+		if node != null:
+			node.set("text", tr(STATIC_TEXTS[path]))
 
 
 func _render_locale() -> void:
@@ -479,6 +509,33 @@ func start_strava_connect() -> void:
 	_strava_connect_button.set_authorize_url(url)
 
 
+## «Отвязать Strava»: сначала подтверждение (`ui.md` п. 8.6). false — Strava не подключена.
+func request_disconnect_strava() -> bool:
+	if _strava == null:
+		return false
+	_disconnect_strava_dialog.title = tr(DISCONNECT_STRAVA_TITLE_KEY)
+	_disconnect_strava_dialog.dialog_text = tr(DISCONNECT_STRAVA_BODY_KEY)
+	_disconnect_strava_dialog.ok_button_text = tr(DISCONNECT_STRAVA_OK_KEY)
+	_disconnect_strava_dialog.cancel_button_text = tr("ui.common.cancel")
+	_disconnect_strava_dialog.popup_centered()
+	# Опасное действие: по Enter — «Отмена», а не «Отвязать».
+	_disconnect_strava_dialog.get_cancel_button().grab_focus.call_deferred()
+	return true
+
+
+## Ждёт подтверждения отвязки Strava.
+func is_disconnect_strava_pending() -> bool:
+	return _disconnect_strava_dialog.visible
+
+
+## Подтверждена отвязка Strava (кнопка «Отвязать» диалога).
+func confirm_disconnect_strava() -> void:
+	if _disconnect_strava_dialog.visible:
+		_disconnect_strava_dialog.hide()
+	disconnect_strava()
+
+
+## Отвязка Strava без вопроса (после подтверждения): отзыв токенов, очистка очереди.
 func disconnect_strava() -> void:
 	if _strava == null:
 		return
@@ -839,7 +896,35 @@ func sync_intervals() -> ApiResult:
 	return result
 
 
-## Unlink Intervals.icu: delete the key (REQ-PRF-03 crit. 2); FTP/zone sources are kept.
+## «Отвязать Intervals.icu»: сначала подтверждение (`ui.md` п. 8.6): ключ вернуть можно только
+## ручным вводом. false — нет активного профиля.
+func request_forget_intervals() -> bool:
+	if _active() == null:
+		return false
+	_forget_intervals_dialog.title = tr(FORGET_INTERVALS_TITLE_KEY)
+	_forget_intervals_dialog.dialog_text = tr(FORGET_INTERVALS_BODY_KEY)
+	_forget_intervals_dialog.ok_button_text = tr(FORGET_INTERVALS_OK_KEY)
+	_forget_intervals_dialog.cancel_button_text = tr("ui.common.cancel")
+	_forget_intervals_dialog.popup_centered()
+	# Опасное действие: по Enter — «Отмена», а не «Отвязать».
+	_forget_intervals_dialog.get_cancel_button().grab_focus.call_deferred()
+	return true
+
+
+## Ждёт подтверждения отвязки Intervals.icu.
+func is_forget_intervals_pending() -> bool:
+	return _forget_intervals_dialog.visible
+
+
+## Подтверждена отвязка Intervals.icu (кнопка «Отвязать» диалога).
+func confirm_forget_intervals() -> void:
+	if _forget_intervals_dialog.visible:
+		_forget_intervals_dialog.hide()
+	forget_intervals()
+
+
+## Unlink Intervals.icu without asking (after confirmation): delete the key (REQ-PRF-03 crit. 2);
+## FTP/zone sources are kept.
 func forget_intervals() -> void:
 	var p := _active()
 	if p == null:

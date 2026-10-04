@@ -10,8 +10,9 @@ extends Control
 ##   уклона, белый контур 1.5 lp (альфа 0.85); подписей нет. У приморья под мостом — полоса
 ##   воды 4 lp и значок `waves` 14 lp, у гор — треугольник-вершина 8 lp над максимумом.
 ## - Крупный профиль (`Mode.LARGE`, `tracks.md` п. 7.2): без фона; линии сетки и подписи
-##   максимальной и минимальной высоты, шкала км под полем, подписи подъёмов, пунктир старта
-##   с флажком на s = 0, мост — полоса воды и подпись.
+##   максимальной и минимальной высоты (ближе 14 lp — только максимум), шкала км под полем,
+##   подписи подъёмов без пересечений, пунктир старта с флажком на s = 0, мост — полоса воды
+##   и подпись.
 
 ## Контур профиля (`tracks.md` п. 7.1).
 const OUTLINE_COLOR: Color = Color(1.0, 1.0, 1.0, 0.85)
@@ -202,28 +203,29 @@ func _draw_peak(p: RoutePreviewModel.Plot) -> void:
 
 
 func _draw_height_grid(p: RoutePreviewModel.Plot) -> void:
-	for label in model.height_labels():
+	for label in model.visible_height_labels(p):
 		var y: float = roundf(p.y(label["h_m"])) + 0.5
 		draw_line(Vector2(p.rect.position.x, y), Vector2(p.rect.end.x, y), UiTokens.LINE, 1.0)
 
 
 func _draw_height_labels(p: RoutePreviewModel.Plot) -> void:
-	# Подписи справа налево в колонке слева от поля, по центру своих линий; если линии
-	# ближе высоты строки (равнина), подписи раздвигаются вверх и вниз поровну.
-	var labels := model.height_labels()
-	if labels.size() < 2:
+	# Подписи справа налево в колонке слева от поля, по центру своих линий. Линии ближе 14 lp —
+	# только максимум (`tracks.md` п. 7.2); ближе высоты строки — подписи раздвигаются поровну.
+	var labels := model.visible_height_labels(p)
+	if labels.is_empty():
 		return
 	var line_h: float = FONT_CAPTION_NUM.get_height(CAPTION_SIZE)
-	var y_max: float = p.y(labels[0]["h_m"])
-	var y_min: float = p.y(labels[1]["h_m"])
-	var lack: float = line_h + 2.0 - (y_min - y_max)
-	if lack > 0.0:
-		y_max -= lack * 0.5
-		y_min += lack * 0.5
-	var centers: Array[float] = [y_max, y_min]
+	var centers: Array[float] = []
+	for label in labels:
+		centers.append(p.y(label["h_m"]))
+	if centers.size() == 2:
+		var lack: float = line_h + 2.0 - (centers[1] - centers[0])
+		if lack > 0.0:
+			centers[0] -= lack * 0.5
+			centers[1] += lack * 0.5
 	var half_text: float = (FONT_CAPTION_NUM.get_ascent(CAPTION_SIZE) - FONT_CAPTION_NUM.get_descent(CAPTION_SIZE)) * 0.5
 	var right: float = p.rect.position.x - LABEL_GAP
-	for i in 2:
+	for i in labels.size():
 		var text: String = labels[i]["text"]
 		var w: float = FONT_CAPTION_NUM.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x
 		draw_string(FONT_CAPTION_NUM, Vector2(right - w, centers[i] + half_text), text,
@@ -247,7 +249,20 @@ func _draw_start_line(p: RoutePreviewModel.Plot) -> void:
 
 
 func _draw_climb_labels(p: RoutePreviewModel.Plot) -> void:
+	for label in climb_label_layout(p):
+		var rect: Rect2 = label["rect"]
+		draw_string(FONT_CLIMB, Vector2(rect.position.x, rect.position.y + FONT_CLIMB.get_ascent(CLIMB_LABEL_SIZE)),
+			str(label["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, CLIMB_LABEL_SIZE, UiTokens.TEXT)
+
+
+## Подписи подъёмов на крупном профиле `p` с местом `rect` (координаты узла), без пересечений:
+## из двух пересекающихся остаётся подпись более длинного подъёма (`tracks.md` п. 7.2).
+func climb_label_layout(p: RoutePreviewModel.Plot) -> Array[Dictionary]:
+	var placed: Array[Dictionary] = []
+	if model == null or p == null:
+		return placed
 	var ascent: float = FONT_CLIMB.get_ascent(CLIMB_LABEL_SIZE)
+	var height: float = FONT_CLIMB.get_height(CLIMB_LABEL_SIZE)
 	for label in model.climb_labels():
 		var text: String = label["text"]
 		var start: float = label["start_m"]
@@ -255,7 +270,10 @@ func _draw_climb_labels(p: RoutePreviewModel.Plot) -> void:
 		var w: float = FONT_CLIMB.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, CLIMB_LABEL_SIZE).x
 		var x: float = _clamp_x(p.x(label["mid_m"]) - w * 0.5, w)
 		var baseline: float = maxf(p.y(top_h) - LABEL_GAP * 2.0, p.rect.position.y + ascent)
-		draw_string(FONT_CLIMB, Vector2(x, baseline), text, HORIZONTAL_ALIGNMENT_LEFT, -1, CLIMB_LABEL_SIZE, UiTokens.TEXT)
+		var item := label.duplicate()
+		item["rect"] = Rect2(x, baseline - ascent, w, height)
+		placed.append(item)
+	return RoutePreviewModel.without_overlaps(placed)
 
 
 ## Левый край подписи шириной `w`, чтобы она не выходила за узел.

@@ -8,7 +8,6 @@ ui.menu.unit.kj,кДж,kJ
 ui.menu.unit.bpm,уд/мин,bpm
 ui.menu.unit.rpm,об/мин,rpm
 ui.menu.unit.pct,%,%
-ui.menu.unit.min,мин,min
 ui.menu.stand.title,Компоненты меню,Menu components
 ui.menu.stand.action_search,Искать,Search
 ui.menu.stand.banner_warn,Bluetooth недоступен — включите Bluetooth в настройках системы,Bluetooth is unavailable — turn it on in system settings
@@ -88,5 +87,10 @@ ui.devices.ble_help_title,Как включить Bluetooth,How to turn on Bluet
 ui.devices.ble_help_text,"Включите Bluetooth в настройках системы и разрешите приложению доступ к Bluetooth, затем нажмите «Сканировать».","Turn on Bluetooth in system settings and allow the app to use Bluetooth, then press “Scan”."
 ui.profile_select.who,Кто едет?,Who’s riding?
 ui.profile_select.card_stats,FTP {ftp} Вт · {weight} кг,FTP {ftp} W · {weight} kg
-ui.profile_select.more,Действия с профилем,Profile actions
 ui.profile_select.delete_profile,Удалить профиль,Delete profile
+ui.settings.intervals_forget_confirm.title,Отвязать Intervals.icu?,Unlink Intervals.icu?
+ui.settings.intervals_forget_confirm.body,Ключ API будет удалён с этого устройства. План на сегодня перестанет загружаться.,The API key will be removed from this device. Today's plan will no longer load.
+ui.settings.intervals_forget_confirm.ok,Отвязать,Unlink
+ui.settings.strava_disconnect_confirm.title,Отвязать Strava?,Disconnect Strava?
+ui.settings.strava_disconnect_confirm.body,Новые заезды перестанут выгружаться в Strava.,New rides will no longer be uploaded to Strava.
+ui.settings.strava_disconnect_confirm.ok,Отвязать,Disconnect

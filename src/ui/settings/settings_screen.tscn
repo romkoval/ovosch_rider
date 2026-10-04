@@ -595,6 +595,25 @@ title = "ui.settings.store_reset"
 ok_button_text = "ui.settings.store_reset_confirm_ok"
 cancel_button_text = "ui.common.cancel"
 dialog_text = "ui.settings.store_reset_confirm"
+size = Vector2i(480, 160)
+dialog_autowrap = true
+
+[node name="ForgetIntervalsDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.settings.intervals_forget_confirm.title"
+size = Vector2i(480, 200)
+ok_button_text = "ui.settings.intervals_forget_confirm.ok"
+cancel_button_text = "ui.common.cancel"
+dialog_text = "ui.settings.intervals_forget_confirm.body"
+dialog_autowrap = true
+
+[node name="DisconnectStravaDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.settings.strava_disconnect_confirm.title"
+size = Vector2i(480, 200)
+ok_button_text = "ui.settings.strava_disconnect_confirm.ok"
+cancel_button_text = "ui.common.cancel"
+dialog_text = "ui.settings.strava_disconnect_confirm.body"
 dialog_autowrap = true
 
 [node name="LicensesDialog" type="AcceptDialog" parent="."]

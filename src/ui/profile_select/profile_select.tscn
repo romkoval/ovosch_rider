@@ -104,6 +104,7 @@ autowrap_mode = 3
 unique_name_in_owner = true
 title = "ui.profile_create.title"
 size = Vector2i(480, 360)
+theme_type_variation = &"FormDialog"
 
 [node name="CreateForm" type="VBoxContainer" parent="CreateDialog"]
 unique_name_in_owner = true
@@ -221,6 +222,7 @@ unique_name_in_owner = true
 title = "ui.profile_select.delete"
 ok_button_text = "ui.common.delete"
 cancel_button_text = "ui.common.cancel"
+size = Vector2i(480, 160)
 dialog_autowrap = true
 
 [node name="CardMenu" type="PopupMenu" parent="."]

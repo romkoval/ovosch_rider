@@ -42,13 +42,13 @@ theme_type_variation = &"Row0"
 [node name="LogoMain" type="Label" parent="Column/Bar/Logo"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"H1Label"
+theme_type_variation = &"LogoLabel"
 auto_translate_mode = 2
 
 [node name="LogoAccent" type="Label" parent="Column/Bar/Logo"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"H1Label"
+theme_type_variation = &"LogoAccentLabel"
 auto_translate_mode = 2
 
 [node name="BarSpacer" type="Control" parent="Column/Bar"]
@@ -148,10 +148,10 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
-theme_type_variation = &"OverlineLabel"
+theme_type_variation = &"OverlineAccent"
+auto_translate_mode = 2
 text = "ui.home.plan.overline"
 uppercase = true
-text_overrun_behavior = 3
 
 [node name="PlanBody" type="VBoxContainer" parent="Column/Cards/PlanCard/PlanContent"]
 unique_name_in_owner = true
@@ -301,10 +301,10 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
-theme_type_variation = &"OverlineLabel"
+theme_type_variation = &"OverlineSim"
+auto_translate_mode = 2
 text = "ui.home.ride.overline"
 uppercase = true
-text_overrun_behavior = 3
 
 [node name="RideBody" type="VBoxContainer" parent="Column/Cards/RideCard/RideContent"]
 layout_mode = 2

@@ -42,6 +42,7 @@ const ROW_SCENE: PackedScene = preload("res://src/ui/common/list_row.tscn")
 ## Ключи строк экрана (T-082, `strings_menu_lists.csv`).
 const KEY_BAR_TITLE: String = "ui.plan.bar.title"
 const KEY_BAR_IMPORT: String = "ui.plan.bar.import"
+const KEY_BAR_RELOAD: String = "ui.plan.reload"
 const KEY_SECTION_TODAY: String = "ui.plan.section.today"
 const KEY_BANNER_CONNECT: String = "ui.plan.banner.connect"
 const KEY_BANNER_ACTION: String = "ui.plan.banner.key_action"
@@ -70,8 +71,9 @@ const DOT: String = " · "
 ## Брейкпоинт compact и предел ширины контента, lp (`ui.md` п. 3).
 const COMPACT_MAX_WIDTH: float = 1100.0
 const CONTENT_MAX_WIDTH: float = 1216.0
-## Миниатюра в карточке и высоты крупного превью, lp (`ui.md` п. 8.3).
-const THUMB_SIZE: Vector2 = Vector2(120, 44)
+## Миниатюра в карточке (`ui.md` п. 8.3, решение ред. 2: 128×52, поля 6) и высоты крупного
+## превью, lp.
+const THUMB_SIZE: Vector2 = PlanPreview.ROW_THUMB_SIZE
 const CHART_HEIGHT: float = 240.0
 const CHART_HEIGHT_COMPACT: float = 140.0
 const CHART_MIN_HEIGHT: float = 140.0
@@ -79,8 +81,6 @@ const CHART_MIN_HEIGHT: float = 140.0
 const DESCRIPTION_LINES: int = 3
 ## Полоса «время в зонах», lp.
 const ZONE_BAR_HEIGHT: float = 8.0
-## Промежуток между подписями долей зон, lp.
-const ZONE_CAPTION_GAP: float = 8.0
 
 ## Пользователь выбрал тренировку и нажал «Начать».
 signal workout_chosen(workout: Workout, source: String)
@@ -152,12 +152,14 @@ var _description_expanded: bool = false
 var _emulator_button: Button = null
 var _zone_bar: ZoneShareBar = null
 
-## Инструменты разработчика (кнопка «На эмуляторе»): оболочка включает их в отладочной сборке.
+## Инструменты разработчика (кнопка «На эмуляторе» и вариант «Эмулятор» в диалоге выбора станка):
+## оболочка включает их в отладочной сборке (`AppMain.is_debug_build()`).
 var dev_tools_enabled: bool = false:
 	set(value):
 		dev_tools_enabled = value
 		if is_node_ready():
 			_emulator_start_button.visible = value
+			_apply_trainer_choice_texts()
 
 @onready var _layout: VBoxContainer = %Layout
 @onready var _app_bar: AppBar = %AppBar
@@ -244,6 +246,7 @@ func _ready() -> void:
 	_trainer_dialog.confirmed.connect(_choose_devices)
 	_trainer_dialog.custom_action.connect(_on_trainer_action)
 	_emulator_button = _trainer_dialog.add_button(tr("ui.plan.trainer_choice.emulator"), true, TRAINER_ACTION_EMULATOR)
+	_apply_trainer_choice_texts()
 	_zone_bar = ZoneShareBar.new()
 	_zones.add_child(_zone_bar)
 	_zones.move_child(_zone_bar, _zone_captions.get_index())
@@ -765,10 +768,10 @@ func localized_errors(result: ParseResult, file_name: String = "") -> String:
 # Выбор станка при старте без подключённого устройства
 # ---------------------------------------------------------------------------
 
-## Станок не подключён: предложить эмулятор или экран устройств.
+## Станок не подключён: предложить экран устройств, а в отладочной сборке — ещё и эмулятор.
 func show_trainer_choice() -> void:
 	_trainer_choice_pending = true
-	_trainer_dialog.dialog_text = tr("ui.plan.trainer_choice.text")
+	_apply_trainer_choice_texts()
 	if not _trainer_dialog.visible:
 		_trainer_dialog.popup_centered()
 
@@ -789,8 +792,18 @@ func _choose_devices() -> void:
 	_navigate(AppState.Screen.DEVICES)
 
 
+## Тексты диалога выбора станка: «Эмулятор» — только в отладочной сборке (`dev_tools_enabled`,
+## `ui.md` п. 8.2), в релизе текст зовёт только подключить устройства.
+func _apply_trainer_choice_texts() -> void:
+	if _emulator_button == null:
+		return
+	_emulator_button.text = tr("ui.plan.trainer_choice.emulator")
+	_emulator_button.visible = dev_tools_enabled
+	_trainer_dialog.dialog_text = tr("ui.plan.trainer_choice.text" if dev_tools_enabled else "ui.plan.trainer_choice.text_release")
+
+
 func _on_trainer_action(action: StringName) -> void:
-	if action == TRAINER_ACTION_EMULATOR:
+	if action == TRAINER_ACTION_EMULATOR and dev_tools_enabled:
 		choose_emulator()
 
 
@@ -848,15 +861,12 @@ func _is_current_profile(profile: Profile) -> bool:
 ## Тексты, заданные из кода (сцена переводится движком сама).
 func _refresh_texts() -> void:
 	_app_bar.set_title(KEY_BAR_TITLE)
-	_import_button.text = tr(KEY_BAR_IMPORT)
+	_apply_bar_actions()
 	_today_header.text = tr(KEY_SECTION_TODAY)
 	_zones_title.text = tr(KEY_ZONES_TITLE)
 	_sheet_close.tooltip_text = tr(KEY_SHEET_CLOSE)
 	_library_empty.setup("upload", KEY_EMPTY_TITLE, KEY_EMPTY_TEXT, KEY_BAR_IMPORT)
-	if _emulator_button != null:
-		_emulator_button.text = tr("ui.plan.trainer_choice.emulator")
-	if _trainer_choice_pending:
-		_trainer_dialog.dialog_text = tr("ui.plan.trainer_choice.text")
+	_apply_trainer_choice_texts()
 	if not _items.is_empty():
 		for i in mini(_items.size(), _cards.size()):
 			_apply_card_texts(_cards[i], _items[i])
@@ -943,7 +953,7 @@ func _rebuild_cards() -> void:
 		var workout: Workout = it["workout"]
 		if workout != null:
 			var thumb := PlanPreview.new()
-			thumb.custom_minimum_size = THUMB_SIZE
+			thumb.row_thumb = true
 			thumb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			thumb.set_workout(workout, _ftp(), _intensity(), _zones_of_profile())
 			card.add_leading(thumb)
@@ -1089,7 +1099,7 @@ func _render_zone_shares(shares: Array[Dictionary]) -> void:
 	_zones.visible = not shares.is_empty()
 	_zone_bar.set_shares(shares)
 	for s in shares:
-		# Подпись доли: цветная метка зоны и «Z2 35 %»; отступ справа отделяет подписи друг от друга.
+		# Подпись доли: цветная метка зоны и «Z2 35 %»; разрыв между подписями — вариация `Flow16`.
 		var item := HBoxContainer.new()
 		item.theme_type_variation = &"Row8"
 		item.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1100,17 +1110,13 @@ func _render_zone_shares(shares: Array[Dictionary]) -> void:
 		swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		item.add_child(swatch)
 		var label := Label.new()
-		label.theme_type_variation = &"CaptionLabel"
+		label.theme_type_variation = &"CaptionNumLabel"
 		label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		if bool(s["free"]):
 			label.text = tr(KEY_ZONE_FREE).format({"pct": s["pct"]})
 		else:
 			label.text = tr(KEY_ZONE_SHARE).format({"zone": s["zone"], "pct": s["pct"]})
 		item.add_child(label)
-		var gap := Control.new()
-		gap.custom_minimum_size = Vector2(ZONE_CAPTION_GAP, 0)
-		gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		item.add_child(gap)
 		_zone_captions.add_child(item)
 
 
@@ -1156,6 +1162,7 @@ func _update_layout() -> void:
 		_columns.custom_minimum_size.x = 0.0
 	if compact != _compact:
 		_compact = compact
+		_apply_bar_actions()
 		if compact:
 			# Лист: прокручиваемый предпросмотр, «Начать» закреплена внизу рядом с «Закрыть».
 			_preview.reparent(_sheet_scroll, false)
@@ -1173,6 +1180,16 @@ func _update_layout() -> void:
 	_start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_emulator_start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fit_chart()
+
+
+## Действия AppBar «Импорт файла» и «Обновить»: на compact — только иконки с подсказкой (на
+## телефоне подписи рядом с H1 не помещаются, UIX-05 крит. 3), иначе иконка и подпись.
+func _apply_bar_actions() -> void:
+	for pair: Array in [[_import_button, KEY_BAR_IMPORT], [_reload_button, KEY_BAR_RELOAD]]:
+		var button: Button = pair[0]
+		button.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		button.text = "" if _compact else tr(pair[1])
+		button.tooltip_text = tr(pair[1])
 
 
 ## Высота крупного превью: 240 lp (compact — 140), но столько, сколько помещается в панель

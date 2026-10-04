@@ -84,3 +84,4 @@ ui.history.detail.track,Трасса «{track}» · крутизна SIM {pct} %
 ui.history.menu.more,Действия с заездом,Ride actions
 ui.plan.card.load,нагрузка {load},load {load}
 ui.plan.start_emulator,На эмуляторе,On emulator
+ui.plan.trainer_choice.text_release,"Станок не подключён. Подключите устройства, чтобы начать тренировку.",No trainer is connected. Connect devices to start the workout.

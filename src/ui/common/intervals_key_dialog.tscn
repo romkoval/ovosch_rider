@@ -36,5 +36,5 @@ secret = true
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
-theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+theme_type_variation = &"ErrorLabel"
 autowrap_mode = 3

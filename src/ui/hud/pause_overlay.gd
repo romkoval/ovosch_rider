@@ -16,8 +16,9 @@ extends Control
 ## Пробел и Enter на карточке паузы — «Продолжить»; Esc в подтверждении — назад, на
 ## карточке паузы — ничего (не уходит дальше к панели инструментов).
 ##
-## Карточка: 360 lp, фон `surface1` с альфой 0.94, радиус 18 (`hud.md` п. 10.2); «Пауза» —
-## 30 lp / 750; «Продолжить» — высота `max(52, touch_hud)`; текстовые кнопки — `touch_hud`.
+## Карточка: 360 lp, фон `surface1` с альфой 0.94, радиус 18 (`hud.md` п. 10.2) — вариация темы
+## `HudPauseCard`; «Пауза» — 30 lp / 750, `HudPauseTitle`; «Продолжить» — высота
+## `max(52, touch_hud)`; текстовые кнопки — `touch_hud`.
 ## `touch_hud` берётся из автозагрузки `UiScaleRuntime` (48 / 52 / 72 lp HUD).
 
 ## «Продолжить» на карточке паузы (кнопка, Пробел или Enter).
@@ -39,7 +40,6 @@ const CARD_WIDTH_LP: float = 360.0
 const CARD_RADIUS_LP: int = 18
 const CARD_ALPHA: float = 0.94
 const CARD_MARGIN: Vector2 = Vector2(24, 20)
-const TITLE_FONT_SIZE: int = 30
 ## Минимальная высота основной кнопки, lp HUD (`hud.md` п. 10.2).
 const PRIMARY_MIN_LP: float = 52.0
 
@@ -66,8 +66,6 @@ var _tween: Tween
 
 func _ready() -> void:
 	_veil.color = UiTokens.HUD_PAUSE_VEIL
-	_card.add_theme_stylebox_override("panel", card_style())
-	_title.add_theme_font_size_override("font_size", TITLE_FONT_SIZE)
 	_title.text = KEY + "pause.title"
 	_subtitle.text = KEY + "pause.subtitle"
 	_resume_button.text = KEY + "pause.resume"
@@ -178,7 +176,8 @@ func confirm_button() -> Button:
 	return _confirm_button
 
 
-## Стиль карточки из токенов: `surface1` с альфой 0.94, радиус 18 (`hud.md` п. 10.2).
+## Стиль карточки из токенов: `surface1` с альфой 0.94, радиус 18 (`hud.md` п. 10.2) — тот же,
+## что у вариации `HudPauseCard` темы; на узле применяется вариация, функция — для сверки.
 static func card_style() -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.bg_color = Color(UiTokens.SURFACE1, CARD_ALPHA)
