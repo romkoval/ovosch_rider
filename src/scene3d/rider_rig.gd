@@ -117,7 +117,7 @@ static func parent_of(bone: String) -> String:
 ## Начало кости (сустав) в rest, Godot.
 static func head(bone: String) -> Vector3:
 	var i: int = index_of(bone)
-	assert(i >= 0, "RiderRig: нет кости %s" % bone)
+	assert(i >= 0, "RiderRig: unknown bone %s" % bone)
 	return BONES[i][2] if i >= 0 else Vector3.ZERO
 
 
