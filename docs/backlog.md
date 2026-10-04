@@ -100,7 +100,7 @@
 | T-054 | `[game]` | 8 | Локализация ru/en: финальная инвентаризация переводов и литералов после всех экранов (выбор языка — в T-057) | REQ-NFR-08 (п.1, 2; п.3, 4 — подтверждение после T-057) | T-040, T-045, T-049, T-057 | `done` (инвентаризация; test_i18n 7/7; п.3, 4 подтверждены приёмкой T-057) |
 | T-055 | `[docs]` | 9–10 | Порты BLE: `docs/ports/{README,android,linux_windows}.md`, `platform/android/AndroidManifest.template.xml`, Data safety Google Play, открытый вопрос о каналах Linux/Windows | REQ-NFR-06 (п.4), REQ-NFR-07 (п.3, 4 — Android) | T-022 | `done` (коммит 7319347; приёмка `test_publishing_docs_acceptance` 11/11) |
 
-Итого 92 задачи: MVP — 58 (ниже), доработка ред. 2 (этап 7р2) — 34 (T-059..T-092: `[game]` — 25, `[visual]` — 6, `[integration]` — 2 (T-064, T-069), `[design]` — 1 (T-091), `[native-ble]` — 0; волны 1–6, см. «Этап 7р2»; T-091, T-092 добавлены по итогам волны 1). MVP: этап 1 — 15 (T-001..T-014, T-056), этап 2 — 8 (+ T-024 выполняется в этапе 3), этап 3 — 9, этап 4 — 9 (+ T-057, экран настроек, сквозная для этапов 4–8), этап 5 — 5, этап 6 — 4, этап 7 — 4, этап 8 — 2, этапы 9–10 — 1. T-056 добавлена после приёмки T-014 (NFR-09 п.2 не покрыт); T-057 выделена из T-049/T-054, когда стало ясно, что экран настроек нужен раньше Strava (язык, синхронизация Intervals.icu, источник мощности по Н-8).
+Итого 101 задача: MVP — 58 (ниже), доработка ред. 2 (этап 7р2) — 43 (T-059..T-101: `[game]` — 30, `[visual]` — 8, `[integration]` — 4 (T-064, T-069, T-099, T-101), `[design]` — 1 (T-091), `[native-ble]` — 0; волны 1–6, см. «Этап 7р2»; T-091, T-092 добавлены по итогам волны 1, T-093..T-097 — по ходу волн 2–4, T-098..T-101 — хвосты волн 3–4). Статусы 7р2 на 2026-10-04: `done` — 28, `review` — 6 (T-078, T-079, T-083, T-085, T-087, T-095 — см. строки; T-078 и T-085 с дефектами в T-097), `in-progress` — 3 (T-088, T-096, T-097), `todo` — 6 (T-089, T-090, T-098..T-101). MVP: этап 1 — 15 (T-001..T-014, T-056), этап 2 — 8 (+ T-024 выполняется в этапе 3), этап 3 — 9, этап 4 — 9 (+ T-057, экран настроек, сквозная для этапов 4–8), этап 5 — 5, этап 6 — 4, этап 7 — 4, этап 8 — 2, этапы 9–10 — 1. T-056 добавлена после приёмки T-014 (NFR-09 п.2 не покрыт); T-057 выделена из T-049/T-054, когда стало ясно, что экран настроек нужен раньше Strava (язык, синхронизация Intervals.icu, источник мощности по Н-8).
 
 ### Этап 7р2 — Доработка ред. 2 (ТЗ ред. 2, коммит 4f0aa82; REQ — коммит 5d028e7)
 
@@ -112,42 +112,51 @@
 
 | ID | Зона | Волна | Задача | REQ-ID | Зависит от | Файлы (владение) | Статус |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-059 | `[game]` | 1 | Скрипт снимков UI (меню, HUD, пауза, сводка) + синтетический пульс эмулятора | инструмент приёмки для HUD-10..14, FRD-06, UIX-01..05; DEV-09 (п.5 — расширение) | — | `scripts/ui_screenshot.sh`, `scripts/dev/ui_screenshot.gd`, `src/devices/fake_heart_rate_curve.gd`, `src/devices/trainer_factory.gd` | `review` (коммит 88b30da; идёт приёмка tester) |
-| T-060 | `[game]` | 1 | Растяжение `canvas_items`, масштаб интерфейса, Inter и Lucide, тема `app_theme.tres` и `UiTokens`, файлы переводов по областям | UIX-01 (п.1, 3, 4), HUD-14 (п.1, 2), NFR-08 (п.2) | — | `project.godot`, `assets/fonts/**`, `assets/icons/**`, `src/ui/theme/**`, `src/app/ui_scale.gd`, `assets/i18n/strings_*.csv` (создание), `tests/unit/app/test_i18n.gd` | `review` (коммит 1f37ec7; идёт приёмка tester; хвосты — в T-089) |
-| T-061 | `[game]` | 1 | Навигационный каркас ред. 2: экраны `ROUTE_SELECT`/`FREE_RIDE`, стек «назад», Esc и Android «назад», заготовки сцен, поля профиля `last_route_id`, `sim_steepness_pct` | UIX-04 (п.1, 2 — навигация), UIX-02 (п.3), FRD-02 (п.3 — хранение), FRD-05 (п.1 — хранение) | — | `src/app/app_state.gd`, `src/app/main.gd`, `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, заготовки `src/ui/tracks/route_select_screen.*`, `src/ui/free_ride/free_ride_screen.*` | `review` (коммит 231b84a; идёт приёмка tester) |
-| T-062 | `[game]` | 1 | Профиль трассы (PCHIP, выборка 10 м, уклон по окну 100 м, набор, подъёмы) и каталог четырёх трасс | D3D-08 (п.1, 2 — профиль, 3) | — | `src/domain/route_profile.gd`, `src/domain/route_catalog.gd` | `review` (коммит c60c9d1; идёт приёмка tester; ориентиры D3D-08 п.12 — T-091) |
-| T-063 | `[game]` | 1 | SIM в FTMS: кодек `0x11`, `0x2AD5`, бит `0x2ACC`; `TrainerDevice.set_simulation`, `BleTrainer`, `FakeTrainer` | FRD-04 (п.1, 3 — чтение диапазона, 6 — определение поддержки) | — | `src/devices/ble/codecs/ftms_codec.gd`, `src/devices/ble/ble_uuids.gd`, `src/devices/trainer_device.gd`, `src/devices/ble_trainer.gd`, `src/devices/fake_trainer.gd` | `review` (коммит c1b5624; идёт приёмка tester) |
-| T-064 | `[integration]` | 1 | Хранилище свободной езды: дистанция, высота и уклон в сэмплах, метаданные, сводка без цели, название для Strava | FRD-07 (п.3, 4 — хранение и набор, 6 — сводка, 7) | — | `src/session/sample_stream.gd`, `src/storage/{ride,ride_recorder,file_ride_repository,ride_summary,ride_series}.gd`, `src/integrations/strava/strava_service.gd` | `review` (коммит 2bdd110; идёт приёмка tester) |
-| T-065 | `[game]` | 1 | Модели нижнего графика HUD (headless): сегменты плана, оси, курсор, серии мощности и пульса, скользящее окно | HUD-10 (п.1–5), HUD-11 (п.1–5), HUD-12 (п.1, 2, 5–7), FRD-06 (п.4 — модель) | — | `src/ui/hud/plan_chart_model.gd`, `src/ui/hud/effort_series.gd`, `src/ui/hud/time_axis.gd` | `review` (коммит 3d79191; идёт приёмка tester) |
-| T-066 | `[visual]` | 1 | Длинные трассы: коридорный рельеф кусками, MultiMesh кусками по ~500 м с `visibility_range`, бюджет на 20 км | D3D-08 (п.6 — бюджет), D3D-05 (п.2, 4), D3D-07 (п.1–5 — регрессия) | — | `src/scene3d/terrain_field.gd`, `src/scene3d/scenery_builder.gd`, `src/scene3d/roadside_builder.gd`, `src/scene3d/perf_budget.gd`, `docs/perf_budget.md` | `review` (коммит 6871a91; идёт приёмка tester) |
-| T-067 | `[game]` | 2 | Модель скорости с уклоном и позиция на трассе (s по модулю L, круги, дистанция, набор) | FRD-04 (п.2 — позиция, 7, 8), FRD-07 (п.1, 4 — расчёт), D3D-02 (регрессия) | T-062 | `src/domain/speed_model.gd`, `src/domain/route_position.gd` | `in-progress` |
-| T-068 | `[game]` | 2 | `SimController`: крутизна, округление, ограничение диапазоном, частота и порог, принудительная отправка, SIM ↔ фиксированное сопротивление, откат без SIM | FRD-04 (п.2–6), FRD-05 (п.1–4), FRD-01 (п.2) | T-063 | `src/session/sim_controller.gd`, `src/devices/sensor_hub.gd` (делегирование SIM) | `in-progress` |
-| T-069 | `[integration]` | 2 | FIT свободной езды: distance, altitude, grade в `record`, total_distance и total_ascent в `session`, `lap` на круг | FRD-07 (п.5), LOC-05 (п.1–4 — регрессия) | T-064 | `src/integrations/fit/{fit_encoder,fit_definitions,fit_decoder}.gd` | `in-progress` |
-| T-070 | `[visual]` | 2 | `ProfiledTrack`: план-схемы четырёх трасс, дорога по h(s), рельеф относительно полотна, наклон гонщика на уклоне, камера; `RideScene.set_route(id)` | D3D-08 (п.2 — геометрия стыка, 4, 5, 7), D3D-03 (п.1, 2) | T-062, T-066 | `src/scene3d/profiled_track.gd`, `src/scene3d/route_world.gd`, `src/scene3d/{road_builder,roadside_builder,terrain_field,rider,ride_scene}.gd`, `docs/scene3d.md` | `in-progress` |
-| T-071 | `[game]` | 2 | Рисовальщик `HudChart` (сегменты, рампы по зонам, штриховка, курсор, линии с обводкой) и `PlanPreview` на том же коде | HUD-10 (п.6), HUD-11 (п.6), HUD-12 (п.3, 4), UIX-03 (п.4 — план) | T-060, T-065 | `src/ui/hud/hud_chart.gd`, `src/ui/common/plan_preview.gd` | `in-progress` |
-| T-072 | `[game]` | 2 | Компонент «Список интервалов» (модель строк, состояния, прокрутка к текущей) | HUD-13 (п.2, 3 — компонент) | T-060 | `src/ui/hud/interval_list_model.gd`, `src/ui/hud/interval_list.gd` | `in-progress` |
-| T-073 | `[game]` | 2 | Каркас экрана тренировки: HUD в `CanvasLayer`, 3D в физическом разрешении, геометрия `HudLayout`, панель цифр (факт — герой), подложки, фишки статусов | HUD-01 (новая редакция), HUD-13 (п.1, 5, 6), HUD-14 (п.3–5), HUD-02..06 (регрессия) | T-059, T-060 | `src/ui/workout/workout_screen.{tscn,gd}`, `src/ui/hud/hud_layout.gd`, `src/ui/hud/hud_metric_panel.{tscn,gd}`, `assets/i18n/strings_hud.csv` | `in-progress` |
-| T-074 | `[game]` | 2 | Компоненты управления HUD: фишка «ДАЛЕЕ», вуаль и карточка паузы, скрываемая панель инструментов (план/свободная езда), горячие клавиши | HUD-06 (п.2 — отображение), WRK-05 (UI), WRK-03 (п.1 — UI), FRD-05 (п.4, 6 — UI) | T-060 | `src/ui/hud/next_chip.gd`, `src/ui/hud/pause_overlay.{tscn,gd}`, `src/ui/hud/hud_toolbar.{tscn,gd}`, `assets/i18n/strings_hud_controls.csv` | `in-progress` |
-| T-075 | `[game]` | 2 | Превью трассы: модель серии (s, h), шкалы, палитра уклона, цифры; миниатюра и крупный профиль | FRD-03 (п.1–3), UIX-03 (п.2, 4 — трасса) | T-060, T-062 | `src/ui/tracks/route_preview_model.gd`, `src/ui/tracks/route_preview.gd`, `assets/i18n/strings_tracks.csv` | `in-progress` |
-| T-076 | `[game]` | 2 | Общие компоненты меню: AppBar с «назад», Stat, Banner, ListRow, пустое состояние | UIX-01 (п.3 — использование вариаций), UIX-04 (п.1 — компонент) | T-060, T-061 | `src/ui/common/{app_bar,stat_view,banner,list_row,empty_state,touch_target}.*`, `assets/i18n/strings_menu.csv` | `in-progress` |
-| T-077 | `[game]` | 3 | `FreeRideSession`: сессия без плана — тики, модель скорости с уклоном, позиция, `SimController`, пауза, события, запись, без лимита | FRD-01 (п.1 — сессия, 2, 3), FRD-04 (п.5, 9), FRD-05 (п.5, 6 — события), FRD-07 (п.1–4) | T-064, T-067, T-068 | `src/session/free_ride_session.gd` | `todo` |
-| T-078 | `[game]` | 3 | Сборка HUD тренировки: график внизу, список слева, «ДАЛЕЕ», пауза, панель инструментов; полоса прогресса снята; трасса `flat` без уклона | HUD-10 (п.7), HUD-11 (п.7), HUD-12 (п.8), HUD-13 (п.2–4, 7), HUD-07 (замена) | T-071, T-072, T-073, T-074 | `src/ui/workout/workout_screen.{tscn,gd}`, `src/ui/workout/workout_progress_bar.gd` (удаление), `assets/i18n/strings_hud.csv` | `todo` |
-| T-079 | `[game]` | 3 | Компоненты HUD свободной езды: панель рельефа (круг и «впереди 2 км»), режим панели цифр с карточкой уклона, график истории усилия 30 мин | FRD-06 (п.1–4), FRD-05 (п.6 — отображение) | T-071, T-073, T-075 | `src/ui/hud/relief_panel.gd`, `src/ui/hud/hud_metric_panel.gd`, `src/ui/hud/hud_chart.gd`, `assets/i18n/strings_free_ride.csv` | `todo` |
-| T-080 | `[game]` | 3 | Экран выбора трассы: четыре карточки, деталь с крупным профилем, слайдер крутизны, запуск | FRD-02 (п.1–3), FRD-03 (п.4), FRD-05 (п.1 — UI), UIX-03 (п.2, 3, 5 — трасса), D3D-08 (п.1 — названия) | T-061, T-075, T-076 | `src/ui/tracks/route_select_screen.{tscn,gd}`, `assets/i18n/strings_tracks.csv` | `todo` |
-| T-081 | `[game]` | 3 | Главный экран: два сценария, статус устройств, история и настройки, профиль, кнопка разработчика только в отладке | UIX-02 (п.1–5), FRD-01 (п.1 — вход) | T-061, T-076 | `src/ui/home/home.{tscn,gd}`, `src/app/main.gd` (проводка, если нужна), `assets/i18n/strings_menu.csv` | `todo` |
-| T-082 | `[game]` | 3 | Выбор тренировки карточками с превью плана, длительностью и максимальной целью | UIX-03 (п.1, 3, 4, 5 — тренировка), INT-04, INT-05 (регрессия) | T-071, T-076 | `src/ui/plan/plan_screen.{tscn,gd}`, `src/ui/plan/workout_chart.gd` (снятие), `assets/i18n/strings_menu_lists.csv` | `todo` |
-| T-083 | `[visual]` | 3 | Окружения «равнина» и «холмы»: свои `EnvironmentSet`, поля-лоскуты, тополя, ветряки, ориентиры | D3D-08 (п.6, 8 — `flat`, `hills`) | T-070 | `src/scene3d/environment_set.gd`, `src/scene3d/tracks/env_{flat,hills}.tres`, `src/scene3d/props/**`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd` | `todo` |
-| T-084 | `[game]` | 4 | Экран свободной езды и запуск из меню: сцена по трассе, сессия, HUD, пауза, стоп, «нет SIM», сохранение и Strava; снимки свободной езды | FRD-01 (п.1, 4), FRD-06 (п.5, 6), FRD-05 (п.6), FRD-07 (п.2, 6, 7 — сквозная), UIX-04 (п.2 — свободная езда; п.1 — Android «назад» на главном закрывает приложение) | T-070, T-074, T-077, T-079, T-080 | `src/ui/free_ride/free_ride_screen.{tscn,gd}`, `src/app/main.gd`, `scripts/dev/ui_screenshot.gd`, `assets/i18n/strings_free_ride.csv` | `todo` |
-| T-085 | `[game]` | 4 | История и карточка заезда в новой системе; свободная езда — профиль по дистанции, без цели | UIX-04 (п.3–5 — история), FRD-07 (п.6 — UI), LOC-02, LOC-03 (регрессия) | T-064, T-076 | `src/ui/history/**`, `assets/i18n/strings_menu_lists.csv` | `todo` |
-| T-086 | `[game]` | 4 | Настройки (группы), устройства (строки, пустое состояние), выбор профиля, «О программе» (Inter OFL, Lucide ISC) | UIX-04 (п.3–5 — настройки, устройства), PRF-05 (регрессия) | T-076 | `src/ui/settings/**`, `src/ui/devices/**`, `src/ui/profile_select/**`, `assets/i18n/strings_menu.csv` | `todo` |
-| T-087 | `[visual]` | 4 | Окружение «горы»: камень, снег, высокий горизонт, серпантин, таблички, ориентиры | D3D-08 (п.6, 8 — `mountains`) | T-083 | `src/scene3d/tracks/env_mountains.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/mesh_kit.gd` | `todo` |
-| T-088 | `[visual]` | 5 | Приморье, часть 1: вода (шейдер), берег и пляж, зонтичные сосны, маяк, ориентиры | D3D-08 (п.6 — вода, 8 — `seaside` без моста) | T-087 | `src/scene3d/shaders/water.gdshader`, `src/scene3d/materials/water.tres`, `src/scene3d/tracks/env_seaside.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/terrain_field.gd` | `todo` |
-| T-089 | `[game]` | 5 | Финальная проверка UI: адаптивность и цели нажатия, обрезка текста ru/en, статическая проверка `theme_override_*`, инвентаризация переводов, снимки всех экранов | UIX-01 (п.2, 5), UIX-05 (п.1–5), NFR-08 (п.1, 2) | T-078, T-080, T-081, T-082, T-084, T-085, T-086 | все `src/ui/**` и `assets/i18n/**` (единственный исполнитель волны в UI) | `todo` |
+| T-059 | `[game]` | 1 | Скрипт снимков UI (меню, HUD, пауза, сводка) + синтетический пульс эмулятора | инструмент приёмки для HUD-10..14, FRD-06, UIX-01..05; DEV-09 (п.5 — расширение) | — | `scripts/ui_screenshot.sh`, `scripts/dev/ui_screenshot.gd`, `src/devices/fake_heart_rate_curve.gd`, `src/devices/trainer_factory.gd` | `done` (коммит 88b30da; приёмка 83dd2b0) |
+| T-060 | `[game]` | 1 | Растяжение `canvas_items`, масштаб интерфейса, Inter и Lucide, тема `app_theme.tres` и `UiTokens`, файлы переводов по областям | UIX-01 (п.1, 3, 4), HUD-14 (п.1, 2), NFR-08 (п.2) | — | `project.godot`, `assets/fonts/**`, `assets/icons/**`, `src/ui/theme/**`, `src/app/ui_scale.gd`, `assets/i18n/strings_*.csv` (создание), `tests/unit/app/test_i18n.gd` | `done` (коммит 1f37ec7; приёмка 83dd2b0; хвосты — в T-093, T-089) |
+| T-061 | `[game]` | 1 | Навигационный каркас ред. 2: экраны `ROUTE_SELECT`/`FREE_RIDE`, стек «назад», Esc и Android «назад», заготовки сцен, поля профиля `last_route_id`, `sim_steepness_pct` | UIX-04 (п.1, 2 — навигация), UIX-02 (п.3), FRD-02 (п.3 — хранение), FRD-05 (п.1 — хранение) | — | `src/app/app_state.gd`, `src/app/main.gd`, `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, заготовки `src/ui/tracks/route_select_screen.*`, `src/ui/free_ride/free_ride_screen.*` | `done` (коммит 231b84a; приёмка 83dd2b0) |
+| T-062 | `[game]` | 1 | Профиль трассы (PCHIP, выборка 10 м, уклон по окну 100 м, набор, подъёмы) и каталог четырёх трасс | D3D-08 (п.1, 2 — профиль, 3) | — | `src/domain/route_profile.gd`, `src/domain/route_catalog.gd` | `done` (коммит c60c9d1; приёмка f84b12b; ориентиры D3D-08 п.12 — T-091, T-092) |
+| T-063 | `[game]` | 1 | SIM в FTMS: кодек `0x11`, `0x2AD5`, бит `0x2ACC`; `TrainerDevice.set_simulation`, `BleTrainer`, `FakeTrainer` | FRD-04 (п.1, 3 — чтение диапазона, 6 — определение поддержки) | — | `src/devices/ble/codecs/ftms_codec.gd`, `src/devices/ble/ble_uuids.gd`, `src/devices/trainer_device.gd`, `src/devices/ble_trainer.gd`, `src/devices/fake_trainer.gd` | `done` (коммит c1b5624; приёмка f84b12b) |
+| T-064 | `[integration]` | 1 | Хранилище свободной езды: дистанция, высота и уклон в сэмплах, метаданные, сводка без цели, название для Strava | FRD-07 (п.3, 4 — хранение и набор, 6 — сводка, 7) | — | `src/session/sample_stream.gd`, `src/storage/{ride,ride_recorder,file_ride_repository,ride_summary,ride_series}.gd`, `src/integrations/strava/strava_service.gd` | `done` (коммит 2bdd110; приёмка f84b12b) |
+| T-065 | `[game]` | 1 | Модели нижнего графика HUD (headless): сегменты плана, оси, курсор, серии мощности и пульса, скользящее окно | HUD-10 (п.1–5), HUD-11 (п.1–5), HUD-12 (п.1, 2, 5–7), FRD-06 (п.4 — модель) | — | `src/ui/hud/plan_chart_model.gd`, `src/ui/hud/effort_series.gd`, `src/ui/hud/time_axis.gd` | `done` (коммит 3d79191; приёмка 83dd2b0) |
+| T-066 | `[visual]` | 1 | Длинные трассы: коридорный рельеф кусками, MultiMesh кусками по ~500 м с `visibility_range`, бюджет на 20 км | D3D-08 (п.6 — бюджет), D3D-05 (п.2, 4), D3D-07 (п.1–5 — регрессия) | — | `src/scene3d/terrain_field.gd`, `src/scene3d/scenery_builder.gd`, `src/scene3d/roadside_builder.gd`, `src/scene3d/perf_budget.gd`, `docs/perf_budget.md` | `done` (коммит 6871a91; приёмка f84b12b, правка теста под трассу по умолчанию edbeef9) |
+| T-067 | `[game]` | 2 | Модель скорости с уклоном и позиция на трассе (s по модулю L, круги, дистанция, набор) | FRD-04 (п.2 — позиция, 7, 8), FRD-07 (п.1, 4 — расчёт), D3D-02 (регрессия) | T-062 | `src/domain/speed_model.gd`, `src/domain/route_position.gd` | `done` (коммит e057f74; приёмка d62b281) |
+| T-068 | `[game]` | 2 | `SimController`: крутизна, округление, ограничение диапазоном, частота и порог, принудительная отправка, SIM ↔ фиксированное сопротивление, откат без SIM | FRD-04 (п.2–6), FRD-05 (п.1–4), FRD-01 (п.2) | T-063 | `src/session/sim_controller.gd`, `src/devices/sensor_hub.gd` (делегирование SIM) | `done` (коммит c9762f9; приёмка d62b281) |
+| T-069 | `[integration]` | 2 | FIT свободной езды: distance, altitude, grade в `record`, total_distance и total_ascent в `session`, `lap` на круг | FRD-07 (п.5), LOC-05 (п.1–4 — регрессия) | T-064 | `src/integrations/fit/{fit_encoder,fit_definitions,fit_decoder}.gd` | `done` (коммит a7405a8; приёмка d62b281) |
+| T-070 | `[visual]` | 2 | `ProfiledTrack`: план-схемы четырёх трасс, дорога по h(s), рельеф относительно полотна, наклон гонщика на уклоне, камера; `RideScene.set_route(id)` | D3D-08 (п.2 — геометрия стыка, 4, 5, 7), D3D-03 (п.1, 2) | T-062, T-066 | `src/scene3d/profiled_track.gd`, `src/scene3d/route_world.gd`, `src/scene3d/{road_builder,roadside_builder,terrain_field,rider,ride_scene}.gd`, `docs/scene3d.md` | `done` (коммит 431b324; приёмка d62b281) |
+| T-071 | `[game]` | 2 | Рисовальщик `HudChart` (сегменты, рампы по зонам, штриховка, курсор, линии с обводкой) и `PlanPreview` на том же коде | HUD-10 (п.6), HUD-11 (п.6), HUD-12 (п.3, 4), UIX-03 (п.4 — план) | T-060, T-065 | `src/ui/hud/hud_chart.gd`, `src/ui/common/plan_preview.gd` | `done` (коммит ca89bea; приёмка 6e84ef1) |
+| T-072 | `[game]` | 2 | Компонент «Список интервалов» (модель строк, состояния, прокрутка к текущей) | HUD-13 (п.2, 3 — компонент) | T-060 | `src/ui/hud/interval_list_model.gd`, `src/ui/hud/interval_list.gd` | `done` (коммит cf77938; приёмка 6e84ef1) |
+| T-073 | `[game]` | 2 | Каркас экрана тренировки: HUD в `CanvasLayer`, 3D в физическом разрешении, геометрия `HudLayout`, панель цифр (факт — герой), подложки, фишки статусов | HUD-01 (новая редакция), HUD-13 (п.1, 5, 6), HUD-14 (п.3–5), HUD-02..06 (регрессия) | T-059, T-060 | `src/ui/workout/workout_screen.{tscn,gd}`, `src/ui/hud/hud_layout.gd`, `src/ui/hud/hud_metric_panel.{tscn,gd}`, `assets/i18n/strings_hud.csv` | `done` (коммит 588e978; приёмка bb178af) |
+| T-074 | `[game]` | 2 | Компоненты управления HUD: фишка «ДАЛЕЕ», вуаль и карточка паузы, скрываемая панель инструментов (план/свободная езда), горячие клавиши | HUD-06 (п.2 — отображение), WRK-05 (UI), WRK-03 (п.1 — UI), FRD-05 (п.4, 6 — UI) | T-060 | `src/ui/hud/next_chip.gd`, `src/ui/hud/pause_overlay.{tscn,gd}`, `src/ui/hud/hud_toolbar.{tscn,gd}`, `assets/i18n/strings_hud_controls.csv` | `done` (коммит 06ab853; приёмка 6e84ef1) |
+| T-075 | `[game]` | 2 | Превью трассы: модель серии (s, h), шкалы, палитра уклона, цифры; миниатюра и крупный профиль | FRD-03 (п.1–3), UIX-03 (п.2, 4 — трасса) | T-060, T-062 | `src/ui/tracks/route_preview_model.gd`, `src/ui/tracks/route_preview.gd`, `assets/i18n/strings_tracks.csv` | `done` (коммит 002b3bb; приёмка 6e84ef1) |
+| T-076 | `[game]` | 2 | Общие компоненты меню: AppBar с «назад», Stat, Banner, ListRow, пустое состояние | UIX-01 (п.3 — использование вариаций), UIX-04 (п.1 — компонент) | T-060, T-061 | `src/ui/common/{app_bar,stat_view,banner,list_row,empty_state,touch_target}.*`, `assets/i18n/strings_menu.csv` | `done` (коммит 6391da8; приёмка 6e84ef1) |
+| T-077 | `[game]` | 3 | `FreeRideSession`: сессия без плана — тики, модель скорости с уклоном, позиция, `SimController`, пауза, события, запись, без лимита | FRD-01 (п.1 — сессия, 2, 3), FRD-04 (п.5, 9), FRD-05 (п.5, 6 — события), FRD-07 (п.1–4) | T-064, T-067, T-068 | `src/session/free_ride_session.gd` | `done` (коммит 013a0d8; приёмка d62b281) |
+| T-078 | `[game]` | 3 | Сборка HUD тренировки: график внизу, список слева, «ДАЛЕЕ», пауза, панель инструментов; полоса прогресса снята; трасса `flat` без уклона | HUD-10 (п.7), HUD-11 (п.7), HUD-12 (п.8), HUD-13 (п.2–4, 7), HUD-07 (замена) | T-071, T-072, T-073, T-074 | `src/ui/workout/workout_screen.{tscn,gd}`, `src/ui/workout/workout_progress_bar.gd` (удаление), `assets/i18n/strings_hud.csv` | `review` (коммит b2d48da; приёмка 6e84ef1 — дефекты HUD-13 п.5, 6, 9 на телефоне, исправляет T-097) |
+| T-079 | `[game]` | 3 | Компоненты HUD свободной езды: панель рельефа (круг и «впереди 2 км»), режим панели цифр с карточкой уклона, график истории усилия 30 мин | FRD-06 (п.1–4), FRD-05 (п.6 — отображение) | T-071, T-073, T-075 | `src/ui/hud/relief_panel.gd`, `src/ui/hud/hud_metric_panel.gd`, `src/ui/hud/hud_chart.gd`, `assets/i18n/strings_free_ride.csv` | `review` (коммит 36452a1; отдельного отчёта tester нет — FRD-06 п.1–4 проверялись на экране T-084 в 6e84ef1, подтвердить) |
+| T-080 | `[game]` | 3 | Экран выбора трассы: четыре карточки, деталь с крупным профилем, слайдер крутизны, запуск | FRD-02 (п.1–3), FRD-03 (п.4), FRD-05 (п.1 — UI), UIX-03 (п.2, 3, 5 — трасса), D3D-08 (п.1 — названия) | T-061, T-075, T-076 | `src/ui/tracks/route_select_screen.{tscn,gd}`, `assets/i18n/strings_tracks.csv` | `done` (коммит c36d3d1; приёмка 6e84ef1) |
+| T-081 | `[game]` | 3 | Главный экран: два сценария, статус устройств, история и настройки, профиль, кнопка разработчика только в отладке | UIX-02 (п.1–5), FRD-01 (п.1 — вход) | T-061, T-076 | `src/ui/home/home.{tscn,gd}`, `src/app/main.gd` (проводка, если нужна), `assets/i18n/strings_menu.csv` | `done` (коммит 9f68583; приёмка 6e84ef1) |
+| T-082 | `[game]` | 3 | Выбор тренировки карточками с превью плана, длительностью и максимальной целью | UIX-03 (п.1, 3, 4, 5 — тренировка), INT-04, INT-05 (регрессия) | T-071, T-076 | `src/ui/plan/plan_screen.{tscn,gd}`, `src/ui/plan/workout_chart.gd` (снятие), `assets/i18n/strings_menu_lists.csv` | `done` (коммит b443372; приёмка 6e84ef1) |
+| T-083 | `[visual]` | 3 | Окружения «равнина» и «холмы»: свои `EnvironmentSet`, поля-лоскуты, тополя, ветряки, ориентиры | D3D-08 (п.6, 8 — `flat`, `hills`) | T-070 | `src/scene3d/environment_set.gd`, `src/scene3d/tracks/env_{flat,hills}.tres`, `src/scene3d/props/**`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd` | `review` (коммит cf6fec6; визуально принято game-designer по снимкам, `[авто]` — тесты исполнителя зелёные; приёмка tester — в цикле T-088/T-089) |
+| T-084 | `[game]` | 4 | Экран свободной езды и запуск из меню: сцена по трассе, сессия, HUD, пауза, стоп, «нет SIM», сохранение и Strava; снимки свободной езды | FRD-01 (п.1, 4), FRD-06 (п.5, 6), FRD-05 (п.6), FRD-07 (п.2, 6, 7 — сквозная), UIX-04 (п.2 — свободная езда; п.1 — Android «назад» на главном закрывает приложение) | T-070, T-074, T-077, T-079, T-080 | `src/ui/free_ride/free_ride_screen.{tscn,gd}`, `src/app/main.gd`, `scripts/dev/ui_screenshot.gd`, `assets/i18n/strings_free_ride.csv` | `done` (коммит 68a89e6; приёмка 6e84ef1) |
+| T-085 | `[game]` | 4 | История и карточка заезда в новой системе; свободная езда — профиль по дистанции, без цели | UIX-04 (п.3–5 — история), FRD-07 (п.6 — UI), LOC-02, LOC-03 (регрессия) | T-064, T-076 | `src/ui/history/**`, `assets/i18n/strings_menu_lists.csv` | `review` (коммит da90ba3; приёмка 6e84ef1 — дефект LOC-03 п.2: в истории сглаженная мощность; исправляет T-097) |
+| T-086 | `[game]` | 4 | Настройки (группы), устройства (строки, пустое состояние), выбор профиля, «О программе» (Inter OFL, Lucide ISC) | UIX-04 (п.3–5 — настройки, устройства), PRF-05 (регрессия) | T-076 | `src/ui/settings/**`, `src/ui/devices/**`, `src/ui/profile_select/**`, `assets/i18n/strings_menu.csv` | `done` (коммит 58c7fed; приёмка 6e84ef1) |
+| T-087 | `[visual]` | 4 | Окружение «горы»: камень, снег, высокий горизонт, серпантин, таблички, ориентиры | D3D-08 (п.6, 8 — `mountains`) | T-083 | `src/scene3d/tracks/env_mountains.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/mesh_kit.gd` | `review` (коммит 5576c36; визуально принято game-designer по снимкам, `[авто]` — тесты исполнителя зелёные; приёмка tester — в цикле T-088/T-089) |
+| T-088 | `[visual]` | 5 | Приморье, часть 1: вода (шейдер), берег и пляж, зонтичные сосны, маяк, ориентиры | D3D-08 (п.6 — вода, 8 — `seaside` без моста) | T-087 | `src/scene3d/shaders/water.gdshader`, `src/scene3d/materials/water.tres`, `src/scene3d/tracks/env_seaside.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/terrain_field.gd` | `in-progress` |
+| T-089 | `[game]` | 5 | Финальная проверка UI: адаптивность и цели нажатия, обрезка текста ru/en, статическая проверка `theme_override_*`, инвентаризация переводов, снимки всех экранов | UIX-01 (п.2, 5), UIX-05 (п.1–5), NFR-08 (п.1, 2) | T-078, T-080, T-081, T-082, T-084, T-085, T-086, T-095, T-097 | все `src/ui/**` и `assets/i18n/**` (после T-097 — единственный исполнитель в UI) | `todo` (хвосты волн 3–4 — в карточке) |
 | T-090 | `[visual]` | 6 | Приморье, часть 2: мост над рекой на диапазоне `bridges`, река под мостом, выемка рельефа, перила | D3D-08 (п.3 — мост в сцене, 6, 8 — `seaside`) | T-088 | `src/scene3d/props/bridge_builder.gd`, `src/scene3d/{road_builder,roadside_builder,terrain_field}.gd`, `src/scene3d/tracks/env_seaside.tres` | `todo` |
-| T-091 | `[design]` | 2 | Ориентиры трасс не реже 1.5 км в `tracks.md`, уточнение PCHIP (Fritsch–Butland), `assets.md` (Inter и Lucide в проекте), оценка состояний кнопок темы T-060 | D3D-08 (п.12 — данные дизайна), UIX-01 (п.3 — вердикт по вариациям) | T-060, T-062 | `docs/game/tracks.md`, `docs/game/assets.md`, `docs/game/ui.md` (только если нужна правка состояний) | `todo` |
-| T-092 | `[game]` | 2–3 | Ориентиры в данных `RouteCatalog` по новой таблице `tracks.md` (разрыв ≤ 1.5 км на всех трассах) | D3D-08 (п.12) | T-091 | `src/domain/route_catalog.gd`, `tests/unit/domain/test_route_catalog.gd` | `todo` |
+| T-091 | `[design]` | 2 | Ориентиры трасс не реже 1.5 км в `tracks.md`, уточнение PCHIP (Fritsch–Butland), `assets.md` (Inter и Lucide в проекте), оценка состояний кнопок темы T-060 | D3D-08 (п.12 — данные дизайна), UIX-01 (п.3 — вердикт по вариациям) | T-060, T-062 | `docs/game/tracks.md`, `docs/game/assets.md`, `docs/game/ui.md` (только если нужна правка состояний) | `done` (коммит 44f5ea9) |
+| T-092 | `[game]` | 2–3 | Ориентиры в данных `RouteCatalog` по новой таблице `tracks.md` (разрыв ≤ 1.5 км на всех трассах) | D3D-08 (п.12) | T-091 | `src/domain/route_catalog.gd`, `tests/unit/domain/test_route_catalog.gd` | `done` (коммит 94f8f2c; приёмка d62b281) |
+| T-093 | `[game]` | 2–3 | Доработка темы перед волной 3: `danger_hover`/`danger_pressed`, нажатие `GhostButton`, `NumLabel`, `Stack0`, `Row0/8/12/16/24`, `HudPauseCard`/`HudChipLabel`/`HudPauseTitle`, шрифт цифр `SpinBox`, разрядка `Overline`, иконки баннера info/triangle-alert/circle-alert, помощник `UiIcons` | UIX-01 (п.1, 3), UIX-05, HUD-14 | T-060, T-091 | `src/ui/theme/**` (в т.ч. `ui_icons.gd`), `assets/icons/lucide/**` | `done` (коммит 64d24eb; приёмка 6e84ef1) |
+| T-094 | `[game]` | 3 | `y_max` графика плана с нижней границей 1.1 × FTP (У-2), сдвиг линий факта по журналу пропусков, проверка размера кадра снимков UI, окно поверх всех на macOS | HUD-10 (п.2, 5), HUD-11 (п.1) | T-065, T-059 | `src/ui/hud/plan_chart_model.gd`, `src/ui/hud/effort_series.gd`, `scripts/dev/ui_screenshot.gd`, `scripts/ui_screenshot.sh` | `done` (коммит ad349e9; приёмка d62b281) |
+| T-095 | `[game]` | 4 | `tnum` у подписей HUD с цифрами, недостающие вариации темы (`HudHeroUnit`, `HudTargetUnit`, `HudCountdown`, `HudDelta`, `HudGradeValue`, `HudGradeUnit`, `HudModeLabel`, `HudStepLabel`, `OverlineAccent`, `OverlineSim`, `LogoLabel`, `LogoAccentLabel`, `SheetPanel`), нагрузка Intervals.icu в строке карточки плана, удалены `WorkoutChart` и скрытый `WorkoutList` | HUD-14 (п.2), INT-04 (п.2), UIX-01 (п.3), UIX-03 | T-073, T-082, T-093 | `src/ui/theme/**`, `src/ui/hud/**` (подписи), `src/ui/plan/**` | `review` (коммит c85e98c; приёмка tester — вместе с T-097) |
+| T-096 | `[visual]` | 5 | Пересвет 3D в `SubViewport` экранов заезда (тренировка и свободная езда): экспозиция, тонмаппинг и окружение сцены в `SubViewport` совпадают со снимками `screenshot.sh` | D3D-07 (п.1–5 — регрессия на экранах заезда), HUD-13 (п.10 — 3D под HUD) | T-084 | `src/scene3d/ride_scene.gd`, окружение сцены; в `src/ui/{workout,free_ride}/*_screen.tscn` — только узел `SubViewport` (уточнить в отчёте исполнителя, сцены экранов одновременно правит T-097) | `in-progress` |
+| T-097 | `[game]` | 5 | Дефекты приёмки UI (HUD-13 п.5, 6, 9 на телефоне; LOC-03 п.2 в истории), Esc → подтверждение на обоих экранах заезда, удаление узлов совместимости, кэш подписей `HudChart`, вариации T-095 на панели цифр, подвал панели рельефа на телефоне, «На эмуляторе» на экране плана, ожидание анимаций в `ui_screenshot` | HUD-13 (п.5, 6, 9), LOC-03 (п.2), UIX-04 (п.2), HUD-14 (п.2), FRD-06 (п.1), FRD-01 (п.4) | T-078, T-084, T-085, T-095 | `src/ui/workout/**` (в т.ч. удаление `workout_progress_bar.gd`), `src/ui/free_ride/**`, `src/ui/hud/{hud_layout,hud_metric_panel,hud_chart,relief_panel}.*`, `src/ui/history/**`, `src/ui/profile_select/**`, `src/ui/plan/plan_screen.*`, `scripts/dev/ui_screenshot.gd` | `in-progress` |
+| T-098 | `[game]` | 6 | Последняя выбранная тренировка в профиле: поле `last_workout_id`, предвыбор на экране плана между запусками (по образцу `last_route_id`) | UIX-03 (п.3) — прямого критерия нет, вопрос Н-17 | T-097 | `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, `src/ui/plan/plan_screen.gd` | `todo` |
+| T-099 | `[integration]` | 6 | Свёртка повторов Intervals.icu «3x»: метаданные блоков повторов в `Workout` при разборе (сейчас `expand_repeat` разворачивает блок без следа), список интервалов показывает блок одной строкой, как у ZWO `IntervalsT` | HUD-13 (п.8 — для планов Intervals.icu), INT-03 (регрессия) | T-072 | `src/domain/workout.gd`, `src/domain/workout_step.gd`, `src/integrations/workouts/intervals_icu_workout_parser.gd`, `src/ui/hud/interval_list_model.gd` (только чтение метаданных) | `todo` |
+| T-100 | `[visual]` | 6 | Статический кэш `RouteWorld._tracks`: в одиночном прогоне — «resources still in use at exit»; кэш с очисткой (или не статический) | INF-01 (п.2, 5 — чистый одиночный прогон) | T-088, T-090 (файлы `src/scene3d/` заняты) | `src/scene3d/route_world.gd` | `todo` |
+| T-101 | `[integration]` | 6 | Нестабильные по времени тесты: `test_storage_acceptance::loc_07_c4_tick_budget_50ms`, `test_strava_hardening::idle_connection_5s` — подменяемые часы или устойчивый замер | LOC-07 (п.4), STR-04 (регрессия), INF-01 (п.1) | — | `tests/**/test_storage_acceptance.gd` (правит tester), `tests/**/test_strava_hardening.gd` (developer), при необходимости шов часов в `src/storage/`, `src/integrations/strava/` | `todo` |
 
-Состояние волн (2026-10-03). Волна 1 слита в `claude/quirky-goldberg-m8r1ro`, все восемь задач — `review` (приёмка tester): T-059 88b30da, T-060 1f37ec7, T-061 231b84a, T-062 c60c9d1, T-063 c1b5624, T-064 2bdd110, T-065 3d79191, T-066 6871a91. Инфраструктура вне задач: bb13332 (`check_secrets.sh` на perl вместо `sed -z`, тесты INF-03 зелёные на macOS), 065d41c (проверка NFR-06 п.2 не сканирует `.claude/`). Полный прогон GUT 2477/2477. Волна 2 (T-067..T-076) — `in-progress`. Замечания исполнителей волны 1 перенесены в карточки T-068, T-069, T-070, T-076, T-077, T-082, T-084..T-086, T-089 (абзацы «По итогам волны 1») и в новые задачи T-091, T-092.
+Состояние волн (2026-10-04, ветка `claude/quirky-goldberg-m8r1ro`, голова 6e84ef1). Волны 1–4 слиты. Приёмки tester: 83dd2b0 (T-059, T-060, T-061, T-065), f84b12b (T-062, T-063, T-064, T-066; правка edbeef9), d62b281 (T-067, T-068, T-069, T-070, T-077, T-092, T-094), bb178af (T-073), 6e84ef1 (T-071, T-072, T-074, T-075, T-076, T-078, T-080, T-081, T-082, T-084, T-085, T-086, T-093); T-091 — 44f5ea9 (документ). В `review`: T-078 и T-085 — дефекты приёмки, исправляет T-097; T-083 и T-087 — визуально приняты game-designer, приёмка tester в цикле T-088/T-089; T-079 и T-095 — нет отдельного отчёта tester. Инфраструктура вне задач: bb13332, 065d41c, 2a201e8 (проверка ключей UI читает все `strings*.csv`). Последний полный прогон GUT: 3208 тестов, 4 красных — дефекты T-097. Волна 5 в работе: T-088, T-096, T-097; затем T-089 (после T-097), T-090 (после T-088), мелкие T-098..T-101 — волна 6.
 
 #### Параллельная работа в git worktree
 
@@ -198,8 +207,10 @@
 | 2 | T-067, T-068, T-069, T-070, T-071, T-072, T-073, T-074, T-075, T-076, T-091 (game-designer), T-092 (после T-091) | T-091 ← T-060, T-062; T-092 ← T-091; T-067 ← T-062; T-068 ← T-063; T-069 ← T-064; T-070 ← T-062, T-066; T-071 ← T-060, T-065; T-072, T-074 ← T-060; T-073 ← T-059, T-060; T-075 ← T-060, T-062; T-076 ← T-060, T-061 |
 | 3 | T-077, T-078, T-079, T-080, T-081, T-082, T-083 | T-077 ← T-064, T-067, T-068; T-078 ← T-071..T-074; T-079 ← T-071, T-073, T-075; T-080 ← T-061, T-075, T-076; T-081 ← T-061, T-076; T-082 ← T-071, T-076; T-083 ← T-070 |
 | 4 | T-084, T-085, T-086, T-087 | T-084 ← T-070, T-074, T-077, T-079, T-080; T-085 ← T-064, T-076; T-086 ← T-076; T-087 ← T-083 |
-| 5 | T-088, T-089 | T-088 ← T-087; T-089 ← все UI-задачи (T-078, T-080..T-082, T-084..T-086) |
-| 6 | T-090 | T-088 |
+| 5 | T-088, T-096, T-097, затем T-089 | T-088 ← T-087; T-096 ← T-084; T-097 ← T-078, T-084, T-085, T-095; T-089 ← все UI-задачи (T-078, T-080..T-082, T-084..T-086) и T-097 |
+| 6 | T-090, T-098, T-099, T-100, T-101 | T-090 ← T-088; T-098 ← T-097 (экран плана); T-099 ← T-072; T-100 ← T-088, T-090 (`src/scene3d/` занят); T-101 — без зависимостей |
+
+Вне исходной нарезки (по ходу волн 2–4): T-093 (тема перед волной 3), T-094 (уточнение У-2 и снимки), T-095 (вариации и `tnum`, волна 4); волна 5 добавила T-096 и T-097 (дефекты приёмки и хвосты). Владение в волне 5: сцены экранов заезда (`src/ui/{workout,free_ride}/**`) — T-097, T-096 трогает в них только узел `SubViewport`; `src/scene3d/**` — T-088 и T-096 (T-096 — только `ride_scene.gd` и окружение сцены; при пересечении — сначала T-096, потом T-088); `scripts/dev/ui_screenshot.gd` — T-097, затем T-089.
 
 Задача из следующей волны может стартовать раньше, как только слиты её зависимости и её файлы не заняты задачей, которая ещё в работе (например, T-075 — сразу после T-060 и T-062).
 
@@ -610,70 +621,70 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 
 Общее для всех карточек. Правила параллельной работы, владение файлами и волны — раздел 2, «Этап 7р2». Визуальные критерии (`[визуальная проверка]`) сдаются со снимками «до/после»: HUD и меню — `scripts/ui_screenshot.sh` (T-059), мир — `scripts/screenshot.sh`. Tester проверяет `[авто]` и однозначные визуальные пункты, спорные визуальные пункты передаёт game-designer. Для `done` нужен положительный вердикт tester, а для задач с `[визуальная проверка]` ещё и game-designer. Размер: S — полдня, M — один полный заход, L не допускается.
 
-#### T-059 — Скрипт снимков UI и синтетический пульс эмулятора `[game]` — `review` (88b30da)
+#### T-059 — Скрипт снимков UI и синтетический пульс эмулятора `[game]` — `done` (88b30da; приёмка 83dd2b0)
 Волна 1, первая в работу. Зависит: —. Размер M.
 Что сделать. По `hud.md` п. 14: `scripts/ui_screenshot.sh [каталог] [разрешение] [язык] [--safe-area]` → `scripts/dev/ui_screenshot.gd` (`extends SceneTree`, по образцу `ride_screenshot.gd`; без дисплея — `xvfb-run`). Скрипт поднимает `main.tscn` с временным `data_dir`, `trainer_kind = "fake"`, `env_reader = Callable()`, заводит два профиля, импортирует `tests/fixtures/workouts_acceptance/acc_full.zwo` и снимает каждый экран, зарегистрированный в `AppState` (после `navigate` — 6 кадров и `frame_post_draw`). HUD тренировки снимается с ускоренными часами (`WorkoutScreen.clock_usec`, ×30) на моментах 0:30, 17:00, «за 5 с до смены», пауза, последний шаг, сводка. Разрешения: 1280×720, 1024×768, 1280×590. Флаг `--safe-area` имитирует безопасную зону 100/100/0/13 lp через `Engine.set_meta("ui_debug_safe_area", …)`, который читает `UiScale` (T-060). Сценарии хранятся в таблице внутри скрипта: T-084 добавит в неё свободную езду (ровно, подъём, спуск), не переписывая остальное. Синтетический пульс: `FakeHeartRateCurve` (95 → 165 уд/мин за 20 мин, затем плато, детерминированный шум ±2) и `TrainerFactory.create("fake")` подключает его к `FakeTrainer` через существующий `set_heart_rate_sequence`. Тесты, которые ждут эмулятор без пульса, должны получить его через `FakeTrainer.new()` напрямую, а не через фабрику, — developer проверяет это по `tests/` и пишет в отчёт.
 Файлы: `scripts/ui_screenshot.sh`, `scripts/dev/ui_screenshot.gd` (+ `.uid`), `src/devices/fake_heart_rate_curve.gd`, `src/devices/trainer_factory.gd`, `tests/unit/devices/test_fake_heart_rate_curve.gd`. `main.gd`, `workout_screen.*` и `fake_trainer.gd` не трогать.
 Закрывает: инструмент приёмки (REQ не закрывает); REQ-DEV-09 п.5 (расширение: пульс в dev-режиме).
 Критерии авто: кривая пульса монотонна на 0–20 мин, значения 95 и 165 на концах (±2); фабрика `fake` отдаёт пульс в первые 2 с; полный набор GUT зелёный. Tester запускает скрипт: код выхода 0, на каждый экран и момент HUD есть PNG ненулевого размера для трёх разрешений и двух языков, на снимке HUD середины тренировки пульс — число, а не «—».
 
-#### T-060 — Растяжение, масштаб, шрифт Inter, иконки Lucide, тема, переводы по областям `[game]` — `review` (1f37ec7)
+#### T-060 — Растяжение, масштаб, шрифт Inter, иконки Lucide, тема, переводы по областям `[game]` — `done` (1f37ec7; приёмка 83dd2b0)
 Волна 1. Зависит: —. Размер M.
 Что сделать. `project.godot`: `display/window/stretch/mode = "canvas_items"`, `aspect = "expand"`, базовый размер 1280×720, `gui/theme/custom = app_theme.tres`, шрифт по умолчанию — `inter_400.tres` (`hud.md` п. 3, `ui.md` п. 9). `src/app/ui_scale.gd` (`UiScale`): множитель 1.0 / 1.2 (телефон), `content_scale_factor`, безопасная зона в lp с отладочной подменой `ui_debug_safe_area`. Применяется без правки `main.gd`, через автозагрузку, которую регистрирует `project.godot`. Ресурсы: `assets/fonts/inter/Inter-Variable.ttf` + `OFL.txt`, `assets/icons/lucide/*.svg` + `LICENSE` (только нужные иконки из `ui.md` п. 7), `FontVariation` по `ui.md` п. 9 (включая `tnum`-варианты для HUD), `app_theme.tres` с базовыми типами п. 9.1 и вариациями п. 9.2 (включая `Hud*`), `UiTokens` (палитра `ui.md` п. 4 и `hud.md` п. 11, только тёмная тема, акцент `#2CC9B4`). Переводы: создать и зарегистрировать `assets/i18n/strings_{hud,hud_controls,free_ride,tracks,menu,menu_lists}.csv`, заранее завести ключи `track.<id>.name`/`track.<id>.kind` (ru/en по `tracks.md` п. 3) и `ride.free_ride.default_name`; `test_i18n.gd` проверяет все `strings*.csv`, ключи уникальны во всех файлах сразу. Экраны не перекраивать: существующие `theme_override_*` снимаются в задачах экранов (T-073, T-080..T-082, T-085, T-086), итоговая статическая проверка — в T-089.
 Файлы: `project.godot`, `assets/fonts/**`, `assets/icons/**`, `src/ui/theme/**`, `src/app/ui_scale.gd`, `assets/i18n/strings_*.csv` (создание), `tests/unit/app/test_i18n.gd`, `tests/unit/ui/test_app_theme.gd`, `tests/unit/app/test_ui_scale.gd`. `strings.csv`, `main.gd` и сцены экранов не трогать.
 Закрывает: REQ-UIX-01 п.1, 3, 4 (часть «шрифт»); REQ-HUD-14 п.1, 2 (ресурсы шрифтов и `tnum`; применение на узлах HUD — T-073); REQ-NFR-08 п.2 (на новых файлах).
 Критерии авто: тема назначена проекту, её получает каждый существующий экран; вариации типов из `ui.md` п. 9.2 существуют; цвета стилей совпадают с `UiTokens` (±1/255); все `FontVariation` ссылаются на один файл Inter; «0000» = «1111» = «8888» по ширине (±0.5 px) для размеров 11–88; `UiScale` даёт 1.2 на «мобильном» и 1.0 иначе; переводы из новых файлов загружаются. Визуально: снимки всех экранов «до/после» (T-059) — шрифт Inter, тёмный фон; поломки раскладки допустимы, их исправляют задачи экранов.
 
-#### T-061 — Навигационный каркас ред. 2 и поля профиля `[game]` — `review` (231b84a)
+#### T-061 — Навигационный каркас ред. 2 и поля профиля `[game]` — `done` (231b84a; приёмка 83dd2b0)
 Волна 1. Зависит: —. Размер M.
 Что сделать. `AppState`: экраны `ROUTE_SELECT` и `FREE_RIDE`; стек переходов и `back()`: возврат на экран, с которого пришли, а для истории, настроек и устройств — на главный. `back()` на экранах `WORKOUT`/`FREE_RIDE` не уходит с экрана, а отдаёт запрос «досрочное завершение с подтверждением» (сигнал, который экран обрабатывает по WRK-05.4). `main.gd`: регистрирует новые экраны, ловит `ui_cancel` (Esc) и `NOTIFICATION_WM_GO_BACK_REQUEST` (Android) → `app_state.back()`. Заготовки сцен с итоговыми путями и контрактом `setup(...)` нужны, чтобы T-080 и T-084 не трогали `main.gd`: `src/ui/tracks/route_select_screen.{tscn,gd}` (сигнал `start_requested(route_id: String, steepness_pct: int)`) и `src/ui/free_ride/free_ride_screen.{tscn,gd}` (пустой экран с «назад»). Обработчик `start_requested` в `main.gd` — заглушка, настоящий запуск делает T-084. `Profile`: `last_route_id` (по умолчанию `"flat"`) и `sim_steepness_pct` (0–100, шаг 5, по умолчанию 50, валидация с кодом `ERR_*`); сериализация совместима со старыми профилями (поля по умолчанию). Ключи текстов заготовок — в `strings.csv` не добавлять, заготовки без текста или с уже существующими ключами.
 Файлы: `src/app/app_state.gd`, `src/app/main.gd`, `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, заготовки `src/ui/tracks/route_select_screen.*`, `src/ui/free_ride/free_ride_screen.*`, `tests/unit/app/test_app_state_back.gd`, `tests/unit/profiles/test_profile_free_ride_fields.gd`.
 Закрывает: REQ-UIX-04 п.1 (навигация «назад», Esc, Android), п.2 (контракт для экранов заезда); REQ-UIX-02 п.3 (переходы в историю и настройки — навигация); REQ-FRD-02 п.3 (хранение последней трассы, по умолчанию `flat`); REQ-FRD-05 п.1 (хранение крутизны, по умолчанию 50 %).
 Критерии авто: цепочки переходов HOME → HISTORY → `back()` → HOME, HOME → PLAN → WORKOUT → `back()` → запрос подтверждения (экран не сменился); Esc и событие Android вызывают тот же `back()`; профиль без новых полей читается со значениями по умолчанию; некорректная крутизна (−5, 103, 7) не проходит валидацию. Ручные: REQ-UIX-04 п.1 — системный «назад» на реальном Android (вне контейнера).
 
-#### T-062 — Профиль трассы и каталог четырёх трасс `[game]` — `review` (c60c9d1)
+#### T-062 — Профиль трассы и каталог четырёх трасс `[game]` — `done` (c60c9d1; приёмка f84b12b)
 Волна 1. Зависит: —. Размер M.
 Что сделать. Чистый GDScript (`RefCounted`) в `src/domain/` по `tracks.md` п. 2–4. `RouteProfile`: опорные точки (s, h) → периодическая PCHIP (Фрич–Карлсон, касательная на стыке по соседям через стык) → выборка с шагом 10 м; `height_at(s)`, `grade_at(s)` (Δh/Δs по окну 100 м, окно переходит через стык), `length_m()`, `ascent_m()`, `max_grade_pct()`, `min_grade_pct()`, `climbs()` (уклон > 2 %, длина ≥ 300 м: начало, длина, средний уклон, набор). `RouteCatalog`: четыре трассы `flat`, `hills`, `mountains` (петля по решению владельца), `seaside`; у каждой `name_key`/`kind_key` (ключи `track.<id>.name`/`.kind` заводит T-060), опорные точки, `bridges` (у `seaside` — 5820–6330 м), `water_level_m`, `landmarks`, параметры план-схемы `layout` + `seed` (для T-070), `mood_color`, идентификатор набора окружения (строка; маппинг на `.tres` — `src/scene3d/route_world.gd`, T-070). Трасса по умолчанию — `flat` (REQ FRD-02 п.3; вопрос Н-14).
 Файлы: `src/domain/route_profile.gd`, `src/domain/route_catalog.gd`, `tests/unit/domain/test_route_profile.gd`, `tests/unit/domain/test_route_catalog.gd`.
 Закрывает: REQ-D3D-08 п.1 (кроме отображения названий — T-080), п.2 (замкнутость профиля и уклона), п.3; основа для REQ-FRD-03 п.1.
 Критерии авто: ровно четыре трассы с уникальными id; |h(L) − h(0)| ≤ 0.1 м, разрыв уклона на стыке ≤ 1 %; характеристики каждой трассы — в диапазонах D3D-08 п.3 и равны таблице `tracks.md` п. 3 (длина ±0.1 км, набор ±5 м, макс. уклон ±0.3 %); тестовый профиль FRD-03 п.1 (1000 м ровно, 1000 м +50 м, 1000 м −50 м) даёт 3.0 км, 50 м, 5.0 % (±0.1); у приморья мост в данных, полотно на мосту выше `water_level_m` не меньше чем на 10 м. Ручных нет.
 
-#### T-063 — SIM в FTMS-кодеке и в `TrainerDevice` `[game]` — `review` (c1b5624)
+#### T-063 — SIM в FTMS-кодеке и в `TrainerDevice` `[game]` — `done` (c1b5624; приёмка f84b12b)
 Волна 1. Зависит: —. Размер M.
 Что сделать. `FtmsCodec`: `encode_indoor_bike_simulation(wind_mps, grade_pct, crr, cw)` по вводному абзацу FRD (опкод `0x11`, sint16 LE ветер ×1000, sint16 LE уклон ×100, uint8 Crr ×10000, uint8 Cw ×100; вне диапазона → ошибка, без байтов), `decode_supported_inclination_range` (`0x2AD5`: min, max sint16 ×0.1 %, increment uint16), бит «Indoor Bike Simulation Parameters Supported» в Target Setting Features `0x2ACC`. `BleUuids` — константы `0x2AD5`, `0x2ACC`, если их нет. `TrainerDevice`: `set_simulation(grade_pct: float)` (ветер, Crr, Cw по умолчанию 0 / 0.004 / 0.20), `simulation_support() -> int` (`UNKNOWN`/`SUPPORTED`/`UNSUPPORTED`), `inclination_range() -> Vector2` (запасной диапазон −10…+20 %), код ошибки `SIMULATION_REJECTED`. `BleTrainer`: после подключения читает `0x2ACC` и `0x2AD5` (`read_characteristic`), пишет `0x11` в Control Point, результат ≠ `0x01` → `error(SIMULATION_REJECTED)` и `UNSUPPORTED`. `FakeTrainer`: команда `CMD_SIM` в журнале, `set_simulation_supported(bool)`, `set_inclination_range(min, max)`; мощность в SIM задаёт `set_rider_power` (ERG не включается). Контракт `BleBridge` и `native/ble/` не меняются — подтвердить в отчёте.
 Файлы: `src/devices/ble/codecs/ftms_codec.gd`, `src/devices/ble/ble_uuids.gd`, `src/devices/trainer_device.gd`, `src/devices/ble_trainer.gd`, `src/devices/fake_trainer.gd`, `tests/unit/devices/test_ftms_sim_codec.gd`, `tests/unit/devices/test_ble_trainer_sim.gd`, `tests/unit/devices/test_fake_trainer_sim.gd`.
 Закрывает: REQ-FRD-04 п.1; п.3 (чтение диапазона и запасной диапазон; ограничение уклона — T-068); п.6 (определение поддержки по `0x2ACC` и коду результата; переход на сопротивление и сообщение — T-068, T-084).
 Критерии авто: все байтовые примеры FRD-04 п.1 (5.00 %, −3.00 %, 0 %, 12.34 %, ветер 1.5 м/с, Crr, Cw) и отклонение значений вне диапазона; на `StubBleBridge` после подключения есть чтения `0x2ACC` и `0x2AD5`, затем запись `0x11` по `set_simulation`; ответ `0x11` с кодом `0x02` → `UNSUPPORTED` и ошибка; `FakeTrainer` пишет `CMD_SIM` в журнал. Ручные: REQ-FRD-04 п.10 (Tacx Neo, вне контейнера).
 
-#### T-064 — Хранилище свободной езды: потоки, метаданные, сводка, название для Strava `[integration]` — `review` (2bdd110)
+#### T-064 — Хранилище свободной езды: потоки, метаданные, сводка, название для Strava `[integration]` — `done` (2bdd110; приёмка f84b12b)
 Волна 1. Зависит: —. Размер M.
 Что сделать. `SampleStream` и сэмпл заезда: необязательные поля `distance_m` (накопленная), `altitude_m`, `grade_pct`, которые у заездов по плану отсутствуют. `FileRideRepository`: запись и чтение этих потоков; старые заезды без них читаются без ошибок (миграция не нужна). Метаданные `Ride`: `ride_type` (`workout`/`free_ride`), `route_id`, `sim_steepness_start_pct`, `total_distance_m`, `total_ascent_m`; у свободной езды `speed_source = model`, названия плана нет. `RideSummary`: набор высоты — сумма положительных приращений `altitude_m` между соседними сэмплами; поля, связанные с целью, — «нет значения» без ошибок. `RideSeries`: без серии цели, без ошибки; серия высоты по дистанции (для T-085). `StravaService`: название по умолчанию для свободной езды — `tr("ride.free_ride.default_name") % <название трассы>` (ключи заводит T-060; CSV не править).
 Файлы: `src/session/sample_stream.gd`, `src/storage/ride.gd`, `src/storage/ride_recorder.gd`, `src/storage/file_ride_repository.gd`, `src/storage/ride_summary.gd`, `src/storage/ride_series.gd`, `src/integrations/strava/strava_service.gd`, `tests/unit/storage/test_free_ride_storage.gd`, `tests/unit/integrations/test_strava_free_ride_name.gd`.
 Закрывает: REQ-FRD-07 п.3 (метаданные), п.4 (хранение полей и расчёт набора по сэмплам), п.6 (сводка и серии без цели; список истории — T-085), п.7.
 Критерии авто: сохранение и чтение заезда свободной езды через `RideRepository` возвращает дистанцию, высоту и уклон каждого сэмпла; старый заезд из фикстуры читается; набор по синтетическим сэмплам двух кругов = 2 × набор круга ± 5 %; сводка без цели без ошибок, поля цели «—»; название в очереди Strava — «Свободная езда — <трасса>» на ru и en; LOC-01..LOC-07 и STR-02..05 не регрессируют. Ручных нет.
 
-#### T-065 — Модели нижнего графика HUD `[game]` — `review` (3d79191)
+#### T-065 — Модели нижнего графика HUD `[game]` — `done` (3d79191; приёмка 83dd2b0)
 Волна 1. Зависит: —. Размер M.
 Что сделать. Только модели, без отрисовки (`RefCounted`, headless) по `hud.md` п. 7, 8. `PlanChartModel`: сегменты из `Workout.segments()` с учётом множителя WRK-07 (начало, длительность, цели в начале и в конце, зона, признак «свободно»); рампа, пересекающая границы зон, режется на куски по зонам (`hud.md` п. 12.3); `y_max = 1.25 × максимальная цель`; пересчёт при смене множителя; состояния `пройдено`/`предстоит`/`пропущено`; курсор x(t), на паузе не двигается. `TimeAxis`: шаг подписей из ряда 1, 2, 5, 10, 15, 30, 60 мин, не больше 10 подписей, формат `мм` / `ч:мм`. `EffortSeries`: серия сглаженной мощности (HUD-09) и серия пульса по сэмплам; «нет данных» и пульс 0 дают разрыв; пауза не добавляет точек; обрезка по `y_max` с флагом; прореживание до ≤ 2 × ширины с сохранением min/max в корзине; своя шкала пульса 50…`max_hr` (или 200); токены цвета (`power_line`, `hr_line`), стиль серии пульса — «линия без площади»; подписи шкалы пульса на противоположной стороне. Режим скользящего окна для свободной езды: окно и коэффициент шкалы — параметры, по умолчанию 30 мин и 1.5 × FTP (решение оркестратора и `hud.md` п. 8; расхождение с FRD-06 п.4 — вопрос Н-13).
 Файлы: `src/ui/hud/plan_chart_model.gd`, `src/ui/hud/effort_series.gd`, `src/ui/hud/time_axis.gd`, `tests/unit/ui/test_plan_chart_model.gd`, `tests/unit/ui/test_effort_series.gd`, `tests/unit/ui/test_time_axis.gd`.
 Закрывает: REQ-HUD-10 п.1–5; REQ-HUD-11 п.1–5; REQ-HUD-12 п.1, 2, 5, 6, 7 (п.4 — токен, цвет проверяется в T-071); REQ-FRD-06 п.4 (модель окна и шкалы).
 Критерии авто: все `[авто]` перечисленных пунктов на моделях (поток 100, 200, 300, 300 → 100, 150, 200, 267; план 3 ч на 1280 px → ≤ 2560 точек, пик 30-секундного спринта среди точек; план 60 мин → шаг 10 мин, 20 мин → 5 мин; рампа 40 → 70 % FTP → 2 куска). Ручных нет.
 
-#### T-066 — Длинные трассы: коридорный рельеф и куски MultiMesh `[visual]` — `review` (6871a91)
+#### T-066 — Длинные трассы: коридорный рельеф и куски MultiMesh `[visual]` — `done` (6871a91; приёмка f84b12b, edbeef9)
 Волна 1. Зависит: —. Размер M.
 Что сделать. По `tracks.md` п. 5, на существующей `LoopTrack`, растянутой до 20 км (трассы и профиль появятся в T-062/T-070). `TerrainField`: вместо одной сетки на габарит — коридор вдоль трассы кусками (например, по 500 м, ширина видимой зоны), с LOD или крупной ячейкой вдали, форма рельефа на 20 км не хуже, чем сейчас на 2 км. `SceneryBuilder` и столбики `RoadsideBuilder`: MultiMesh кусками по ~500 м с `visibility_range` (видно ±1.5 км), плотность — на километр. `PerfBudget` и `docs/perf_budget.md`: бюджет «видимо с любой точки трассы» вместо «всего на трассе». Снимки «до/после» на 2 км и 20 км.
 Файлы: `src/scene3d/terrain_field.gd`, `src/scene3d/scenery_builder.gd`, `src/scene3d/roadside_builder.gd`, `src/scene3d/perf_budget.gd`, `docs/perf_budget.md`, `tests/integration/test_long_route_world.gd`. `ride_scene.gd` — только если без него нельзя (сообщить в отчёте).
 Закрывает: REQ-D3D-08 п.6 (бюджет на длинной трассе; состав окружений — T-083, T-087, T-088, T-090); REQ-D3D-05 п.2 (бюджет в редакции В-7); регрессия REQ-D3D-07 п.1–5 и дефектов D3D-07-A/B.
 Критерии авто: на петле 20 км число видимых экземпляров MultiMesh с любой точки (шаг 250 м) ≤ бюджета; рельеф не выше полотна в пределах ширины дороги; приёмочные тесты D3D-07 зелёные на 2 и 20 км. Визуально: чек-лист `ride-visual-review` ≥ 10/12 на снимках 0/400/900/1500 м и на тех же точках петли 20 км. Ручные: FPS на устройстве (D3D-05 п.1).
 
-#### T-067 — Модель скорости с уклоном и позиция на трассе `[game]` — `in-progress`
+#### T-067 — Модель скорости с уклоном и позиция на трассе `[game]` — `done` (e057f74; приёмка d62b281)
 Волна 2. Зависит: T-062. Размер S–M.
 Что сделать. `SpeedModel`: установившаяся скорость и шаг инерции с уклоном по вводному абзацу FRD (P = v · (m·g·(Crr·cos θ + sin θ) + 0.5·ρ·CdA·v²), m = вес + 8 кг); на уклоне 0 — прежние значения D3D-02. `RoutePosition` (`src/domain/`): по скорости и dt продвигает s по модулю L; накопленная дистанция, номер круга, h(s), g(s) из `RouteProfile`; набор по сэмплам. Тренировка по плану эту модель не использует (решение оркестратора: на `flat` без уклона).
 Файлы: `src/domain/speed_model.gd`, `src/domain/route_position.gd`, `tests/unit/domain/test_speed_model_grade.gd`, `tests/unit/domain/test_route_position.gd`.
 Закрывает: REQ-FRD-04 п.2 (позиция s как интеграл скорости), п.7, п.8 (модель берёт полный уклон, крутизна — только для станка); REQ-FRD-07 п.1 (оборачивание s и монотонная дистанция на модели); регрессия REQ-D3D-02 п.1–4.
 Критерии авто: опорные значения FRD-04 п.7 (200 Вт: 0 % → 34 ± 3, 5 % → 15.2 ± 1.5, 10 % → 8.4 ± 1.0 км/ч; 0 Вт, −5 % → 49.8 ± 3); монотонность по P, g, m; 4 ч при 250 Вт на `flat`: дистанция > 10 L, скачок высоты на стыке ≤ 0.1 м. Ручных нет.
 
-#### T-068 — `SimController`: уклон на станок, крутизна, режимы `[game]` — `in-progress`
+#### T-068 — `SimController`: уклон на станок, крутизна, режимы `[game]` — `done` (c9762f9; приёмка d62b281)
 Волна 2. Зависит: T-063. Размер M.
 Что сделать. `src/session/sim_controller.gd` (`RefCounted`, время извне через `tick`). Вход: уклон трассы g(s) на каждом тике, крутизна k, режим `SIM`/`FIXED`, уровень сопротивления. Выход — команды `TrainerDevice`: `set_simulation(round(g·k/100, 0.01))`, ограниченный `inclination_range()`; не чаще раза в 1 с и только при изменении ≥ 0.1 %; принудительная отправка (не позже 1 с, без порога) при старте, `resume()`, восстановлении связи и смене крутизны; переключение `SIM` ↔ `FIXED` одним вызовом (в `FIXED` — `set_resistance_level` по WRK-04.2, команд `0x11` нет); при `UNSUPPORTED` или `SIMULATION_REJECTED` — переход в `FIXED` и сигнал `simulation_unavailable` (текст сообщения — T-084). Ни одной `set_target_power`. События для журнала заезда: смена режима, смена крутизны.
 По итогам волны 1 (T-063). `SensorHub extends TrainerDevice` (`src/devices/sensor_hub.gd`) должен делегировать станку `set_simulation`, `simulation_support` и `inclination_range` — сейчас этого нет, и через хаб SIM не дойдёт до `BleTrainer`; файл добавлен в эту задачу. `BleTrainer` сам не блокирует `0x11` при `UNSUPPORTED` — решение «SIM или фиксированное сопротивление» целиком на `SimController` (проверить тестом: при `UNSUPPORTED` контроллер не шлёт `set_simulation`).
@@ -681,7 +692,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-FRD-04 п.2 (передаваемый уклон), п.3 (ограничение диапазоном), п.4, п.5, п.6 (переход на сопротивление); REQ-FRD-05 п.1 (применение крутизны), п.2, п.3, п.4; REQ-FRD-01 п.2 (нет `0x05`, первая команда — `0x11` или `0x04`).
 Критерии авто: все `[авто]` перечисленных пунктов на `FakeTrainer` и `StubBleBridge` (g = 8 %, k = 50 % → 4.00 %; g = −4 %, k = 50 % → −2.00 %; 10 мин «гор» → ≤ 600 команд `0x11`, интервалы ≥ 1000 мс). Ручные: REQ-FRD-05 п.7 (Neo).
 
-#### T-069 — FIT свободной езды `[integration]` — `in-progress`
+#### T-069 — FIT свободной езды `[integration]` — `done` (a7405a8; приёмка d62b281)
 Волна 2. Зависит: T-064. Размер M.
 Что сделать. `FitEncoder`: в `record` — `distance` (поле 5, м × 100), `enhanced_altitude` (поле 78) или `altitude` (поле 2; масштаб 5, смещение 500), `grade` (поле 9, % × 100), только если у сэмпла есть эти поля; в `session` — `total_distance` (9), `total_ascent` (22); `lap` — на каждый полный круг трассы и неполный последний (по `distance_m` и длине трассы из метаданных) вместо шагов плана. `FitDecoder` (тестовый) читает новые поля.
 По итогам волны 1 (T-064). Источник данных: `distance_m`, `altitude_m`, `grade_pct` сэмплов и признак `has_route` — из `SampleStream`; итоги сессии — `Ride.total_distance_m()` и `Ride.total_ascent_m()`, свой подсчёт набора не делать.
@@ -689,7 +700,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-FRD-07 п.5; регрессия REQ-LOC-05 п.1–4.
 Критерии авто: декодированные значения совпадают с сэмплами (дистанция ±0.01 м, высота ±0.2 м, `total_ascent` ±1 м); 2.5 круга → 3 `lap`; FIT заезда по плану не изменился (те же тесты LOC-05 зелёные). Ручные: REQ-FRD-07 п.8 (реальный Strava).
 
-#### T-070 — `ProfiledTrack`: дорога, гонщик и камера на профиле `[visual]` — `in-progress`
+#### T-070 — `ProfiledTrack`: дорога, гонщик и камера на профиле `[visual]` — `done` (431b324; приёмка d62b281)
 Волна 2. Зависит: T-062, T-066. Размер M.
 Что сделать. `ProfiledTrack extends Track`: план-схема каждой трассы по `layout` + `seed` из `RouteCatalog`, длина равна длине профиля, высота дороги — h(s); стык круга непрерывен. `RouteWorld` (`src/scene3d/route_world.gd`): id трассы → `ProfiledTrack` + `EnvironmentSet` (пока у всех `default_environment.tres`). `RideScene.set_route(id)`; по умолчанию `flat` (тренировка по плану не меняет `workout_screen`). `RoadBuilder`/`RoadsideBuilder`: полотно, кромка, трава, кювет — относительно высоты полотна; `TerrainField`: рельеф относительно дороги, поперечный склон вдоль подъёмов (`tracks.md` п. 5). `Rider`: продольный наклон atan(g/100); камера D3D-07.5 на подъёмах и переломах. Снимки по дистанциям `tracks.md` п. 8.8 для всех четырёх трасс (пока на общем окружении).
 По итогам волны 1 (T-066). Дорогу (`RoadBuilder`) и обочину (`RoadsideBuilder`) строить кусками, без лимитов `RoadBuilder.MAX_SEGMENTS` и `RoadsideBuilder.MAX_RINGS`: на 20 км они дают шаг 50 м и 28.6 м — изломы полотна и щель асфальт–бордюр (критерий: шаг ≤ шага на 2 км, щели нет на кадрах 20 км). База рельефа `TerrainField._height` — относительно h(s) трассы, а не средней высоты. В `docs/scene3d.md` — абзац о рельефе-коридоре и кусках (дорога, обочина, MultiMesh, `visibility_range`).
@@ -697,42 +708,42 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-D3D-08 п.2 (горизонтальная геометрия на стыке), п.4, п.5, п.7; REQ-D3D-03 п.1, 2 (на новых трассах).
 Критерии авто: высота оси дороги и гонщика = h(s) ± 0.05 м с шагом 50 м по кругу на каждой трассе; рельеф не выше полотна в пределах ширины; наклон гонщика = atan(g/100) ± 1°; требования камеры D3D-07.5 на всех точках, включая максимальный уклон и перелом; тесты D3D-02, D3D-04, D3D-07.2–3 зелёные на всех четырёх трассах; бюджет T-066 соблюдён. Визуально: на кадрах подъёма дорога видимо уходит вверх, на спуске — вниз; чек-лист ≥ 10/12. Ручные: REQ-D3D-08 п.9.
 
-#### T-071 — Рисовальщик `HudChart` и превью плана `[game]` — `in-progress`
+#### T-071 — Рисовальщик `HudChart` и превью плана `[game]` — `done` (ca89bea; приёмка 6e84ef1)
 Волна 2. Зависит: T-060, T-065. Размер M.
 Что сделать. `HudChart` (`Control`, `_draw`) по `hud.md` п. 7 поверх моделей T-065: сегменты плана цветом `ZonePalette`, скруглённые верхние углы `min(5·s, w/2)`, зазор 1·s, рампы наклонным верхом кусками по зонам, FreeRide — нейтральный `hud.free` со штриховкой на 30 % высоты, пройденное приглушено, курсор; линия мощности `#F5F7FA` и линия пульса `#FF4757` толщиной 2·s с обводкой; порядок: план → пульс → мощность; у пульса только полилиния, без заливки; шкалы мощности и пульса по разные стороны. Режим «скользящее окно» (без плана) — заготовка API, наполнение в T-079. `PlanPreview` — тот же рисовальщик в компактном режиме для карточек (UIX-03.4); заменит `src/ui/plan/workout_chart.gd` в T-082.
 Файлы: `src/ui/hud/hud_chart.gd`, `src/ui/common/plan_preview.gd`, `tests/unit/ui/test_hud_chart_draw.gd`.
 Закрывает: REQ-HUD-10 п.6; REQ-HUD-11 п.6; REQ-HUD-12 п.3, 4; REQ-UIX-03 п.4 (план: превью и график из одной модели).
 Критерии авто: токены цвета сегментов совпадают с зонами, «свободно» — нейтральный; порядок вызовов отрисовки; для пульса ни одного залитого полигона; цвет пульса в диапазоне тона 345–15°, насыщенность ≥ 0.6. Визуально — в T-078 (на экране); здесь снимок отдельной сцены-стенда с `acc_full.zwo`.
 
-#### T-072 — Список интервалов `[game]` — `in-progress`
+#### T-072 — Список интервалов `[game]` — `done` (cf77938; приёмка 6e84ef1)
 Волна 2. Зависит: T-060. Размер S–M.
 Что сделать. По `hud.md` п. 6. `IntervalListModel`: строка на шаг — длительность, цель в Вт с учётом множителя или «свободно», зона; состояния `текущий` (ровно один), `пройден`, `пропущен`, `предстоит`; повторы — каждый шаг отдельной строкой, пока владелец не решил иначе (открытое решение 27). `IntervalList` (`Control`): текущая строка выше и залита цветом зоны с текстом `hud.ink`, прокрутка к текущей (300 мс), ширина — из `HudLayout` (параметр). Ключи текстов — только существующие или в отчёт для T-078 (CSV `strings_hud.csv` в этой волне у T-073).
 Файлы: `src/ui/hud/interval_list_model.gd`, `src/ui/hud/interval_list.gd`, `tests/unit/ui/test_interval_list_model.gd`.
 Закрывает: REQ-HUD-13 п.2, 3 (компонент; размещение в левых 25 % — T-078).
 Критерии авто: одна строка «текущий»; после смены шага выделение на новой строке не позже следующего сэмпла; при 30 шагах текущая строка в видимой области; пропущенный шаг — `пропущен`. Ручных нет.
 
-#### T-073 — Каркас экрана тренировки и панель цифр `[game]` — `in-progress`
+#### T-073 — Каркас экрана тренировки и панель цифр `[game]` — `done` (588e978; приёмка bb178af)
 Волна 2. Зависит: T-059, T-060. Размер M.
 Что сделать. `WorkoutScreen`: `RideScene` рендерится в физическом разрешении окна (вариант из `hud.md` п. 3: сцена в корневом вьюпорте, HUD в `CanvasLayer`, или размер `SubViewport` = `get_window().size`); `HudLayout` — геометрия `hud.md` п. 4.1 (панель цифр, левый слот, слот графика, слот подсказки, статусы) с безопасной зоной из `UiScale`. `HudMetricPanel` по `hud.md` п. 5 и новой редакции HUD-01: герой — факт мощности (сглаженный, с полосой зоны и отклонением), карточка цели с зоной и обратным отсчётом, время, пульс, каденс, скорость; цифры — `Hud*`-вариации темы с `tnum`, поле резервирует ширину под максимум разрядов (`hud.md` п. 5.3); подложки `HudPlate` (альфа ≥ 0.78). Фишки статусов и кнопка паузы справа сверху. Режим панели «свободная езда» не делать (T-079), но API панели — с режимом. Слоты графика и списка пока пустые (наполняет T-078); старую полосу прогресса не удалять до T-078. Снять `theme_override_*` с HUD.
 Файлы: `src/ui/workout/workout_screen.tscn`, `src/ui/workout/workout_screen.gd`, `src/ui/hud/hud_layout.gd`, `src/ui/hud/hud_metric_panel.{tscn,gd}`, `assets/i18n/strings_hud.csv`, `tests/unit/ui/test_hud_layout.gd`, `tests/unit/ui/test_hud_metric_panel.gd`.
 Закрывает: REQ-HUD-01 (новая редакция, вопрос Н-16); REQ-HUD-13 п.1, 5, 6; REQ-HUD-14 п.3, 4, 5; регрессия REQ-HUD-02..06, HUD-09; критерий `hud.md` п. 12.1 (3D в физическом разрешении) — если перенесён в REQ.
 Критерии авто: прямоугольники узлов на разрешениях из вводного абзаца HUD — панель в верхних 30 % и по центру (±5 %), центральная зона свободна, элементы не пересекаются; смена значений 9 → 99 → 100 → 999 (мощность до 9999, скорость 9.9 → 99.9, время 9:59 → 10:00 → 1:00:00) не сдвигает соседей (±1 px); контраст ≥ 4.5:1; размер текстуры 3D = размер окна ±1 px. Визуально (T-059): чек-лист `hud.md` п. 14 H1, H4, H5, H6 на 1280×720, 4:3 и телефоне. Ручные: REQ-HUD-14 п.6, HUD-01 п.4.
 
-#### T-074 — Компоненты управления HUD `[game]` — `in-progress`
+#### T-074 — Компоненты управления HUD `[game]` — `done` (06ab853; приёмка 6e84ef1)
 Волна 2. Зависит: T-060. Размер M.
 Что сделать. По `hud.md` п. 10. `NextChip` — фишка «ДАЛЕЕ · длительность · цель» с полосой цвета зоны следующего шага и секундами 5…1 (появление и исчезание 200 мс). `PauseOverlay` — вуаль `hud.ink` 0.35 и карточка «Пауза» с «Продолжить», «Пропустить шаг» (только план) и «Завершить» (→ подтверждение WRK-05.4). `HudToolbar` — колонка у правого края, появляется по вводу и скрывается через 4 с; режим «план» (ERG, интенсивность ±5 %, сопротивление ±5 при ERG выкл, пропуск, завершить) и режим «свободная езда» (SIM ↔ сопротивление, крутизна ±10 % или сопротивление ±5, завершить). Горячие клавиши: Пробел/Enter, Esc, E, `+`/`−`, N. Компоненты отдают сигналы и не знают о сессии; к экранам их подключают T-078 и T-084.
 Файлы: `src/ui/hud/next_chip.gd`, `src/ui/hud/pause_overlay.{tscn,gd}`, `src/ui/hud/hud_toolbar.{tscn,gd}`, `assets/i18n/strings_hud_controls.csv`, `tests/unit/ui/test_hud_controls.gd`.
 Закрывает: REQ-HUD-06 п.2 (отображение «скоро смена» — модель уже есть с T-029); REQ-WRK-05 и REQ-WRK-03 п.1 (UI-часть); REQ-FRD-05 п.4, 6 (органы управления); критерии `hud.md` п. 12.9–12.11, если requirements перенёс их в REQ (вопрос Н-15).
 Критерии авто: панель скрыта через 4 ± 0.5 с без ввода; в режиме «свободная езда» нет «Пропустить шаг» и ERG; каждая кнопка и клавиша выдаёт свой сигнал; цели нажатия ≥ 44 lp. Визуально — на экранах в T-078 и T-084.
 
-#### T-075 — Превью трассы `[game]` — `in-progress`
+#### T-075 — Превью трассы `[game]` — `done` (002b3bb; приёмка 6e84ef1)
 Волна 2. Зависит: T-060, T-062. Размер M.
 Что сделать. По `tracks.md` п. 7. `RoutePreviewModel`: серия (s, h) по кругу, прореживание ≤ 2 × ширины с сохранением локальных экстремумов, ось Y крупного профиля — от min до max с полями ≥ 10 %, у миниатюры — размах `max(перепад, 150 м)`; куски заливки по палитре уклона (`hud.md` п. 11); подъёмы для подписей (не больше трёх); диапазон моста; цифры и форматы (км с 1 знаком, целые м, % с 1 знаком) через функции `RouteProfile`. `RoutePreview` (`Control`): режимы «миниатюра» и «крупный», без интерактива. Единицы — ключи в `strings_tracks.csv`.
 Файлы: `src/ui/tracks/route_preview_model.gd`, `src/ui/tracks/route_preview.gd`, `assets/i18n/strings_tracks.csv`, `tests/unit/ui/test_route_preview_model.gd`.
 Закрывает: REQ-FRD-03 п.1–3; REQ-UIX-03 п.2 (содержимое карточки трассы), п.4 (трасса: одна модель с HUD-панелью рельефа).
 Критерии авто: тестовый профиль FRD-03 п.1 → «3.0 км», «50 м», «5.0 %» на ru и en; поля 10 %; число точек ≤ 2 × ширины, экстремумы среди точек. Визуально — в T-080.
 
-#### T-076 — Общие компоненты меню `[game]` — `in-progress`
+#### T-076 — Общие компоненты меню `[game]` — `done` (6391da8; приёмка 6e84ef1)
 Волна 2. Зависит: T-060, T-061. Размер S–M.
 Что сделать. По `ui.md` п. 6, 9.2: `AppBar` (заголовок `H1Label`, «назад» → `app_state.go_back()` — так метод назван в T-061, слот действий справа), `StatView` (число `tnum` + единица `text2`), `Banner` (warn/error/info), `ListRow` (`ListRowButton` с колонками), `EmptyState` (иконка, текст, действие). Только вариации темы, без `theme_override_*`. Стенд-сцена для снимков.
 По итогам волны 1 (T-060). Минимальный размер цели нажатия темой не задаётся: нужен общий хелпер `src/ui/common/touch_target.gd` (или аналог) — `custom_minimum_size` по `UiScale.touch_ui()` (52 lp на сенсорных устройствах, 40 lp на компьютере; HUD — `touch_hud()`); хелпер применяют компоненты этой задачи и экранные задачи (T-078, T-080..T-082, T-084..T-086), T-089 проверяет матрицей.
@@ -740,7 +751,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-UIX-01 п.3 (компоненты используют вариации темы), REQ-UIX-04 п.1 (компонент «назад»).
 Критерии авто: «назад» в `AppBar` вызывает `app_state.go_back()`; хелпер даёт 52 lp на телефоне и планшете и 40 lp на компьютере (подмена устройства через `ui_debug_device`); компоненты без локальных переопределений цвета и шрифта; цели нажатия ≥ 44 lp. Ручных нет.
 
-#### T-077 — `FreeRideSession` `[game]` — `todo`
+#### T-077 — `FreeRideSession` `[game]` — `done` (013a0d8; приёмка d62b281)
 Волна 3. Зависит: T-064, T-067, T-068. Размер M.
 Что сделать. `src/session/free_ride_session.gd` — сессия без плана, по образцу `WorkoutSession`, без `IntervalExecutor`. Тики 1 Гц извне (`SessionTicker`); скорость — `SpeedModel` с полным уклоном (`speed_source = model`); позиция — `RoutePosition`; станок — через `SimController` (старт: Request Control → `0x11` или `0x04`, если заранее выбран фиксированный режим); пауза и возобновление по WRK-05/В-4 (на паузе на станок ничего, дистанция и время стоят; при возобновлении — принудительная отправка); восстановление связи — принудительная отправка; события (пауза, смена режима и крутизны, обрывы); сэмплы с `distance_m`, `altitude_m`, `grade_pct`; без лимита; `stop()` — только явный вызов, затем сохранение через `RideRecorder` с метаданными T-064. Сеть не нужна.
 По итогам волны 1 (T-064). Сессия реализует контракт, который ждёт `RideRecorder`: сигналы `state_changed(int)`, `event_logged(Dictionary)`, `second_elapsed(int)`; методы `get_state()`, `elapsed_sec()`, `metadata()`; свойства `samples`, `events`, `started_at_unix`. Метаданные — `Ride.free_ride_metadata(route, steepness)`. Сэмплы — `SampleStream.append(..., {distance_m, altitude_m, grade_pct})`. Подписки в `RefCounted` — только связанными методами, отключение в `dispose()`.
@@ -748,35 +759,37 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-FRD-01 п.1 (сессия без исполнителя), п.2, п.3; REQ-FRD-04 п.5 (старт, пауза, переподключение), п.9; REQ-FRD-05 п.5, п.6 (события); REQ-FRD-07 п.1, п.2 (пауза и сохранение после stop), п.3, п.4.
 Критерии авто: ускоренная симуляция 4 ч при 250 Вт на `flat` не завершается сама, дистанция > 10 L, стык без скачка высоты > 0.1 м; в журнале `FakeTrainer` нет `CMD_TARGET_POWER`; с мок-транспортом «нет сети» сессия стартует; смена режима и крутизны не меняет таймер, запись и позицию; набор N кругов = N × набор трассы ± 5 %. Ручных нет.
 
-#### T-078 — Сборка HUD тренировки `[game]` — `todo`
+#### T-078 — Сборка HUD тренировки `[game]` — `review` (b2d48da; приёмка 6e84ef1 с дефектами → T-097)
+Итог приёмки (6e84ef1). На телефоне (s = 1.2) не выполнены HUD-13 п.5 (центральная зона), п.6 (пересечения, зазор список — панель), п.9 (слот подсказки у низа над графиком). Исправляет T-097; `done` — по повторной приёмке tester после T-097. Полоса прогресса пока скрытым узлом — удаляет T-097.
 Волна 3. Зависит: T-071, T-072, T-073, T-074. Размер M.
 Что сделать. В `WorkoutScreen` встроить `HudChart` (слот снизу во всю ширину, 12–22 % высоты, градиент над графиком), `IntervalList` (левый слот), `NextChip` (слот подсказки, за 5 с до смены), `PauseOverlay` (между 3D и HUD) и `HudToolbar` (режим «план»), привязать к сессии; удалить `WorkoutProgressBar` (HUD-07 по смыслу заменён HUD-10). Тренировка по плану — трасса `flat` (умолчание `RideScene` из T-070), станку уклон не уходит, скорость — по D3D-02. Компоненты T-071..T-074 не менять: нужная правка → в отчёт.
 Файлы: `src/ui/workout/workout_screen.{tscn,gd}`, удаление `src/ui/workout/workout_progress_bar.gd` (+ `.uid`), `assets/i18n/strings_hud.csv`, `tests/unit/ui/test_workout_screen_layout.gd`.
 Закрывает: REQ-HUD-10 п.7; REQ-HUD-11 п.7; REQ-HUD-12 п.8; REQ-HUD-13 п.2, 3 (на экране), п.4, п.7; REQ-HUD-07 (замена полосы, тесты HUD-07 переносятся на модель графика — согласовать с tester).
 Критерии авто: график прижат к низу, ширина окна, 12–22 % высоты; список в левых 25 %; центральная зона свободна, пересечений нет на всех разрешениях; при паузе курсор стоит; в тренировке по плану в журнале нет `CMD_SIM`. Визуально (T-059, `acc_full.zwo`): чек-лист `hud.md` п. 14 H1–H12 на моментах начало / 17:00 / −5 с / пауза / последний шаг на 1280×720, 4:3 и телефоне, сверка с `zwift_hud_workout.png`. Ручные: REQ-HUD-10 п.8 (1.5 м).
 
-#### T-079 — Компоненты HUD свободной езды `[game]` — `todo`
+#### T-079 — Компоненты HUD свободной езды `[game]` — `review` (36452a1)
+Итог. Отдельного отчёта tester по T-079 нет: FRD-06 и FRD-05 п.6 проверялись на экране T-084 (6e84ef1). Нужно подтверждение tester, что FRD-06 п.1–4 и FRD-05 п.6 закрыты, — тогда `done`. Подвал панели рельефа на телефоне — в T-097.
 Волна 3. Зависит: T-071, T-073, T-075. Размер M.
 Что сделать. По `hud.md` п. 8. `ReliefPanel` (левый слот): шапка с трассой и кругом, профиль круга целиком с пройденной частью и точкой позиции, строка «дистанция / длина круга · набор», профиль «впереди 2 км» (s − 200 … s + 2000 м, минимальный размах 40 м, подпись самого крутого места), подвал «до вершины … / подъём через …». Модель — на `RoutePreviewModel` (одна серия с превью). `HudMetricPanel` — режим «свободная езда»: время, дистанция (км, 2 знака, накопленная), скорость, набор; полоса прогресса круга; карточка «УКЛОН» (g(s) трассы, знак всегда, 1 знак, клин цвета уклона, строка `SIM 50 %` / `СОПР. 40 %`); герой — факт мощности без отклонения; пульс, каденс; цели, отсчёта и списка нет. `HudChart` — режим «история усилия»: окно из T-065, мощность площадью по зонам + белая линия, пульс красной линией, FTP пунктиром.
 Файлы: `src/ui/hud/relief_panel.gd`, `src/ui/hud/hud_metric_panel.gd`, `src/ui/hud/hud_chart.gd`, `assets/i18n/strings_free_ride.csv`, `tests/unit/ui/test_relief_panel.gd`, `tests/unit/ui/test_free_ride_metric_panel.gd`.
 Закрывает: REQ-FRD-06 п.1, п.2, п.3, п.4 (отрисовка); REQ-FRD-05 п.6 (режим и крутизна на HUD).
 Критерии авто: маркер на x = (s mod L)/L × ширина (±1 px) и на высоте профиля, после круга — у левого края; на HUD уклон трассы, а не переданный станку; форматы FRD-06 п.1, «—» при отсутствии данных; правила HUD-11/12 на графике истории. Визуально — в T-084.
 
-#### T-080 — Экран выбора трассы `[game]` — `todo`
+#### T-080 — Экран выбора трассы `[game]` — `done` (c36d3d1; приёмка 6e84ef1)
 Волна 3. Зависит: T-061, T-075, T-076. Размер M.
 Что сделать. По `ui.md` п. 8.4. Заполнить заготовку `route_select_screen` из T-061: `AppBar`, четыре карточки `CardButton` (название на языке интерфейса, тип, полоса `mood_color`, миниатюра `RoutePreview`, три цифры), состояние «выбрано» у одной, предвыбор — `profile.last_route_id`; деталь выбранной — крупный профиль, слайдер крутизны 0–100 % с шагом 5 (значение из профиля, сохраняется), основная кнопка «Старт» → `start_requested(route_id, steepness)`. Выбор сохраняется в профиле. Адаптивность: одна колонка на портретном телефоне.
 Файлы: `src/ui/tracks/route_select_screen.{tscn,gd}`, `assets/i18n/strings_tracks.csv`, `tests/unit/ui/test_route_select_screen.gd`.
 Закрывает: REQ-FRD-02 п.1, 2 (передача id), 3; REQ-FRD-03 п.4; REQ-FRD-05 п.1 (UI); REQ-UIX-03 п.2, 3, 5 (трасса); REQ-D3D-08 п.1 (названия ru/en на экране).
 Критерии авто: четыре карточки, ровно одна «выбрано»; первый запуск — `flat`, далее — последняя выбранная; «Старт» отдаёт выбранный id и крутизну; названия на ru и en. Визуально (T-059): профили четырёх трасс различимы, цифры с единицами, чек-лист `ui.md` п. 11. Ручные: REQ-FRD-02 п.4.
 
-#### T-081 — Главный экран `[game]` — `todo`
+#### T-081 — Главный экран `[game]` — `done` (9f68583; приёмка 6e84ef1)
 Волна 3. Зависит: T-061, T-076. Размер M.
 Что сделать. По `ui.md` п. 8.2 и макетам: две карточки сценариев `ScenarioCard` с основной кнопкой — «Тренировка по плану» (→ PLAN) и «Свободная езда» (→ ROUTE_SELECT), каждая по площади ≥ 2 × любой другой кнопки; фишки статуса станка и запомненных датчиков (состояние DEV-07.1, заряд DEV-07.2, обновление ≤ 1 с, нажатие → DEVICES); переходы в историю и настройки; имя профиля и смена профиля при ≥ 2 профилях; кнопка режима разработчика только в отладочной сборке. Если для статуса устройств экрану нужен `ConnectionManager`, его передаёт `main.gd` (владелец в волне 3 — эта задача, правка только проводки).
 Файлы: `src/ui/home/home.{tscn,gd}`, `src/app/main.gd` (только проводка), `assets/i18n/strings_menu.csv`, `tests/unit/ui/test_home_screen.gd`.
 Закрывает: REQ-UIX-02 п.1–4, п.5 (снимки); REQ-FRD-01 п.1 (вход с главного экрана).
 Критерии авто: два основных действия ведут на PLAN и ROUTE_SELECT; соотношение площадей; смена состояния `FakeTrainer` видна ≤ 1 с; история и настройки — одно нажатие; dev-кнопка скрыта вне отладки. Визуально: снимки на телефоне, планшете и компьютере — сценарии самые заметные, история и настройки без прокрутки.
 
-#### T-082 — Выбор тренировки карточками `[game]` — `todo`
+#### T-082 — Выбор тренировки карточками `[game]` — `done` (b443372; приёмка 6e84ef1; `WorkoutChart` удалён в T-095)
 Волна 3. Зависит: T-071, T-076. Размер M.
 Что сделать. По `ui.md` п. 8.3: `AppBar`, план на сегодня и библиотека — карточки `CardButton` с названием, `PlanPreview` (сегменты HUD-10.1 по зонам с FTP профиля), длительностью (`ч:мм` или `мм` мин) и максимальной целью (Вт); одна карточка «выбрано»; запуск одним действием; импорт файла и пустые состояния. `workout_chart.gd` заменить на `PlanPreview` и удалить.
 По итогам волны 1 (T-061). Кнопка «назад» экрана → `app_state.go_back()` (через `AppBar`), а не `navigate(HOME)`. Цели нажатия — хелпером `touch_target.gd` из T-076.
@@ -784,14 +797,15 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-UIX-03 п.1, 3, 4, 5 (тренировка); регрессия REQ-INT-04, INT-05, IMP-03 п.2.
 Критерии авто: цифры карточки по плану из фикстуры; сегменты превью = модель HUD-10.1; ровно одна «выбрано»; запуск выбранной; приёмка T-040 зелёная (тесты, завязанные на `workout_chart.gd`, — согласовать с tester). Визуально: три тренировки разной структуры различимы.
 
-#### T-083 — Окружения «равнина» и «холмы» `[visual]` — `todo`
+#### T-083 — Окружения «равнина» и «холмы» `[visual]` — `review` (cf6fec6)
+Итог. Визуально принято game-designer по снимкам; `[авто]` — тесты исполнителя зелёные. Приёмка tester (D3D-08 п.6, 8, 12 на `flat`, `hills`; бюджет D3D-05 п.4) — в цикле T-088/T-089, затем `done`.
 Волна 3. Зависит: T-070. Размер M.
 Что сделать. По `tracks.md` п. 4.1, 4.2, 6. Свои `EnvironmentSet` для `flat` и `hills` (новые поля `environment_set.gd` — с запасом под горы и приморье), поля-лоскуты, пашня, тополя, ветряки, деревни с крышами; ориентиры из списков трасс (не реже 1.5 км, в кадре одновременно не больше 2–3); `hills_height_m`: равнина < холмы. Новые меши — в `src/scene3d/props/` и `MeshKit`, контур и тун-палитра по арт-библии; источники ассетов — в отчёт для `docs/game/assets.md` (документ ведёт game-designer).
 Файлы: `src/scene3d/environment_set.gd`, `src/scene3d/tracks/env_flat.tres`, `src/scene3d/tracks/env_hills.tres`, `src/scene3d/props/**`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd`, `src/scene3d/scenery_builder.gd`, `tests/integration/test_route_environments.gd`.
 Закрывает: REQ-D3D-08 п.6 (`flat`, `hills`), п.8 (`flat`, `hills`).
 Критерии авто: у трасс свои наборы окружения; ориентиры не реже 1.5 км; бюджет T-066 на обеих. Визуально: снимки `tracks.md` п. 8.8 — чек-лист ≥ 10/12 без блокирующих, трассы различимы без подписи.
 
-#### T-084 — Экран свободной езды и запуск `[game]` — `todo`
+#### T-084 — Экран свободной езды и запуск `[game]` — `done` (68a89e6; приёмка 6e84ef1; пересвет 3D — T-096, Esc → подтверждение — T-097)
 Волна 4. Зависит: T-070, T-074, T-077, T-079, T-080. Размер M.
 Что сделать. Заполнить заготовку `free_ride_screen` из T-061: `RideScene.set_route(id)`, `FreeRideSession`, `HudLayout` + `HudMetricPanel` (режим «свободная езда»), `ReliefPanel`, `HudChart` (история усилия), `PauseOverlay`, `HudToolbar` (режим «свободная езда»: SIM ↔ сопротивление, крутизна ±10 %, завершить), сообщение «станок не поддерживает SIM» по `simulation_unavailable`, «назад» → запрос завершения с подтверждением. `main.gd`: `start_free_ride(route_id, steepness)` — то же правило старта, что у плана (нужен подключённый станок, в dev-режиме — `FakeTrainer`; FRD-01 п.4), после завершения — сохранение, автопостановка в очередь Strava, переход на сводку и в историю. `ui_screenshot.gd`: сценарии свободной езды по id трассы и дистанции (ровно, подъём и спуск на `mountains`).
 По итогам волны 1 (T-061; решение передано requirements, REQ-UIX-04 п.1). Android «назад» на главном экране (стек пуст, `go_back()` вернул `false`) закрывает приложение (`get_tree().quit()`); поведение Esc на главном — по редакции UIX-04 п.1. Реализация в `main.gd` (владелец в волне 4 — эта задача), тест — на обработчике `NOTIFICATION_WM_GO_BACK_REQUEST` с подменой выхода. Если редакция UIX-04 п.1 к началу задачи не внесена — делать по этому решению, tester принимает после внесения.
@@ -799,7 +813,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-FRD-01 п.1 (сквозной путь), п.4; REQ-FRD-06 п.5, п.6; REQ-FRD-05 п.6 (на экране); REQ-FRD-07 п.2 (подтверждение), п.6, п.7 (сквозная проверка); REQ-UIX-04 п.2 (свободная езда), п.1 (Android «назад» на главном — по новой редакции); REQ-FRD-04 п.6 (сообщение пользователю).
 Критерии авто: HOME → ROUTE_SELECT → «Старт» → FREE_RIDE с выбранной трассой (профиль сессии и окружение совпадают); без станка — как у плана; `set_simulation_supported(false)` → фиксированное сопротивление и сообщение; «Завершить» с подтверждением → заезд в истории и в очереди Strava с названием «Свободная езда — <трасса>»; раскладка HUD-13.1, 13.4–13.6. Визуально (T-059): чек-лист `hud.md` п. 14 на «ровно / подъём / спуск», FRD-06 п.6. Ручные: REQ-FRD-01 п.5, FRD-04 п.10, FRD-05 п.7.
 
-#### T-085 — История и карточка заезда `[game]` — `todo`
+#### T-085 — История и карточка заезда `[game]` — `review` (da90ba3; приёмка 6e84ef1 с дефектом → T-097)
+Итог приёмки (6e84ef1). LOC-03 п.2: в истории показана сглаженная мощность — экстремумы исходной серии (`RideSeries`, В-18) должны быть среди точек графика. Исправляет T-097; `done` — по повторной приёмке.
 Волна 4. Зависит: T-064, T-076. Размер M.
 Что сделать. По `ui.md` п. 8.5: `AppBar`, список заездов строками `ListRow` (дата, название, длительность, средняя мощность, статус Strava; у свободной езды — трасса и дистанция), пустое состояние; карточка заезда — `StatView`, графики в языке HUD (`HudChart` в режиме истории или `ride_chart.gd` на тех же токенах), у свободной езды — профиль высоты по дистанции (круги подряд, граница — пунктир, `tracks.md` п. 7.3), без серии цели. Снять `theme_override_*`.
 По итогам волны 1 (T-061, T-064). «Назад» экранов истории и карточки → `app_state.go_back()` (через `AppBar`), а не `navigate(HOME)`. Данные из T-064: `RideSummary.ride_type`, `route_id`, `ascent_m`, `avg_target_w` (значение `NO_DATA` → «—»), профиль высоты — `RideSeries.altitude_by_distance()`. Цели нажатия — хелпером `touch_target.gd` (T-076).
@@ -807,7 +822,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-UIX-04 п.3, 4, 5 (история); REQ-FRD-07 п.6 (в истории наравне с тренировками); регрессия REQ-LOC-02, LOC-03, LOC-06.
 Критерии авто: заезд свободной езды в списке с дистанцией, карточка без ошибок, поля цели «—»; пустая история — поясняющий текст; приёмка T-045 зелёная. Визуально: 0 и 20 заездов, чек-лист `ui.md` п. 11.
 
-#### T-086 — Настройки, устройства, выбор профиля `[game]` — `todo`
+#### T-086 — Настройки, устройства, выбор профиля `[game]` — `done` (58c7fed; приёмка 6e84ef1)
 Волна 4. Зависит: T-076. Размер M.
 Что сделать. По `ui.md` п. 8.1, 8.6, 8.7: настройки — группы с подзаголовками (состав по `ui.md`; крутизна SIM по умолчанию — если game-designer поместил её в настройки, то пишется в `sim_steepness_pct` из T-061), «О программе» с лицензиями Inter (OFL 1.1) и Lucide (ISC); устройства — строки `ListRow`, состояния и заряд, пустое состояние «устройства не найдены», баннер «Bluetooth недоступен» (UX-3); выбор профиля — карточки. `AppBar` с «назад», снять `theme_override_*`.
 По итогам волны 1 (T-061). «Назад» экранов настроек, устройств и выбора профиля → `app_state.go_back()` (через `AppBar`), а не `navigate(HOME)`. Цели нажатия — хелпером `touch_target.gd` (T-076).
@@ -815,14 +830,15 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-UIX-04 п.3, 4, 5 (настройки, устройства); регрессия REQ-PRF-05, DEV-01 п.7, NFR-08 п.3, T-057.
 Критерии авто: группы с подзаголовками; строки устройств — вариация строки списка; 0 устройств — поясняющий текст; лицензии в «О программе»; приёмки T-019/T-057 зелёные. Визуально: настройки, устройства (0 и 3), выбор профиля.
 
-#### T-087 — Окружение «горы» `[visual]` — `todo`
+#### T-087 — Окружение «горы» `[visual]` — `review` (5576c36)
+Итог. Визуально принято game-designer по снимкам; `[авто]` — тесты исполнителя зелёные. Приёмка tester (D3D-08 п.6, 8, 10, 12 на `mountains`; D3D-05 п.4) — в цикле T-088/T-089, затем `done`.
 Волна 4. Зависит: T-083. Размер M.
 Что сделать. По `tracks.md` п. 4.3: `EnvironmentSet` гор — камень, альпийский луг, снег на вершинах, высокие склоны и горизонт выше, чем на равнине, серпантин на подъёме, таблички с высотой, ориентиры; петля (подъём по одному склону, спуск по другому).
 Файлы: `src/scene3d/tracks/env_mountains.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd`, `tests/integration/test_route_environments.gd` (дополнение).
 Закрывает: REQ-D3D-08 п.6 (`mountains`: горизонт выше равнины, `hills_height_m` горы > холмы), п.8 (`mountains`).
 Критерии авто: свой набор окружения; бюджет; ориентиры. Визуально: снимки 1000 / 6000 / 8600 / 10400 / 14500 м — чек-лист ≥ 10/12, подъём и спуск читаются.
 
-#### T-088 — Приморье, часть 1: вода, берег, маяк `[visual]` — `todo`
+#### T-088 — Приморье, часть 1: вода, берег, маяк `[visual]` — `in-progress`
 Волна 5. Зависит: T-087. Размер M.
 Что сделать. По `tracks.md` п. 4.4: шейдер воды в тун-стиле (глубокая, мелкая, пена у берега, без отражений в реальном времени), море и река как поверхности на `water_level_m`, рельеф берега и пляж, дюнная трава, зонтичные сосны, маяк, ориентиры. Мост — в T-090: пока на его участке дорога идёт по насыпи.
 Файлы: `src/scene3d/shaders/water.gdshader`, `src/scene3d/materials/water.tres`, `src/scene3d/tracks/env_seaside.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/terrain_field.gd`, `tests/integration/test_route_environments.gd` (дополнение).
@@ -833,6 +849,15 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Волна 5. Зависит: T-078, T-080, T-081, T-082, T-084, T-085, T-086. Размер M (если дефектов больше, чем на заход, — менеджер режет по экранам).
 Что сделать. Матричные тесты по всем экранам × разрешения UIX (390×844, 844×390, 1024×1366, 1366×1024, 1280×720, 1920×1080) × ru/en: цели нажатия ≥ 44 lp, ничего не выходит за окно, нет пересечений интерактивных элементов, нет обрезанного текста (кроме пользовательских данных с «…»), одна колонка на портретном телефоне, без горизонтальной прокрутки; статическая проверка `.tscn`/`.gd` в `src/ui/` на `theme_override_colors`/`fonts` и `add_theme_*_override` (исключения — данные: зона, статус, графики); инвентаризация переводов (ключи из всех `strings*.csv` используются, ru и en непустые, нет кириллицы в литералах); полный набор снимков `ui_screenshot.sh` на трёх разрешениях и двух языках. Исправления — точечно в `src/ui/**` (единственная UI-задача волны).
 Хвосты T-060 (не сделаны в волне 1): letter-spacing оверлайна +6 % (`ui.md` п. 9; в `FontVariation` Godot трекинг задаётся через `spacing_glyph`, проверить на Inter) и шрифт `SpinBox` (поле ввода не наследует вариацию темы). Если game-designer в T-091 изменит состояния кнопок (hover/pressed `OptionButton`, `DangerButton`, `HudButton`, padding `GhostButton`) — правка `src/ui/theme/**` тоже здесь, если раньше её не взяла экранная задача.
+По итогам волн 3–4 (стартует после T-097; хвосты T-060 по `Overline` и `SpinBox` закрыты T-093). Дополнительно:
+- тема: у `TextEdit` (описание Strava в карточке заезда) нет стиля темы; разрывы `GridContainer`/`HFlowContainer` — вариациями separation; вариация `Caption` с `tnum`; `intervals_key_dialog.tscn` — `theme_override_colors` на `ErrorLabel` заменить вариацией `ErrorLabel`; `AcceptDialog` со скрытым OK оставляет пустое место снизу;
+- вариации T-095 на узлах вне панели цифр (`OverlineAccent`, `LogoLabel`, `SheetPanel`; на панели цифр — T-097);
+- `HudToolbar`: кнопки 56 lp + подпись 11 (сейчас ~84 lp), чтобы колонка помещалась на 16:9; `NextChip` без `add_theme_*_override`; API приглушения `HudMetricPanel` вместо доступа к `%Content`;
+- переводы: неиспользуемые ключи `ui.history.*` и `ui.plan.item.load` в `strings.csv` — удалить; тексты `SettingsSections.TEXTS` — в `strings*.csv`, проверку ключей настроек расширить на все `strings*.csv` (приёмочный тест `test_settings_acceptance` правит tester);
+- карточка заезда: легенда графика обрезана сверху;
+- снимки: сценарии истории на 0 и 20 заездов в `ui_screenshot.gd`;
+- матрица целей нажатия и обрезки текста — по всем экранам (основной пункт задачи); текстовые аксессоры истории `rows()`/`summary_text()` (только для тестов) — оставить или снять по решению tester;
+- принять ограничение движка: разрядка `Overline` +8.3 % вместо +6 % (game-designer подтверждает в `ui.md`).
 Файлы: `tests/unit/ui/test_ui_matrix.gd`, `tests/unit/ui/test_ui_static_theme.gd`, `tests/unit/app/test_i18n.gd`, точечные правки `src/ui/**`, `assets/i18n/**`.
 Закрывает: REQ-UIX-01 п.2, п.5; REQ-UIX-05 п.1–5; REQ-NFR-08 п.1, 2 (на итоговом наборе экранов).
 Критерии авто: все `[авто]` перечисленных пунктов. Визуально: чек-лист `ui.md` п. 11 и `hud.md` п. 14 по полному набору снимков. Ручные: REQ-UIX-05 п.6 (iPhone/iPad), NFR-08 п.5.
@@ -844,19 +869,86 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-D3D-08 п.3 (мост в сцене на участке из данных), п.6 (мост и вода под ним), п.8 (`seaside`, кадры 5600 и 6100 м).
 Критерии авто: на диапазоне моста есть узел моста, полотно выше воды ≥ 10 м, под мостом водная поверхность, рельеф не выше полотна; бюджет. Визуально: мост и вода в кадре, четыре трассы различимы без подписи (сводная проверка D3D-08 п.8). Ручные: REQ-D3D-08 п.9.
 
-#### T-091 — Дизайн по итогам волны 1: ориентиры, PCHIP, реестр ассетов, состояния кнопок `[design]` — `todo`
+#### T-091 — Дизайн по итогам волны 1: ориентиры, PCHIP, реестр ассетов, состояния кнопок `[design]` — `done` (44f5ea9)
 Волна 2 (можно сразу). Зависит: T-060, T-062 (слиты, в приёмке). Исполнитель — game-designer, без кода. Размер S.
 Что сделать. 1) `docs/game/tracks.md`: ориентиры каждой трассы с шагом не больше 1.5 км по кругу, включая стык круга (сейчас у `hills`, `mountains`, `seaside` разрывы 1.6–2.5 км — D3D-08 п.12 не выполняется), таблица «дистанция, тип, сторона дороги» в форме, которую T-092 перенесёт в `RouteCatalog.landmarks` без толкования. 2) `tracks.md`: уточнить, что PCHIP — вариант Fritsch–Butland (наклоны во внутренних точках — взвешенное гармоническое среднее, как `scipy.interpolate.PchipInterpolator`), а не исходный Fritsch–Carlson. 3) `docs/game/assets.md`: Inter и Lucide — статус «в проекте» (пути `assets/fonts/inter/`, `assets/icons/lucide/`, лицензии OFL 1.1 / ISC), иконки переключателя и слайдера генерируются темой (`app_theme_builder.gd`), файлов нет. 4) Оценить по снимкам T-059 состояния, которые T-060 выбрал сам: hover/pressed у `OptionButton`, `DangerButton`, `HudButton`, padding `GhostButton`; вердикт «принято» или правка значений в `ui.md`/`hud.md` (код правит T-089 или экранная задача).
 Файлы: `docs/game/tracks.md`, `docs/game/assets.md`, `docs/game/ui.md` и `docs/game/hud.md` (только п. 4 при несогласии).
 Закрывает: данные дизайна для REQ-D3D-08 п.12 (реализация в данных — T-092); вердикт game-designer по визуальной части REQ-UIX-01 п.3 для T-060.
 Критерии: в таблице ориентиров `tracks.md` максимальный разрыв по кругу (с учётом стыка) ≤ 1.5 км на всех четырёх трассах — tester считает по таблице; `assets.md` без статуса «план» для Inter и Lucide; вердикт по четырём состояниям записан. Предложение критериев для requirements, если п.12 нужно уточнить, — в отчёт.
 
-#### T-092 — Ориентиры трасс в `RouteCatalog` `[game]` — `todo`
+#### T-092 — Ориентиры трасс в `RouteCatalog` `[game]` — `done` (94f8f2c; приёмка d62b281)
 Волна 2–3. Зависит: T-091. Исполнитель — developer. Размер S.
 Что сделать. Перенести таблицу ориентиров из `tracks.md` (после T-091) в `RouteCatalog.landmarks` всех четырёх трасс; тест: максимальный разрыв между соседними ориентирами по кругу (включая стык) ≤ 1500 м. Профили и остальные данные каталога не менять.
 Файлы: `src/domain/route_catalog.gd`, `tests/unit/domain/test_route_catalog.gd`.
 Закрывает: REQ-D3D-08 п.12 (данные). Расстановка ориентиров в мире — T-083, T-087, T-088 по этим данным.
 Критерии авто: разрыв ≤ 1500 м на `flat`, `hills`, `mountains`, `seaside`; приёмка T-062 (характеристики трасс) не регрессирует. Ручных нет.
+
+#### T-093 — Доработка темы перед волной 3 `[game]` — `done` (64d24eb; приёмка 6e84ef1)
+Волна 2–3 (вне исходной нарезки). Зависит: T-060, T-091. Размер S.
+Что сделано. Состояния `danger_hover`/`danger_pressed` и нажатие `GhostButton` (вердикт T-091); вариации `NumLabel`, `Stack0`, `Row0/8/12/16/24`, `HudPauseCard`, `HudChipLabel`, `HudPauseTitle`; шрифт цифр `SpinBox`; разрядка `Overline` (хвосты T-060); иконки баннера info / triangle-alert / circle-alert; помощник `UiIcons` (`src/ui/theme/ui_icons.gd`).
+Закрывает: REQ-UIX-01 п.1, 3; REQ-UIX-05 (основа целей и отступов); REQ-HUD-14 (вариации HUD).
+
+#### T-094 — `y_max` графика плана, сдвиг по журналу пропусков, размер кадра снимков `[game]` — `done` (ad349e9; приёмка d62b281)
+Волна 3 (вне исходной нарезки). Зависит: T-065, T-059. Размер S.
+Что сделано. `y_max` графика плана с нижней границей 1.1 × FTP (уточнение У-2); линии факта сдвигаются по журналу пропусков шагов; `ui_screenshot` проверяет размер кадра и держит окно поверх всех на macOS.
+Закрывает: REQ-HUD-10 п.2, 5; REQ-HUD-11 п.1.
+
+#### T-095 — `tnum` у меток HUD, вариации темы, нагрузка на карточке Intervals.icu `[game]` — `review` (c85e98c)
+Волна 4 (вне исходной нарезки). Зависит: T-073, T-082, T-093. Размер S–M.
+Что сделано. `tnum` у подписей HUD с цифрами (фишки зон, подписи, номер шага); вариации `HudHeroUnit`, `HudTargetUnit`, `HudCountdown`, `HudDelta`, `HudGradeValue`, `HudGradeUnit`, `HudModeLabel`, `HudStepLabel`, `OverlineAccent`, `OverlineSim`, `LogoLabel`, `LogoAccentLabel`, `SheetPanel`; нагрузка Intervals.icu в строке карточки плана; удалены `WorkoutChart` и скрытый `WorkoutList`.
+Закрывает: REQ-HUD-14 п.2; REQ-INT-04 п.2; REQ-UIX-01 п.3; REQ-UIX-03 (карточка плана).
+Итог. Отдельного отчёта tester нет; приёмка — вместе с T-097. Применение вариаций на узлах: панель цифр — T-097, остальные экраны — T-089.
+
+#### T-096 — Пересвет 3D в `SubViewport` экранов заезда `[visual]` — `in-progress`
+Волна 5. Зависит: T-084. Исполнитель — technical-artist. Размер S–M.
+Почему. Оркестратор по снимкам T-084 (`ui_screenshot`) нашёл, что 3D-сцена в `SubViewport` экранов тренировки и свободной езды пересвечена; эталон — снимки `screenshot.sh` той же трассы и дистанции.
+Что сделать. Найти причину (окружение и тонмаппинг сцены внутри `SubViewport`, `own_world_3d`, прозрачный фон, HDR/цветовое пространство вьюпорта) и привести кадр экрана заезда к кадру `screenshot.sh` на тех же трассе, дистанции и разрешении. Сцены экранов одновременно правит T-097: в `src/ui/{workout,free_ride}/*_screen.tscn` T-096 трогает только узел `SubViewport` (иначе — в отчёт).
+Файлы: `src/scene3d/ride_scene.gd` и окружение сцены (по отчёту исполнителя), узел `SubViewport` в `src/ui/workout/workout_screen.tscn`, `src/ui/free_ride/free_ride_screen.tscn`; тест — в `tests/integration/`.
+Закрывает: регрессия REQ-D3D-07 п.1–5 на экранах заезда; REQ-HUD-13 п.10 (3D под HUD).
+Критерии авто: средняя яркость и гистограмма кадра 3D экрана заезда совпадают с кадром `screenshot.sh` на той же точке (допуск — исполнитель предлагает, game-designer подтверждает); размер изображения сцены = размер окна ±1 px (HUD-13 п.10 не регрессирует). Визуально: снимки «до/после» `ui_screenshot` и `screenshot.sh` рядом, вердикт game-designer.
+
+#### T-097 — Дефекты приёмки UI и хвосты экранов заезда `[game]` — `in-progress`
+Волна 5. Зависит: T-078, T-084, T-085, T-095. Исполнитель — developer. Размер M (если не помещается — режется по экранам: HUD тренировки, свободная езда, история).
+Что сделать.
+1. Дефекты приёмки 6e84ef1: HUD-13 п.5, 6, 9 на телефоне (s = 1.2) — центральная зона, пересечения и зазор список — панель, слот подсказки у низа над графиком (T-078); LOC-03 п.2 — график мощности в карточке заезда по серии `RideSeries` с экстремумами, а не по сглаженной мощности (T-085). Сейчас 4 красных теста полного прогона — это они.
+2. Esc на экранах тренировки и свободной езды → подтверждение завершения (UIX-04 п.2 важнее `hud.md` 10.3), одинаково на обоих экранах.
+3. Удаление узлов совместимости после перевода тестов: `LegacyControls` экрана тренировки (скрытые `%ErgButton`/`%SkipButton`/`%StopButton`/`%Intensity*`/`%Resistance*`/`%StopDialog`) и `workout_progress_bar.gd` (+ `.uid`); скрытые `%PowerChart`/`%HrChart` (`RideChart`) карточки заезда → `detail().effort_chart()`; скрытые `%ProfileList`/`%SelectButton`/`%DeleteButton` выбора профиля → `cards()`/`choose()`/`open_card_menu()`; переименованные в экран узлы `AppBar`/`Banner` (`%BackButton`, `%StoreWarningLabel`, `%ResetStoreButton`, `%NoticeLabel`) → `app_bar().back_button()` и т. п. Тесты, которые на них опираются, tester переводит до удаления (чужие тесты developer не правит).
+4. `HudChart`: кэш подписей шкал (не пересоздавать текст каждый кадр).
+5. Вариации T-095 на панели цифр (`HudHeroUnit`, `HudTargetUnit`, `HudCountdown`, `HudDelta`, `HudGrade*`, `HudModeLabel`, `HudStepLabel`).
+6. Подвал панели рельефа на телефоне («до вершины / подъём через» не помещается).
+7. Экран плана: кнопка «На эмуляторе» (запуск на `FakeTrainer` в отладочной сборке, как у свободной езды FRD-01 п.4).
+8. `ui_screenshot.gd`: ожидание анимаций перед снимком (~0.5 с по времени, анимации 200–300 мс).
+Файлы: `src/ui/workout/**` (удаление `workout_progress_bar.gd`), `src/ui/free_ride/**`, `src/ui/hud/{hud_layout,hud_metric_panel,hud_chart,relief_panel}.*`, `src/ui/history/**`, `src/ui/profile_select/**`, `src/ui/plan/plan_screen.*`, `scripts/dev/ui_screenshot.gd`, свои юнит-тесты.
+Закрывает: REQ-HUD-13 п.5, 6, 9 (телефон) — для `done` T-078; REQ-LOC-03 п.2 — для `done` T-085; REQ-UIX-04 п.2 (Esc); REQ-HUD-14 п.2 (вариации на узлах); REQ-FRD-06 п.1 (подвал на телефоне); REQ-FRD-01 п.4 (эмулятор в отладке — на экране плана по тому же правилу).
+Критерии авто: полный прогон GUT без красных; HUD-13 п.5, 6, 9 на 390×844 и 844×390 (s = 1.2); серия графика карточки содержит min/max исходной мощности (LOC-03 п.2); Esc на обоих экранах заезда открывает подтверждение, экран не меняется; в сценах нет `LegacyControls`, `WorkoutProgressBar`, `%PowerChart`, `%HrChart`, `%ProfileList`; «На эмуляторе» видна только в отладочной сборке. Визуально: снимки HUD тренировки и свободной езды на телефоне «до/после».
+
+#### T-098 — Последняя выбранная тренировка в профиле `[game]` — `todo`
+Волна 6. Зависит: T-097 (экран плана). Размер S.
+Что сделать. Поле профиля `last_workout_id` (совместимо со старыми профилями, по образцу `last_route_id`), запись при выборе карточки на экране плана, предвыбор при следующем открытии и после перезапуска; если тренировки нет (удалена, план сменился) — предвыбор по прежнему правилу.
+Файлы: `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, `src/ui/plan/plan_screen.gd`, юнит-тесты.
+Закрывает: REQ-UIX-03 п.3 (состояние «выбрано») — прямого критерия «запоминать между запусками» нет, вопрос Н-17 к requirements.
+Критерии авто: выбор → перезапуск (новый `ProfileRepository` на том же каталоге) → выбрана та же карточка; профиль без поля читается; несуществующий id не ломает экран.
+
+#### T-099 — Свёртка повторов Intervals.icu «3x» `[integration]` — `todo`
+Волна 6. Зависит: T-072. Размер S–M.
+Что сделать. Сейчас `Workout.expand_repeat` разворачивает блок `3x …` при разборе Intervals.icu без следа, поэтому список интервалов не может свернуть его, как ZWO `IntervalsT` (HUD-13 п.8). Сохранить метаданные блока повторов в `Workout`/`WorkoutStep` в том же виде, что у ZWO, и проверить, что `IntervalListModel` сворачивает блок без правок логики (правка модели — только чтение метаданных).
+Файлы: `src/domain/workout.gd`, `src/domain/workout_step.gd`, `src/integrations/workouts/intervals_icu_workout_parser.gd`, `src/ui/hud/interval_list_model.gd` (если нужно), тесты.
+Закрывает: REQ-HUD-13 п.8 (для планов Intervals.icu); регрессия REQ-INT-03, REQ-NFR-09 п.3.
+Критерии авто: план Intervals.icu «2 шага разминки + 4x (15 с, 45 с)» до начала блока — 3 строки, после — 2 + 8; сериализация `Workout.to_dict()/from_dict()` сохраняет метаданные; приёмка T-035 зелёная.
+
+#### T-100 — Статический кэш `RouteWorld._tracks` `[visual]` — `todo`
+Волна 6. Зависит: T-088, T-090 (`src/scene3d/` занят до их слияния). Размер S.
+Что сделать. Одиночный прогон (`-gselect`) тестов сцены заканчивается сообщением «resources still in use at exit» из-за статического кэша `RouteWorld._tracks`. Кэш — с явной очисткой (например, при выходе/в `after_all`) или не статический.
+Файлы: `src/scene3d/route_world.gd`, тест.
+Закрывает: REQ-INF-01 п.2, 5 (одиночный прогон без предупреждений об утечках).
+Критерии авто: `./scripts/test.sh -gselect=test_route_environments` без «resources still in use at exit»; время построения мира при смене трасс не выросло заметно (замер в отчёте).
+
+#### T-101 — Нестабильные по времени тесты `[integration]` — `todo`
+Волна 6. Зависит: —. Размер S.
+Что сделать. `test_storage_acceptance::loc_07_c4_tick_budget_50ms` (бюджет тика 50 мс, LOC-07 п.4) и `test_strava_hardening::idle_connection_5s` периодически падают под нагрузкой. Перевести на подменяемые часы или устойчивый замер (медиана нескольких прогонов). Приёмочный тест — зона tester; developer правит `test_strava_hardening` и, если нужно, добавляет шов часов в `src/storage/` / `src/integrations/strava/`.
+Файлы: `tests/**/test_storage_acceptance.gd` (tester), `tests/**/test_strava_hardening.gd`, при необходимости шов часов.
+Закрывает: REQ-LOC-07 п.4; регрессия REQ-STR-04; REQ-INF-01 п.1 (стабильный прогон).
+Критерии авто: 20 полных прогонов подряд без падений этих тестов.
 
 ### Этап 8 — Публикация iOS и macOS (в контейнере — документы и заготовки)
 
@@ -989,6 +1081,18 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - REQ-D3D-08 п.9 — смена трасс, подъёмы и спуски без рывков высоты, 60 FPS (методика D3D-05).
 - REQ-UIX-05 п.6 — iPhone и iPad: все действия пальцем без промахов; REQ-UIX-04 п.1 — системный «назад» на Android.
 
+#### Ред. 2 — дополнение по итогам волн 2–4 (T-063, T-068, T-073, T-077, T-083..T-087, T-059/T-094)
+- SIM на Tacx Neo (FRD-04 п.10, FRD-05 п.7): трасса `mountains` («Перевал»), крутизна 50 % — в подъём тяжелее, на спуске легче, смена ощущается за 1–2 с; то же при 100 %; переключение SIM ↔ сопротивление на ходу.
+- Чтение у Neo `0x2ACC` (бит 13 «Indoor Bike Simulation Parameters Supported») и `0x2AD5` (Supported Inclination Range) — значения в логе совпадают с ожидаемыми (FRD-04 п.10).
+- Strava, свободная езда: дистанция, профиль высоты и набор активности совпадают с приложением ±1 % (FRD-07 п.8).
+- Устройство: смена трасс, подъёмы и спуски без рывков, 60 FPS (D3D-08 п.9, D3D-05); куски растительности и ориентиры не «выпрыгивают» на границе `visibility_range`.
+- HUD с 1.5 м (HUD-01 п.5, HUD-14 п.6); 3D не мыльное на iPad и Retina (HUD-13 п.10); индикаторы ●/▲/▼ отклонения и «—» пульса при снятии нагрудного датчика.
+- `ui_screenshot.sh` на Retina-маке: размеры кадров точные (проверка размера кадра T-094).
+- Android: системный «назад» на главном не перехватывается — приложение сворачивается/закрывается системой (UIX-04 п.1, T-084).
+- REQ-WRK-04 п.4 — уровень сопротивления ощущается при педалировании, в том числе в свободной езде в режиме «СОПР.».
+- REQ-WRK-05 п.6 — на паузе (тренировка и свободная езда) нагрузка Neo не меняется, после возобновления — по цели интервала / по уклону.
+- REQ-FRD-01 п.5 — реальный запуск свободной езды на Tacx Neo с главного экрана («Поехать» и «Сменить трассу» → «Поехать»).
+
 ## 5. Блокеры и вопросы к requirements
 
 Блокеры среды (не требуют решения, фиксируются):
@@ -997,6 +1101,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - Б-3. Фикстуры Intervals.icu (открытое решение 19) — до получения реальных ответов с аккаунта владельца тесты INT идут на синтетических данных по публичной документации API; при получении реальных фикстур задачи T-033..T-035 возвращаются в `review`.
 
 Открытые вопросы агенту requirements (Н-1..Н-6, Н-8, Н-9 решены — см. «Решено»):
+- Н-17 (от оркестратора, хвост волн 3–4; T-098). Запоминать ли выбранную тренировку между запусками (поле профиля `last_workout_id`, по образцу FRD-02 п.3 для трассы)? Если да — нужен `[авто]`-критерий (например, в UIX-03 п.3 или INT-04): «после перезапуска выбрана последняя выбранная тренировка, если она есть в списке; иначе — правило INT-04 п.1».
 - Н-11 (владельцу/requirements; от developer C, T-048). `Retry-After` поддерживается только в секундах; формат HTTP-даты (`Retry-After: Wed, 21 Oct 2026 07:28:00 GMT`) не разбирается — Strava и Intervals.icu отдают секунды. Предложение: подтвердить, что поддержка HTTP-даты не нужна в MVP (при неразобранном заголовке — откат на 60 с), и зафиксировать в REQ-INT-02 п.5 / REQ-STR-04 п.3.
 - Н-12 (владельцу/requirements; от developer C, T-048). REQ-STR-04 п.2: «далее каждые 60 мин до успеха или ручной отмены» — очередь повторяет бесконечно, пока пользователь не отменит. Нужен ли предел (предложение менеджера: 7 суток, после — статус «ошибка: превышено число попыток» с возможностью ручной постановки заново из карточки заезда, STR-04 п.5)? Влияет на критерий п.2 и перечень статусов STR-05 п.1.
 - Н-7 (от tester, T-056). Инвентаризация NFR-09 п.2 проверяет вызов метода по имени, без учёта класса-владельца — общие имена могут давать ложное покрытие. Предложить владельцу: ужесточить критерий до «каждый публичный метод каждого класса `src/domain/` вызывается в тесте именно на экземпляре/классе-владельце» (проверка через рефлексию скрипта) или оставить текущий способ как достаточный для MVP.
@@ -1036,7 +1141,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 
 | REQ | Задачи |
 | --- | --- |
-| INF-01, INF-02 | T-001 |
+| INF-01, INF-02 | T-001; ред. 2 — T-100 (INF-01 п.2, 5 — одиночный прогон без утечек), T-101 (INF-01 п.1 — стабильность) |
 | INF-03 | T-014 |
 | INF-04 | T-014 (п.1 мягко, п.3), T-056 (п.1, 2 строго) |
 | PRF-01 | T-009, T-011 |
@@ -1046,8 +1151,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | PRF-05 | T-012 |
 | INT-01 | T-033 (ключ), T-053 (OAuth-документ) |
 | INT-02 | T-034 |
-| INT-03 | T-035 |
-| INT-04 | T-040 |
+| INT-03 | T-035; регрессия — T-099 (метаданные повторов) |
+| INT-04 | T-040; ред. 2 — T-082 (регрессия), T-095 (п.2 — нагрузка на карточке) |
 | INT-05 | T-005 (`Workout.power_points` — фикс D-1), T-030, T-040 |
 | INT-06 | T-033 (п.1–4, 8 по В-13), T-057 (п.5–7) |
 | INT-07 | T-036 |
@@ -1080,36 +1185,36 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | HUD-05, HUD-06, HUD-08 | T-029 |
 | HUD-07 | T-005 (`Workout.segments` — фикс D-1), T-030; ред. 2 — полоса заменена графиком HUD-10 в T-078 |
 | HUD-01 (новая редакция: герой — факт) | T-031 (MVP), T-073 (ред. 2) |
-| HUD-10 | T-065 (п.1–5), T-071 (п.6), T-078 (п.7); п.8 — ручная |
-| HUD-11 | T-065 (п.1–5), T-071 (п.6), T-078 (п.7) |
+| HUD-10 | T-065 (п.1–5), T-071 (п.6), T-078 (п.7), T-094 (п.2, 5 — `y_max` ≥ 1.1 × FTP, сдвиг после пропуска); п.8 — ручная |
+| HUD-11 | T-065 (п.1–5), T-071 (п.6), T-078 (п.7), T-094 (п.1) |
 | HUD-12 | T-059 (синтетический пульс для приёмки), T-065 (п.1, 2, 5–7), T-071 (п.3, 4), T-078 (п.8) |
-| HUD-13 | T-073 (п.1, 5, 6), T-072 (п.2, 3 — компонент), T-078 (п.2–4, 7) |
-| HUD-14 | T-060 (п.1, 2), T-073 (п.3–5); п.6 — ручная |
+| HUD-13 | T-073 (п.1, 5, 6, 10), T-072 (п.2, 3, 8 — компонент), T-078 (п.2–4, 7, 9), T-084 (п.1, 4–6 — свободная езда), T-097 (п.5, 6, 9 — телефон, дефекты T-078), T-096 (п.10 — 3D в `SubViewport`), T-099 (п.8 — повторы Intervals.icu) |
+| HUD-14 | T-060 (п.1, 2), T-073 (п.3–5), T-093 (вариации HUD), T-095 (п.2 — `tnum` у меток), T-097 (п.2 — вариации на панели цифр); п.6 — ручная |
 | HUD-06 (п.2 — фишка «ДАЛЕЕ»), WRK-05 (UI паузы) | T-074, T-078 |
 | D3D-01, D3D-04, D3D-05 | T-052; ред. 2 — T-066 (D3D-05 п.2, 4 на длинных трассах) |
 | D3D-02 | T-050; регрессия — T-067 |
 | D3D-03, D3D-06 | T-051; ред. 2 — T-070 (D3D-03 п.1, 2 на новых трассах) |
-| D3D-07 | T-058; регрессия — T-066, T-070 |
-| D3D-08 | T-062 (п.1–3), T-066 (п.6 — бюджет), T-070 (п.2, 4, 5, 7), T-080 (п.1 — названия), T-083 (п.6, 8 — `flat`, `hills`), T-087 (п.6, 8 — `mountains`), T-088 (п.6, 8 — вода), T-090 (п.3, 6, 8 — мост), T-091 (п.12 — дизайн ориентиров), T-092 (п.12 — данные); п.9 — ручная |
-| FRD-01 | T-061 (навигация), T-068 (п.2), T-077 (п.1–3), T-081 (п.1 — вход), T-084 (п.1, 4); п.5 — ручная |
+| D3D-07 | T-058; регрессия — T-066, T-070, T-083, T-087, T-096 (экраны заезда) |
+| D3D-08 | T-062 (п.1–3), T-066 (п.6 — бюджет), T-070 (п.2, 4, 5, 7), T-080 (п.1 — названия), T-083 (п.6, 8, 12 — `flat`, `hills`), T-087 (п.6, 8, 10, 12 — `mountains`), T-088 (п.6, 8 — вода), T-090 (п.3, 6, 8 — мост), T-091 (п.12 — дизайн ориентиров), T-092 (п.12 — данные); п.9 — ручная |
+| FRD-01 | T-061 (навигация), T-068 (п.2), T-077 (п.1–3), T-081 (п.1 — вход), T-084 (п.1, 4), T-097 (п.4 — «На эмуляторе» на экране плана по тому же правилу); п.5 — ручная |
 | FRD-02 | T-061 (п.3 — хранение), T-080 (п.1–3); п.4 — ручная |
 | FRD-03 | T-062 (функции характеристик), T-075 (п.1–3), T-080 (п.4) |
 | FRD-04 | T-063 (п.1, 3 — чтение, 6 — определение), T-067 (п.2 — позиция, 7, 8), T-068 (п.2–6), T-077 (п.5, 9), T-084 (п.6 — сообщение); п.10 — ручная |
 | FRD-05 | T-061 (п.1 — хранение), T-068 (п.1–4), T-074 (п.4, 6 — органы управления), T-077 (п.5, 6 — события), T-079 (п.6 — HUD), T-080 (п.1 — UI); п.7 — ручная |
-| FRD-06 | T-065 (п.4 — модель), T-079 (п.1–4), T-084 (п.5, 6) |
+| FRD-06 | T-065 (п.4 — модель), T-079 (п.1–4), T-084 (п.5–7), T-097 (п.1 — подвал панели рельефа на телефоне) |
 | FRD-07 | T-064 (п.3, 4, 6, 7), T-067 (п.1 — модель), T-069 (п.5), T-077 (п.1–4), T-084 (п.2, 6, 7 — сквозная), T-085 (п.6 — UI); п.8 — ручная |
-| UIX-01 | T-060 (п.1, 3, 4), T-076 (п.3 — компоненты), T-089 (п.2, 5; хвосты T-060), T-091 (п.3 — вердикт по состояниям кнопок) |
+| UIX-01 | T-060 (п.1, 3, 4), T-076 (п.3 — компоненты), T-086 (п.2), T-089 (п.2, 5; хвосты волн 3–4), T-091 (п.3 — вердикт по состояниям кнопок), T-093 (п.1, 3), T-095 (п.3) |
 | UIX-02 | T-061 (п.3 — навигация), T-081 (п.1–5) |
-| UIX-03 | T-071 (п.4 — план), T-075 (п.2, 4 — трасса), T-080 (п.2, 3, 5 — трасса), T-082 (п.1, 3, 4, 5 — тренировка) |
-| UIX-04 | T-061 (п.1, 2 — навигация), T-076 (п.1 — AppBar), T-084 (п.2 — свободная езда; п.1 — Android «назад» на главном), T-082/T-085/T-086 (п.1 — «назад» через `go_back()`), T-085 (п.3–5 — история), T-086 (п.3–5 — настройки, устройства) |
-| UIX-05 | T-089 (п.1–5); п.6 — ручная |
+| UIX-03 | T-071 (п.4 — план), T-075 (п.2, 4 — трасса), T-080 (п.2, 3, 5 — трасса), T-082 (п.1, 3, 4, 5 — тренировка), T-095 (карточка плана), T-098 (п.3 — запоминание выбора, после Н-17) |
+| UIX-04 | T-061 (п.1, 2 — навигация), T-076 (п.1 — AppBar), T-084 (п.2 — свободная езда; п.1 — Android «назад» на главном), T-082/T-085/T-086 (п.1 — «назад» через `go_back()`), T-085 (п.3–5 — история), T-086 (п.3–5 — настройки, устройства), T-097 (п.2 — Esc → подтверждение на обоих экранах заезда) |
+| UIX-05 | T-076 (п.1 — хелпер целей), T-080, T-082, T-086 (п.1, 4), T-093 (основа), T-089 (п.1–5 — матрица); п.6 — ручная |
 | LOC-01 | T-041 |
 | LOC-02 | T-045 |
-| LOC-03 | T-043 (`RideSeries`) |
+| LOC-03 | T-043 (`RideSeries`); ред. 2 — T-085 (регрессия UI), T-097 (п.2 — дефект: сглаженная мощность в истории) |
 | LOC-04 | T-041 (`RideSummary`) |
 | LOC-05 | T-044, T-045 |
 | LOC-06 | T-045, T-048 |
-| LOC-07 | T-042 |
+| LOC-07 | T-042; T-101 (п.4 — стабильность теста) |
 | NFR-01 | T-025 |
 | NFR-02 | T-006, T-013, T-023 |
 | NFR-03 | T-032, T-036, T-048 |
@@ -1117,5 +1222,5 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | NFR-05 | T-010 (п.1, 2 — контейнер; `EncryptedFileSecureStore` временная), T-046, T-053 (п.3 — платформенные реализации, вне контейнера) |
 | NFR-06 | T-002, T-014, T-015, T-021, T-055 |
 | NFR-07 | T-053, T-055 |
-| NFR-08 | T-012 (заделка), T-057 (п.3, 4), T-054 (п.1, 2 — финальная инвентаризация); ред. 2 — T-060 (п.2 — файлы по областям), T-089 (п.1, 2 — итоговый набор) |
+| NFR-08 | T-012 (заделка), T-057 (п.3, 4), T-054 (п.1, 2 — финальная инвентаризация); ред. 2 — T-060 (п.2 — файлы по областям), 2a201e8 (п.1 — проверка всех `strings*.csv`), T-089 (п.1, 2 — итоговый набор, неиспользуемые ключи `strings.csv`, тексты `SettingsSections`) |
 | NFR-09 | T-005, T-006, T-014 (п.4), T-056 (п.2), T-035, T-037, T-038, T-044 |
