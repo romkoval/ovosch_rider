@@ -304,7 +304,13 @@ func test_saddle_geometry_from_file_matches_brief_6() -> void:
 	assert_not_null(frame)
 	if frame == null:
 		return
+	# art-bible ред. 4.1 «Вход конвейера из пакета» (T-143): седло — отдельный узел `saddle`.
+	# Геометрия велосипеда по брифу §6 — рама и седло вместе, как в файле до разделения.
+	var saddle := scene.find_child("saddle", true, false) as MeshInstance3D
+	assert_not_null(saddle, "узел saddle (ред. 4.1)")
 	var tris := _mesh_tris(frame)
+	if saddle != null:
+		tris.append_array(_mesh_tris(saddle))
 	# Верх седла под S (бриф §6: 0.965 у y = 0.230).
 	var top := _top_at(tris, 0.0, 0.230)
 	assert_almost_eq(top, 0.965, 0.002, "верх седла под S по геометрии: %.4f" % top)
