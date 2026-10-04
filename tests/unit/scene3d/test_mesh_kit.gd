@@ -54,9 +54,11 @@ func test_to_mesh_single_surface_with_material() -> void:
 
 func test_two_bone_joint_keeps_segment_lengths_and_bends_to_hint() -> void:
 	var hip := RiderModel.HIP
+	# Голеностоп над шипом — как в rest контракта (T-106a2).
+	var ankle_from_cleat: Vector3 = RiderRig.head("foot.R") - RiderRig.head("cleat.R")
 	for phi in [0.0, PI * 0.5, PI, PI * 1.5]:
 		var pedal := Vector3(RiderModel.PEDAL_X_M, RiderModel.BB.y + RiderModel.CRANK_LENGTH_M * cos(phi), -RiderModel.CRANK_LENGTH_M * sin(phi))
-		var ankle: Vector3 = pedal + RiderModel.ANKLE_FROM_PEDAL
+		var ankle: Vector3 = pedal + ankle_from_cleat
 		assert_lt(hip.distance_to(ankle), RiderModel.THIGH_M + RiderModel.SHIN_M, "педаль достижима при угле %.2f" % phi)
 		var knee := RiderModel.two_bone_joint(hip, ankle, RiderModel.THIGH_M, RiderModel.SHIN_M, RiderModel.KNEE_HINT)
 		assert_almost_eq(knee.distance_to(hip), RiderModel.THIGH_M, 1e-4, "длина бедра")
@@ -82,7 +84,8 @@ func test_rider_meshes_are_cached_and_share_one_material() -> void:
 	var a := RiderModel.meshes(mat)
 	var b := RiderModel.meshes(mat)
 	assert_eq(a["bike"], b["bike"], "статический кэш")
-	for key in ["bike", "wheel", "rear_wheel", "crank", "upper", "thigh", "shin", "shoe"]:
+	for key in ["bike", "wheel", "rear_wheel", "crank", "body_m", "body_f", "hair_short", "hair_tail", "helmet",
+			"eyewear", "shoe_l", "shoe_r"]:
 		var m: ArrayMesh = a[key]
 		assert_eq(m.get_surface_count(), 1, key)
 		assert_eq(m.surface_get_material(0), mat, key)

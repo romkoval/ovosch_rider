@@ -100,10 +100,6 @@ func test_feet_follow_pedals_through_crank_revolution() -> void:
 	var s := _scene()
 	var rider := s.rider()
 	var crank: Node3D = rider.get_node("%Crank")
-	var shoe_r: Node3D = rider.get_node("%ShoeR")
-	var shoe_l: Node3D = rider.get_node("%ShoeL")
-	var thigh_r: Node3D = rider.get_node("%ThighR")
-	var shin_r: Node3D = rider.get_node("%ShinR")
 	var arm_r: Node3D = rider.get_node("%Lean/CrankMount/Crank/CrankArm")
 	for phi in [0.0, 1.0, 2.5, 4.0, 5.5]:
 		crank.rotation = Vector3(phi, 0.0, 0.0)
@@ -112,23 +108,26 @@ func test_feet_follow_pedals_through_crank_revolution() -> void:
 		# Ось правой педали в системе узла Lean (шатун: локальный −X — правая сторона, длина по +Y).
 		var pedal_r: Vector3 = lean_inv * (arm_r.global_transform * Vector3(-RiderModel.PEDAL_X_M, RiderModel.CRANK_LENGTH_M, 0.0))
 		var pedal_l: Vector3 = lean_inv * (arm_r.global_transform * Vector3(RiderModel.PEDAL_X_M, -RiderModel.CRANK_LENGTH_M, 0.0))
-		assert_lt(shoe_r.position.distance_to(pedal_r + RiderModel.ANKLE_FROM_PEDAL), 0.01, "правая стопа на педали (φ=%.1f)" % phi)
-		assert_lt(shoe_l.position.distance_to(pedal_l + RiderModel.ANKLE_FROM_PEDAL), 0.01, "левая стопа на педали (φ=%.1f)" % phi)
-		assert_almost_eq(thigh_r.position.distance_to(shin_r.position), RiderModel.THIGH_M, 1e-3, "бедро не растягивается")
-		assert_almost_eq(shin_r.position.distance_to(shoe_r.position), RiderModel.SHIN_M, 1e-3, "голень не растягивается")
+		# Шип (сокет `cleat` скелета, T-106a2) — на оси педали.
+		assert_lt(rider.bone_pose("cleat.R").origin.distance_to(pedal_r), 0.01, "правая стопа на педали (φ=%.1f)" % phi)
+		assert_lt(rider.bone_pose("cleat.L").origin.distance_to(pedal_l), 0.01, "левая стопа на педали (φ=%.1f)" % phi)
+		var hip: Vector3 = rider.bone_pose("thigh.R").origin
+		var knee: Vector3 = rider.bone_pose("shin.R").origin
+		var ankle: Vector3 = rider.bone_pose("foot.R").origin
+		assert_almost_eq(hip.distance_to(knee), RiderModel.THIGH_M, 1e-3, "бедро не растягивается")
+		assert_almost_eq(knee.distance_to(ankle), RiderModel.SHIN_M, 1e-3, "голень не растягивается")
 
 
 func test_right_pedal_moves_forward_at_top_of_stroke() -> void:
 	var s := _scene()
 	var rider := s.rider()
 	var crank: Node3D = rider.get_node("%Crank")
-	var shoe_r: Node3D = rider.get_node("%ShoeR")
 	crank.rotation = Vector3(0.0, 0.0, 0.0)
 	rider.advance(FRAME)
-	var top := shoe_r.position
+	var top := rider.bone_pose("cleat.R").origin
 	crank.rotation = Vector3(0.2, 0.0, 0.0)
 	rider.advance(FRAME)
-	assert_lt(shoe_r.position.z, top.z, "положительный угол шатуна — педаль вверху уходит вперёд (−Z)")
+	assert_lt(rider.bone_pose("cleat.R").origin.z, top.z, "положительный угол шатуна — педаль вверху уходит вперёд (−Z)")
 
 
 func test_rider_leans_into_turn_and_not_on_straight() -> void:

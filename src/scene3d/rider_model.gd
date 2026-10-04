@@ -6,9 +6,10 @@ extends RefCounted
 ## ноги из бедра/голени/туфли). Все части красятся одним тун-материалом по цвету вершин.
 ##
 ## Система координат — как у `Rider`: −Z вперёд, Y вверх, начало — на земле под кареткой.
-## Ноги собираются в кадре двухзвенной IK от тазобедренного сустава к педали
-## (`Rider._solve_leg`), поэтому бедро, голень и туфля — отдельные меши. Меши строятся
-## один раз на процесс (статический кэш).
+## Гонщик — манекен на скелете контракта `RiderRig` (T-106a2): сетки `Body`, `Hair`, `Helmet`,
+## `Eyewear`, `ShoeL/R` со скиннингом (вес 1 на кость), позы костей в кадре ставит `Rider`
+## (IK ног и рук, покачивание, пружина хвоста). Меши строятся один раз на процесс
+## (статический кэш).
 
 ## Велосипед подогнан под контракт скелета (`RiderRig`, T-106a1): верх седла 0.965 м под
 ## точкой опоры таза S, центр ладони на тормозной ручке (±0.21, 0.885, −0.62), шатун 0.17 м,
@@ -30,18 +31,29 @@ const CRANK_BONES := ["crank", "pedal.R", "pedal.L"]
 ## Начала костей педалей в системе узла `Crank` (локальный −X — правая сторона, длина по +Y).
 const PEDAL_R_REST := Vector3(-RiderRig.PEDAL_X_M, RiderRig.CRANK_LENGTH_M, 0.0)
 const PEDAL_L_REST := Vector3(RiderRig.PEDAL_X_M, -RiderRig.CRANK_LENGTH_M, 0.0)
-## Нынешний процедурный гонщик (до манекена на `Skeleton3D`, T-106a2) — его суставы и длины
-## пока свои; контракт для модели художника — `RiderRig`.
-## Тазобедренные суставы (x — по модулю), длины бедра и голени.
-const HIP := Vector3(0.09, 0.975, 0.215)
-const THIGH_M: float = 0.44
-const SHIN_M: float = 0.42
-## Голеностоп относительно оси педали (подушечка стопы над педалью).
-const ANKLE_FROM_PEDAL := Vector3(0.0, 0.075, 0.1)
+## Манекен (T-106a2): нынешние примитивы на костях контракта `RiderRig` — `Skeleton3D` гонщика
+## (25 костей), каждая часть привязана жёстко (вес 1) к своей кости. Две фигуры (`m`, `f`) —
+## разный объём плеч, талии, таза и конечностей при общих суставах (арт-библия «Пропорции и
+## посадка», таблица фигур); две причёски (`short`, `tail` — хвост на `hair_tail.1/2`).
+## Тазобедренный сустав правой ноги (начало `thigh.R`), длины бедра и голени — из контракта.
+const HIP := Vector3(0.09, 1.05, 0.19)
+const THIGH_M: float = 0.440124
+const SHIN_M: float = 0.439346
 ## Подсказка сгиба колена — вперёд и чуть вверх.
 const KNEE_HINT := Vector3(0.0, 0.25, -1.0)
-## Центр таза — ось покачивания корпуса.
-const PELVIS := Vector3(0.0, 1.0, 0.2)
+## Объём фигур, м (полуширины и радиусы; таблица фигур спеки): плечи снаружи по дельтам,
+## талия, таз по шортам — полуширины; рука у плеча и запястье, бедро у шорт и у колена, икра,
+## лодыжка, шея — радиусы.
+const FIGURES: Dictionary = {
+	"m": {"shoulder_hw": 0.225, "waist_hw": 0.150, "hips_hw": 0.175, "arm_r": 0.045, "wrist_r": 0.0275,
+		"thigh_r": 0.0875, "knee_r": 0.0575, "calf_r": 0.060, "ankle_r": 0.031, "neck_r": 0.060},
+	"f": {"shoulder_hw": 0.205, "waist_hw": 0.135, "hips_hw": 0.180, "arm_r": 0.040, "wrist_r": 0.025,
+		"thigh_r": 0.085, "knee_r": 0.055, "calf_r": 0.055, "ankle_r": 0.029, "neck_r": 0.0525},
+}
+const HAIR_STYLES: Array[String] = ["short", "tail"]
+## Голова манекена: центр и полуоси (спека: (0, 1.45, −0.36), 0.155 × 0.22 × 0.20 м).
+const HEAD_CENTER := Vector3(0.0, 1.45, -0.36)
+const HEAD_RADII := Vector3(0.0775, 0.11, 0.10)
 
 # Палитра формы (sRGB). Альфа — вес контура.
 const C_FRAME := Color(0.88, 0.16, 0.12, 1.0)
@@ -60,10 +72,16 @@ const C_TIRE := Color(0.10, 0.10, 0.11, 1.0)
 const C_RIM := Color(0.13, 0.13, 0.15, 0.0)
 const C_RIM_STRIPE := Color(0.90, 0.70, 0.22, 0.0)
 
+const C_HAIR := Color(0.24, 0.15, 0.09, 1.0)
+const C_GLOVE := Color(0.09, 0.09, 0.10, 1.0)
+
 static var _cache: Dictionary = {}
+static var _skin: Skin
 
 
-## Все меши модели: bike, wheel, rear_wheel, crank, upper, thigh, shin, shoe.
+## Все меши модели: велосипед (`bike`, `wheel`, `rear_wheel`, `crank`) и манекен —
+## `body_m`, `body_f`, `hair_short`, `hair_tail`, `helmet`, `eyewear`, `shoe_l`, `shoe_r`
+## (скиннинг на скелет `RiderRig`, `rider_skin()`).
 static func meshes(material: Material) -> Dictionary:
 	var key: int = material.get_instance_id() if material != null else 0
 	if _cache.has(key):
@@ -73,13 +91,56 @@ static func meshes(material: Material) -> Dictionary:
 		"wheel": _wheel(false).to_mesh(material),
 		"rear_wheel": _wheel(true).to_mesh(material),
 		"crank": crank_mesh(material),
-		"upper": _upper().to_mesh(material),
-		"thigh": _thigh().to_mesh(material),
-		"shin": _shin().to_mesh(material),
-		"shoe": _shoe().to_mesh(material),
+		"helmet": _skinned([[_helmet(), "head"]], material),
+		"eyewear": _skinned([[_eyewear(), "head"]], material),
+		"shoe_l": _skinned([[_shoe(".L"), "foot.L"]], material),
+		"shoe_r": _skinned([[_shoe(".R"), "foot.R"]], material),
 	}
+	for figure in FIGURES:
+		out["body_" + figure] = _skinned(_body_parts(figure), material)
+	for style in HAIR_STYLES:
+		out["hair_" + style] = _skinned(_hair_parts(style), material)
 	_cache[key] = out
 	return out
+
+
+## `Skin` манекена: привязка `i` — кость `i` контракта (`RiderRig.BONES`), поза привязки —
+## обратный глобальный rest кости. Один на все сетки гонщика.
+static func rider_skin() -> Skin:
+	if _skin == null:
+		_skin = Skin.new()
+		for b in RiderRig.BONES:
+			_skin.add_named_bind(b[0], Transform3D(RiderRig.rest_basis(b[0]), b[2]).affine_inverse())
+	return _skin
+
+
+## Сетка со скиннингом из частей `[MeshKit в системе гонщика (rest), имя кости]`, вес 1 на
+## кость части (сокеты весов не несут).
+static func _skinned(parts: Array, material: Material) -> ArrayMesh:
+	var k := MeshKit.new()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for p in parts:
+		var part: MeshKit = p[0]
+		var bone: int = RiderRig.index_of(p[1])
+		assert(bone >= 0 and not RiderRig.is_socket(p[1]), "RiderModel: part on unknown or socket bone %s" % p[1])
+		_append(k, part)
+		for i in part.vertices.size():
+			bones.append_array(PackedInt32Array([bone, 0, 0, 0]))
+			weights.append_array(PackedFloat32Array([1.0, 0.0, 0.0, 0.0]))
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = k.vertices
+	arrays[Mesh.ARRAY_NORMAL] = k.normals
+	arrays[Mesh.ARRAY_COLOR] = k.colors
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	arrays[Mesh.ARRAY_INDEX] = k.indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	if material != null:
+		mesh.surface_set_material(0, material)
+	return mesh
 
 
 ## Колено двухзвенной цепи «бедро → голень» (или «плечо → предплечье»): решение в плоскости
@@ -96,6 +157,15 @@ static func two_bone_joint(root: Vector3, target: Vector3, l1: float, l2: float,
 	return root + dn * a + bend.normalized() * h
 
 
+## Система звена «локоть → точка хвата» руки: X — от локтя к точке хвата, Z — нормаль плоскости
+## «плечо — локоть — точка хвата», Y = Z × X (в плоскости руки). Без аллокаций (кадр).
+static func arm_frame(shoulder: Vector3, elbow: Vector3, grip: Vector3) -> Basis:
+	var u: Vector3 = (grip - elbow).normalized()
+	var n: Vector3 = (elbow - shoulder).cross(u)
+	n = n.normalized() if n.length_squared() > 1e-12 else Vector3.RIGHT
+	return Basis(u, n.cross(u), n)
+
+
 ## Трансформ кости, меш которой идёт от начала координат вдоль −Y: от `from` к `to`.
 static func bone_transform(from: Vector3, to: Vector3) -> Transform3D:
 	var y: Vector3 = from - to
@@ -106,6 +176,43 @@ static func bone_transform(from: Vector3, to: Vector3) -> Transform3D:
 	x = x.normalized() if x.length_squared() > 1e-10 else Vector3.FORWARD
 	var z: Vector3 = x.cross(y)
 	return Transform3D(Basis(x, y, z), from)
+
+
+## Колено двухзвенной цепи с заданной координатой X (сдвиг полюса IK вбок, «колено вбок»
+## спеки): из окружности решений (длины `l1`, `l2` точно) берётся точка с `x` (если её нет —
+## ближайшая по X), ближайшая к направлению подсказки `hint`. Без аллокаций (кадр).
+static func two_bone_joint_x(root: Vector3, target: Vector3, l1: float, l2: float, hint: Vector3, x: float) -> Vector3:
+	var d: Vector3 = target - root
+	var dist: float = clampf(d.length(), absf(l1 - l2) + 1e-3, l1 + l2 - 1e-4)
+	var dn: Vector3 = d.normalized() if d.length_squared() > 1e-10 else Vector3.DOWN
+	var a: float = (l1 * l1 - l2 * l2 + dist * dist) / (2.0 * dist)
+	var h: float = sqrt(maxf(l1 * l1 - a * a, 0.0))
+	var u: Vector3 = hint - dn * dn.dot(hint)
+	if u.length_squared() < 1e-10:
+		u = Vector3.FORWARD
+	u = u.normalized()
+	var v: Vector3 = dn.cross(u)
+	var c: Vector3 = root + dn * a
+	var ax: float = h * u.x
+	var bx: float = h * v.x
+	var r: float = sqrt(ax * ax + bx * bx)
+	if r < 1e-9:
+		return c + u * h
+	var gamma: float = atan2(bx, ax)
+	var delta: float = acos(clampf((x - c.x) / r, -1.0, 1.0))
+	var b1: float = wrapf(gamma - delta, -PI, PI)
+	var b2: float = wrapf(gamma + delta, -PI, PI)
+	var beta: float = b1 if absf(b1) <= absf(b2) else b2
+	return c + (u * cos(beta) + v * sin(beta)) * h
+
+
+## Оси кости по направлению `dir` (начало → окончание), как у контракта (`RiderRig.rest_basis`,
+## бриф 5.3): Y — вдоль кости, X — к мировой X Blender (Godot −X), Z = X × Y. Без аллокаций.
+static func bone_basis(dir: Vector3) -> Basis:
+	var y: Vector3 = dir.normalized() if dir.length_squared() > 1e-12 else Vector3.UP
+	var x: Vector3 = Vector3.LEFT - y * Vector3.LEFT.dot(y)
+	x = x.normalized() if x.length_squared() > 1e-10 else Vector3.FORWARD
+	return Basis(x, y, x.cross(y))
 
 
 static func _bike() -> MeshKit:
@@ -378,69 +485,174 @@ static func _append(dst: MeshKit, src: MeshKit) -> void:
 		dst.indices.append(base + i)
 
 
-static func _upper() -> MeshKit:
-	var k := MeshKit.new()
-	# Таз в шортах и корпус в джерси с красными боковыми вставками: спина почти
-	# горизонтальна — гоночная посадка «в нижнем хвате».
-	k.add_ellipsoid(PELVIS, Vector3(0.135, 0.11, 0.14), C_SHORTS, Basis.IDENTITY, 6, 12)
-	k.add_tube(Vector3(0, 1.0, 0.19), Vector3(0, 1.07, 0.08), Vector2(0.135, 0.11), Vector2(0.15, 0.112), C_SHORTS, 12, false)
-	k.add_tube(Vector3(0, 1.05, 0.11), Vector3(0, 1.2, -0.25), Vector2(0.148, 0.11), Vector2(0.18, 0.115), C_JERSEY, 14,
-		false, Vector3.RIGHT, C_JERSEY_RED, 0.82)
-	var shoulder_basis := Basis(Vector3.RIGHT, -0.35)
-	k.add_ellipsoid(Vector3(0, 1.2, -0.26), Vector3(0.2, 0.095, 0.12), C_JERSEY, shoulder_basis, 7, 14, 0, -1.0, -0.84, C_JERSEY_BLUE)
-	k.add_ellipsoid(Vector3(0, 1.2, -0.26), Vector3(0.2001, 0.0951, 0.1201), C_JERSEY, shoulder_basis, 7, 14, 0, 0.84, 1.0, C_JERSEY_BLUE)
-	# Красная полоса поперёк спины.
-	k.add_tube(Vector3(0, 1.145, -0.1), Vector3(0, 1.162, -0.145), Vector2(0.168, 0.117), Vector2(0.171, 0.118), C_JERSEY_RED, 14, false)
-	# Шея, голова, шлем, очки.
-	k.add_tube(Vector3(0, 1.23, -0.31), Vector3(0, 1.31, -0.4), Vector2(0.05, 0.05), Vector2(0.048, 0.048), C_SKIN, 8, false)
-	k.add_ellipsoid(Vector3(0, 1.335, -0.44), Vector3(0.082, 0.098, 0.1), C_SKIN, Basis.IDENTITY, 6, 12)
-	var helmet_basis := Basis(Vector3.RIGHT, 0.12)
-	k.add_ellipsoid(Vector3(0, 1.385, -0.425), Vector3(0.11, 0.08, 0.155), C_HELMET, helmet_basis, 7, 14, 0, -0.18, 0.18, C_BLACK)
-	k.add_ellipsoid(Vector3(0, 1.345, -0.512), Vector3(0.088, 0.024, 0.035), C_BLACK, Basis.IDENTITY, 4, 10)
-	# Руки: от плеча к тормозной ручке, локти слегка наружу и вниз.
+## Части тела манекена `[MeshKit, кость]` в системе гонщика (rest): таз в шортах (ядро и две
+## доли по бокам седла), корпус (поясница в шортах, джерси с боковыми вставками), шея, голова,
+## руки до хвата, ноги (бедро в шортах с резинкой, голень с икрой и высоким носком).
+static func _body_parts(figure: String) -> Array:
+	var d: Dictionary = FIGURES[figure]
+	var parts: Array = []
+	# Таз: ядро и доли «сердца» по бокам седла (низ долей ниже верха седла).
+	var hw: float = d["hips_hw"]
+	var pelvis := MeshKit.new()
+	pelvis.add_ellipsoid(Vector3(0.0, 1.05, 0.195), Vector3(hw - 0.04, 0.085, 0.125), C_SHORTS, Basis.IDENTITY, 8, 16)
 	for sx in [-1.0, 1.0]:
-		var shoulder := Vector3(0.18 * sx, 1.21, -0.28)
-		# Кисть — на центр ладони тормозной ручки контракта (`grip.L/R`).
-		var grip: Vector3 = RiderRig.head("grip.R")
-		var hand := Vector3(grip.x * sx, grip.y, grip.z)
-		var elbow: Vector3 = two_bone_joint(shoulder, hand, 0.25, 0.24, Vector3(0.35 * sx, 0.6, 0.7))
-		var cuff: Vector3 = shoulder.lerp(elbow, 0.5)
-		var cuff_end: Vector3 = shoulder.lerp(elbow, 0.64)
-		k.add_ellipsoid(shoulder, Vector3(0.06, 0.06, 0.06), C_JERSEY, Basis.IDENTITY, 5, 10)
-		k.add_tube(shoulder, cuff, Vector2(0.06, 0.06), Vector2(0.054, 0.054), C_JERSEY, 10, false)
-		k.add_tube(cuff, cuff_end, Vector2(0.054, 0.054), Vector2(0.052, 0.052), C_JERSEY_BLUE, 10, false)
-		k.add_tube(cuff_end, elbow, Vector2(0.046, 0.046), Vector2(0.042, 0.042), C_SKIN, 10, false)
-		k.add_ellipsoid(elbow, Vector3(0.042, 0.042, 0.042), C_SKIN, Basis.IDENTITY, 5, 10)
-		var wrist: Vector3 = elbow.lerp(hand, 0.82)
-		k.add_tube(elbow, wrist, Vector2(0.042, 0.042), Vector2(0.032, 0.032), C_SKIN, 10, false)
-		k.add_ellipsoid(hand + Vector3(0, 0.0, 0.01), Vector3(0.042, 0.04, 0.062), C_BLACK, Basis.IDENTITY, 5, 10)
+		pelvis.add_ellipsoid(Vector3(sx * (hw - 0.09), 1.0, 0.23), Vector3(0.09, 0.072, 0.105), C_SHORTS, Basis.IDENTITY, 7, 14)
+	parts.append([pelvis, "pelvis"])
+	# Корпус: поясница в шортах до низа джерси (≈ 0.24 м над седлом по спине), джерси до груди.
+	var waist: float = d["waist_hw"]
+	var chest_j: Vector3 = RiderRig.head("chest")
+	var p0 := Vector3(0.0, 1.06, 0.17)
+	var p1 := Vector3(0.0, 1.13, 0.105)
+	var spine := MeshKit.new()
+	spine.add_tube(p0, p1, Vector2(waist + 0.012, 0.10), Vector2(waist + 0.004, 0.10), C_SHORTS, 16, false)
+	spine.add_tube(p1, chest_j, Vector2(waist + 0.004, 0.10), Vector2(waist + 0.012, 0.105), C_JERSEY, 16, false,
+		Vector3.RIGHT, C_JERSEY_RED, 0.82)
+	parts.append([spine, "spine"])
+	var sh_hw: float = d["shoulder_hw"]
+	var p3 := Vector3(0.0, 1.30, -0.175)
+	var chest := MeshKit.new()
+	chest.add_tube(chest_j, p3, Vector2(waist + 0.012, 0.105), Vector2(sh_hw - 0.06, 0.085), C_JERSEY, 16, false,
+		Vector3.RIGHT, C_JERSEY_RED, 0.82)
+	chest.add_ellipsoid(Vector3(0.0, 1.30, -0.215), Vector3(sh_hw - 0.045, 0.07, 0.10), C_JERSEY, Basis(Vector3.RIGHT, 0.5), 7, 16)
+	# Красная полоса поперёк спины (как у прежнего гонщика).
+	chest.add_tube(Vector3(0.0, 1.245, -0.035), Vector3(0.0, 1.262, -0.058), Vector2(waist + 0.016, 0.109),
+		Vector2(waist + 0.018, 0.108), C_JERSEY_RED, 16, false)
+	parts.append([chest, "chest"])
+	var neck := MeshKit.new()
+	var nr: float = d["neck_r"]
+	neck.add_tube(Vector3(0.0, 1.34, -0.19), Vector3(0.0, 1.425, -0.325), Vector2(nr, nr), Vector2(nr * 0.95, nr * 0.95), C_SKIN, 12, false)
+	parts.append([neck, "neck"])
+	var head := MeshKit.new()
+	head.add_ellipsoid(HEAD_CENTER, HEAD_RADII, C_SKIN, Basis(Vector3.RIGHT, -0.2), 8, 16)
+	# Нос — пологий выступ.
+	head.add_ellipsoid(HEAD_CENTER + Vector3(0.0, -0.025, -0.095), Vector3(0.016, 0.026, 0.02), C_SKIN, Basis.IDENTITY, 4, 8)
+	parts.append([head, "head"])
+	for side in [".L", ".R"]:
+		var sx: float = -1.0 if side == ".L" else 1.0
+		var r: float = d["arm_r"]
+		var sh: Vector3 = RiderRig.head("upperarm" + side)
+		var el: Vector3 = RiderRig.head("forearm" + side)
+		var wr: Vector3 = RiderRig.head("hand" + side)
+		var gr: Vector3 = RiderRig.head("grip" + side)
+		var upper := MeshKit.new()
+		var delt: Vector3 = sh + Vector3(sx * (sh_hw - r - absf(sh.x)), 0.0, 0.0)
+		var cuff: Vector3 = sh.lerp(el, 0.48)
+		var cuff_end: Vector3 = sh.lerp(el, 0.56)
+		upper.add_ellipsoid(delt, Vector3.ONE * r * 1.05, C_JERSEY, Basis.IDENTITY, 6, 14)
+		upper.add_tube(delt, cuff, Vector2(r, r) * 1.02, Vector2(r, r) * 0.95, C_JERSEY, 14, false)
+		upper.add_tube(cuff, cuff_end, Vector2(r, r) * 0.96, Vector2(r, r) * 0.94, C_JERSEY_BLUE, 14, false)
+		upper.add_tube(cuff_end, el, Vector2(r, r) * 0.88, Vector2(r, r) * 0.8, C_SKIN, 14, false)
+		upper.add_ellipsoid(el, Vector3.ONE * r * 0.8, C_SKIN, Basis.IDENTITY, 6, 14)
+		parts.append([upper, "upperarm" + side])
+		var fore := MeshKit.new()
+		var wr_r: float = d["wrist_r"]
+		fore.add_tube(el, wr, Vector2(r, r) * 0.8, Vector2(wr_r, wr_r), C_SKIN, 14, false)
+		fore.add_ellipsoid(wr, Vector3.ONE * wr_r, C_SKIN, Basis.IDENTITY, 5, 12)
+		parts.append([fore, "forearm" + side])
+		# Кисть в перчатке обхватывает корпус ручки: ладонь сверху (центр — `grip`), большой
+		# палец с внутренней стороны.
+		var hand := MeshKit.new()
+		var hb: Basis = bone_basis(gr - wr)
+		hand.add_ellipsoid(wr.lerp(gr, 0.75) + Vector3(0.0, -0.004, 0.0), Vector3(0.036, 0.055, 0.03), C_GLOVE, hb, 6, 12)
+		hand.add_ellipsoid(gr + Vector3(-sx * 0.022, -0.022, -0.004), Vector3(0.012, 0.028, 0.012), C_GLOVE, hb, 4, 8)
+		hand.add_ellipsoid(gr + Vector3(sx * 0.006, -0.03, -0.02), Vector3(0.022, 0.03, 0.014), C_GLOVE, hb, 4, 8)
+		parts.append([hand, "hand" + side])
+		var hip: Vector3 = RiderRig.head("thigh" + side)
+		var knee: Vector3 = RiderRig.head("shin" + side)
+		var ankle: Vector3 = RiderRig.head("foot" + side)
+		parts.append([_moved(_thigh_kit(d, hip.distance_to(knee)), bone_transform(hip, knee)), "thigh" + side])
+		parts.append([_moved(_shin_kit(d, knee.distance_to(ankle)), bone_transform(knee, ankle)), "shin" + side])
+	return parts
+
+
+## Бедро вдоль −Y от тазобедренного сустава длиной `l` (локальный +Z — задняя поверхность):
+## шорты до 66 % длины, резинка 3 см, кожа до колена, надколенник.
+static func _thigh_kit(d: Dictionary, l: float) -> MeshKit:
+	var k := MeshKit.new()
+	var r: float = d["thigh_r"]
+	var kr: float = d["knee_r"]
+	k.add_ellipsoid(Vector3.ZERO, Vector3.ONE * r * 0.95, C_SHORTS, Basis.IDENTITY, 7, 14)
+	k.add_tube(Vector3.ZERO, Vector3(0.0, -l * 0.33, 0.0), Vector2(r * 0.95, r * 1.04), Vector2(r * 0.93, r * 1.0), C_SHORTS, 14, false)
+	k.add_tube(Vector3(0.0, -l * 0.33, 0.0), Vector3(0.0, -l * 0.66, 0.0), Vector2(r * 0.93, r * 1.0), Vector2(r * 0.8, r * 0.84), C_SHORTS, 14, false)
+	k.add_tube(Vector3(0.0, -l * 0.66, 0.0), Vector3(0.0, -l * 0.70, 0.0), Vector2(r * 0.81, r * 0.85), Vector2(r * 0.79, r * 0.83), C_BLACK, 14, false)
+	k.add_tube(Vector3(0.0, -l * 0.70, 0.0), Vector3(0.0, -l, 0.0), Vector2(r * 0.76, r * 0.79), Vector2(kr, kr), C_SKIN, 14, false)
+	k.add_ellipsoid(Vector3(0.0, -l, 0.0), Vector3.ONE * kr, C_SKIN, Basis.IDENTITY, 7, 14)
+	k.add_ellipsoid(Vector3(0.0, -l * 0.96, -kr * 0.55), Vector3(kr * 0.6, kr * 0.7, kr * 0.5), C_SKIN, Basis.IDENTITY, 4, 10)
 	return k
 
 
-static func _thigh() -> MeshKit:
+## Голень вдоль −Y от колена длиной `l` (локальный +Z — сзади): икра в верхней трети,
+## высокий носок с середины голени до голеностопа.
+static func _shin_kit(d: Dictionary, l: float) -> MeshKit:
 	var k := MeshKit.new()
-	var l: float = THIGH_M
-	k.add_ellipsoid(Vector3.ZERO, Vector3(0.088, 0.088, 0.088), C_SHORTS, Basis.IDENTITY, 6, 12)
-	k.add_tube(Vector3.ZERO, Vector3(0, -l * 0.62, 0), Vector2(0.088, 0.09), Vector2(0.074, 0.076), C_SHORTS, 12, false)
-	k.add_tube(Vector3(0, -l * 0.62, 0), Vector3(0, -l * 0.66, 0), Vector2(0.075, 0.077), Vector2(0.073, 0.075), C_BLACK, 12, false)
-	k.add_tube(Vector3(0, -l * 0.66, 0), Vector3(0, -l, 0), Vector2(0.071, 0.072), Vector2(0.056, 0.056), C_SKIN, 12, false)
-	k.add_ellipsoid(Vector3(0, -l, 0), Vector3(0.056, 0.056, 0.056), C_SKIN, Basis.IDENTITY, 5, 12)
+	var kr: float = d["knee_r"] * 0.95
+	var c: float = d["calf_r"]
+	var a: float = d["ankle_r"]
+	var calf := Vector3(0.0, -l * 0.32, c * 0.25)
+	var sock := Vector3(0.0, -l * 0.5, c * 0.1)
+	k.add_tube(Vector3.ZERO, calf, Vector2(kr, kr), Vector2(c * 0.92, c), C_SKIN, 14, false)
+	k.add_tube(calf, sock, Vector2(c * 0.92, c), Vector2(c * 0.78, c * 0.8), C_SKIN, 14, false)
+	k.add_tube(sock, Vector3(0.0, -l, 0.0), Vector2(c * 0.79, c * 0.81), Vector2(a, a * 1.1), C_SOCK, 14, false)
+	k.add_ellipsoid(Vector3(0.0, -l, 0.0), Vector3(a, a, a * 1.1) * 1.05, C_SOCK, Basis.IDENTITY, 5, 12)
 	return k
 
 
-static func _shin() -> MeshKit:
+## Причёска `[MeshKit, кость]`: волосы на затылке из-под шлема (кость `head`); у `tail` —
+## резинка и хвост строго по костям: `hair_tail.1` — от корня до вершины дуги над воротником,
+## `hair_tail.2` — от вершины до кончика (окончание кости, `RiderRig.tail`), без своего изгиба.
+static func _hair_parts(style: String) -> Array:
+	var parts: Array = []
+	var cap := MeshKit.new()
+	cap.add_ellipsoid(Vector3(0.0, 1.425, -0.29), Vector3(0.074, 0.05, 0.05), C_HAIR, Basis(Vector3.RIGHT, 0.3), 6, 14)
+	parts.append([cap, "head"])
+	if style == "tail":
+		var t1: Vector3 = RiderRig.head("hair_tail.1")
+		var t2: Vector3 = RiderRig.head("hair_tail.2")
+		var dir: Vector3 = (t2 - t1).normalized()
+		var root := MeshKit.new()
+		root.add_tube(t1 - dir * 0.004, t1 + dir * 0.012, Vector2(0.019, 0.015), Vector2(0.019, 0.015), C_BLACK, 10, true)
+		root.add_tube(t1, t2, Vector2(0.017, 0.012), Vector2(0.015, 0.011), C_HAIR, 10, false)
+		root.add_ellipsoid(t2, Vector3(0.015, 0.011, 0.015), C_HAIR, Basis.IDENTITY, 4, 10)
+		parts.append([root, "hair_tail.1"])
+		var tip: Vector3 = RiderRig.tail("hair_tail.2")
+		var end := MeshKit.new()
+		end.add_tube(t2, tip, Vector2(0.015, 0.011), Vector2(0.008, 0.006), C_HAIR, 10, false)
+		end.add_ellipsoid(tip, Vector3(0.008, 0.006, 0.008), C_HAIR, Basis.IDENTITY, 4, 8)
+		parts.append([end, "hair_tail.2"])
+	return parts
+
+
+## Шлем шоссейный (манекен): каплевидная оболочка с тёмной продольной полосой, задний край
+## ниже переднего, ремешки к подбородку. Кость `head`.
+static func _helmet() -> MeshKit:
 	var k := MeshKit.new()
-	var l: float = SHIN_M
-	# Икра — объём сзади (локальный +Z при сгибе колена вперёд).
-	k.add_tube(Vector3.ZERO, Vector3(0, -l * 0.3, 0.012), Vector2(0.054, 0.054), Vector2(0.06, 0.066), C_SKIN, 12, false)
-	k.add_tube(Vector3(0, -l * 0.3, 0.012), Vector3(0, -l * 0.68, 0), Vector2(0.06, 0.066), Vector2(0.042, 0.044), C_SKIN, 12, false)
-	k.add_tube(Vector3(0, -l * 0.68, 0), Vector3(0, -l, 0), Vector2(0.043, 0.045), Vector2(0.038, 0.04), C_SOCK, 12, true)
+	k.add_ellipsoid(Vector3(0.0, 1.505, -0.35), Vector3(0.105, 0.078, 0.14), C_HELMET, Basis(Vector3.RIGHT, 0.12),
+		10, 20, 0, -0.18, 0.18, C_BLACK)
+	for sx in [-1.0, 1.0]:
+		k.add_tube(Vector3(0.074 * sx, 1.455, -0.335), Vector3(0.03 * sx, 1.355, -0.42), Vector2(0.006, 0.003),
+			Vector2(0.006, 0.003), C_BLACK, 6, false)
 	return k
 
 
-## Туфля: начало координат — голеностоп, носок вперёд (−Z) к педали.
-static func _shoe() -> MeshKit:
+## Очки — обтекающая линза-маска на 1–1.5 см перед лицом. Кость `head`.
+static func _eyewear() -> MeshKit:
 	var k := MeshKit.new()
-	var basis := Basis(Vector3.RIGHT, -0.32)
-	k.add_ellipsoid(Vector3(0, -0.045, -0.06), Vector3(0.046, 0.042, 0.13), C_SHOE, basis, 6, 12, 1, -1.0, -0.55, C_BLACK)
+	k.add_ellipsoid(Vector3(0.0, 1.455, -0.447), Vector3(0.088, 0.022, 0.036), C_BLACK, Basis.IDENTITY, 4, 14)
+	return k
+
+
+## Туфля стороны `side` (".L"/".R") в rest: подошва по линии «пятка → носок» через шип,
+## тёмная подошва, манжета у голеностопа, шип. Кость `foot`.
+static func _shoe(side: String) -> MeshKit:
+	var k := MeshKit.new()
+	var heel: Vector3 = RiderRig.head("heel" + side)
+	var toe: Vector3 = RiderRig.tail("foot" + side)
+	var ankle: Vector3 = RiderRig.head("foot" + side)
+	var cleat: Vector3 = RiderRig.head("cleat" + side)
+	var back: Vector3 = (heel - toe).normalized()
+	var up: Vector3 = back.cross(Vector3.RIGHT).normalized()
+	var basis := Basis(up.cross(back), up, back)
+	k.add_ellipsoid((heel + toe) * 0.5 + up * 0.04, Vector3(0.05, 0.042, 0.145), C_SHOE, basis, 7, 14, 1, -1.0, -0.6, C_BLACK)
+	k.add_ellipsoid(ankle + Vector3(0.0, -0.025, 0.012), Vector3(0.042, 0.04, 0.05), C_SHOE, Basis.IDENTITY, 5, 12)
+	k.add_box(Transform3D(basis, cleat + up * 0.004), Vector3(0.034, 0.008, 0.036), C_BLACK)
 	return k

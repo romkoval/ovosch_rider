@@ -1,29 +1,91 @@
 class_name Rider
 extends Node3D
-## Велосипедист (REQ-D3D-04, REQ-D3D-07): модель из `RiderModel` (один тун-материал с
-## контуром), педалирование — `AnimationPlayer` с анимацией оборота шатунов (1 с на оборот),
+## Велосипедист (REQ-D3D-04, REQ-D3D-07, REQ-D3D-09): велосипед и манекен из `RiderModel`
+## (один тун-материал с контуром) на `Skeleton3D` по контракту `RiderRig` (25 костей; T-106a2).
+## Узлов с сетками 10: `Body`, `Hair`, `Helmet`, `Eyewear`, `ShoeL`, `ShoeR` (скиннинг, вес 1
+## на кость), `Bike`, `FrontWheel`, `RearWheel`, `CrankArm`. Фигура (`m`/`f`) и причёска
+## (`short`/`tail`) — подмена `mesh` тех же узлов (`set_figure`, `set_hair_style`).
+##
+## Педалирование — `AnimationPlayer` с анимацией оборота шатунов (1 с на оборот),
 ## `speed_scale = каденс / 60` (90 rpm → 1.5 об/с); каденс 0 или «нет данных» → остановка.
-## Изменение `speed_scale` сглаживается (τ = `SMOOTHING_TAU_SEC`), чтобы синхронизация шла
-## без рывков; цель применяется сразу при `set_cadence` — не позже следующего сэмпла
-## (крит. 3). Колёса крутятся по скорости. Ноги каждый кадр ставятся двухзвенной IK
-## от тазобедренного сустава к педали по текущему углу шатуна, корпус слегка покачивается
-## в такт; в поворотах велосипедист наклоняется (`set_lean`, угол считает `RideScene`);
-## на уклоне продольный наклон задаёт трасса (`pitch_rad` = atan(g), REQ-D3D-08 п.5).
-## Анимация и меши строятся в `_ready()`; в `_process`/`advance` — только арифметика.
+## Изменение `speed_scale` сглаживается (τ = `SMOOTHING_TAU_SEC`), цель применяется сразу при
+## `set_cadence` (крит. 3). Колёса крутятся по скорости. Каждый кадр `_pose_body` ставит позы
+## костей (все — в системе узла `Lean`, скелет в нём без смещения):
+## - таз S на седле, крен таза вокруг S, крен и рыскание корпуса по `spine`/`chest`,
+##   компенсация в `head` (`RiderMotion`, спека «Движение по видео-референсу»);
+## - ноги — двухзвенная IK от тазобедренного сустава к голеностопу: шип (`cleat`) на оси педали,
+##   угол стопы θ(φ), колено вбок по спеке; руки — IK от плеча к точке хвата (предплечье с
+##   кистью — одно звено, запястье прямое), кисти и сокеты `grip` на тормозных ручках;
+## - хвост — пружина на `hair_tail.1/2` от ускорения корня в системе гонщика.
+## Размах покачивания — коэффициент усилия k (`RiderMotion`): от P/FTP (`set_power`; решение
+## Н-39 — P сэмпла сессии, FTP профиля), без мощности или FTP — от каденса; при каденсе 0 k не
+## обновляется. Велосипед от педалирования не качается; наклон в повороте — узел `Lean`
+## (`set_lean`), на уклоне продольный наклон задаёт трасса (REQ-D3D-08 п.5).
+## Скелет, меши и массивы поз строятся в `_ready()`; в `_process`/`advance` — только
+## арифметика (D3D-05 п.4).
 
 const SMOOTHING_TAU_SEC: float = 0.5
 const PEDAL_ANIMATION: String = "pedal"
 const WHEEL_RADIUS_M: float = 0.336
 ## Ниже этого коэффициента анимация считается остановленной.
 const STOP_THRESHOLD: float = 0.02
-## Покачивание корпуса в такт педалированию, рад (на полной амплитуде).
-const SWAY_RAD: float = 0.035
 const RIDER_MATERIAL: Material = preload("res://src/scene3d/materials/rider_toon.tres")
+## Фигуры и причёски манекена (слоты `body.figure`, `hair.style`; проводка `RiderLook` — T-109).
+const FIGURES: Array[String] = ["m", "f"]
+const HAIR_STYLES: Array[String] = ["short", "tail"]
+
+# Индексы костей — порядок `RiderRig.BONES` (сверяется в `_ready`).
+const B_PELVIS: int = 0
+const B_SPINE: int = 1
+const B_CHEST: int = 2
+const B_NECK: int = 3
+const B_HEAD: int = 4
+const B_UPPERARM_L: int = 5
+const B_UPPERARM_R: int = 9
+const B_THIGH_L: int = 13
+const B_THIGH_R: int = 18
+const B_TAIL_1: int = 23
+const B_TAIL_2: int = 24
 
 var target_speed_scale: float = 0.0
 var speed_scale: float = 0.0
 var wheel_speed_kmh: float = 0.0
 var lean_rad: float = 0.0
+## Коэффициент усилия k (сглаженный); до первых данных — 1 (порог, эталонные ракурсы спеки).
+var effort_k: float = 1.0
+var figure: String = "m"
+var hair_style: String = "short"
+
+var _power_w: int = 0
+var _has_power: bool = false
+var _ftp_w: int = 0
+# Глобальный rest и поза кадра каждой кости (система `Lean`), родители, длины звеньев.
+var _rest: Array[Transform3D] = []
+var _rest_inv: Array[Transform3D] = []
+var _pose: Array[Transform3D] = []
+var _parent := PackedInt32Array()
+var _thigh_len: float = 0.0
+var _shin_len: float = 0.0
+var _upper_len: float = 0.0
+# Звено «предплечье + кисть»: длина «локоть → точка хвата» и запястье в системе звена
+# (`RiderModel.arm_frame`) в rest — правая и левая руки.
+var _elbow_grip_len: float = 0.0
+# Наименьшее расстояние «плечо → точка хвата»: локоть не сгибается сильнее `RiderMotion.ELBOW_MIN_DEG`.
+var _arm_min_reach: float = 0.0
+var _wrist_off_r := Vector3.ZERO
+var _wrist_off_l := Vector3.ZERO
+var _sole_rest_rad: float = 0.0
+# Оси «вбок» костей хвоста в rest: перпендикуляр к своей кости в продольной плоскости.
+var _tail_side_axis_1 := Vector3.UP
+var _tail_side_axis_2 := Vector3.UP
+# Пружина хвоста: углы кончика от rest (x > 0 — вправо, y > 0 — вниз), рад, их скорости;
+# корень хвоста в системе гонщика на прошлых кадрах (`_tail_primed` — сколько кадров есть).
+var _tail_ang := Vector2.ZERO
+var _tail_vel := Vector2.ZERO
+var _tail_prev_p := Vector3.ZERO
+var _tail_prev_v := Vector3.ZERO
+var _tail_primed: int = 0
+var _meshes: Dictionary = {}
 
 @onready var _anim: AnimationPlayer = %PedalPlayer
 @onready var _crank: Node3D = %Crank
@@ -31,16 +93,13 @@ var lean_rad: float = 0.0
 @onready var _front_wheel: Node3D = %FrontWheel
 @onready var _rear_wheel: Node3D = %RearWheel
 @onready var _lean: Node3D = %Lean
-@onready var _upper: Node3D = %Upper
-@onready var _thigh_l: Node3D = %ThighL
-@onready var _shin_l: Node3D = %ShinL
-@onready var _shoe_l: Node3D = %ShoeL
-@onready var _thigh_r: Node3D = %ThighR
-@onready var _shin_r: Node3D = %ShinR
-@onready var _shoe_r: Node3D = %ShoeR
+@onready var _skel: Skeleton3D = %Skeleton
+@onready var _body: MeshInstance3D = %Body
+@onready var _hair: MeshInstance3D = %Hair
 
 
 func _ready() -> void:
+	_build_skeleton()
 	_build_model()
 	# Шатуны продвигаются вручную в `advance` перед постановкой ног: иначе ноги ставились
 	# бы по углу прошлого кадра (AnimationPlayer обрабатывается позже узла сцены).
@@ -49,12 +108,31 @@ func _ready() -> void:
 	_anim.play(PEDAL_ANIMATION)
 	_anim.speed_scale = 0.0
 	_anim.pause()
-	_pose_body()
+	_pose_body(0.0)
 
 
 ## Каденс, об/мин; ≤ 0 (или «нет данных») — остановка педалирования.
 func set_cadence(rpm: int) -> void:
 	target_speed_scale = maxf(float(rpm), 0.0) / 60.0
+
+
+## Мощность сэмпла сессии и FTP профиля для коэффициента усилия k (Н-39). Без мощности
+## (`has_power` = false) или при FTP ≤ 0 — запасная ветка «k по каденсу».
+func set_power(power_w: int, has_power: bool, ftp_w: int) -> void:
+	_power_w = power_w
+	_has_power = has_power
+	_ftp_w = ftp_w
+
+
+## Цель k по текущим данным (до сглаживания).
+func effort_target() -> float:
+	return RiderMotion.effort_target(_power_w, _has_power, _ftp_w, target_speed_scale * 60.0)
+
+
+## Задать k сразу, без сглаживания (эталонные ракурсы, тесты). Не для кадра.
+func set_effort_k(k: float) -> void:
+	effort_k = k
+	_pose_body(0.0)
 
 
 ## Скорость для вращения колёс, км/ч.
@@ -68,6 +146,24 @@ func set_lean(rad: float) -> void:
 	lean_rad = rad
 	if _lean != null:
 		_lean.rotation = Vector3(0.0, 0.0, rad)
+
+
+## Фигура манекена (`m`/`f`): подмена `mesh` узла `Body`. Не для кадра.
+func set_figure(value: String) -> void:
+	assert(FIGURES.has(value), "Rider: unknown figure %s" % value)
+	figure = value
+	if _body != null and _meshes.has("body_" + value):
+		_body.mesh = _meshes["body_" + value]
+
+
+## Причёска (`short`/`tail`): подмена `mesh` узла `Hair`, хвост — в rest. Не для кадра.
+func set_hair_style(value: String) -> void:
+	assert(HAIR_STYLES.has(value), "Rider: unknown hair style %s" % value)
+	hair_style = value
+	if _hair != null and _meshes.has("hair_" + value):
+		_hair.mesh = _meshes["hair_" + value]
+		_tail_reset()
+		_pose_body(0.0)
 
 
 ## Продольный наклон велосипедиста, рад (> 0 — нос вверх): угол направления движения
@@ -86,14 +182,34 @@ func crank_rotation_rad() -> float:
 	return _crank.rotation.x
 
 
+func skeleton() -> Skeleton3D:
+	return _skel
+
+
+## Поза кости в системе узла `Lean` (точки посадки — по контракту скелета). Для тестов.
+func bone_pose(bone: String) -> Transform3D:
+	return _skel.get_bone_global_pose(_skel.find_bone(bone))
+
+
+## Поза кости в мировых координатах. Для тестов.
+func bone_global(bone: String) -> Transform3D:
+	return _skel.global_transform * bone_pose(bone)
+
+
+## Углы кончика хвоста от rest в системе головы, рад: x > 0 — вправо, y > 0 — вниз.
+func tail_angles() -> Vector2:
+	return _tail_ang
+
+
 ## Поставить шатун на угол φ, рад (0 — правая педаль вверху, π/2 — впереди) и позу по нему:
 ## эталонные ракурсы и тесты. Анимация переводится на ту же фазу — при каденсе > 0 оборот
-## продолжится с этого угла. Не для кадра.
+## продолжится с этого угла; хвост — в rest. Не для кадра.
 func set_crank_angle(rad: float) -> void:
 	var phi: float = fposmod(rad, TAU)
 	_anim.seek(phi / TAU, true)
 	_crank.rotation = Vector3(phi, 0.0, 0.0)
-	_pose_body()
+	_tail_reset()
+	_pose_body(0.0)
 
 
 ## Продвинуть анимацию на `delta` с (доступно тестам). Отдельно стоящий велосипедист
@@ -116,63 +232,238 @@ func advance(delta: float) -> void:
 		_anim.speed_scale = 0.0
 	if _anim.is_playing():
 		_anim.advance(delta)
+	# k: при каденсе 0 не обновляется — поза стоит (D3D-04 п.2).
+	if target_speed_scale > 0.0:
+		effort_k = RiderMotion.smooth_effort(effort_k, effort_target(), delta)
 	# Колесо катится вперёд (−Z): верх обода уходит вперёд — поворот вокруг X отрицательный.
 	var angular: float = wheel_speed_kmh / 3.6 / WHEEL_RADIUS_M
 	_front_wheel.rotate_object_local(Vector3.RIGHT, -angular * delta)
 	_rear_wheel.rotate_object_local(Vector3.RIGHT, -angular * delta)
-	_pose_body()
+	_pose_body(delta)
 
 
 func _process(delta: float) -> void:
 	advance(delta)
 
 
-## Ноги — по углу шатуна, корпус — лёгкое покачивание к ноге, давящей на педаль.
-func _pose_body() -> void:
+## Позы всех костей по углу шатуна φ и k; `dt` > 0 — шаг пружины хвоста.
+func _pose_body(dt: float) -> void:
 	var phi: float = _crank.rotation.x
-	var c: float = cos(phi)
-	var s: float = sin(phi)
-	var l: float = RiderModel.CRANK_LENGTH_M
-	var bb: Vector3 = RiderModel.BB
-	var pedal_r := Vector3(RiderModel.PEDAL_X_M, bb.y + l * c, bb.z - l * s)
-	var pedal_l := Vector3(-RiderModel.PEDAL_X_M, bb.y - l * c, bb.z + l * s)
-	_solve_leg(Vector3(RiderModel.HIP.x, RiderModel.HIP.y, RiderModel.HIP.z), pedal_r, _thigh_r, _shin_r, _shoe_r)
-	_solve_leg(Vector3(-RiderModel.HIP.x, RiderModel.HIP.y, RiderModel.HIP.z), pedal_l, _thigh_l, _shin_l, _shoe_l)
-	var effort: float = clampf(speed_scale, 0.0, 1.0)
-	var sway: float = SWAY_RAD * s * effort
-	var basis := Basis(Vector3.BACK, sway)
-	_upper.transform = Transform3D(basis, RiderModel.PELVIS - basis * RiderModel.PELVIS)
+	var k: float = effort_k
+	var rho_p: float = RiderMotion.pelvis_roll_rad(phi, k)
+	var rho_c: float = RiderMotion.chest_roll_rad(phi, k)
+	var psi_c: float = RiderMotion.chest_yaw_rad(phi, k)
+	var half: float = (rho_c - rho_p) * 0.5
+	var share: float = RiderMotion.SPINE_YAW_SHARE
+	var m_pelvis: Transform3D = _turn(B_PELVIS, rho_p, 0.0, Transform3D.IDENTITY)
+	var m_spine: Transform3D = _turn(B_SPINE, half, psi_c * share, m_pelvis)
+	var m_chest: Transform3D = _turn(B_CHEST, half, psi_c * (1.0 - share), m_spine)
+	var m_head: Transform3D = _turn(B_HEAD, -RiderMotion.HEAD_COMP * rho_c, -RiderMotion.HEAD_COMP * psi_c, m_chest)
+	_pose[B_PELVIS] = m_pelvis * _rest[B_PELVIS]
+	_pose[B_SPINE] = m_spine * _rest[B_SPINE]
+	_pose[B_CHEST] = m_chest * _rest[B_CHEST]
+	_pose[B_NECK] = m_chest * _rest[B_NECK]
+	_pose[B_HEAD] = m_head * _rest[B_HEAD]
+	_solve_arm(B_UPPERARM_R, m_chest)
+	_solve_arm(B_UPPERARM_L, m_chest)
+	_solve_leg(B_THIGH_R, phi, m_pelvis, 1.0)
+	_solve_leg(B_THIGH_L, phi + PI, m_pelvis, -1.0)
+	_step_tail(m_head, dt)
+	_pose_tail(m_head)
+	for i in _pose.size():
+		var p: int = _parent[i]
+		var local: Transform3D = _pose[i] if p < 0 else _pose[p].affine_inverse() * _pose[i]
+		_skel.set_bone_pose_position(i, local.origin)
+		_skel.set_bone_pose_rotation(i, local.basis.get_rotation_quaternion())
 	# Контактные педали держат угол стопы θ(φ) (кости 1, 2 скелета шатуна).
 	_crank_rig.set_bone_pose_rotation(1, Quaternion(Vector3.RIGHT, RiderModel.pedal_bone_angle(phi, false)))
 	_crank_rig.set_bone_pose_rotation(2, Quaternion(Vector3.RIGHT, RiderModel.pedal_bone_angle(phi, true)))
 
 
-func _solve_leg(hip: Vector3, pedal: Vector3, thigh: Node3D, shin: Node3D, shoe: Node3D) -> void:
-	var target: Vector3 = pedal + RiderModel.ANKLE_FROM_PEDAL
-	var reach: float = RiderModel.THIGH_M + RiderModel.SHIN_M - 1e-3
-	var d: Vector3 = target - hip
-	if d.length() > reach:
-		target = hip + d.normalized() * reach
-	var knee: Vector3 = RiderModel.two_bone_joint(hip, target, RiderModel.THIGH_M, RiderModel.SHIN_M, RiderModel.KNEE_HINT)
-	thigh.transform = RiderModel.bone_transform(hip, knee)
-	shin.transform = RiderModel.bone_transform(knee, target)
-	shoe.position = target
+## Смещение кости `bone` в системе `Lean` (M = поза · rest⁻¹): поворот на крен `roll` и
+## рыскание `yaw` вокруг её сустава в rest поверх смещения родителя `parent_m`.
+func _turn(bone: int, roll: float, yaw: float, parent_m: Transform3D) -> Transform3D:
+	var b: Basis = Basis(Vector3.UP, yaw) * Basis(Vector3.FORWARD, roll)
+	var o: Vector3 = _rest[bone].origin
+	return parent_m * Transform3D(b, o - b * o)
+
+
+## Рука: плечо — с грудью; ладонь (сокет `grip`) — в точке хвата тормозной ручки; предплечье с
+## кистью — одно жёсткое звено «локоть → точка хвата» (запястье держит изгиб rest, ≈ 2.3°, —
+## прямое, спека: ≤ 5° от линии предплечья); локоть — IK «плечо → точка хвата» с направлением
+## сгиба rest, угол локтя «дышит» с плечами.
+func _solve_arm(b_upper: int, m_chest: Transform3D) -> void:
+	var b_fore: int = b_upper + 1
+	var b_hand: int = b_upper + 2
+	var b_grip: int = b_upper + 3
+	var wrist_off: Vector3 = _wrist_off_r if b_upper == B_UPPERARM_R else _wrist_off_l
+	var shoulder: Vector3 = m_chest * _rest[b_upper].origin
+	var grip: Vector3 = _rest[b_grip].origin
+	# Плечо ближе, чем допускает предел сгиба локтя, — ладонь сдвигается по ручке (≈ мм).
+	var reach: float = grip.distance_to(shoulder)
+	if reach < _arm_min_reach:
+		grip = shoulder + (grip - shoulder) * (_arm_min_reach / reach)
+	var hint: Vector3 = _rest[b_fore].origin - _rest[b_upper].origin
+	var elbow: Vector3 = RiderModel.two_bone_joint(shoulder, grip, _upper_len, _elbow_grip_len, hint)
+	var wrist: Vector3 = elbow + RiderModel.arm_frame(shoulder, elbow, grip) * wrist_off
+	_pose[b_upper] = Transform3D(RiderModel.bone_basis(elbow - shoulder), shoulder)
+	_pose[b_fore] = Transform3D(RiderModel.bone_basis(wrist - elbow), elbow)
+	_pose[b_hand] = Transform3D(RiderModel.bone_basis(grip - wrist), wrist)
+	_pose[b_grip] = _pose[b_hand] * _rest_inv[b_hand] * _rest[b_grip]
+
+
+## Нога стороны `sx` (+1 — правая) при угле шатуна этой стороны: шип на оси педали, подошва
+## под углом θ(φ), колено — IK с заданным |x| (колено вбок), бедро от тазобедренного сустава
+## (движется с тазом).
+func _solve_leg(b_thigh: int, side_phi: float, m_pelvis: Transform3D, sx: float) -> void:
+	var b_shin: int = b_thigh + 1
+	var b_foot: int = b_thigh + 2
+	var l: float = RiderModel.CRANK_LENGTH_M
+	var cleat := Vector3(sx * RiderModel.PEDAL_X_M, RiderModel.BB.y + l * cos(side_phi), RiderModel.BB.z - l * sin(side_phi))
+	var rot := Basis(Vector3.RIGHT, RiderMotion.foot_pitch_rad(side_phi) - _sole_rest_rad)
+	var ankle: Vector3 = cleat - rot * (_rest[b_thigh + 3].origin - _rest[b_foot].origin)
+	var hip: Vector3 = m_pelvis * _rest[b_thigh].origin
+	var knee_x: float = sx * RiderMotion.knee_x(side_phi, effort_k)
+	var knee: Vector3 = RiderModel.two_bone_joint_x(hip, ankle, _thigh_len, _shin_len, RiderModel.KNEE_HINT, knee_x)
+	_pose[b_thigh] = Transform3D(RiderModel.bone_basis(knee - hip), hip)
+	_pose[b_shin] = Transform3D(RiderModel.bone_basis(ankle - knee), knee)
+	_pose[b_foot] = Transform3D(rot * _rest[b_foot].basis, ankle)
+	var m_foot: Transform3D = _pose[b_foot] * _rest_inv[b_foot]
+	_pose[b_thigh + 3] = m_foot * _rest[b_thigh + 3]
+	_pose[b_thigh + 4] = m_foot * _rest[b_thigh + 4]
+
+
+## Шаг пружины хвоста за `dt`: ускорение корня в системе гонщика (с наклоном `Lean`) → в систему
+## головы → угловое «отставание» кончика; полу-неявный Эйлер с подшагами, упор в пределы.
+func _step_tail(m_head: Transform3D, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var p: Vector3 = _lean.transform * (m_head * _rest[B_TAIL_1].origin)
+	if _tail_primed == 0:
+		_tail_prev_p = p
+		_tail_primed = 1
+		return
+	var v: Vector3 = (p - _tail_prev_p) / dt
+	_tail_prev_p = p
+	if _tail_primed == 1:
+		_tail_prev_v = v
+		_tail_primed = 2
+		return
+	var a: Vector3 = (v - _tail_prev_v) / dt
+	_tail_prev_v = v
+	if a.length() > RiderMotion.TAIL_ACCEL_MAX:
+		a = a.normalized() * RiderMotion.TAIL_ACCEL_MAX
+	var local: Vector3 = (_lean.transform.basis * m_head.basis).transposed() * a
+	# Корень уходит вправо — кончик отстаёт влево; корень вверх — кончик вниз.
+	var force := Vector2(-local.x, local.y) / RiderMotion.TAIL_LEVER_M
+	var w: float = TAU * RiderMotion.TAIL_FREQ_HZ
+	var damp: float = 2.0 * RiderMotion.TAIL_DAMPING * w
+	var steps: int = clampi(ceili(dt / RiderMotion.TAIL_SUBSTEP_SEC), 1, RiderMotion.TAIL_MAX_SUBSTEPS)
+	var h: float = dt / float(steps)
+	var side_max: float = deg_to_rad(RiderMotion.TAIL_SIDE_MAX_DEG)
+	var vert_max: float = deg_to_rad(RiderMotion.TAIL_VERT_MAX_DEG)
+	for i in steps:
+		_tail_vel += (force - _tail_ang * (w * w) - _tail_vel * damp) * h
+		_tail_ang += _tail_vel * h
+		if absf(_tail_ang.x) > side_max:
+			_tail_ang.x = signf(_tail_ang.x) * side_max
+			_tail_vel.x = 0.0
+		if absf(_tail_ang.y) > vert_max:
+			_tail_ang.y = signf(_tail_ang.y) * vert_max
+			_tail_vel.y = 0.0
+	var cone: float = deg_to_rad(RiderMotion.TAIL_CONE_DEG)
+	if _tail_ang.length() > cone:
+		_tail_ang = _tail_ang.normalized() * cone
+
+
+## Позы `hair_tail.1/2` от головы: угол кончика делится между костями (вторая догибается на
+## `TAIL_CURL` от первой, кончик в сумме — на угол пружины).
+func _pose_tail(m_head: Transform3D) -> void:
+	var w1: float = 1.0 / (1.0 + 0.5 * RiderMotion.TAIL_CURL)
+	var m1: Transform3D = m_head * _tail_turn(B_TAIL_1, _tail_ang * w1, _tail_side_axis_1)
+	_pose[B_TAIL_1] = m1 * _rest[B_TAIL_1]
+	var m2: Transform3D = m1 * _tail_turn(B_TAIL_2, _tail_ang * (w1 * RiderMotion.TAIL_CURL), _tail_side_axis_2)
+	_pose[B_TAIL_2] = m2 * _rest[B_TAIL_2]
+
+
+## Поворот вокруг начала кости хвоста: вбок — вокруг `side_axis`, перпендикуляра к этой кости в
+## продольной плоскости (+ — кончик вправо), вверх-вниз — вокруг X (+ — кончик вниз).
+func _tail_turn(bone: int, ang: Vector2, side_axis: Vector3) -> Transform3D:
+	var b: Basis = Basis(Vector3.RIGHT, ang.y) * Basis(side_axis, ang.x)
+	var o: Vector3 = _rest[bone].origin
+	return Transform3D(b, o - b * o)
+
+
+func _tail_reset() -> void:
+	_tail_ang = Vector2.ZERO
+	_tail_vel = Vector2.ZERO
+	_tail_primed = 0
+
+
+## Скелет по контракту и массивы поз (один раз).
+func _build_skeleton() -> void:
+	RiderRig.build_skeleton(_skel)
+	assert(_skel.get_bone_count() == RiderRig.BONE_COUNT)
+	_rest.resize(RiderRig.BONE_COUNT)
+	_rest_inv.resize(RiderRig.BONE_COUNT)
+	_pose.resize(RiderRig.BONE_COUNT)
+	_parent.resize(RiderRig.BONE_COUNT)
+	for i in RiderRig.BONE_COUNT:
+		var bone_name: String = RiderRig.BONES[i][0]
+		assert(_skel.get_bone_name(i) == bone_name, "Rider: bone order differs from RiderRig.BONES")
+		_rest[i] = Transform3D(RiderRig.rest_basis(bone_name), RiderRig.BONES[i][2])
+		_rest_inv[i] = _rest[i].affine_inverse()
+		_pose[i] = _rest[i]
+		_parent[i] = _skel.get_bone_parent(i)
+	_thigh_len = RiderRig.span("thigh.R", "shin.R")
+	_shin_len = RiderRig.span("shin.R", "foot.R")
+	_upper_len = RiderRig.span("upperarm.R", "forearm.R")
+	_elbow_grip_len = RiderRig.span("forearm.R", "grip.R")
+	_wrist_off_r = _wrist_offset(".R")
+	_wrist_off_l = _wrist_offset(".L")
+	_arm_min_reach = _min_reach(".R")
+	_sole_rest_rad = RiderRig.rest_sole_pitch_rad()
+	# Поворот вокруг оси «направление кости × X» на + уводит кончик кости к +X.
+	_tail_side_axis_1 = _rest[B_TAIL_1].basis.y.normalized().cross(Vector3.RIGHT).normalized()
+	_tail_side_axis_2 = _rest[B_TAIL_2].basis.y.normalized().cross(Vector3.RIGHT).normalized()
+
+
+## Расстояние «плечо → точка хвата» при угле локтя (плечо — локоть — запястье)
+## `RiderMotion.ELBOW_MIN_DEG`; запястье — в rest звена «локоть → точка хвата».
+func _min_reach(side: String) -> float:
+	var s: Vector3 = RiderRig.head("upperarm" + side)
+	var e: Vector3 = RiderRig.head("forearm" + side)
+	var to_wrist: float = (s - e).angle_to(RiderRig.head("hand" + side) - e)
+	var to_grip: float = (s - e).angle_to(RiderRig.head("grip" + side) - e)
+	var ang: float = deg_to_rad(RiderMotion.ELBOW_MIN_DEG) + to_grip - to_wrist
+	return sqrt(_upper_len * _upper_len + _elbow_grip_len * _elbow_grip_len
+		- 2.0 * _upper_len * _elbow_grip_len * cos(ang))
+
+
+## Запястье в rest в системе звена «локоть → точка хвата» руки `side`.
+func _wrist_offset(side: String) -> Vector3:
+	var frame: Basis = RiderModel.arm_frame(RiderRig.head("upperarm" + side), RiderRig.head("forearm" + side),
+		RiderRig.head("grip" + side))
+	return frame.inverse() * (RiderRig.head("hand" + side) - RiderRig.head("forearm" + side))
 
 
 func _build_model() -> void:
-	var m: Dictionary = RiderModel.meshes(RIDER_MATERIAL)
-	(%Bike as MeshInstance3D).mesh = m["bike"]
-	(_front_wheel as MeshInstance3D).mesh = m["wheel"]
-	(_rear_wheel as MeshInstance3D).mesh = m["rear_wheel"]
+	_meshes = RiderModel.meshes(RIDER_MATERIAL)
+	(%Bike as MeshInstance3D).mesh = _meshes["bike"]
+	(_front_wheel as MeshInstance3D).mesh = _meshes["wheel"]
+	(_rear_wheel as MeshInstance3D).mesh = _meshes["rear_wheel"]
 	var arm := %CrankArm as MeshInstance3D
-	arm.mesh = m["crank"]
+	arm.mesh = _meshes["crank"]
 	arm.skin = RiderModel.setup_crank_rig(_crank_rig)
 	arm.skeleton = arm.get_path_to(_crank_rig)
-	(_upper as MeshInstance3D).mesh = m["upper"]
-	for leg in [[_thigh_l, _shin_l, _shoe_l], [_thigh_r, _shin_r, _shoe_r]]:
-		(leg[0] as MeshInstance3D).mesh = m["thigh"]
-		(leg[1] as MeshInstance3D).mesh = m["shin"]
-		(leg[2] as MeshInstance3D).mesh = m["shoe"]
+	var skin: Skin = RiderModel.rider_skin()
+	var parts: Dictionary = {"Body": "body_" + figure, "Hair": "hair_" + hair_style, "Helmet": "helmet",
+		"Eyewear": "eyewear", "ShoeL": "shoe_l", "ShoeR": "shoe_r"}
+	for part in parts:
+		var mi := _skel.get_node(NodePath(part)) as MeshInstance3D
+		mi.mesh = _meshes[parts[part]]
+		mi.skin = skin
+		mi.skeleton = mi.get_path_to(_skel)
 	# Тень от обеих сторон граней: тонкие трубки и незакрытые торцы не дают «дыр» в тени.
 	for node in find_children("*", "MeshInstance3D", true, false):
 		(node as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_DOUBLE_SIDED

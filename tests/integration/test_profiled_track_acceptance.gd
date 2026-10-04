@@ -337,13 +337,11 @@ func test_req_d3d_08_c5_pitch_atan_grade_and_camera_every_50m_including_max_grad
 # ---------------------------------------------------------------------------
 
 func _foot_errors(rider: Rider) -> Dictionary:
-	var lean: Node3D = rider.get_node("%Lean")
 	var arm: Node3D = rider.get_node("%CrankArm")
 	var l: float = RiderModel.CRANK_LENGTH_M
 	var px: float = RiderModel.PEDAL_X_M
-	var ankle_off: Vector3 = lean.global_transform.basis * RiderModel.ANKLE_FROM_PEDAL
-	var foot_r: Vector3 = (rider.get_node("%ShoeR") as Node3D).global_position - ankle_off
-	var foot_l: Vector3 = (rider.get_node("%ShoeL") as Node3D).global_position - ankle_off
+	var foot_r: Vector3 = rider.bone_global("cleat.R").origin
+	var foot_l: Vector3 = rider.bone_global("cleat.L").origin
 	var pedal_r: Vector3 = arm.global_transform * Vector3(-px, l, 0.0)
 	var pedal_l: Vector3 = arm.global_transform * Vector3(px, -l, 0.0)
 	return {"r": foot_r.distance_to(pedal_r), "l": foot_l.distance_to(pedal_l)}

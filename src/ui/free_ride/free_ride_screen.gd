@@ -707,6 +707,7 @@ func _on_second_elapsed(_elapsed_sec: int) -> void:
 		var cadence: int = int(row["cadence_rpm"]) if row.get("has_cadence", false) else 0
 		_ride_scene.cadence_rpm = cadence
 		_ride_scene.rider().set_cadence(cadence)
+		_ride_scene.rider().set_power(int(row["power_w"]), bool(row.get("has_power", false)), _profile.ftp_w if _profile != null else 0)
 		_ride_scene.rider().set_wheel_speed(_session.speed_kmh())
 
 

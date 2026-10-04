@@ -1,5 +1,6 @@
 extends GutTest
-## Эталонный пакет `assets/rider/reference/` (T-106a1, REQ-D3D-09 п.1, 2, 5, 11; бриф разделы 4–6, 10, 18; арт-библия
+## Эталонный пакет `assets/rider/reference/` (T-106a1; REQ-D3D-09 подготовка п.1, 2, 5,
+## инструмент п.11; бриф разделы 4–6, 10, 18; арт-библия
 ## «Гонщик» → «Слоты внешности», «Вариант Г»): файлы собирает сценарий
 ## (`scripts/rider_artist_kit.sh` → `scripts/dev/rider_reference_pack.gd`) из кода
 ## (`RiderRig`, `RiderModel`, `RiderRegions`, `RiderLook`) воспроизводимо побайтно и не

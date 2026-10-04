@@ -31,25 +31,25 @@ unique_name_in_owner = true
 [node name="CrankArm" type="MeshInstance3D" parent="Lean/CrankMount/Crank"]
 unique_name_in_owner = true
 
-[node name="Upper" type="MeshInstance3D" parent="Lean"]
+[node name="Skeleton" type="Skeleton3D" parent="Lean"]
 unique_name_in_owner = true
 
-[node name="ThighL" type="MeshInstance3D" parent="Lean"]
+[node name="Body" type="MeshInstance3D" parent="Lean/Skeleton"]
 unique_name_in_owner = true
 
-[node name="ShinL" type="MeshInstance3D" parent="Lean"]
+[node name="Hair" type="MeshInstance3D" parent="Lean/Skeleton"]
 unique_name_in_owner = true
 
-[node name="ShoeL" type="MeshInstance3D" parent="Lean"]
+[node name="Helmet" type="MeshInstance3D" parent="Lean/Skeleton"]
 unique_name_in_owner = true
 
-[node name="ThighR" type="MeshInstance3D" parent="Lean"]
+[node name="Eyewear" type="MeshInstance3D" parent="Lean/Skeleton"]
 unique_name_in_owner = true
 
-[node name="ShinR" type="MeshInstance3D" parent="Lean"]
+[node name="ShoeL" type="MeshInstance3D" parent="Lean/Skeleton"]
 unique_name_in_owner = true
 
-[node name="ShoeR" type="MeshInstance3D" parent="Lean"]
+[node name="ShoeR" type="MeshInstance3D" parent="Lean/Skeleton"]
 unique_name_in_owner = true
 
 [node name="PedalPlayer" type="AnimationPlayer" parent="."]

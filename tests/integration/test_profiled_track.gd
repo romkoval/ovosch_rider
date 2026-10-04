@@ -418,16 +418,14 @@ func test_d3d_07_c2_feet_on_pedals_and_c3_lean_in_tightest_turn_on_each_route() 
 		_drive_to(s, _special_points(t)[0], 20.0, 60)
 		var rider := s.rider()
 		var arm: Node3D = rider.get_node("%CrankArm")
-		var lean: Node3D = rider.get_node("%Lean")
-		var ankle_off: Vector3 = lean.global_transform.basis * RiderModel.ANKLE_FROM_PEDAL
 		var l: float = RiderModel.CRANK_LENGTH_M
 		var px: float = RiderModel.PEDAL_X_M
-		var foot_r: Vector3 = (rider.get_node("%ShoeR") as Node3D).global_position - ankle_off
-		var foot_l: Vector3 = (rider.get_node("%ShoeL") as Node3D).global_position - ankle_off
+		var foot_r: Vector3 = rider.bone_global("cleat.R").origin
+		var foot_l: Vector3 = rider.bone_global("cleat.L").origin
 		assert_lt(foot_r.distance_to(arm.global_transform * Vector3(-px, l, 0.0)), 0.01, "%s: правая стопа на педали" % id)
 		assert_lt(foot_l.distance_to(arm.global_transform * Vector3(px, -l, 0.0)), 0.01, "%s: левая стопа на педали" % id)
-		var hip: Vector3 = (rider.get_node("%ThighR") as Node3D).global_position
-		var knee: Vector3 = (rider.get_node("%ShinR") as Node3D).global_position
+		var hip: Vector3 = rider.bone_global("thigh.R").origin
+		var knee: Vector3 = rider.bone_global("shin.R").origin
 		assert_almost_eq(hip.distance_to(knee), RiderModel.THIGH_M, 0.001, "%s: бедро постоянно" % id)
 
 

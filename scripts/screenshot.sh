@@ -10,6 +10,10 @@
 #   Ключи в любом месте после каталога (T-106a1): --views=all|work,side_r,… — эталонные ракурсы гонщика
 #   (RiderRig.VIEWS, файлы rider_<view>_<φ>.png; дистанция — первая из списка), --crank=0,90,… — углы
 #   шатуна вместо углов ракурса, --bike-only — без гонщика (bike_<view>_<φ>.png). Обёртка — rider_views.sh.
+#   --figure=m|f, --hair=short|tail (T-106a2) — фигура и причёска манекена (по умолчанию m, short).
+#   --series=<с> [--fps=30] (T-106a2) — серия кадров ракурсов --views в движении (скорость и каденс из
+#   аргументов): series_<view>/<view>_<NNN>.png и series.csv; пример — rear_low 2 с при 100 об/мин:
+#   ./scripts/screenshot.sh shots 32 100 0 flat --views=rear_low --series=2.0 --fps=30 --figure=f --hair=tail
 set -euo pipefail
 cd "$(dirname "$0")/.."
 GODOT="${GODOT:-$(command -v godot || echo /opt/godot/godot)}"

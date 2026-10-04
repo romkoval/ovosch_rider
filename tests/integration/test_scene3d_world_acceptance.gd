@@ -348,13 +348,12 @@ func _tilt_abs(s: RideScene) -> float:
 ## шатуна (правая педаль — локальный −X шатуна, +Y; левая — +X, −Y). Плюс признак, что
 ## точка стопы лежит на площадке педали (бокс меша шатуна).
 func _foot_errors(rider: Rider) -> Dictionary:
-	var lean: Node3D = rider.get_node("%Lean")
 	var arm: Node3D = rider.get_node("%CrankArm")
 	var l: float = RiderModel.CRANK_LENGTH_M
 	var px: float = RiderModel.PEDAL_X_M
-	var ankle_off: Vector3 = lean.global_transform.basis * RiderModel.ANKLE_FROM_PEDAL
-	var foot_r: Vector3 = (rider.get_node("%ShoeR") as Node3D).global_position - ankle_off
-	var foot_l: Vector3 = (rider.get_node("%ShoeL") as Node3D).global_position - ankle_off
+	# Точка стопы — шип (сокет `cleat` скелета гонщика, T-106a2).
+	var foot_r: Vector3 = rider.bone_global("cleat.R").origin
+	var foot_l: Vector3 = rider.bone_global("cleat.L").origin
 	var pedal_r: Vector3 = arm.global_transform * Vector3(-px, l, 0.0)
 	var pedal_l: Vector3 = arm.global_transform * Vector3(px, -l, 0.0)
 	var arm_inv: Transform3D = arm.global_transform.affine_inverse()
@@ -735,7 +734,8 @@ func test_req_d3d_07_c1_per_frame_code_has_no_allocations_transitively_across_sc
 					var callee: String = cm.get_string(1)
 					if defs.has(callee) and not visited.has(callee):
 						queue.append(callee)
-	for must in ["advance", "_pose_body", "_solve_leg", "two_bone_joint", "bone_transform", "_lean_target", "set_lean", "sample_into"]:
+	for must in ["advance", "_pose_body", "_solve_leg", "_solve_arm", "two_bone_joint", "two_bone_joint_x", "bone_basis",
+			"_step_tail", "_pose_tail", "smooth_effort", "_lean_target", "set_lean", "sample_into"]:
 		assert_true(visited.has(must), "граф вызовов кадра включает %s" % must)
 	var offenders: Array[String] = []
 	for fn in visited:
@@ -776,9 +776,7 @@ func test_req_d3d_07_c2_foot_on_pedal_and_constant_bone_lengths_for_any_crank_an
 	var s := _scene(track)
 	var rider := s.rider()
 	var crank: Node3D = rider.get_node("%Crank")
-	var thighs: Array[Node3D] = [rider.get_node("%ThighR") as Node3D, rider.get_node("%ThighL") as Node3D]
-	var shins: Array[Node3D] = [rider.get_node("%ShinR") as Node3D, rider.get_node("%ShinL") as Node3D]
-	var shoes: Array[Node3D] = [rider.get_node("%ShoeR") as Node3D, rider.get_node("%ShoeL") as Node3D]
+	var sides: Array[String] = [".R", ".L"]
 	var worst_foot: float = 0.0
 	var worst_len: float = 0.0
 	var off_platform: Array[String] = []
@@ -794,15 +792,18 @@ func test_req_d3d_07_c2_foot_on_pedal_and_constant_bone_lengths_for_any_crank_an
 			if not bool(e["on_r"]) or not bool(e["on_l"]):
 				off_platform.append("φ=%.2f lean=%.2f" % [phi, lean])
 			for k in 2:
-				var hip: Vector3 = thighs[k].global_position
-				var knee: Vector3 = shins[k].global_position
-				var ankle: Vector3 = shoes[k].global_position
+				# Кости скелета гонщика (T-106a2): бедро — `thigh`, голень — `shin`, голеностоп — `foot`.
+				var thigh: Transform3D = rider.bone_global("thigh" + sides[k])
+				var shin: Transform3D = rider.bone_global("shin" + sides[k])
+				var hip: Vector3 = thigh.origin
+				var knee: Vector3 = shin.origin
+				var ankle: Vector3 = rider.bone_global("foot" + sides[k]).origin
 				worst_len = maxf(worst_len, absf(hip.distance_to(knee) - RiderModel.THIGH_M))
 				worst_len = maxf(worst_len, absf(knee.distance_to(ankle) - RiderModel.SHIN_M))
-				# Меш бедра (вдоль −Y) заканчивается в колене, меш голени — в голеностопе; без растяжения.
-				worst_len = maxf(worst_len, (thighs[k].global_transform * Vector3(0.0, -RiderModel.THIGH_M, 0.0)).distance_to(knee))
-				worst_len = maxf(worst_len, (shins[k].global_transform * Vector3(0.0, -RiderModel.SHIN_M, 0.0)).distance_to(ankle))
-				worst_len = maxf(worst_len, absf(thighs[k].global_transform.basis.get_scale().length() - sqrt(3.0)))
+				# Кость бедра (вдоль локальной +Y) заканчивается в колене, голени — в голеностопе; без растяжения.
+				worst_len = maxf(worst_len, (thigh.origin + thigh.basis.y.normalized() * RiderModel.THIGH_M).distance_to(knee))
+				worst_len = maxf(worst_len, (shin.origin + shin.basis.y.normalized() * RiderModel.SHIN_M).distance_to(ankle))
+				worst_len = maxf(worst_len, absf(thigh.basis.get_scale().length() - sqrt(3.0)))
 			checked += 1
 			phi += 0.05
 	assert_gt(checked, 1000, "проверено углов шатуна × наклонов: %d" % checked)
@@ -1039,7 +1040,8 @@ func test_req_d3d_07_c4_sky_is_direction_dependent_shader_for_default_custom_col
 func test_req_d3d_07_c4_every_rider_mesh_has_outline_pass_with_nonzero_weight() -> void:
 	var s := _scene()
 	var meshes: Array[Node] = s.rider().find_children("*", "MeshInstance3D", true, false)
-	assert_gte(meshes.size(), 11, "частей велосипедиста: %d" % meshes.size())
+	# Состав гонщика с велосипедом — 10 узлов (REQ-D3D-09 п.7, спека «Состав и бюджет»).
+	assert_eq(meshes.size(), 10, "частей велосипедиста: %d" % meshes.size())
 	for node in meshes:
 		var mi := node as MeshInstance3D
 		var m: Material = mi.get_active_material(0)
@@ -1054,7 +1056,7 @@ func test_req_d3d_07_c4_every_rider_mesh_has_outline_pass_with_nonzero_weight() 
 			assert_true(code.contains("cull_front"), "%s: контур — инвертированная оболочка" % mi.name)
 			assert_gt(float((outline as ShaderMaterial).get_shader_parameter("outline_width")), 0.0, "%s: толщина контура > 0" % mi.name)
 	# Вес контура — альфа цвета вершины: у тела, ног и рамы контур не схлопнут.
-	for part in ["Upper", "ThighR", "ShinR", "ShoeR", "Bike"]:
+	for part in ["Body", "Helmet", "ShoeR", "Bike"]:
 		var pm := s.rider().get_node("%" + part) as MeshInstance3D
 		var cols: PackedColorArray = pm.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 		var weighted: int = 0

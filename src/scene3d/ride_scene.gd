@@ -60,6 +60,9 @@ var speed_kmh: float = 0.0
 var cadence_rpm: int = 0
 var distance_m: float = 0.0
 var weight_kg: float = SpeedModel.BIKE_MASS_KG + 67.0
+## FTP активного профиля (из `bind`), Вт: вместе с мощностью сэмпла задаёт коэффициент усилия
+## гонщика (REQ-D3D-09 п.16, Н-39); 0 — нет FTP, гонщик берёт k по каденсу.
+var ftp_w: int = 0
 
 var _session: WorkoutSession = null
 var _speed_model := SpeedModel.new()
@@ -236,6 +239,7 @@ func bind(session: WorkoutSession, profile: Profile = null) -> void:
 	unbind()
 	_session = session
 	weight_kg = profile.weight_kg if profile != null else WorkoutSession.DEFAULT_WEIGHT_KG
+	ftp_w = profile.ftp_w if profile != null else 0
 	_speed_model.reset(0.0)
 	speed_kmh = 0.0
 	cadence_rpm = 0
@@ -271,6 +275,7 @@ func apply_telemetry(power_w: int, has_power: bool, cadence: int, has_cadence: b
 		speed_kmh = _speed_model.step(float(power_w) if has_power else 0.0, weight_kg, 1.0)
 	cadence_rpm = cadence if has_cadence else 0
 	_rider.set_cadence(cadence_rpm)
+	_rider.set_power(power_w, has_power, ftp_w)
 	_rider.set_wheel_speed(speed_kmh)
 
 

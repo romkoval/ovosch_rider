@@ -8,7 +8,8 @@ extends RefCounted
 ## строкой в `RIG_SOURCES`, без переписывания тестов.
 
 ## Кость → [родитель, начало (Blender: x, y, z)]; для `.L` — как в брифе, `.R` — зеркально
-## (`brief_bones()`); `hair_tail.2` — без позиции (бриф задаёт длину 0.09–0.10 м).
+## (`brief_bones()`); `hair_tail.2` — без позиции (бриф задаёт длину 0.09–0.10 м), его окончание
+## (кончик хвоста) — `BRIEF_HAIR_TAIL_END`.
 const BRIEF_BONES: Dictionary = {
 	"pelvis": ["", Vector3(0.0, 0.230, 0.965)],
 	"spine": ["pelvis", Vector3(0.0, 0.105, 1.147)],
@@ -27,6 +28,11 @@ const BRIEF_BONES: Dictionary = {
 	"hair_tail.1": ["head", Vector3(0.0, -0.250, 1.390)],
 	"hair_tail.2": ["hair_tail.1", null],
 }
+## Окончание `hair_tail.2` — кончик хвоста в rest (Blender; вердикт game-designer по T-106a2, Г15):
+## хвост от вершины дуги над воротником ложится назад-вниз ≈ 22° к горизонту, вторая кость
+## ≈ 0.092 м, весь хвост ≈ 0.186 м (спека «Причёски»: 0.16–0.20 м). Допуск `HAIR_TAIL_END_TOL_M`.
+const BRIEF_HAIR_TAIL_END := Vector3(0.0, -0.080, 1.395)
+const HAIR_TAIL_END_TOL_M: float = 0.005
 ## Сокеты (бриф 5.1): без весов, по ним IK ставит кисти и стопы.
 const BRIEF_SOCKETS: Array[String] = ["grip.L", "grip.R", "cleat.L", "cleat.R", "heel.L", "heel.R"]
 ## Велосипед (бриф раздел 6, Blender, м).
@@ -43,7 +49,7 @@ const BRIEF_PEDAL_X_M: float = 0.115
 const BRIEF_VIEWS: Dictionary = {
 	"work": [Vector3(0.49, 3.77, 2.10), Vector3(0.0, -6.0, 0.60), 55.0, [0, 90, 180, 270]],
 	"side_r": [Vector3(-2.8, -0.1, 0.95), Vector3(0.0, -0.1, 0.85), 40.0, [0, 90, 180, 270]],
-	"hips_r": [Vector3(-1.3, 0.15, 0.85), Vector3(0.0, 0.05, 0.75), 35.0, [0, 90, 180, 270]],
+	"hips_r": [Vector3(-1.3, 0.15, 0.97), Vector3(0.0, 0.05, 0.87), 35.0, [0, 90, 180, 270]],
 	"rear34_l": [Vector3(1.5, 2.0, 1.55), Vector3(0.0, 0.05, 0.95), 40.0, [90]],
 	"front34_r": [Vector3(-1.6, -2.2, 1.35), Vector3(0.0, -0.25, 1.05), 40.0, [90]],
 	"head_34": [Vector3(-0.7, -1.1, 1.55), Vector3(0.0, -0.38, 1.42), 30.0, [90]],
@@ -61,6 +67,10 @@ const RIG_SOURCES: Array = [
 	{"name": "code", "path": "", "tol_m": 1e-5, "roll_deg": 0.01, "marker_meshes": []},
 	{"name": "rider_rig_reference.glb", "path": "res://assets/rider/reference/rider_rig_reference.glb",
 		"tol_m": 0.001, "roll_deg": 0.05, "marker_meshes": ["rig_joints"]},
+	# T-106a2: манекен в игре — `Skeleton3D` узла `Rider` (вторая арматура сцены — шатуны, `skeleton`
+	# выбирает нужную по имени).
+	{"name": "rider.tscn (манекен)", "path": "res://src/scene3d/rider.tscn", "skeleton": "Skeleton",
+		"tol_m": 1e-5, "roll_deg": 0.01, "marker_meshes": []},
 	# T-106b/T-106c: {"name": "rider.glb", "path": "res://assets/rider/rider.glb",
 	#	"tol_m": RiderRig.ARTIST_TOLERANCE_M, "roll_deg": 5.0, "marker_meshes": []},
 ]
@@ -119,7 +129,7 @@ static func load_rig(src: Dictionary, holder: Node) -> Dictionary:
 		out["error"] = "%s: не загружается" % src["name"]
 		return out
 	out["root"] = root
-	var skels: Array[Node] = root.find_children("*", "Skeleton3D", true, false)
+	var skels: Array[Node] = root.find_children(str(src.get("skeleton", "*")), "Skeleton3D", true, false)
 	if root is Skeleton3D:
 		skels.push_front(root)
 	if skels.size() != 1:
@@ -152,3 +162,22 @@ static func top_at(mesh: Mesh, x: float, z: float, xf: Transform3D = Transform3D
 			if hit != null:
 				best = maxf(best, (hit as Vector3).y)
 	return best
+
+
+## Источники модели для поз гонщика в игре (REQ-D3D-09 п.1–5, 14–18; T-106a2): сцена `Rider` и
+## вариант внешности — фигура (`body.figure`) и причёска (`hair.style`). Каждая фигура
+## проверяется отдельно (критерии «для каждой фигуры»). С T-106a4 — строки с `rider.glb`.
+const POSE_SOURCES: Array = [
+	{"name": "манекен m/short", "scene": "res://src/scene3d/rider.tscn", "figure": "m", "hair": "short"},
+	{"name": "манекен f/tail", "scene": "res://src/scene3d/rider.tscn", "figure": "f", "hair": "tail"},
+]
+
+
+## Гонщик источника `src` под `holder` (в дереве), без своего `_process` (кадры — `advance`).
+static func load_rider(src: Dictionary, holder: Node) -> Rider:
+	var r: Rider = (load(src["scene"]) as PackedScene).instantiate()
+	holder.add_child(r)
+	r.set_process(false)
+	r.set_figure(src["figure"])
+	r.set_hair_style(src["hair"])
+	return r

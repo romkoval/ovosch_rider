@@ -114,10 +114,11 @@ func test_pedal_body_centered_on_pedal_axis() -> void:
 		assert_gt(hi.z - lo.z, 0.07, "контактная педаль — платформа ≥ 7 см")
 
 
-func test_rider_still_has_eleven_mesh_nodes_and_one_material() -> void:
+func test_rider_has_ten_mesh_nodes_and_one_material() -> void:
 	var r := _rider()
 	var meshes := r.find_children("*", "MeshInstance3D", true, false)
-	assert_eq(meshes.size(), 11, "узлов с сетками столько же, сколько до T-106a1")
+	# Состав спеки (T-106a2, REQ-D3D-09 п.7): Body, Hair, Helmet, Eyewear, ShoeL/R, Bike, колёса, CrankArm.
+	assert_eq(meshes.size(), 10, "узлов с сетками — 10 по составу спеки")
 	for m in meshes:
 		assert_eq((m as MeshInstance3D).mesh.surface_get_material(0), Rider.RIDER_MATERIAL, String(m.name))
 

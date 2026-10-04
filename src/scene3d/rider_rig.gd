@@ -49,6 +49,10 @@ const ARTIST_TOLERANCE_M: float = 0.005
 ## Длина `hair_tail.1` → `hair_tail.2`, м (бриф 5.1).
 const HAIR_TAIL_MIN_M: float = 0.09
 const HAIR_TAIL_MAX_M: float = 0.10
+## Окончание `hair_tail.2` (кончик хвоста) в rest, Godot (Blender (0, −0.08, 1.395)): от вершины
+## дуги над воротником (начало `hair_tail.2`) хвост ложится назад-вниз ≈ 22° к горизонту, длина
+## второй кости 0.092 м, всего 0.186 м (спека «Причёски»: 0.16–0.20 м; вердикт T-106a2, Г15).
+const HAIR_TAIL_END := Vector3(0.0, 1.395, -0.080)
 ## Длина сокета (окончание — вниз от начала), м (бриф 5.1).
 const SOCKET_TAIL_M: float = 0.03
 
@@ -74,7 +78,8 @@ const REST_CRANK_RAD: float = PI / 2.0
 const VIEWS: Array = [
 	["work", Vector3(-0.49, 2.10, 3.77), Vector3(0.0, 0.60, -6.0), 55.0, [0, 90, 180, 270]],
 	["side_r", Vector3(2.8, 0.95, -0.1), Vector3(0.0, 0.85, -0.1), 40.0, [0, 90, 180, 270]],
-	["hips_r", Vector3(1.3, 0.85, 0.15), Vector3(0.0, 0.75, 0.05), 35.0, [0, 90, 180, 270]],
+	# Ред. 4.1: камера и цель на 0.12 м выше — таз и седло в центре кадра.
+	["hips_r", Vector3(1.3, 0.97, 0.15), Vector3(0.0, 0.87, 0.05), 35.0, [0, 90, 180, 270]],
 	["rear34_l", Vector3(-1.5, 1.55, 2.0), Vector3(0.0, 0.95, 0.05), 40.0, [90]],
 	["front34_r", Vector3(1.6, 1.35, -2.2), Vector3(0.0, 1.05, -0.25), 40.0, [90]],
 	["head_34", Vector3(0.7, 1.55, -1.1), Vector3(0.0, 1.42, -0.38), 30.0, [90]],
@@ -133,8 +138,9 @@ static func is_socket(bone: String) -> bool:
 
 ## Окончание (tail) кости в rest, Godot (бриф 5.1, колонка «Окончание»): начало «своего»
 ## ребёнка цепочки; у `head` — к макушке, у `foot` — к носку, у сокетов — 3 см вниз, у
-## `hair_tail.2` — продолжение хвоста на ту же длину. Движок окончаний не читает: они задают
-## направление кости (ось Y, бриф 5.3) в эталонной арматуре и в конвейере доводки.
+## `hair_tail.2` — кончик хвоста `HAIR_TAIL_END` (хвост изгибается на вершине дуги и лежит над
+## спиной). Окончания задают направление кости (ось Y, бриф 5.3) в эталонной арматуре, в
+## конвейере доводки и в rest скелета игры (сетка хвоста и оси пружины — по ним).
 static func tail(bone: String) -> Vector3:
 	var side: String = bone.right(2) if bone.ends_with(".L") or bone.ends_with(".R") else ""
 	var sx: float = -1.0 if side == ".L" else 1.0
@@ -164,7 +170,7 @@ static func tail(bone: String) -> Vector3:
 		"hair_tail.1":
 			return head("hair_tail.2")
 		"hair_tail.2":
-			return head("hair_tail.2") * 2.0 - head("hair_tail.1")
+			return HAIR_TAIL_END
 	return head(bone) + Vector3(0.0, -SOCKET_TAIL_M, 0.0)
 
 
@@ -231,9 +237,9 @@ static func left_phase_deg(right_deg: float) -> float:
 
 ## Рекомендуемая кривая угла стопы θ(φ) (допуски п.4, ред. 3 по видео владельца):
 ## θ = −14° + 12°·cos(φ − 100°), рад; «+» — носок вверх. По ней же стоит контактная педаль
-## под шипом.
+## под шипом. Константы — `RiderMotion` (одно место для движения, T-106a2).
 static func foot_pitch_rad(crank_rad: float) -> float:
-	return deg_to_rad(-14.0) + deg_to_rad(12.0) * cos(crank_rad - deg_to_rad(100.0))
+	return RiderMotion.foot_pitch_rad(crank_rad)
 
 
 ## Угол линии подошвы «пятка → шип» в rest (бриф 5.2: ≈ −8°), рад; правая сторона.
