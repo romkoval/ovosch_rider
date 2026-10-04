@@ -60,6 +60,9 @@ var _free_ride_trainer_dialog: ConfirmationDialog
 var last_finished_free_ride: FreeRideSession = null
 
 var _screens: Dictionary = {}
+## Диагностический журнал запуска (T-116a): `<data_dir>/logs/`, общий для приложения
+## (`DiagLog.install`), значения `SecureStore` в него не попадают (`SecureStoreFilter`).
+var journal: DiagLog = null
 
 @onready var _screens_root: Control = %Screens
 
@@ -73,6 +76,7 @@ func _ready() -> void:
 		transport = GodotHttpTransport.new(self)
 	repo = ProfileRepository.new(root + "profiles/")
 	secure_store = SecureStore.create_default(root + "secure/")
+	_open_journal(root + "logs/")
 	devices = RememberedDevices.new(root + "devices/")
 	secure_store.attach_to_profiles(repo)
 	devices.attach_to_profiles(repo)
@@ -573,6 +577,9 @@ func _screen_handles_back(node: Control) -> bool:
 	if node is PlanScreen:
 		# Открытый на телефоне лист предпросмотра закрывается, экран остаётся.
 		return (node as PlanScreen).handle_back()
+	if node is SettingsScreen:
+		# Идущий замер FPS (T-116a) прерывается, экран настроек остаётся.
+		return (node as SettingsScreen).handle_back()
 	return false
 
 
@@ -720,9 +727,27 @@ func _process(delta: float) -> void:
 		strava.tick(delta)
 
 
+## Открыть журнал запуска и сделать его общим; первая запись — версия и окружение.
+func _open_journal(dir_path: String) -> void:
+	journal = DiagLog.new(dir_path)
+	journal.filter().set_store(secure_store)
+	if journal.open() != OK:
+		push_warning("AppMain: diagnostic log not opened (%s)" % error_string(journal.last_error()))
+		return
+	DiagLog.install(journal)
+	var info := FrameStatsProbe.render_info(self)
+	info["locale"] = TranslationServer.get_locale()
+	info["format"] = DiagLog.FORMAT_VERSION
+	journal.write(DiagLog.CAT_APP, "app_started", info)
+
+
 func _exit_tree() -> void:
 	# Оболочки нет — «назад» снова решает движок (значение по умолчанию).
 	get_tree().quit_on_go_back = true
+	if journal != null:
+		journal.write(DiagLog.CAT_APP, "app_stopped")
+		journal.close()
+		DiagLog.uninstall(journal)
 	if strava != null:
 		strava.dispose()
 	if ride_recorder != null:

@@ -28,7 +28,9 @@ extends Control
 ##   решение ред. 2): кнопка вызывает `request_forget_intervals()` / `request_disconnect_strava()`,
 ##   само действие — `forget_intervals()` / `disconnect_strava()` после подтверждения;
 ## - нечитаемое хранилище секретов — баннер с подтверждённым сбросом (`SecureStore.reset_store()`);
-## - «О программе»: версия, лицензии (лист), политика конфиденциальности.
+## - «О программе»: версия, лицензии (лист), политика конфиденциальности, «Сохранить журнал»
+##   и скрытые строки разработчика — «Замер FPS», «Ограничить FPS до 15» (`AboutDiagnostics`,
+##   T-116a); замер идёт поверх экрана (`FpsBenchmark`), «назад» его прерывает (`handle_back`).
 ##
 ## Тексты — ключи переводов (`strings.csv` и `strings_menu.csv`) в `STATIC_TEXTS`, применяются
 ## `tr()` при каждой перерисовке. Стили — только вариации темы (UIX-01 крит. 2); цвета точки статуса и полосы
@@ -194,6 +196,9 @@ var _nav_group: ButtonGroup = ButtonGroup.new()
 var _strava: StravaService = null
 var _profile_chip: Button = null
 var _chip_placeholder: ImageTexture = null
+## Строки диагностики «О программе» и идущий поверх экрана замер FPS (T-116a).
+var _diagnostics: AboutDiagnostics = null
+var _benchmark: FpsBenchmark = null
 
 @onready var _root: VBoxContainer = %Root
 @onready var _app_bar: AppBar = %AppBar
@@ -306,6 +311,7 @@ func _ready() -> void:
 	_disconnect_strava_dialog.confirmed.connect(confirm_disconnect_strava)
 	_disconnect_strava_dialog.get_ok_button().theme_type_variation = &"DangerButton"
 	_licenses_button.pressed.connect(open_licenses)
+	_build_diagnostics()
 	# Диалоги — по `ui.md` п. 6 (480 lp, кнопки справа, фокус опасных — «Отмена»); у лицензий своя
 	# раскладка (`open_licenses`: на compact — лист снизу).
 	DialogLayout.attach(_licenses_dialog, false)
@@ -350,6 +356,9 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED and is_node_ready() and is_visible_in_tree():
 		_update_layout()
 		scroll_to_top()
+	elif what == NOTIFICATION_VISIBILITY_CHANGED and is_node_ready() and _benchmark != null:
+		# Ушли с экрана — замер прерывается (сцена заезда не рендерится в фоне).
+		_benchmark.close()
 
 
 ## Signal handlers are bound methods (no lambdas); the coroutine results are not awaited here.
@@ -606,6 +615,8 @@ func _render_about() -> void:
 	]
 	_licenses_label.text = "\n".join(lines)
 	_privacy_doc_label.text = tr(SettingsSections.PRIVACY_DOC).format({"path": PRIVACY_POLICY_DOC})
+	if _diagnostics != null:
+		_diagnostics.render_texts()
 
 
 ## Human-readable FTP/zones source: "local" or "intervals:<date>".
@@ -1109,6 +1120,76 @@ func switch_profile() -> void:
 ## «Назад»: на экран, с которого пришли (REQ-UIX-04 крит. 1).
 func back() -> void:
 	_app_bar.press_back()
+
+
+## «Назад» оболочки (Esc, системный «назад»): идёт замер FPS — он прерывается и закрывается,
+## экран остаётся. true — обработано экраном.
+func handle_back() -> bool:
+	if _benchmark != null:
+		return _benchmark.handle_back()
+	return false
+
+
+# ---------------------------------------------------------------------------
+# Диагностика (T-116a): журнал, замер FPS, ограничение FPS
+# ---------------------------------------------------------------------------
+
+func diagnostics() -> AboutDiagnostics:
+	return _diagnostics
+
+
+## Замер FPS, идущий поверх экрана (null — нет).
+func fps_benchmark() -> FpsBenchmark:
+	return _benchmark
+
+
+## Открыть замер FPS поверх экрана и запустить. Идущий замер заменяется.
+func start_fps_benchmark(route_id: String, duration_sec: float) -> FpsBenchmark:
+	if _benchmark != null:
+		_close_benchmark()
+	_benchmark = FpsBenchmark.new()
+	_benchmark.route_id = route_id
+	_benchmark.duration_sec = duration_sec
+	_benchmark.closed.connect(_close_benchmark)
+	add_child(_benchmark)
+	_benchmark.start()
+	_benchmark.cancel_button().grab_focus.call_deferred()
+	return _benchmark
+
+
+func _close_benchmark() -> void:
+	if _benchmark == null:
+		return
+	var bench := _benchmark
+	_benchmark = null
+	if bench.closed.is_connected(_close_benchmark):
+		bench.closed.disconnect(_close_benchmark)
+	if bench.is_running():
+		bench.cancel()
+	bench.queue_free()
+	if is_visible_in_tree() and _diagnostics != null and _diagnostics.are_dev_tools_visible():
+		_diagnostics.benchmark_button().grab_focus.call_deferred()
+
+
+func _build_diagnostics() -> void:
+	_diagnostics = AboutDiagnostics.new()
+	get_node(SettingsSections.CONTENT + "AboutSection/Card/Rows").add_child(_diagnostics)
+	_diagnostics.benchmark_requested.connect(_on_benchmark_requested)
+	var version_row := _version_label.get_parent() as Control
+	version_row.gui_input.connect(_on_version_row_input)
+
+
+func _on_benchmark_requested(route_id: String, duration_sec: float) -> void:
+	start_fps_benchmark(route_id, duration_sec)
+
+
+## Нажатие на строку «Версия» (мышь или касание) — счётчик открытия строк разработчика.
+func _on_version_row_input(event: InputEvent) -> void:
+	var press := event as InputEventMouseButton
+	var touch := event as InputEventScreenTouch
+	if (press != null and press.pressed and press.button_index == MOUSE_BUTTON_LEFT) \
+			or (touch != null and touch.pressed):
+		_diagnostics.register_unlock_tap()
 
 
 func app_bar() -> AppBar:
