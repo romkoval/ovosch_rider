@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workout_file>
+    <name>Активация: 3x6 мин на гоночной мощности</name>
+    <sportType>bike</sportType>
+    <tags/>
+    <workout>
+        <SteadyState show_avg="1" PowerHigh="0.6" PowerLow="0.45" Duration="900"/>
+        <SteadyState show_avg="1" PowerHigh="0.96" PowerLow="0.9" Duration="360">
+            <textevent message="1/3" duration="10"/>
+        </SteadyState>
+        <SteadyState show_avg="1" PowerHigh="0.58" PowerLow="0.5" Duration="240"/>
+        <SteadyState show_avg="1" PowerHigh="0.96" PowerLow="0.9" Duration="360">
+            <textevent message="2/3" duration="10"/>
+        </SteadyState>
+        <SteadyState show_avg="1" PowerHigh="0.58" PowerLow="0.5" Duration="240"/>
+        <SteadyState show_avg="1" PowerHigh="0.96" PowerLow="0.9" Duration="360">
+            <textevent message="3/3" duration="10"/>
+        </SteadyState>
+        <SteadyState show_avg="1" PowerHigh="0.58" PowerLow="0.5" Duration="240"/>
+        <SteadyState show_avg="1" PowerHigh="0.68" PowerLow="0.58" Duration="600"/>
+        <SteadyState show_avg="1" PowerHigh="0.5" PowerLow="0.43" Duration="600"/>
+    </workout>
+</workout_file>

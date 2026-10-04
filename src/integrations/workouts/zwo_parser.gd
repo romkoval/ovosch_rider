@@ -6,7 +6,10 @@ extends RefCounted
 ## - `<workout_file>`: `name`, `description` → `Workout`; `author`, `sportType` и прочие
 ##   простые текстовые элементы → `ParseResult.metadata` (REQ-IMP-01 крит. 5);
 ## - `Warmup`, `Cooldown`, `Ramp` → рампа `PowerLow→PowerHigh` (крит. 1);
-## - `SteadyState` → постоянная цель `Power` (крит. 1);
+## - `SteadyState` → постоянная цель `Power` (крит. 1); без `Power`, но с парой
+##   `PowerLow`/`PowerHigh` (экспорт Intervals.icu) — середина диапазона; `Power` главнее
+##   диапазона; одна граница без `Power` — ошибка `missing_attribute` (T-149, Н-51);
+##   `show_avg` и прочие незнакомые атрибуты не учитываются;
 ## - `IntervalsT` → `Repeat` × (`OnDuration`/`OnPower`, `OffDuration`/`OffPower`),
 ##   раскрывается в плоский список через `Workout.expand_repeat` (крит. 1); `Repeat` не больше
 ##   `ParseResult.MAX_REPEAT_COUNT`, шагов после разворачивания не больше
@@ -270,7 +273,7 @@ static func _build_step(lname: String, attrs: Dictionary, element: String, line:
 			var dur := _duration(attrs, "duration", element, line, result)
 			var power: Variant = _number(attrs, "power", element, line, result)
 			if power == null and not attrs.has("power"):
-				result.add_error("у элемента %s нет атрибута Power" % element, line, 0, element, "missing_attribute")
+				power = _steady_range_midpoint(attrs, element, line, result)
 			if dur > 0 and power != null:
 				var s := WorkoutStep.percent(dur, _to_percent(float(power)), WorkoutStep.StepKind.STEADY)
 				s.cadence_rpm = _cadence(attrs, element, line, result)
@@ -307,6 +310,20 @@ static func _build_step(lname: String, attrs: Dictionary, element: String, line:
 				s.cadence_rpm = _cadence(attrs, element, line, result)
 				out.append(s)
 	return {"steps": out, "repeat": repeat}
+
+
+## Цель `SteadyState` без `Power`: середина пары `PowerLow`/`PowerHigh` (доля FTP), как её
+## выгружает Intervals.icu (в `.mrc` того же плана — та же середина). Одна граница или ни одной —
+## ошибка `missing_attribute`; нечисловая граница — уже записанная `bad_number`. `null` — цели нет.
+static func _steady_range_midpoint(attrs: Dictionary, element: String, line: int, result: ParseResult) -> Variant:
+	var low: Variant = _number(attrs, "powerlow", element, line, result)
+	var high: Variant = _number(attrs, "powerhigh", element, line, result)
+	if low != null and high != null:
+		return (float(low) + float(high)) / 2.0
+	if not (attrs.has("powerlow") and attrs.has("powerhigh")):
+		result.add_error("у элемента %s нет атрибута Power (или пары PowerLow/PowerHigh)" % element,
+				line, 0, element, "missing_attribute")
+	return null
 
 
 ## Подсказка `textevent` в шаг(и) текущего элемента по смещению.
