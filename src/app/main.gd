@@ -20,6 +20,9 @@ const FREE_RIDE_SCENE: String = "res://src/ui/free_ride/free_ride_screen.tscn"
 @export var data_dir: String = "user://"
 ## Implementation of the trainer for `ConnectionManager`: "ble" (default) or "fake" (dev builds).
 @export var trainer_kind: String = TrainerFactory.KIND_BLE
+## Признак отладочной сборки для оболочки (по умолчанию — `is_debug_build()`). Тесты ставят false
+## до входа в дерево, чтобы проверить поведение release-сборки.
+var debug_build: bool = is_debug_build()
 
 var repo: ProfileRepository
 var secure_store: SecureStore
@@ -52,6 +55,10 @@ var _recovery_dialog: RecoveryDialog
 var last_finished_session: WorkoutSession = null
 ## Эмулятор, созданный для «тренировки на эмуляторе» (временно, до этапа 4).
 var _emulator_trainer: TrainerDevice = null
+## Эмулятор включён скрытой строкой разработчика «О программе» (до перезапуска, не сохраняется).
+var _emulator_unlocked: bool = false
+## Кнопка «Эмулятор» диалога свободной езды (есть всегда, видна по `emulator_enabled()`).
+var _free_ride_emulator_button: Button = null
 ## Свободная езда, ожидающая станка: `{route_id, steepness_pct}` (пусто — нет).
 var _pending_free_ride: Dictionary = {}
 ## Диалог «станок не подключён» при старте свободной езды (FRD-01 крит. 4).
@@ -121,7 +128,7 @@ func _build_screens() -> void:
 	_add_screen(AppState.Screen.PROFILE_SELECT, select)
 	var home: HomeScreen = load(HOME_SCENE).instantiate()
 	home.setup(repo, app_state, connections, plan_cache, workout_library, ride_repository)
-	home.dev_tools_enabled = is_debug_build()
+	home.dev_tools_enabled = emulator_enabled()
 	home.emulator_workout_requested.connect(start_emulator_workout)
 	home.workout_start_requested.connect(_on_home_workout_start)
 	home.import_requested.connect(_on_home_import)
@@ -145,13 +152,15 @@ func _build_screens() -> void:
 	plan.emulator_chosen.connect(func() -> void:
 		if _pending_workout != null:
 			start_workout_on_emulator(_pending_workout))
-	plan.dev_tools_enabled = is_debug_build()
+	plan.dev_tools_enabled = emulator_enabled()
 	plan.emulator_workout_requested.connect(_on_plan_emulator_workout)
 	plan.profile_updated.connect(func(p: Profile) -> void: repo.save(p))
 	_add_screen(AppState.Screen.PLAN, plan)
 	var settings: SettingsScreen = load(SETTINGS_SCENE).instantiate()
 	settings.setup(repo, app_state, secure_store, transport, connections)
 	_add_screen(AppState.Screen.SETTINGS, settings)
+	settings.diagnostics().emulator_toggled.connect(set_emulator_unlocked)
+	settings.diagnostics().show_emulator_state(emulator_enabled(), debug_build)
 	var history: HistoryScreen = load(HISTORY_SCENE).instantiate()
 	history.setup(ride_repository, repo, app_state)
 	history.upload_requested.connect(_on_upload_requested)
@@ -193,7 +202,7 @@ func _make_placeholder(screen: int) -> Control:
 
 
 ## Отладочная сборка (редактор, отладочный экспорт): `assert` выполняется только в ней, поэтому
-## флаг ставится без обращения к `OS` (REQ-NFR-06 крит. 1). Включает кнопки разработки на главном.
+## флаг ставится без обращения к `OS` (REQ-NFR-06 крит. 1). Для эмулятора — `emulator_enabled()`.
 static func is_debug_build() -> bool:
 	var probe: Array[bool] = [false]
 	assert(_mark_debug(probe))
@@ -203,6 +212,39 @@ static func is_debug_build() -> bool:
 static func _mark_debug(probe: Array[bool]) -> bool:
 	probe[0] = true
 	return true
+
+
+## Эмулятор станка доступен (REQ-DEV-09 крит. 6, FRD-01 крит. 4): в отладочной сборке — всегда,
+## в release — после включения скрытой строкой «Эмулятор станка» в «О программе». Единственный
+## признак для «Режима разработки» и «На эмуляторе» главного, «На эмуляторе» и «Эмулятора»
+## экрана выбора тренировки и «Эмулятора» диалога свободной езды.
+func emulator_enabled() -> bool:
+	return debug_build or _emulator_unlocked
+
+
+## Включить или выключить эмулятор (скрытая строка «О программе»): действует до перезапуска,
+## уже созданные экраны и диалоги обновляются сразу; переключение — в журнал. Идущий заезд на
+## эмуляторе не прерывается.
+func set_emulator_unlocked(enabled: bool) -> void:
+	if enabled != _emulator_unlocked:
+		_emulator_unlocked = enabled
+		DiagLog.event(DiagLog.CAT_APP, "emulator", {"enabled": enabled, "debug_build": debug_build})
+	_apply_emulator_access()
+
+
+func _apply_emulator_access() -> void:
+	var enabled := emulator_enabled()
+	var home := home_screen()
+	if home != null:
+		home.dev_tools_enabled = enabled
+	var plan := plan_screen()
+	if plan != null:
+		plan.dev_tools_enabled = enabled
+	if _free_ride_emulator_button != null:
+		_free_ride_emulator_button.visible = enabled
+	var settings := settings_screen()
+	if settings != null and settings.diagnostics() != null:
+		settings.diagnostics().show_emulator_state(enabled, debug_build)
 
 
 func home_screen() -> HomeScreen:
@@ -318,8 +360,8 @@ func _launch(screen: WorkoutScreen, workout: Workout, trainer: TrainerDevice, ma
 
 ## Запуск свободной езды по трассе с крутизной SIM («Поехать» на главном и на экране выбора
 ## трассы). Правило станка — как у плана: подключён станок (хаб `ConnectionManager`) — заезд
-## стартует на нём; нет — сессия не создаётся, диалог поясняет и ведёт на «Устройства», а в
-## отладочной сборке предлагает эмулятор (FRD-01 крит. 4). true — заезд запущен сразу.
+## стартует на нём; нет — сессия не создаётся, диалог поясняет и ведёт на «Устройства», а при
+## `emulator_enabled()` предлагает эмулятор (FRD-01 крит. 4). true — заезд запущен сразу.
 func start_free_ride(route_id: String, steepness_pct: int) -> bool:
 	if free_ride_screen() == null:
 		return false
@@ -363,7 +405,12 @@ func free_ride_trainer_dialog() -> ConfirmationDialog:
 	return _free_ride_trainer_dialog
 
 
-## Диалог «станок не подключён»: «Устройства» (основная), «Отмена»; в отладке — «Эмулятор».
+## Кнопка «Эмулятор» диалога свободной езды (видна по `emulator_enabled()`).
+func free_ride_emulator_button() -> Button:
+	return _free_ride_emulator_button
+
+
+## Диалог «станок не подключён»: «Устройства» (основная), «Отмена»; «Эмулятор» — по `emulator_enabled()`.
 func _build_free_ride_trainer_dialog() -> void:
 	_free_ride_trainer_dialog = ConfirmationDialog.new()
 	_free_ride_trainer_dialog.name = "FreeRideTrainerDialog"
@@ -374,18 +421,18 @@ func _build_free_ride_trainer_dialog() -> void:
 	_free_ride_trainer_dialog.dialog_autowrap = true
 	_free_ride_trainer_dialog.ok_button_text = "ui.free_ride.no_trainer.devices"
 	_free_ride_trainer_dialog.cancel_button_text = "ui.common.cancel"
-	if is_debug_build():
-		_free_ride_trainer_dialog.add_button("ui.free_ride.no_trainer.emulator", true, &"emulator")
-		_free_ride_trainer_dialog.custom_action.connect(_on_free_ride_trainer_action)
+	_free_ride_emulator_button = _free_ride_trainer_dialog.add_button("ui.free_ride.no_trainer.emulator", true, &"emulator")
+	_free_ride_emulator_button.visible = emulator_enabled()
+	_free_ride_trainer_dialog.custom_action.connect(_on_free_ride_trainer_action)
 	_free_ride_trainer_dialog.confirmed.connect(_on_free_ride_devices_chosen)
 	_free_ride_trainer_dialog.canceled.connect(_on_free_ride_choice_canceled)
 	add_child(_free_ride_trainer_dialog)
 	DialogLayout.attach(_free_ride_trainer_dialog)
 
 
-## «Эмулятор» в диалоге (только отладка, FRD-01 крит. 4): ожидающий заезд — на эмуляторе.
+## «Эмулятор» в диалоге (при `emulator_enabled()`, FRD-01 крит. 4): ожидающий заезд — на эмуляторе.
 func choose_free_ride_emulator() -> bool:
-	if _pending_free_ride.is_empty() or not is_debug_build():
+	if _pending_free_ride.is_empty() or not emulator_enabled():
 		return false
 	var pending := _pending_free_ride
 	_free_ride_trainer_dialog.hide()

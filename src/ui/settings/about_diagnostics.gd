@@ -11,7 +11,10 @@ extends VBoxContainer
 ##   - «Замер FPS»: трасса (по умолчанию «Перевал») и длительность (по умолчанию 3 мин),
 ##     «Запустить» → сигнал `benchmark_requested` (экран замера — `FpsBenchmark`, открывает
 ##     экран настроек);
-##   - «Ограничить FPS до 15» (`FrameRateLimit`, NFR-02 п.3).
+##   - «Ограничить FPS до 15» (`FrameRateLimit`, NFR-02 п.3);
+##   - «Эмулятор станка» (REQ-DEV-09 крит. 6, FRD-01 крит. 4): переключатель → сигнал
+##     `emulator_toggled`, решает оболочка (`AppMain.set_emulator_unlocked`), состояние она же
+##     возвращает в `show_emulator_state`; в отладочной сборке эмулятор включён всегда.
 ##
 ## Оформление строк — как у остальных строк «О программе» (`Row16`, высота 56, подпись и
 ## пояснение `CaptionLabel` слева, контрол справа); решения `ui.md` для раздела разработчика
@@ -19,6 +22,8 @@ extends VBoxContainer
 
 ## «Запустить» замер FPS.
 signal benchmark_requested(route_id: String, duration_sec: float)
+## Переключатель «Эмулятор станка» (до перезапуска приложения).
+signal emulator_toggled(enabled: bool)
 
 const UNLOCK_TAPS: int = 5
 const ROW_HEIGHT: float = 56.0
@@ -46,6 +51,10 @@ var _limit_row: HBoxContainer
 var _limit_label: Label
 var _limit_hint: Label
 var _limit_check: CheckButton
+var _emulator_row: HBoxContainer
+var _emulator_label: Label
+var _emulator_hint: Label
+var _emulator_check: CheckButton
 var _file_dialog: FileDialog = null
 
 
@@ -80,6 +89,7 @@ func unlock_dev_tools() -> void:
 	_bench_params_row.visible = true
 	_limit_row.visible = true
 	_limit_check.set_pressed_no_signal(FrameRateLimit.is_limited())
+	_emulator_row.visible = true
 	DiagLog.event(DiagLog.CAT_SETTINGS, "dev_tools_unlocked")
 
 
@@ -105,6 +115,21 @@ func request_benchmark() -> void:
 func set_fps_limited(limited: bool) -> void:
 	FrameRateLimit.set_limited(limited)
 	_limit_check.set_pressed_no_signal(FrameRateLimit.is_limited())
+
+
+## Состояние «Эмулятора станка» от оболочки: `enabled` — эмулятор доступен, `forced` — включён
+## сборкой (отладка) и выключить его нельзя.
+func show_emulator_state(enabled: bool, forced: bool) -> void:
+	_emulator_check.set_pressed_no_signal(enabled)
+	_emulator_check.disabled = forced
+
+
+func emulator_check() -> CheckButton:
+	return _emulator_check
+
+
+func _on_emulator_check_toggled(enabled: bool) -> void:
+	emulator_toggled.emit(enabled)
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +207,8 @@ func render_texts() -> void:
 	_bench_button.text = tr("ui.settings.fps_bench_run")
 	_limit_label.text = tr("ui.settings.fps_limit_title").format({"fps": FrameRateLimit.DEBUG_FPS})
 	_limit_hint.text = tr("ui.settings.fps_limit_hint")
+	_emulator_label.text = tr("ui.settings.emulator_title")
+	_emulator_hint.text = tr("ui.settings.emulator_hint")
 	var ids := RouteCatalog.ids()
 	for i in ids.size():
 		_route_option.set_item_text(i, tr(RouteCatalog.get_route(ids[i]).name_key))
@@ -233,11 +260,21 @@ func _build() -> void:
 	_limit_check.toggled.connect(set_fps_limited)
 	_limit_row.add_child(_limit_check)
 
+	_emulator_row = _row("EmulatorRow")
+	var emulator_texts := _texts(_emulator_row)
+	_emulator_label = emulator_texts[0]
+	_emulator_hint = emulator_texts[1]
+	_emulator_check = CheckButton.new()
+	_emulator_check.name = "EmulatorCheck"
+	_emulator_check.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_emulator_check.toggled.connect(_on_emulator_check_toggled)
+	_emulator_row.add_child(_emulator_check)
+
 	for b: Button in [_save_log_button, _bench_button]:
 		TouchTarget.attach(b, TouchTarget.Kind.BUTTON)
-	for c: Control in [_route_option, _duration_option, _limit_check]:
+	for c: Control in [_route_option, _duration_option, _limit_check, _emulator_check]:
 		TouchTarget.attach(c, TouchTarget.Kind.UI)
-	for hidden: Control in [_bench_row, _bench_params_row, _limit_row]:
+	for hidden: Control in [_bench_row, _bench_params_row, _limit_row, _emulator_row]:
 		hidden.visible = false
 	render_texts()
 

@@ -105,6 +105,8 @@ ui.settings.fps_bench_run,Запустить,Run
 ui.settings.fps_bench_minutes,{min} мин,{min} min
 ui.settings.fps_limit_title,Ограничить FPS до {fps},Limit FPS to {fps}
 ui.settings.fps_limit_hint,Отладка: действует до перезапуска приложения,Debug: lasts until the app restarts
+ui.settings.emulator_title,Эмулятор станка,Trainer emulator
+ui.settings.emulator_hint,"Тренировка и свободная езда без станка («Эмулятор», «На эмуляторе»); до перезапуска приложения","Workouts and free ride without a trainer (Emulator buttons); lasts until the app restarts"
 ui.fps_bench.warmup,Замер FPS · {route} · прогрев,FPS benchmark · {route} · warming up
 ui.fps_bench.progress,Замер FPS · {route} · {elapsed} / {total},FPS benchmark · {route} · {elapsed} / {total}
 ui.fps_bench.result_title,Замер FPS · {route},FPS benchmark · {route}
