@@ -64,6 +64,16 @@ uniform float snow_to_m = 100001.0;
 uniform vec4 snow_color : source_color = vec4(0.95, 0.97, 1.0, 1.0);
 // Снег — не ниже этой высоты над полем высоты трассы (UV.x рельефа), м.
 uniform float snow_rel_m = 0.0;
+// Приморье (T-088, `tracks.md` п. 4.4): по высоте над уровнем воды `water_level` (абсолютная, м)
+// — песок пляжа до `sand_to_m` (у воды — мокрый, темнее), выше до `dune_to_m` — дюнная трава
+// пятнами, под водой — дно. Обрывы остаются камнем. По умолчанию выключено.
+uniform float water_level = -100000.0;
+uniform float sand_to_m = 2.6;
+uniform float dune_to_m = 7.0;
+uniform vec4 sand_color : source_color = vec4(0.90, 0.82, 0.62, 1.0);
+uniform vec4 sand_wet : source_color = vec4(0.74, 0.66, 0.48, 1.0);
+uniform vec4 dune_grass : source_color = vec4(0.62, 0.66, 0.36, 1.0);
+uniform vec4 seabed_color : source_color = vec4(0.56, 0.62, 0.50, 1.0);
 
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -156,6 +166,20 @@ void fragment() {
 			* smoothstep(snow_rel_m + ns * 80.0, snow_rel_m + 40.0 + ns * 80.0, rel_y)
 			* smoothstep(0.62 - naa, 0.62 + naa, ny);
 		col = mix(col, snow_color.rgb, smask);
+	}
+	if (water_level > -50000.0) {
+		float hw = world_pos.y - water_level;
+		float nn = vnoise(p * 0.03 + vec2(4.0, 11.0)) - 0.5;
+		float haa = max(fwidth(hw), 0.01);
+		float flat_ground = smoothstep(0.70, 0.80, world_normal.y);
+		float sand = (1.0 - smoothstep(sand_to_m + nn * 1.4 - haa, sand_to_m + nn * 1.4 + haa, hw)) * flat_ground;
+		float dune = (1.0 - smoothstep(dune_to_m + nn * 4.0 - haa, dune_to_m + nn * 4.0 + haa, hw))
+			* smoothstep(0.42 - aa, 0.42 + aa, n1) * flat_ground * (1.0 - COLOR.a * 0.8);
+		col = mix(col, dune_grass.rgb, dune);
+		vec3 sandc = mix(sand_wet.rgb, sand_color.rgb, smoothstep(0.05, 0.45, hw));
+		sandc *= 1.0 + (n2 - 0.5) * 0.06;
+		sandc = mix(seabed_color.rgb, sandc, smoothstep(-0.8, -0.1, hw));
+		col = mix(col, sandc, max(sand, 1.0 - smoothstep(-0.5, 0.0, hw)));
 	}
 	ALBEDO = col * COLOR.rgb;
 	ROUGHNESS = 1.0;

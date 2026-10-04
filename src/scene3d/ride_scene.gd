@@ -24,6 +24,7 @@ const DEFAULT_ROAD_MATERIAL: String = "res://src/scene3d/materials/road.tres"
 const DEFAULT_WORLD_MATERIAL: String = "res://src/scene3d/materials/world_toon.tres"
 const DEFAULT_TERRAIN_MATERIAL: String = "res://src/scene3d/materials/grass.tres"
 const DEFAULT_SKY_MATERIAL: String = "res://src/scene3d/materials/sky.tres"
+const DEFAULT_WATER_MATERIAL: String = "res://src/scene3d/materials/water.tres"
 ## Камера: позади (по горизонтальному направлению движения) и сверху от велосипедиста.
 ## Сглаживается УГОЛ направления (yaw), а не вектор смещения: расстояние и высота
 ## постоянны при любой скорости и на любых поворотах (D3D-01 крит. 1), повороты
@@ -71,6 +72,8 @@ var _props: MultiMeshInstance3D = null
 ## Прочие узлы мира, построенные по трассе (обочина, рельеф, растительность).
 var _world_nodes: Array[Node] = []
 var _terrain: TerrainField = null
+## Вода (море, река; T-088): один меш на уровне воды трассы, null — воды нет.
+var _water: MeshInstance3D = null
 var _env_instance: Node = null
 ## Ориентиры трассы каталога (T-083): расстановка и узлы (входят в `_world_nodes`).
 var _landmarks_placed: Array[LandmarkBuilder.Placed] = []
@@ -133,6 +136,7 @@ func set_track(new_track: Track) -> void:
 		node.queue_free()
 	_world_nodes.clear()
 	_terrain = null
+	_water = null
 	_landmarks_placed.clear()
 	_landmark_nodes.clear()
 	if not is_node_ready():
@@ -174,6 +178,11 @@ func world_nodes() -> Array[Node]:
 ## Поле высот рельефа (null — рельеф выключен в `EnvironmentSet`).
 func terrain() -> TerrainField:
 	return _terrain
+
+
+## Меш воды (море и река, `TerrainField.build_water_mesh`); null — у трассы нет воды.
+func water() -> MeshInstance3D:
+	return _water
 
 
 ## Узлы ориентиров (корни; части — их дети). Пусто — у трассы нет ориентиров или они
@@ -417,6 +426,11 @@ func _build_world() -> void:
 	if _terrain != null:
 		LandmarkBuilder.carve(_landmarks_placed, _terrain)
 		_add_world_node(_no_shadow(_terrain.build_mesh(grass_mat)))
+		# Вода — после всех правок рельефа (котловины, русло, мыс): глубина под водой — по ним.
+		if e.water_enabled:
+			_water = _terrain.build_water_mesh(_material_or(e.water_material, DEFAULT_WATER_MATERIAL))
+			if _water != null:
+				_add_world_node(_water, true)
 	_props = _build_props()
 	_landmark_nodes = LandmarkBuilder.nodes(_landmarks_placed)
 	for node in _landmark_nodes:

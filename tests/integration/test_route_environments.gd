@@ -5,12 +5,15 @@ extends GutTest
 ## стороны долины, только ели до границы леса, валуны; ориентиры по `RouteCatalog.landmarks` —
 ## REQ-D3D-08 п.6 (свой набор, высота горизонта равнина < холмы < горы, бюджет T-066 с запасом
 ## на змейке), п.8 (ориентиры в кадре у своих s, не больше трёх в кадре; подъём читается),
-## п.12 (ориентиры в мире не реже 1.5 км, сторона и план).
+## п.12 (ориентиры в мире не реже 1.5 км, сторона и план). Приморье (T-088): море и река — одна
+## водная поверхность на уровне воды трассы, рельеф уходит под воду, пляж, зонтичные сосны не на
+## песке, маяк на мысу со светом без источника света, ориентиры seaside (мост — T-090: пока насыпь
+## над рекой) — REQ-D3D-08 п.6 (вода, высота горизонта равнина < приморье < холмы), п.8, п.11, п.12.
 
 const SCENE: String = "res://src/scene3d/ride_scene.tscn"
 const FRAME: float = 1.0 / 60.0
 const STEP_M: float = 50.0
-const IDS: Array[String] = [RouteCatalog.FLAT, RouteCatalog.HILLS, RouteCatalog.MOUNTAINS]
+const IDS: Array[String] = [RouteCatalog.FLAT, RouteCatalog.HILLS, RouteCatalog.MOUNTAINS, RouteCatalog.SEASIDE]
 ## Ориентиры-мосты: дорога и есть мост (ручей под полотном, ограждение по краям).
 const BRIDGE_TYPES: Array[String] = ["stone_bridge", "creek_footbridge"]
 ## Половина горизонтального угла обзора камеры (FOV 55° по вертикали, 16:9) с запасом.
@@ -631,3 +634,243 @@ func test_mountains_far_tiles_lod_has_no_cracks() -> void:
 				cracks += 1
 	assert_gt(checked, 0)
 	assert_eq(cracks, 0, "стыки плиток разного шага без щелей")
+
+
+# ---------------------------------------------------------------------------
+# Приморье (T-088, REQ-D3D-08 п.6, 8, 11, 12 — `seaside`; `tracks.md` п. 4.4)
+# ---------------------------------------------------------------------------
+
+func _seaside() -> RideScene:
+	return _scene(RouteCatalog.SEASIDE)
+
+
+func test_seaside_environment_set_follows_tracks_md() -> void:
+	var env: EnvironmentSet = RouteWorld.environment(RouteCatalog.SEASIDE)
+	assert_true(env.water_enabled, "приморье: вода")
+	assert_false(env.sea_s_ranges.is_empty(), "участки с морем")
+	assert_eq(env.conifer_kind, 1, "зонтичные сосны")
+	assert_almost_eq(env.hills_height_m, 60.0, 0.5, "холмы 60 м со стороны суши")
+	assert_almost_eq(env.fog_density, 0.0006, 1e-5)
+	assert_true(env.sun_color.is_equal_approx(Color(1.0, 0.95, 0.86)), "солнце (1.0, 0.95, 0.86)")
+	assert_almost_eq(env.sun_energy, 0.9, 1e-3)
+	assert_true(env.sky_color.is_equal_approx(Color(0.30, 0.62, 0.92)), "зенит")
+	assert_true(env.horizon_color.is_equal_approx(Color(0.80, 0.90, 0.96)), "горизонт")
+	var mat := (env.water_material if env.water_material != null else load(RideScene.DEFAULT_WATER_MATERIAL)) as ShaderMaterial
+	assert_not_null(mat, "материал воды — шейдер")
+	assert_true((mat.get_shader_parameter("deep_color") as Color).is_equal_approx(Color(0.10, 0.42, 0.62)), "глубокая вода")
+	assert_true((mat.get_shader_parameter("shallow_color") as Color).is_equal_approx(Color(0.22, 0.68, 0.75)), "мелкая вода")
+	assert_true((mat.get_shader_parameter("foam_color") as Color).is_equal_approx(Color(0.95, 0.97, 0.98)), "пена")
+	var tm := env.terrain_material as ShaderMaterial
+	assert_almost_eq(float(tm.get_shader_parameter("water_level")), 0.0, 1e-3, "песок по высоте над водой")
+	# Альбедо песка темнее палитры (0.90, 0.82, 0.62): под солнцем и небом он читается её цветом, а не белым.
+	var sand: Color = tm.get_shader_parameter("sand_color")
+	assert_true(sand.r > sand.g and sand.g > sand.b and sand.r > 0.7, "песок — тёплый светлый (%s)" % str(sand))
+
+
+func test_seaside_water_surface_is_one_opaque_mesh_at_water_level() -> void:
+	var s := _seaside()
+	var water: MeshInstance3D = s.water()
+	assert_not_null(water, "водная поверхность в мире приморья (D3D-08 п.6)")
+	if water == null:
+		return
+	assert_true(s.world_nodes().has(water), "вода — узел мира трассы")
+	var level: float = RouteCatalog.get_route(RouteCatalog.SEASIDE).water_level_m
+	var arrays: Array = water.mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var off: int = 0
+	var deep: int = 0
+	for i in verts.size():
+		if absf(verts[i].y - level) > 1e-3:
+			off += 1
+		if uvs[i].x > 2.0:
+			deep += 1
+	assert_eq(off, 0, "вода плоская, на уровне воды трассы")
+	assert_gt(deep, 0, "в UV.x — глубина под водой")
+	var aabb: AABB = water.get_aabb()
+	assert_gt(maxf(aabb.size.x, aabb.size.z), 8000.0, "море до горизонта")
+	assert_eq(water.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+	var mat := water.mesh.surface_get_material(0) as ShaderMaterial
+	assert_not_null(mat)
+	var code: String = mat.shader.code
+	assert_true(code.contains("TIME"), "волны и пена анимируются в шейдере")
+	for banned in ["ALPHA", "hint_depth_texture", "hint_screen_texture", "SCREEN_TEXTURE", "DEPTH_TEXTURE"]:
+		assert_false(code.contains(banned), "без прозрачности, глубины и экрана: %s" % banned)
+	var c := PerfBudget.count(s)
+	assert_lte(int(c["lights"]), PerfBudget.MAX_LIGHTS, "свет маяка — без источника света")
+
+
+func test_seaside_terrain_goes_under_water_on_sea_side_with_beach() -> void:
+	var s := _seaside()
+	var tf: TerrainField = s.terrain()
+	var level: float = tf.water_level
+	var sample := TrackSample.new()
+	var bad: Array[String] = []
+	var beaches: int = 0
+	var points: int = 0
+	for at in range(400, 4600, 300):
+		s.track.sample_into(float(at), sample)
+		points += 1
+		var r: Vector3 = sample.right()
+		var sea: Vector3 = sample.position + r * 320.0
+		var land: Vector3 = sample.position - r * 320.0
+		if tf.height_at(sea.x, sea.z) > level - 1.0:
+			bad.append("s=%d: справа на 320 м не море (%.1f м)" % [at, tf.height_at(sea.x, sea.z)])
+		if tf.height_at(land.x, land.z) < level + 2.0:
+			bad.append("s=%d: слева на 320 м не суша" % at)
+		for v in range(40, 300, 4):
+			var p: Vector3 = sample.position + r * float(v)
+			var h: float = tf.height_at(p.x, p.z)
+			if h > level + 0.2 and h < level + 2.0:
+				beaches += 1
+				break
+	assert_eq(bad, [] as Array[String], str(bad.slice(0, 5)))
+	assert_eq(beaches, points, "между дорогой и водой — пляж")
+	var hills_sea: float = -INF
+	for at in range(400, 4600, 300):
+		s.track.sample_into(float(at), sample)
+		var p: Vector3 = sample.position + sample.right() * 650.0
+		hills_sea = maxf(hills_sea, tf.height_at(p.x, p.z))
+	assert_lt(hills_sea, level, "со стороны моря холмов нет — горизонт открыт")
+
+
+func test_seaside_river_under_bridge_range_and_deck_10m_above_water() -> void:
+	var s := _seaside()
+	var tf: TerrainField = s.terrain()
+	var def: RouteCatalog.RouteDef = RouteCatalog.get_route(RouteCatalog.SEASIDE)
+	var bridge: Vector2 = def.bridges[0]
+	assert_gt(tf.river_points.size(), 10, "река — ломаная")
+	assert_false(is_nan(tf.river_crossing_s), "река пересекает дорогу")
+	assert_between(tf.river_crossing_s, bridge.x + 20.0, bridge.y - 20.0, "переход реки — на диапазоне моста (D3D-08 п.11)")
+	var sample := TrackSample.new()
+	s.track.sample_into(tf.river_crossing_s, sample)
+	assert_gte(sample.position.y - def.water_level_m, 10.0, "полотно над водой ≥ 10 м")
+	# У перехода — вода реки по обе стороны насыпи (мост — T-090).
+	var cross: Vector3 = tf.river_crossing
+	var near: Array[Vector3] = []
+	for p in tf.river_points:
+		var d: float = Vector2(p.x - cross.x, p.z - cross.z).length()
+		if d > 40.0 and d < 140.0:
+			near.append(p)
+	var sides: Dictionary = {}
+	for p in near:
+		if tf.water_depth_at(p.x, p.z) > 0.5:
+			sides[signf((p - cross).dot(sample.right()))] = true
+	assert_eq(sides.size(), 2, "вода реки по обе стороны дороги у перехода")
+	# Русло доходит до моря, исток — озеро внутри петли.
+	var mouth: Vector3 = tf.river_points[tf.river_points.size() - 1]
+	assert_gt(tf.water_depth_at(mouth.x, mouth.z), 1.0, "устье в море")
+	var head: Vector3 = tf.river_points[0]
+	assert_gt(tf.water_depth_at(head.x, head.z), 1.0, "озеро у истока")
+	assert_lt(tf.sea_mask_at(head.x, head.z), 0.01, "озеро — внутри петли, не море")
+	var water: MeshInstance3D = s.water()
+	assert_true(water.get_aabb().has_point(Vector3(near[0].x, tf.water_level, near[0].z)), "река — часть водной поверхности")
+
+
+func test_seaside_vegetation_not_on_beach_or_in_water() -> void:
+	var s := _seaside()
+	var env: EnvironmentSet = s.environment_set
+	var tf: TerrainField = s.terrain()
+	var layers := SceneryBuilder.place(s.track, env, tf, null, PerfBudget.MAX_VISIBLE_MULTIMESH_INSTANCES,
+		PerfBudget.MAX_MULTIMESH_INSTANCES, LandmarkBuilder.keep_out(s.landmarks_placed()))
+	var wet: int = 0
+	var pines: int = 0
+	for layer in layers:
+		if layer.name == "Tufts":
+			continue
+		if layer.name == "Conifers":
+			pines = layer.xf.size()
+		for t in layer.xf:
+			if t.origin.y < tf.water_level + env.shore_clear_m - 0.5:
+				wet += 1
+	assert_eq(wet, 0, "деревья и кусты не на пляже и не в воде")
+	assert_gt(pines, 50, "зонтичные сосны")
+	var conifers: Array[Node] = s.world_nodes().filter(func(n: Node) -> bool: return n.name == "Conifers")
+	assert_eq(conifers.size(), 1)
+	var mm: MultiMesh = (conifers[0] as MultiMeshInstance3D).multimesh
+	assert_eq(mm.mesh, SceneryBuilder.umbrella_pine_mesh(mm.mesh.surface_get_material(0)), "хвойные приморья — зонтичная сосна")
+
+
+func test_seaside_lighthouse_on_headland_with_glowing_rotating_lamp() -> void:
+	var s := _seaside()
+	var tf: TerrainField = s.terrain()
+	var found: Array = s.landmarks_placed().filter(func(p: LandmarkBuilder.Placed) -> bool: return p.type == "lighthouse")
+	assert_eq(found.size(), 1, "маяк")
+	var pl: LandmarkBuilder.Placed = found[0]
+	assert_eq(pl.headlands.size(), 1, "маяк — на мысу")
+	assert_almost_eq(tf.height_at(pl.anchor.x, pl.anchor.z), pl.anchor.y, 0.6, "башня стоит на площадке мыса")
+	var hl: LandmarkBuilder.Headland = pl.headlands[0]
+	var tip: Vector3 = hl.to + (hl.to - hl.from).normalized() * (hl.half_width + 60.0)
+	assert_gt(tf.water_depth_at(tip.x, tip.z), 1.0, "за мысом — море")
+	var lamps: Array = pl.parts.filter(func(p: LandmarkBuilder.Part) -> bool: return p.name == "lighthouse_lamp")
+	assert_eq(lamps.size(), 1, "свет маяка")
+	var lamp: LandmarkBuilder.Part = lamps[0]
+	assert_true(lamp.animated, "свет вращается в шейдере")
+	assert_ne(lamp.custom[0].r, 0.0, "скорость вращения")
+	assert_lt(lamp.custom[0].a, 0.0, "свечение без источника света (w < 0)")
+	var lights: Array[Node] = s.find_children("*", "Light3D", true, false)
+	assert_eq(lights.size(), 1, "свет сцены — только солнце")
+
+
+func test_seaside_boats_float_at_water_level() -> void:
+	var s := _seaside()
+	var tf: TerrainField = s.terrain()
+	var floating: int = 0
+	for pl in s.landmarks_placed():
+		for part in pl.parts:
+			if not ["moored_boats", "river_boats", "sailboat"].has(part.name):
+				continue
+			for t in part.xf:
+				floating += 1
+				assert_almost_eq(t.origin.y, tf.water_level, 1e-3, "%s на воде" % part.name)
+				assert_gt(tf.water_depth_at(t.origin.x, t.origin.z), 0.4, "%s: под ним вода" % part.name)
+	assert_gte(floating, 5, "лодки у причала и в устье, парусники")
+
+
+func test_horizon_height_flat_lower_than_seaside_lower_than_hills() -> void:
+	var tops: Dictionary = {}
+	for id in [RouteCatalog.FLAT, RouteCatalog.SEASIDE, RouteCatalog.HILLS]:
+		var s := _scene(id)
+		var tf: TerrainField = s.terrain()
+		var start_y: float = s.track.sample(0.0).position.y
+		var top: float = -INF
+		for h in tf.tile_heights:
+			for v in h:
+				top = maxf(top, v)
+		tops[id] = top - start_y
+	gut.p("горизонт над стартом: %s" % str(tops))
+	assert_lt(float(tops[RouteCatalog.FLAT]), float(tops[RouteCatalog.SEASIDE]), "равнина < приморье")
+	assert_lt(float(tops[RouteCatalog.SEASIDE]), float(tops[RouteCatalog.HILLS]), "приморье < холмы")
+
+
+func test_seaside_landmarks_on_shore_and_pier_reaches_water() -> void:
+	var s := _seaside()
+	var tf: TerrainField = s.terrain()
+	var level: float = tf.water_level
+	var seen: Array[String] = []
+	for pl in s.landmarks_placed():
+		match pl.type:
+			"beach_umbrellas", "lifeguard_tower":
+				var on_sand: int = 0
+				var total: int = 0
+				for part in pl.parts:
+					if not part.name.begins_with("umbrella"):
+						continue
+					for t in part.xf:
+						total += 1
+						if t.origin.y > level and t.origin.y < level + 3.0:
+							on_sand += 1
+				assert_gt(total, 0, "%s: зонтики" % pl.type)
+				assert_eq(on_sand, total, "%s: зонтики на песке у воды" % pl.type)
+				seen.append(pl.type)
+			"fishing_pier":
+				var pier: Array = pl.parts.filter(func(p: LandmarkBuilder.Part) -> bool: return p.name == "pier")
+				assert_eq(pier.size(), 1, "причал")
+				var verts: PackedVector3Array = (pier[0] as LandmarkBuilder.Part).mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+				var over_water: int = 0
+				for v in verts:
+					if tf.water_depth_at(v.x, v.z) > 1.0:
+						over_water += 1
+				assert_gt(over_water, 20, "причал уходит в море")
+				seen.append(pl.type)
+	assert_eq(seen.size(), 3, "причал, пляж и вышка спасателя: %s" % str(seen))

@@ -4,7 +4,10 @@ extends RefCounted
 ## `docs/game/tracks.md` п. 4.5, 5, 6): постройки, башни, ветряки, животные, стога, изгороди;
 ## горы (T-087): таблички «км до вершины» и «Перевал» с цифрами из сегментов, водопад, знак
 ## перевала, флажки, шале, хижина пастуха, пролёт противолавинной галереи, опоры, станции и
-## кабинки канатной дороги, коровы, лесопилка, палатки, крест на скале.
+## кабинки канатной дороги, коровы, лесопилка, палатки, крест на скале; приморье (T-088): лодки,
+## пляжные зонтики и шезлонги, белые домики с синими ставнями, кипарисы, парусник, камыши,
+## оливы, маяк (фонарь — отдельный анимированный меш с вращающимся светом без источника света),
+## скалы-кекуры и брызги, фонари и балюстрада набережной, вышка спасателя.
 ## Всё собирается `MeshKit` из примитивов с цветом вершин в палитре арт-библии и трассы и
 ## красится одним тун-материалом мира (бюджет материалов не растёт); альфа цвета — вес
 ## контура. Вращающиеся части (лопасти ветряков и мельницы) и воздушный шар — отдельные меши
@@ -138,6 +141,40 @@ static func _build(key: String, kit: MeshKit, wall: Color, roof: Color) -> void:
 			_summit_cross(kit)
 		"crag":
 			_crag(kit)
+		"boat":
+			_boat(kit)
+		"umbrella_a":
+			_umbrella(kit, Color(0.86, 0.50, 0.40, 1.0))
+		"umbrella_b":
+			_umbrella(kit, Color(0.32, 0.58, 0.62, 1.0))
+		"lounger":
+			_lounger(kit)
+		"white_house":
+			_white_house(kit, Vector3(8.0, 6.4, 6.5), roof, true)
+		"white_house_small":
+			_white_house(kit, Vector3(6.0, 3.8, 5.0), roof, false)
+		"cypress":
+			_cypress(kit)
+		"sailboat":
+			_sailboat(kit)
+		"reeds":
+			_reeds(kit)
+		"olive":
+			_olive(kit)
+		"lighthouse":
+			_lighthouse(kit)
+		"lighthouse_lamp":
+			_lighthouse_lamp(kit)
+		"sea_stack":
+			_sea_stack(kit)
+		"spray":
+			_spray(kit)
+		"street_lamp":
+			_street_lamp(kit)
+		"balustrade":
+			_balustrade(kit)
+		"lifeguard_tower":
+			_lifeguard_tower(kit)
 
 
 # ---------------------------------------------------------------------------
@@ -833,3 +870,246 @@ static func _rock(kit: MeshKit, center: Vector3, radii: Vector3, rng: RandomNumb
 				if n.dot((p0 + p1 + p2) / 3.0 - center) < 0.0:
 					n = -n
 				kit.add_triangle(p0, p1, p2, n, C_ROCK if n.y > 0.35 else C_ROCK_DARK)
+
+
+# ---------------------------------------------------------------------------
+# Приморье (T-088, `tracks.md` п. 4.4, 4.5, 6)
+# ---------------------------------------------------------------------------
+
+const C_SHUTTER := Color(0.30, 0.45, 0.62, 0.6)
+const C_LIGHTHOUSE_RED := Color(0.80, 0.20, 0.18, 1.0)
+const C_LIGHTHOUSE_WHITE := Color(0.95, 0.95, 0.93, 1.0)
+const C_LAMP := Color(1.0, 0.90, 0.62, 0.0)
+const C_SAND_WOOD := Color(0.70, 0.58, 0.42, 0.6)
+## Фонарь маяка: высота центра фонаря над основанием башни (крепление `lighthouse_lamp`).
+const LIGHTHOUSE_LAMP_Y: float = 24.9
+
+
+## Лодка (~5 м вдоль X): корпус — сплюснутый эллипсоид, низ ниже нуля (на воде низ скрыт водой,
+## на берегу — в песке), тёмная внутренность, полоса по борту, банки; начало — ватерлиния.
+static func _boat(kit: MeshKit) -> void:
+	var hull := Color(0.93, 0.92, 0.88, 1.0)
+	var stripe := Color(0.30, 0.45, 0.62, 1.0)
+	kit.add_ellipsoid(Vector3(0.0, 0.05, 0.0), Vector3(2.6, 0.62, 0.95), hull, Basis.IDENTITY, 6, 14, 1, 0.3, 0.62, stripe)
+	kit.add_ellipsoid(Vector3(0.0, 0.62, 0.0), Vector3(2.2, 0.08, 0.72), Color(0.44, 0.33, 0.24, 0.0), Basis.IDENTITY, 3, 12)
+	for x in [-0.8, 0.5]:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 0.66, 0.0)), Vector3(0.28, 0.06, 1.5), C_SAND_WOOD)
+
+
+## Пляжный зонтик: шест 2.5 м и купол из восьми долей — цвет `accent` через одну с белой.
+static func _umbrella(kit: MeshKit, accent: Color) -> void:
+	kit.add_tube(Vector3(0.0, -0.3, 0.0), Vector3(0.0, 2.5, 0.0), Vector2(0.04, 0.04), Vector2(0.035, 0.035), Color(0.85, 0.85, 0.82, 0.0), 4)
+	var white := Color(0.96, 0.95, 0.90, 1.0)
+	var apex := Vector3(0.0, 2.75, 0.0)
+	var n: int = 8
+	for i in n:
+		var a0: float = TAU * float(i) / float(n)
+		var a1: float = TAU * float(i + 1) / float(n)
+		var p0 := Vector3(cos(a0) * 1.25, 2.2, sin(a0) * 1.25)
+		var p1 := Vector3(cos(a1) * 1.25, 2.2, sin(a1) * 1.25)
+		var col: Color = accent if i % 2 == 0 else white
+		var nrm: Vector3 = (p1 - apex).cross(p0 - apex).normalized()
+		if nrm.y < 0.0:
+			nrm = -nrm
+		kit.add_triangle(apex, p0, p1, nrm, col)
+		kit.add_triangle(apex, p1, p0, -nrm, Color(col.darkened(0.25), 0.0))
+
+
+## Шезлонг: рама и полотно, спинка поднята (вдоль X, изголовье — +X).
+static func _lounger(kit: MeshKit) -> void:
+	var cloth := Color(0.92, 0.88, 0.78, 0.4)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-0.25, 0.3, 0.0)), Vector3(1.4, 0.06, 0.6), cloth)
+	kit.add_box(Transform3D(Basis(Vector3.BACK, 0.7), Vector3(0.65, 0.55, 0.0)), Vector3(0.65, 0.06, 0.6), cloth)
+	for x in [-0.85, 0.35]:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 0.14, 0.0)), Vector3(0.06, 0.3, 0.6), C_SAND_WOOD)
+
+
+## Белый средиземноморский дом: стены, плоская крыша (у большого — надстройка с террасой), у
+## малого — черепичная пирамида; окна и дверь с синими ставнями на +Z.
+static func _white_house(kit: MeshKit, size: Vector3, roof: Color, terrace: bool) -> void:
+	var wall := Color(0.95, 0.95, 0.93, 1.0)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, size.y * 0.5 - 0.4, 0.0)), Vector3(size.x, size.y + 0.8, size.z), wall)
+	if terrace:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(size.x * 0.22, size.y + 0.25, 0.0)), Vector3(size.x * 0.56 + 0.2, 0.5, size.z + 0.2), wall)
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-size.x * 0.28, size.y + 1.4, -size.z * 0.12)),
+			Vector3(size.x * 0.44, 2.8, size.z * 0.7), wall)
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-size.x * 0.28, size.y + 2.9, -size.z * 0.12)),
+			Vector3(size.x * 0.44 + 0.3, 0.2, size.z * 0.7 + 0.3), Color(0.86, 0.86, 0.84, 1.0))
+	else:
+		kit.add_pyramid(Vector3(0.0, size.y, 0.0), Vector2(size.x * 0.5 + 0.3, size.z * 0.5 + 0.3), 1.6, Color(roof, 1.0))
+	var floors: int = 2 if size.y > 5.0 else 1
+	for f in floors:
+		var y: float = 1.3 + 2.9 * float(f) + (0.4 if floors == 1 else 0.0)
+		for i in 2:
+			var x: float = (float(i) - 0.5) * size.x * 0.5 + size.x * 0.1
+			if f == 0 and i == 0:
+				kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 1.05, size.z * 0.5 + 0.04)), Vector3(1.0, 2.1, 0.1), C_SHUTTER)
+				continue
+			kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, y, size.z * 0.5 + 0.04)), Vector3(0.8, 1.0, 0.1), C_WINDOW)
+			for sx in [-1.0, 1.0]:
+				kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x + sx * 0.62, y, size.z * 0.5 + 0.05)), Vector3(0.42, 1.05, 0.08), C_SHUTTER)
+
+
+## Кипарис: узкое высокое веретено тёмной зелени на коротком стволе (~9 м).
+static func _cypress(kit: MeshKit) -> void:
+	kit.add_tube(Vector3(0, -0.3, 0), Vector3(0, 1.2, 0), Vector2(0.16, 0.16), Vector2(0.12, 0.12), Color(0.40, 0.31, 0.24, 1.0), 6)
+	var c := Color(0.22, 0.36, 0.22, 1.0)
+	kit.add_ellipsoid(Vector3(0.0, 4.6, 0.0), Vector3(0.95, 4.2, 0.95), c, Basis.IDENTITY, 8, 9)
+	kit.add_ellipsoid(Vector3(0.1, 7.2, 0.05), Vector3(0.6, 2.0, 0.6), c.lightened(0.06), Basis.IDENTITY, 6, 8)
+
+
+## Парусник (~8 м вдоль X): белый корпус, рубка, мачта 10 м, грот и стаксель (двусторонние);
+## начало — ватерлиния.
+static func _sailboat(kit: MeshKit) -> void:
+	kit.add_ellipsoid(Vector3(0.0, 0.1, 0.0), Vector3(4.2, 0.9, 1.3), Color(0.94, 0.94, 0.92, 1.0), Basis.IDENTITY, 6, 14, 1, 0.45, 0.75,
+		Color(0.30, 0.42, 0.58, 1.0))
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(-0.6, 1.05, 0.0)), Vector3(2.2, 0.6, 1.4), Color(0.88, 0.86, 0.80, 1.0))
+	kit.add_tube(Vector3(0.6, 0.8, 0.0), Vector3(0.6, 11.0, 0.0), Vector2(0.08, 0.08), Vector2(0.06, 0.06), Color(0.70, 0.70, 0.72, 0.6), 5)
+	var sail := Color(0.97, 0.96, 0.92, 0.0)
+	var main: Array[Vector3] = [Vector3(0.45, 1.6, 0.0), Vector3(0.45, 10.6, 0.0), Vector3(-3.4, 1.7, 0.0)]
+	var jib: Array[Vector3] = [Vector3(0.75, 9.8, 0.0), Vector3(0.75, 1.7, 0.0), Vector3(3.9, 1.3, 0.0)]
+	for tri: Array[Vector3] in [main, jib]:
+		kit.add_triangle(tri[0], tri[1], tri[2], Vector3.BACK, sail)
+		var back := Vector3(0.0, 0.0, -0.02)
+		kit.add_triangle(tri[0] + back, tri[2] + back, tri[1] + back, Vector3.FORWARD, Color(0.86, 0.86, 0.84, 0.0))
+
+
+## Куртина камыша: веер высоких стеблей (до 2.4 м) с бурыми початками, без контура.
+static func _reeds(kit: MeshKit) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3391
+	for i in 13:
+		var a: float = rng.randf() * TAU
+		var r: float = rng.randf_range(0.0, 0.9)
+		var base := Vector3(cos(a) * r, -0.2, sin(a) * r)
+		var lean := Vector3(rng.randf_range(-0.35, 0.35), 0.0, rng.randf_range(-0.35, 0.35))
+		var top: Vector3 = base + Vector3(0.0, rng.randf_range(1.6, 2.4), 0.0) + lean
+		kit.add_tube(base, top, Vector2(0.035, 0.035), Vector2(0.015, 0.015), Color(0.46, 0.56, 0.30, 0.0), 3, false)
+		if i % 2 == 0:
+			var dir: Vector3 = (top - base).normalized()
+			kit.add_tube(top - dir * 0.45, top - dir * 0.05, Vector2(0.07, 0.07), Vector2(0.06, 0.06), Color(0.44, 0.31, 0.20, 0.0), 5)
+	kit.add_ellipsoid(Vector3(0.0, 0.35, 0.0), Vector3(1.1, 0.55, 1.1), Color(0.42, 0.52, 0.28, 0.0), Basis.IDENTITY, 4, 8)
+
+
+## Олива: короткий узловатый ствол с развилкой, серебристо-зелёная округлая крона (~4.5 м).
+static func _olive(kit: MeshKit) -> void:
+	var bark := Color(0.44, 0.38, 0.30, 1.0)
+	kit.add_tube(Vector3(0, -0.3, 0), Vector3(0.3, 1.5, 0.1), Vector2(0.28, 0.28), Vector2(0.2, 0.2), bark, 6)
+	kit.add_tube(Vector3(0.3, 1.3, 0.1), Vector3(-0.6, 2.6, 0.3), Vector2(0.14, 0.14), Vector2(0.1, 0.1), bark, 5)
+	kit.add_tube(Vector3(0.3, 1.3, 0.1), Vector3(1.1, 2.5, -0.3), Vector2(0.14, 0.14), Vector2(0.1, 0.1), bark, 5)
+	var leaf := Color(0.54, 0.60, 0.42, 1.0)
+	kit.add_ellipsoid(Vector3(0.2, 3.1, 0.0), Vector3(2.1, 1.3, 1.9), leaf.darkened(0.08), Basis.IDENTITY, 6, 10)
+	kit.add_ellipsoid(Vector3(-0.8, 3.4, 0.4), Vector3(1.2, 0.9, 1.1), leaf, Basis.IDENTITY, 5, 9)
+	kit.add_ellipsoid(Vector3(1.1, 3.5, -0.3), Vector3(1.1, 0.85, 1.1), leaf, Basis.IDENTITY, 5, 9)
+
+
+## Маяк: башня 23 м, сужается кверху, белая с красными полосами (`tracks.md` п. 6), галерея с
+## ограждением, остеклённый фонарь (тёмные стойки) и красный купол; дверь и окна на +Z.
+## Свет — отдельный анимированный меш `lighthouse_lamp` на высоте `LIGHTHOUSE_LAMP_Y`.
+static func _lighthouse(kit: MeshKit) -> void:
+	var h: float = 23.0
+	var bands: int = 6
+	var dark := Color(0.25, 0.25, 0.28, 0.6)
+	for i in bands:
+		var y0: float = h * float(i) / float(bands)
+		var y1: float = h * float(i + 1) / float(bands)
+		var r0: float = lerpf(3.0, 2.0, y0 / h)
+		var r1: float = lerpf(3.0, 2.0, y1 / h)
+		kit.add_tube(Vector3(0.0, y0 - (0.8 if i == 0 else 0.0), 0.0), Vector3(0.0, y1, 0.0), Vector2(r0, r0), Vector2(r1, r1),
+			C_LIGHTHOUSE_RED if i % 2 == 1 else C_LIGHTHOUSE_WHITE, 14, false)
+	kit.add_tube(Vector3(0.0, h, 0.0), Vector3(0.0, h + 0.4, 0.0), Vector2(2.9, 2.9), Vector2(2.9, 2.9), dark, 16)
+	for i in 12:
+		var a: float = TAU * float(i) / 12.0
+		kit.add_box(Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * 2.75, h + 0.9, sin(a) * 2.75)), Vector3(0.08, 1.0, 0.08), dark)
+	kit.add_tube(Vector3(0.0, h + 1.35, 0.0), Vector3(0.0, h + 1.45, 0.0), Vector2(2.8, 2.8), Vector2(2.8, 2.8), dark, 16, false)
+	kit.add_tube(Vector3(0.0, h + 0.4, 0.0), Vector3(0.0, h + 1.0, 0.0), Vector2(1.7, 1.7), Vector2(1.7, 1.7), C_LIGHTHOUSE_WHITE, 12)
+	kit.add_tube(Vector3(0.0, h + 3.1, 0.0), Vector3(0.0, h + 3.3, 0.0), Vector2(1.75, 1.75), Vector2(1.75, 1.75), C_LIGHTHOUSE_WHITE, 12)
+	for i in 6:
+		var a: float = TAU * float(i) / 6.0
+		kit.add_box(Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * 1.55, h + 2.05, sin(a) * 1.55)), Vector3(0.12, 2.1, 0.12),
+			Color(0.22, 0.22, 0.25, 0.6))
+	kit.add_cone(Vector3(0.0, h + 3.3, 0.0), 1.6, 1.9, C_LIGHTHOUSE_RED, 12)
+	kit.add_tube(Vector3(0.0, h + 4.9, 0.0), Vector3(0.0, h + 5.8, 0.0), Vector2(0.06, 0.06), Vector2(0.04, 0.04), Color(0.2, 0.2, 0.22, 0.0), 4)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.1, 3.0)), Vector3(1.1, 2.2, 0.2), C_DOOR)
+	for y in [8.0, 15.0]:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, y, lerpf(3.0, 2.0, y / h) + 0.05)), Vector3(0.6, 0.9, 0.1), C_WINDOW)
+
+
+## Свет маяка (анимированный; ось вращения — локальная Z, у экземпляра — вертикаль): линза и
+## два луча-клина по ±X, тёплый цвет без контура. Светится сам (эмиссия `prop_anim` по данным
+## экземпляра), источника света нет — бюджет света не растёт.
+static func _lighthouse_lamp(kit: MeshKit) -> void:
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3.ZERO), Vector3(1.1, 1.0, 1.4), C_LAMP)
+	for sgn in [-1.0, 1.0]:
+		var a := Vector3(sgn * 0.6, 0.0, 0.0)
+		var b := Vector3(sgn * 15.0, 0.0, -0.3)
+		kit.add_tube(a, b, Vector2(0.3, 0.3), Vector2(1.5, 1.0), Color(1.0, 0.95, 0.80, 0.0), 6, false, Vector3.BACK)
+
+
+## Скала-кекур в море: столб из граней-глыб двух тонов ~10 × 24 м; начало — на дне, низ под водой.
+static func _sea_stack(kit: MeshKit) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 6603
+	var blocks: Array[Vector4] = [
+		Vector4(0.0, 0.0, 0.0, 6.5), Vector4(1.0, 7.0, 0.5, 5.5), Vector4(-0.5, 13.0, -0.3, 4.6), Vector4(0.6, 18.5, 0.2, 3.6),
+		Vector4(-3.5, 3.0, 2.5, 3.5), Vector4(3.0, 1.5, -2.0, 3.8),
+	]
+	for b in blocks:
+		_rock(kit, Vector3(b.x, b.y, b.z), Vector3(b.w, b.w * 1.15, b.w * 0.95), rng)
+
+
+## Брызги у подножия скалы: плоское пятно пены на воде и белые клубы вокруг (без контура);
+## анимация — медленное покачивание (`prop_anim`). Начало — уровень воды.
+static func _spray(kit: MeshKit) -> void:
+	var foam := Color(0.95, 0.97, 0.98, 0.0)
+	var shade := Color(0.80, 0.88, 0.93, 0.0)
+	for i in 7:
+		var a: float = TAU * float(i) / 7.0 + 0.3
+		var r: float = 6.0 + 1.5 * float(i % 3)
+		kit.add_ellipsoid(Vector3(cos(a) * r, 0.4 + 0.5 * float(i % 2), sin(a) * r), Vector3(2.2, 1.1 + 0.6 * float(i % 3), 1.8),
+			foam if i % 2 == 0 else shade, Basis(Vector3.UP, a), 4, 8)
+	kit.add_ellipsoid(Vector3(0.0, 0.05, 0.0), Vector3(9.0, 0.15, 8.0), foam, Basis.IDENTITY, 2, 16)
+
+
+## Фонарь набережной: тёмный столб 4.6 м с кронштейном и светлым плафоном (без источника света).
+static func _street_lamp(kit: MeshKit) -> void:
+	var iron := Color(0.20, 0.26, 0.26, 0.6)
+	kit.add_tube(Vector3(0.0, -0.3, 0.0), Vector3(0.0, 4.4, 0.0), Vector2(0.09, 0.09), Vector2(0.06, 0.06), iron, 6)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.25, 0.0)), Vector3(0.3, 0.5, 0.3), iron)
+	kit.add_tube(Vector3(0.0, 4.3, 0.0), Vector3(0.0, 4.4, 0.7), Vector2(0.04, 0.04), Vector2(0.04, 0.04), iron, 4, false)
+	kit.add_ellipsoid(Vector3(0.0, 4.15, 0.7), Vector3(0.26, 0.34, 0.26), Color(0.98, 0.94, 0.80, 0.4), Basis.IDENTITY, 5, 8)
+	kit.add_cone(Vector3(0.0, 4.4, 0.7), 0.25, 0.32, iron, 8)
+
+
+## Балюстрада набережной: звено 10 м вдоль X — светлые перила на столбиках, тумбы на концах.
+static func _balustrade(kit: MeshKit) -> void:
+	var stone := Color(0.90, 0.88, 0.82, 0.4)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.1, 0.0)), Vector3(10.0, 0.4, 0.4), stone)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.95, 0.0)), Vector3(10.1, 0.14, 0.34), stone)
+	for i in 12:
+		kit.add_tube(Vector3(-4.6 + float(i) * 0.84, 0.3, 0.0), Vector3(-4.6 + float(i) * 0.84, 0.88, 0.0), Vector2(0.08, 0.08),
+			Vector2(0.06, 0.06), stone, 5, false)
+	for x in [-5.0, 5.0]:
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(x, 0.55, 0.0)), Vector3(0.45, 1.2, 0.45), stone)
+
+
+## Вышка спасателя: будка на четырёх ногах (площадка 3 м), навес, лестница к +Z, флаг.
+static func _lifeguard_tower(kit: MeshKit) -> void:
+	var wood := Color(0.86, 0.84, 0.78, 0.6)
+	var red := Color(0.78, 0.28, 0.24, 1.0)
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			kit.add_tube(Vector3(sx * 1.3, -0.3, sz * 1.3), Vector3(sx * 1.0, 3.0, sz * 1.0), Vector2(0.09, 0.09), Vector2(0.08, 0.08), wood, 5)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 3.05, 0.0)), Vector3(2.6, 0.15, 2.6), wood)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 3.7, -0.4)), Vector3(2.2, 1.2, 1.4), red)
+	kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 3.75, 0.31)), Vector3(1.6, 0.5, 0.06), C_WINDOW)
+	kit.add_gable_roof(Transform3D(Basis.IDENTITY, Vector3(0.0, 4.35, -0.1)), Vector3(2.4, 0.6, 2.4), 0.3, C_LIGHTHOUSE_WHITE, red)
+	for x in [-0.35, 0.35]:
+		kit.add_tube(Vector3(x, -0.2, 2.6), Vector3(x, 3.1, 1.3), Vector2(0.05, 0.05), Vector2(0.05, 0.05), wood, 4)
+	for k in 5:
+		var t: float = (float(k) + 0.5) / 5.0
+		kit.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, lerpf(-0.2, 3.1, t), lerpf(2.6, 1.3, t))), Vector3(0.75, 0.06, 0.12), wood)
+	kit.add_tube(Vector3(1.2, 3.1, -1.2), Vector3(1.2, 7.2, -1.2), Vector2(0.04, 0.04), Vector2(0.03, 0.03), Color(0.3, 0.3, 0.32, 0.0), 4)
+	var flag := Color(red, 0.0)
+	kit.add_quad(Vector3(1.2, 7.1, -1.2), Vector3(2.5, 7.1, -1.2), Vector3(2.5, 6.3, -1.2), Vector3(1.2, 6.3, -1.2), Vector3.BACK, flag)
+	kit.add_quad(Vector3(1.2, 7.1, -1.21), Vector3(1.2, 6.3, -1.21), Vector3(2.5, 6.3, -1.21), Vector3(2.5, 7.1, -1.21), Vector3.FORWARD, flag)

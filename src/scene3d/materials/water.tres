@@ -1,0 +1,26 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://src/scene3d/shaders/water.gdshader" id="1_water"]
+
+[resource]
+shader = ExtResource("1_water")
+shader_parameter/deep_color = Color(0.1, 0.42, 0.62, 1)
+shader_parameter/shallow_color = Color(0.22, 0.68, 0.75, 1)
+shader_parameter/foam_color = Color(0.95, 0.97, 0.98, 1)
+shader_parameter/ripple_color = Color(0.5, 0.78, 0.88, 1)
+shader_parameter/shallow_depth_m = 1.6
+shader_parameter/shallow_wobble_m = 1.0
+shader_parameter/foam_depth_m = 0.3
+shader_parameter/foam_breath_m = 0.18
+shader_parameter/foam_speed = 0.9
+shader_parameter/surf_from_m = 1.3
+shader_parameter/surf_period_s = 7.0
+shader_parameter/surf_width_m = 0.07
+shader_parameter/ripple_scale = 0.05
+shader_parameter/ripple_speed = 0.035
+shader_parameter/ripple_amount = 0.3
+shader_parameter/normal_strength = 0.4
+shader_parameter/glint_threshold = 0.998
+shader_parameter/glint_strength = 0.6
+shader_parameter/toon_threshold = 0.0
+shader_parameter/toon_softness = 0.08

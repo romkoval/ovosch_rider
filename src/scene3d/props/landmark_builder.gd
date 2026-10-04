@@ -17,6 +17,12 @@ extends RefCounted
 ##
 ## Вращение лопастей и дрейф шара — в шейдере (`prop_anim.gdshader`, данные экземпляра), без
 ## кода в кадре. Всё строится один раз в `RideScene.set_track()`, детерминированно по seed.
+##
+## Приморье (T-088): причал, пляж, вышка спасателя — по береговой линии рельефа (`TerrainField`,
+## уровень воды); лодки и парусники — на воде (покачиваются и плывут в шейдере); маяк — на мысу,
+## который ориентир поднимает в рельефе (`Headland`), свет маяка вращается и светится в шейдере;
+## устье — камыши по берегам реки (`TerrainField.river_points`). Мост (`bridge`) — T-090: пока
+## дорога идёт по насыпи, у её подножия у реки — каменная наброска.
 
 const ANIM_MATERIAL: String = "res://src/scene3d/props/materials/prop_anim.tres"
 ## Дальность видимости частей ориентира по плану, м (до центра AABB части).
@@ -49,6 +55,9 @@ const TYPE_PLACE: Dictionary = {
 	"cow_pasture": Vector2(36.0, 70.0),
 	"sawmill": Vector2(32.0, 60.0),
 	"campsite": Vector2(30.0, 60.0),
+	# Приморье (T-088).
+	"white_houses": Vector2(110.0, 230.0),
+	"olive_terraces": Vector2(95.0, 170.0),
 }
 ## Дальность видимости отдельных типов, м (таблички мелкие — видны за 300–400 м и не
 ## занимают место среди «2–3 ориентиров в кадре»; дальние горные — ближе, чем по плану).
@@ -59,6 +68,7 @@ const TYPE_RANGE: Dictionary = {
 	"shepherd_hut": 1100.0,
 	"clouds_below": 1000.0,
 	"mountain_lake": 1300.0,
+	"sailboat": 1900.0,
 }
 ## Мелкие ориентиры-таблички у обочины (видны за 300 м): в правило «в кадре 2–3 ориентира»
 ## (`tracks.md` п. 5) не входят — это не предмет композиции кадра, а «верстовые столбы».
@@ -67,6 +77,8 @@ const MINOR_TYPES: Array[String] = ["pass_sign", "summit_km_sign"]
 const TYPE_CLEARANCE: Dictionary = {
 	"pass_sign": 3.0,
 	"summit_km_sign": 3.0,
+	# Набережная — сразу за отбойником.
+	"promenade": 5.0,
 }
 ## Ближе этого к оси трассы части ориентира (кроме ориентиров на дороге) не ставятся, м.
 const MIN_CLEARANCE_M: float = 16.0
@@ -119,6 +131,8 @@ class Placed:
 	var basins: Array[Basin] = []
 	## Прорези вида (`TerrainField.carve_notch`): рельеф опускается под луч взгляда на ориентир.
 	var notches: Array[Notch] = []
+	## Мысы (`TerrainField.raise_headland`): рельеф поднимается под площадку (маяк, T-088).
+	var headlands: Array[Headland] = []
 
 	## Позиции экземпляров видимых частей (без мешей в мировых координатах и пятен).
 	func origins() -> PackedVector3Array:
@@ -154,7 +168,16 @@ class Notch:
 	var half_width: float = 40.0
 
 
-## Опустить рельеф под водой ориентиров и в прорезях вида (до `TerrainField.build_mesh`).
+## Мыс: площадка на высоте `top_y` вдоль отрезка `from`–`to` полушириной `half_width`.
+class Headland:
+	var from := Vector3.ZERO
+	var to := Vector3.ZERO
+	var half_width: float = 30.0
+	var top_y: float = 0.0
+
+
+## Опустить рельеф под водой ориентиров и в прорезях вида, поднять мысы (до
+## `TerrainField.build_mesh` и `build_water_mesh`).
 static func carve(placed: Array[Placed], field: TerrainField) -> void:
 	if field == null:
 		return
@@ -163,6 +186,8 @@ static func carve(placed: Array[Placed], field: TerrainField) -> void:
 			field.carve_basin(b.center, b.axis, b.radii, b.level)
 		for nt in pl.notches:
 			field.carve_notch(nt.from, nt.to, nt.half_width)
+		for hl in pl.headlands:
+			field.raise_headland(hl.from, hl.to, hl.half_width, hl.top_y)
 
 
 ## Пятна, куда растительность не ставится: (x, z, радиус) по сетке 64 м.
@@ -561,6 +586,31 @@ static func _build_type(ctx: Ctx, type: String) -> void:
 			_sawmill(ctx)
 		"campsite":
 			_campsite(ctx)
+		# --- Приморье (T-088) ---
+		"fishing_pier":
+			_pier(ctx)
+		"beach_umbrellas":
+			_beach(ctx)
+		"white_houses":
+			_white_houses(ctx)
+		"sailboat":
+			_sailboats(ctx)
+		"river_mouth":
+			_river_mouth(ctx)
+		"bridge":
+			_bridge_embankment(ctx)
+		"pine_forest":
+			_pine_forest(ctx)
+		"olive_terraces":
+			_olive_terraces(ctx)
+		"lighthouse":
+			_lighthouse_cape(ctx)
+		"cliffs_spray":
+			_cliffs(ctx)
+		"promenade":
+			_promenade(ctx)
+		"lifeguard_tower":
+			_lifeguard(ctx)
 		"castle_ruins":
 			ctx.put("castle", 26.0, 0.0, 0.0, ctx.rng.randf_range(-0.5, 0.5), 1.3, Color.WHITE, -1.0)
 		"tv_tower":
@@ -1126,3 +1176,457 @@ static func _campsite(ctx: Ctx) -> void:
 	ctx.put("bench", 1.0, 4.5, 1.0, PI * 0.5)
 	ctx.put("bench", 1.0, -0.5, 1.0, -PI * 0.5)
 	_conifers(ctx, 6, Vector2(0.0, 20.0), 30.0)
+
+
+# ---------------------------------------------------------------------------
+# Приморье (T-088, `tracks.md` п. 4.4, 4.5)
+# ---------------------------------------------------------------------------
+
+## Уровень воды трассы для ориентиров (без воды — 0).
+static func _water_y(ctx: Ctx) -> float:
+	return ctx.field.water_level if ctx.field != null and ctx.field.has_water() else 0.0
+
+
+## Точка трассы в s ориентира + `ds`: центр дороги и горизонтальные курс и «вправо».
+class Spot:
+	var center := Vector3.ZERO
+	var fwd := Vector3.FORWARD
+	var right := Vector3.RIGHT
+	var road_y: float = 0.0
+
+
+static func _spot(ctx: Ctx, ds: float) -> Spot:
+	var sample := TrackSample.new()
+	ctx.track.sample_into(ctx.track.wrap_distance(ctx.placed.s_m + ds), sample)
+	var sp := Spot.new()
+	var r: Vector3 = sample.right()
+	r.y = 0.0
+	sp.right = r.normalized()
+	var f := Vector3(sample.forward.x, 0.0, sample.forward.z)
+	sp.fwd = f.normalized() if f.length_squared() > 1e-8 else Vector3.FORWARD
+	sp.center = sample.position + sp.right * ctx.env.road_center_offset_m
+	sp.road_y = sample.position.y
+	return sp
+
+
+## Точка на удалении `v` от центра дороги в сторону `sgn` (+1 — вправо) у `sp`, на земле.
+static func _at(ctx: Ctx, sp: Spot, v: float, sgn: float = 1.0, along: float = 0.0) -> Vector3:
+	var p: Vector3 = sp.center + sp.right * sgn * v + sp.fwd * along
+	p.y = ctx.ground(p)
+	return p
+
+
+## Удаление от центра дороги (вправо от `sp`), на котором земля впервые ниже уровня воды +
+## `above`; −1 — берега нет в пределах рельефа-коридора.
+static func _shore_v(ctx: Ctx, sp: Spot, above: float) -> float:
+	var level: float = _water_y(ctx) + above
+	var v: float = 12.0
+	while v < MAX_FROM_TRACK_M:
+		var p: Vector3 = sp.center + sp.right * v
+		if ctx.ground(p) < level:
+			return v
+		v += 3.0
+	return -1.0
+
+
+## Базис: X — вдоль `x_dir` (горизонталь), Y — вверх.
+static func _along(x_dir: Vector3, scale: Vector3 = Vector3.ONE) -> Basis:
+	var x := Vector3(x_dir.x, 0.0, x_dir.z).normalized()
+	return Basis(x, Vector3.UP, x.cross(Vector3.UP)) * Basis.from_scale(scale)
+
+
+## Причал с лодками: мостки по дюне от верха пляжа, пирс на сваях в море (меш в мировых
+## координатах), три лодки у пирса покачиваются на воде, две вытащены на песок.
+const PIER_LEAD_M: float = 220.0
+const PIER_DECK_ABOVE_M: float = 1.3
+const PIER_OUT_M: float = 46.0
+
+
+static func _pier(ctx: Ctx) -> void:
+	var sp: Spot = _spot(ctx, PIER_LEAD_M)
+	var lvl: float = _water_y(ctx)
+	var v_w: float = _shore_v(ctx, sp, 0.0)
+	if v_w < 0.0:
+		return
+	var v_b: float = _shore_v(ctx, sp, ctx.env.beach_top_m)
+	var start: float = minf(v_b if v_b > 0.0 else v_w - 30.0, 64.0)
+	var side: Vector3 = Vector3.UP.cross(sp.right).normalized()
+	var kit := MeshKit.new()
+	var plank := Color(0.62, 0.50, 0.36, 0.5)
+	var plank_dark := Color(0.50, 0.40, 0.29, 0.5)
+	var post := Color(0.38, 0.30, 0.23, 0.5)
+	var deck_y: float = lvl + PIER_DECK_ABOVE_M
+	var v: float = start
+	var step: float = 4.0
+	while v < v_w + PIER_OUT_M:
+		var a: Vector3 = sp.center + sp.right * v
+		var b: Vector3 = sp.center + sp.right * (v + step)
+		var ya: float = maxf(ctx.ground(a) + 0.35, deck_y)
+		var yb: float = maxf(ctx.ground(b) + 0.35, deck_y)
+		a.y = ya
+		b.y = yb
+		var w: float = 1.5
+		kit.add_quad(a - side * w, a + side * w, b + side * w, b - side * w, Vector3.UP, plank if int(v / step) % 2 == 0 else plank_dark)
+		for sgn in [-1.0, 1.0]:
+			var e0: Vector3 = a + side * w * float(sgn)
+			var e1: Vector3 = b + side * w * float(sgn)
+			kit.add_quad(e0, e1, e1 - Vector3.UP * 0.3, e0 - Vector3.UP * 0.3, side * float(sgn), post)
+			var foot: float = minf(ctx.ground(e0), lvl - 1.5)
+			kit.add_box(Transform3D(Basis.IDENTITY, Vector3(e0.x, (ya + foot) * 0.5, e0.z)), Vector3(0.22, ya - foot, 0.22), post)
+			if v > v_w:
+				kit.add_box(Transform3D(Basis.IDENTITY, e0 + Vector3.UP * 0.45), Vector3(0.1, 0.9, 0.1), post)
+		v += step
+	ctx.part_mesh("pier", kit.to_mesh(ctx.material), 0.0, true).add(Transform3D.IDENTITY)
+	var hull := PropMeshes.mesh("boat", ctx.anim_material)
+	var paint: Array[Color] = [Color.WHITE, Color(0.86, 0.92, 0.96), Color(0.96, 0.90, 0.80)]
+	for k in 3:
+		var along: float = v_w + 18.0 + 11.0 * float(k)
+		var sgn: float = -1.0 if k % 2 == 0 else 1.0
+		var p: Vector3 = sp.center + sp.right * along + side * sgn * 4.6
+		p.y = lvl
+		var t := Transform3D(_along(sp.right.rotated(Vector3.UP, ctx.rng.randf_range(-0.15, 0.15))), p)
+		var part: Part = ctx.part_mesh("moored_boats", hull, 0.0)
+		part.animated = true
+		part.add(t, paint[k], Color(0.0, ctx.rng.randf() * TAU, 0.0, 0.15))
+	var beached := PropMeshes.mesh("boat", ctx.material)
+	for k in 2:
+		var p: Vector3 = _at(ctx, sp, v_w - 9.0 - 4.0 * float(k), 1.0, -10.0 - 7.0 * float(k))
+		var t := Transform3D(_along(sp.right.rotated(Vector3.UP, 0.6 + 0.5 * float(k))), p + Vector3.UP * 0.25)
+		ctx.part_mesh("beached_boats", beached, 3.0).add(t, paint[k + 1])
+	ctx.anchor = _at(ctx, sp, start)
+
+
+## Пляж с зонтиками: зонтики двух расцветок с парами шезлонгов вдоль полосы песка на ~150 м по
+## дороге — ближе к воде (дорога выше пляжа на 10–14 м: верх пляжа скрыт бровкой у дороги).
+const UMBRELLA_SCALE: float = 1.35
+static func _beach(ctx: Ctx) -> void:
+	var lvl: float = _water_y(ctx)
+	for i in 18:
+		var ds: float = 90.0 + float(i) * 10.0 + ctx.rng.randf_range(-3.0, 3.0)
+		var sp: Spot = _spot(ctx, ds)
+		var v_b: float = _shore_v(ctx, sp, ctx.env.beach_top_m - 0.3)
+		var v_w: float = _shore_v(ctx, sp, 0.4)
+		if v_b < 0.0 or v_w - v_b < 10.0:
+			continue
+		var v: float = lerpf(maxf(v_b + 4.0, v_w - 42.0), v_w - 5.0, ctx.rng.randf())
+		var p: Vector3 = _at(ctx, sp, v)
+		if p.y < lvl + 0.3:
+			continue
+		var key: String = "umbrella_a" if ctx.rng.randf() < 0.55 else "umbrella_b"
+		ctx.part(key, 1.6).add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3.ONE * UMBRELLA_SCALE), p))
+		for sgn in [-1.0, 1.0]:
+			var q: Vector3 = p + sp.fwd * float(sgn) * 1.2 + sp.right * 1.4
+			q.y = ctx.ground(q)
+			ctx.part("lounger", 0.0).add(Transform3D(_along(-sp.right, Vector3.ONE * 1.2), q))
+	var sp0: Spot = _spot(ctx, 150.0)
+	var vb0: float = _shore_v(ctx, sp0, ctx.env.beach_top_m)
+	ctx.anchor = _at(ctx, sp0, minf(vb0 if vb0 > 0.0 else 60.0, 64.0))
+
+
+## Белые домики с синими ставнями (средний план): дома двух видов на неровной сетке по склону,
+## кипарисы между ними и оливы.
+static func _white_houses(ctx: Ctx) -> void:
+	var cols: int = 4
+	for i in 8:
+		var gx: float = float(i % cols) - float(cols - 1) * 0.5
+		var gz: float = float(i / cols) - 0.5
+		var u: float = gx * 17.0 + ctx.rng.randf_range(-3.0, 3.0)
+		var v: float = gz * 20.0 + ctx.rng.randf_range(-3.0, 3.0)
+		var key: String = "white_house" if ctx.rng.randf() < 0.45 else "white_house_small"
+		ctx.put(key, 6.0, u, v, ctx.rng.randf_range(-0.25, 0.25) + (PI * 0.5 if ctx.rng.randf() < 0.25 else 0.0),
+			ctx.rng.randf_range(0.9, 1.15))
+	for i in 7:
+		ctx.put("cypress", 1.2, ctx.rng.randf_range(-40.0, 40.0), ctx.rng.randf_range(-22.0, 26.0), 0.0,
+			ctx.rng.randf_range(0.85, 1.25), Color.WHITE, -0.1)
+	for i in 4:
+		ctx.put("olive", 2.5, ctx.rng.randf_range(-45.0, 45.0), ctx.rng.randf_range(-30.0, -18.0), ctx.rng.randf() * TAU,
+			ctx.rng.randf_range(0.9, 1.2), Color.WHITE, -0.1)
+
+
+## Парусники на горизонте (дальний план): два, на воде за полосой мели, медленно плывут вдоль
+## берега (дрейф ≤ 0.5 м/с, `prop_anim`).
+static func _sailboats(ctx: Ctx) -> void:
+	var lvl: float = _water_y(ctx)
+	var first := Vector3.ZERO
+	var count: int = 0
+	for k in 2:
+		var sp: Spot = _spot(ctx, 560.0 - 180.0 * float(k))
+		var v_deep: float = _shore_v(ctx, sp, -3.0)
+		if v_deep < 0.0:
+			continue
+		var v: float = clampf(v_deep + 180.0 + 140.0 * float(k), 260.0, MAX_FROM_TRACK_M - 60.0)
+		var p: Vector3 = sp.center + sp.right * v
+		if ctx.ground(p) > lvl - 3.0:
+			continue
+		p.y = lvl
+		var t := Transform3D(_along(sp.fwd if k == 0 else -sp.fwd, Vector3.ONE * (1.0 if k == 0 else 0.8)), p)
+		ctx.part("sailboat", 0.0, true).add(t, Color.WHITE, Color(0.0, ctx.rng.randf() * TAU, 12.0, 0.0))
+		if count == 0:
+			first = p
+		count += 1
+	if count > 0:
+		ctx.anchor = first
+
+
+## Устье реки: камыши по берегам низовья реки (`TerrainField.river_points`), две лодки на воде;
+## привязка — куртина камыша справа от s.
+static func _river_mouth(ctx: Ctx) -> void:
+	var pts: PackedVector3Array = ctx.field.river_points if ctx.field != null else PackedVector3Array()
+	var lvl: float = _water_y(ctx)
+	if pts.size() < 4:
+		for i in 10:
+			ctx.put("reeds", 1.2, ctx.rng.randf_range(-20.0, 20.0), ctx.rng.randf_range(-8.0, 8.0), ctx.rng.randf() * TAU)
+		return
+	var half: float = ctx.field.river_half_m
+	var sp: Spot = _spot(ctx, 0.0)
+	var best := Vector3.ZERO
+	var best_score: float = INF
+	var reeds: Part = null
+	for i in range(int(float(pts.size()) * 0.4), pts.size() - 1):
+		var a: Vector3 = pts[i]
+		var b: Vector3 = pts[i + 1]
+		var dir := Vector3(b.x - a.x, 0.0, b.z - a.z).normalized()
+		var nrm := Vector3(-dir.z, 0.0, dir.x)
+		for sgn in [-1.0, 1.0]:
+			for k in 2:
+				var p: Vector3 = a.lerp(b, ctx.rng.randf()) + nrm * float(sgn) * (half + ctx.rng.randf_range(0.5, 6.0))
+				var g: float = ctx.ground(p)
+				if g < lvl + 0.05 or g > lvl + 2.2 or _dist_to_track(p, ctx.probe) < 32.0:
+					continue
+				p.y = g
+				reeds = ctx.part("reeds", 1.2)
+				reeds.add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3.ONE * ctx.rng.randf_range(0.8, 1.35)), p))
+				var rel: Vector3 = p - sp.center
+				var lat: float = rel.dot(sp.right)
+				var ahead: float = rel.dot(sp.fwd)
+				var score: float = absf(lat - 180.0) + absf(ahead - 250.0) * 0.5
+				if lat > 70.0 and lat < 380.0 and ahead > 0.0 and score < best_score:
+					best_score = score
+					best = p
+	var hull := PropMeshes.mesh("boat", ctx.anim_material)
+	var boats: int = 0
+	for i in range(pts.size() - 2, int(float(pts.size()) * 0.55), -3):
+		if boats >= 2:
+			break
+		var p: Vector3 = pts[i]
+		if ctx.ground(p) > lvl - 1.2 or _dist_to_track(p, ctx.probe) < 60.0:
+			continue
+		p.y = lvl
+		var dir: Vector3 = pts[i + 1] - pts[i]
+		var part: Part = ctx.part_mesh("river_boats", hull, 0.0)
+		part.animated = true
+		part.add(Transform3D(_along(dir.rotated(Vector3.UP, 0.3 * float(boats))), p), Color(0.92, 0.90, 0.84), Color(0.0, ctx.rng.randf() * TAU, 0.0, 0.12))
+		boats += 1
+	if best_score < INF:
+		ctx.anchor = best
+	elif reeds != null:
+		ctx.anchor = reeds.xf[0].origin
+
+
+## Мост через реку — T-090. Пока дорога идёт по насыпи (рельеф у оси не срезан руслом), у
+## подножия насыпи по обе стороны от русла — каменная наброска; привязка — ось дороги над рекой.
+static func _bridge_embankment(ctx: Ctx) -> void:
+	var s_c: float = ctx.placed.s_m + 250.0
+	if ctx.field != null and not is_nan(ctx.field.river_crossing_s):
+		s_c = ctx.field.river_crossing_s
+	var sample := TrackSample.new()
+	ctx.track.sample_into(ctx.track.wrap_distance(s_c), sample)
+	var r: Vector3 = sample.right()
+	r.y = 0.0
+	r = r.normalized()
+	var f := Vector3(sample.forward.x, 0.0, sample.forward.z).normalized()
+	var center: Vector3 = sample.position + r * ctx.env.road_center_offset_m
+	var rock: Mesh = SceneryBuilder.boulder_mesh(ctx.material)
+	var lvl: float = _water_y(ctx)
+	for sgn in [-1.0, 1.0]:
+		for k in 12:
+			var u: float = ctx.rng.randf_range(-34.0, 34.0)
+			var w: float = ctx.rng.randf_range(15.0, 30.0)
+			var p: Vector3 = center + r * float(sgn) * w + f * u
+			var g: float = ctx.ground(p)
+			if g < lvl - 0.8:
+				continue
+			var sc: float = ctx.rng.randf_range(0.7, 1.5)
+			ctx.part_mesh("riprap", rock, 0.0).add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3.ONE * sc),
+				Vector3(p.x, g - 0.25 * sc, p.z)), Color(0.95, 0.93, 0.88))
+	ctx.anchor = Vector3(center.x, sample.position.y, center.z)
+
+
+## Сосновый лес (по обе стороны): зонтичные сосны рощей у дороги на ~260 м.
+static func _pine_forest(ctx: Ctx) -> void:
+	var m: Mesh = SceneryBuilder.umbrella_pine_mesh(ctx.material)
+	var dry: float = _water_y(ctx) + ctx.env.shore_clear_m
+	for i in 46:
+		var sp: Spot = _spot(ctx, ctx.rng.randf_range(-60.0, 200.0))
+		var sgn: float = -1.0 if i % 2 == 0 else 1.0
+		var p: Vector3 = _at(ctx, sp, ctx.rng.randf_range(23.0, 75.0), sgn)
+		if p.y < dry:
+			continue
+		var sc: float = ctx.rng.randf_range(0.85, 1.3)
+		var shade: float = ctx.rng.randf_range(0.85, 1.08)
+		ctx.part_mesh("umbrella_pines", m, 3.0).add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3(sc, sc * ctx.rng.randf_range(0.9, 1.1), sc)),
+			p - Vector3.UP * 0.1), Color(shade, shade, shade))
+	ctx.anchor = _at(ctx, _spot(ctx, 60.0), 30.0)
+
+
+## Оливковые террасы на склоне мыса (средний план): ряды подпорных стенок из камня вдоль дороги
+## и оливы рядами между ними.
+static func _olive_terraces(ctx: Ctx) -> void:
+	var wall: Mesh = SceneryBuilder.wall_mesh(ctx.material)
+	for row in 5:
+		var v: float = -18.0 + 9.0 * float(row)
+		var u0: float = -28.0 + ctx.rng.randf_range(-3.0, 3.0)
+		for k in 14:
+			var a: Vector3 = ctx.local(u0 + SceneryBuilder.WALL_SEGMENT_M * float(k), v)
+			var b: Vector3 = ctx.local(u0 + SceneryBuilder.WALL_SEGMENT_M * float(k + 1), v)
+			var x: Vector3 = b - a
+			var xs: float = x.length() / SceneryBuilder.WALL_SEGMENT_M
+			x = x.normalized()
+			var z: Vector3 = x.cross(Vector3.UP).normalized()
+			ctx.part_mesh("terrace_walls", wall, 0.0).add(Transform3D(Basis(x * xs, z.cross(x).normalized(), z), (a + b) * 0.5 - Vector3.UP * 0.12),
+				Color(0.98, 0.95, 0.88))
+		for k in 7:
+			ctx.put("olive", 2.5, u0 + 4.0 + 8.0 * float(k) + ctx.rng.randf_range(-1.5, 1.5), v + 4.5, ctx.rng.randf() * TAU,
+				ctx.rng.randf_range(0.85, 1.2), Color(ctx.rng.randf_range(0.92, 1.05), 1.0, 1.0), -0.1)
+	ctx.part_mesh("terrace_footprint", null, 36.0).add(Transform3D(Basis.IDENTITY, ctx.local(0.0, 0.0)))
+
+
+## Маяк на мысу (средний план): мыс-площадка выдаётся в море от обрыва у дороги (рельеф
+## поднимается, `Headland`), на краю — маяк (белый с красными полосами) с вращающимся светом
+## (анимация и свечение в шейдере, без источника света), рядом дом смотрителя и кипарисы.
+const LIGHTHOUSE_LEAD_M: float = 230.0
+const HEADLAND_TIP_M: float = 150.0
+const HEADLAND_HALF_W_M: float = 34.0
+const LIGHTHOUSE_SCALE: float = 1.2
+
+
+static func _lighthouse_cape(ctx: Ctx) -> void:
+	var sp: Spot = _spot(ctx, LIGHTHOUSE_LEAD_M)
+	var top: float = sp.road_y - 4.5
+	var hl := Headland.new()
+	hl.from = sp.center + sp.right * 40.0
+	hl.to = sp.center + sp.right * HEADLAND_TIP_M
+	hl.half_width = HEADLAND_HALF_W_M
+	hl.top_y = top
+	ctx.placed.headlands.append(hl)
+	var base: Vector3 = sp.center + sp.right * (HEADLAND_TIP_M - 6.0)
+	base.y = top
+	var tower := Transform3D(ctx.facing(-sp.right, 0.0, Vector3.ONE * LIGHTHOUSE_SCALE), base)
+	ctx.part("lighthouse", 4.0).add(tower)
+	var up_z := Basis(sp.fwd, Vector3.UP.cross(sp.fwd).normalized(), Vector3.UP) * Basis.from_scale(Vector3.ONE * LIGHTHOUSE_SCALE)
+	ctx.part("lighthouse_lamp", 0.0, true).add(Transform3D(up_z, base + Vector3.UP * PropMeshes.LIGHTHOUSE_LAMP_Y * LIGHTHOUSE_SCALE), Color.WHITE,
+		Color(0.55, ctx.rng.randf() * TAU, 0.0, -0.9))
+	var house: Vector3 = sp.center + sp.right * (HEADLAND_TIP_M - 30.0) + sp.fwd * 13.0
+	house.y = top
+	ctx.part("house_small", 5.0).add(Transform3D(ctx.facing(-sp.fwd, 0.0, Vector3.ONE * 0.95), house))
+	for k in 3:
+		var c: Vector3 = sp.center + sp.right * (HEADLAND_TIP_M - 40.0 + 7.0 * float(k)) - sp.fwd * (10.0 + 3.0 * float(k % 2))
+		c.y = top - 0.1
+		ctx.part("cypress", 1.2).add(Transform3D(Basis.from_scale(Vector3.ONE * ctx.rng.randf_range(0.8, 1.1)), c))
+	# Вид на маяк с дороги у s: деревья не встают на линию взгляда (пятна без меша).
+	var eye: Vector3 = _spot(ctx, 0.0).center
+	for t in [0.05, 0.12, 0.22, 0.34, 0.48, 0.64]:
+		var q: Vector3 = eye.lerp(base, float(t))
+		ctx.part_mesh("lighthouse_view", null, 8.0 + 22.0 * float(t)).add(Transform3D(Basis.IDENTITY, q))
+	ctx.anchor = base
+
+
+## Скалы и брызги у подножия мыса: на кромке обрыва у дороги — глыбы, в море — кекуры (верх
+## над водой виден с дороги поверх обрыва), у их подножия — пена и брызги (покачиваются).
+static func _cliffs(ctx: Ctx) -> void:
+	var lvl: float = _water_y(ctx)
+	var rock: Mesh = SceneryBuilder.boulder_mesh(ctx.material)
+	var sp0: Spot = _spot(ctx, 50.0)
+	for k in 5:
+		var p: Vector3 = _at(ctx, sp0, ctx.rng.randf_range(30.0, 42.0), 1.0, ctx.rng.randf_range(-15.0, 25.0))
+		var sc: float = ctx.rng.randf_range(0.8, 1.8)
+		ctx.part_mesh("cliff_rocks", rock, 1.5).add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3.ONE * sc),
+			p - Vector3.UP * 0.2 * sc))
+	for k in 5:
+		var sp: Spot = _spot(ctx, 90.0 + 60.0 * float(k) + ctx.rng.randf_range(-10.0, 10.0))
+		var v_w: float = _shore_v(ctx, sp, -1.0)
+		if v_w < 0.0:
+			continue
+		var p: Vector3 = sp.center + sp.right * minf(v_w + ctx.rng.randf_range(70.0, 170.0), MAX_FROM_TRACK_M - 40.0)
+		var g: float = ctx.ground(p)
+		var sc: float = ctx.rng.randf_range(0.8, 1.3)
+		var sy: float = (lvl + ctx.rng.randf_range(18.0, 28.0) - g) / 22.0
+		var yaw: float = ctx.rng.randf() * TAU
+		ctx.part("sea_stack", 6.0).add(Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3(sc, maxf(sy, 0.6), sc)), Vector3(p.x, g, p.z)))
+		ctx.part("spray", 0.0, true).add(Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * sc), Vector3(p.x, lvl, p.z)), Color.WHITE,
+			Color(0.0, ctx.rng.randf() * TAU, 0.0, 0.6))
+	ctx.anchor = _at(ctx, sp0, 36.0)
+
+
+## Набережная: мощёная дорожка вдоль дороги за отбойником (меш в мировых координатах), фонари
+## через 20 м, скамейки лицом к морю, балюстрада по краю.
+const PROMENADE_IN_M: float = 8.0
+const PROMENADE_OUT_M: float = 12.2
+
+
+static func _promenade(ctx: Ctx) -> void:
+	var kit := MeshKit.new()
+	var paving := Color(0.84, 0.81, 0.74, 0.0)
+	var paving_dark := Color(0.76, 0.73, 0.67, 0.0)
+	var prev: Spot = null
+	var ds: float = -80.0
+	while ds <= 170.0:
+		var sp: Spot = _spot(ctx, ds)
+		if prev != null:
+			var y0: float = prev.road_y - 0.1
+			var y1: float = sp.road_y - 0.1
+			var a0: Vector3 = prev.center + prev.right * PROMENADE_IN_M
+			var a1: Vector3 = sp.center + sp.right * PROMENADE_IN_M
+			var b0: Vector3 = prev.center + prev.right * PROMENADE_OUT_M
+			var b1: Vector3 = sp.center + sp.right * PROMENADE_OUT_M
+			a0.y = y0
+			b0.y = y0
+			a1.y = y1
+			b1.y = y1
+			kit.add_quad(a0, b0, b1, a1, Vector3.UP, paving if int(ds / 5.0) % 2 == 0 else paving_dark)
+			kit.add_quad(b0, b1, b1 - Vector3.UP * 0.9, b0 - Vector3.UP * 0.9, sp.right, paving_dark)
+			kit.add_quad(a0, a1, a1 - Vector3.UP * 0.5, a0 - Vector3.UP * 0.5, -sp.right, paving_dark)
+		if int(round(ds)) % 20 == 0:
+			var lamp: Vector3 = sp.center + sp.right * (PROMENADE_OUT_M - 0.6)
+			lamp.y = sp.road_y - 0.1
+			ctx.part("street_lamp", 0.0).add(Transform3D(ctx.facing(-sp.right), lamp))
+			var bench: Vector3 = sp.center + sp.right * (PROMENADE_OUT_M - 1.6) + sp.fwd * 10.0
+			bench.y = sp.road_y - 0.1
+			ctx.part("bench", 0.0).add(Transform3D(ctx.facing(sp.right), bench))
+		if int(round(ds)) % 10 == 0:
+			var rail: Vector3 = sp.center + sp.right * (PROMENADE_OUT_M - 0.25) + sp.fwd * 5.0
+			rail.y = sp.road_y - 0.1
+			ctx.part("balustrade", 0.0).add(Transform3D(_along(sp.fwd), rail))
+		prev = sp
+		ds += 5.0
+	ctx.part_mesh("promenade", kit.to_mesh(ctx.material), 0.0, true).add(Transform3D.IDENTITY)
+	var sp1: Spot = _spot(ctx, 40.0)
+	ctx.anchor = sp1.center + sp1.right * (PROMENADE_IN_M + 2.0)
+	ctx.anchor.y = sp1.road_y - 0.1
+
+
+## Вышка спасателя у пляжа: на верху пляжа (не дальше плана «у дороги»), рядом зонтики и
+## спасательная лодка на песке.
+const LIFEGUARD_LEAD_M: float = 110.0
+
+
+static func _lifeguard(ctx: Ctx) -> void:
+	var sp: Spot = _spot(ctx, LIFEGUARD_LEAD_M)
+	var v_b: float = _shore_v(ctx, sp, ctx.env.beach_top_m)
+	var v: float = clampf((v_b if v_b > 0.0 else 60.0) + 4.0, 30.0, 66.0)
+	var p: Vector3 = _at(ctx, sp, v)
+	ctx.part("lifeguard_tower", 3.0).add(Transform3D(ctx.facing(-sp.right), p))
+	var v_w: float = _shore_v(ctx, sp, 0.4)
+	for k in 5:
+		var sp2: Spot = _spot(ctx, LIFEGUARD_LEAD_M + ctx.rng.randf_range(-45.0, 60.0))
+		var vb2: float = _shore_v(ctx, sp2, ctx.env.beach_top_m - 0.3)
+		var vw2: float = _shore_v(ctx, sp2, 0.4)
+		if vb2 < 0.0 or vw2 - vb2 < 10.0:
+			continue
+		var q: Vector3 = _at(ctx, sp2, lerpf(vb2 + 4.0, vw2 - 6.0, ctx.rng.randf_range(0.2, 0.7)))
+		ctx.part("umbrella_a" if k % 2 == 0 else "umbrella_b", 1.6).add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU), q))
+	if v_w > 0.0:
+		var b: Vector3 = _at(ctx, sp, v_w - 8.0, 1.0, 9.0)
+		ctx.part_mesh("rescue_boat", PropMeshes.mesh("boat", ctx.material), 3.0).add(Transform3D(_along(sp.right.rotated(Vector3.UP, 0.4)),
+			b + Vector3.UP * 0.25), Color(0.95, 0.80, 0.74))
+	ctx.anchor = p

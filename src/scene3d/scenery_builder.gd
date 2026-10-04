@@ -8,7 +8,9 @@ extends RefCounted
 ## На длинной трассе каждый тип разбит на куски вдоль трассы с дальностью видимости
 ## (REQ-D3D-08 п.6, T-066): плотность — на километр, в кадре столько же, сколько на петле.
 ## Наборы окружения трасс (T-083) добавляют лесополосы тополей (ряды вдоль полей и поперёк),
-## низкие каменные изгороди вдоль дороги и долю елей/рощи на возвышенностях.
+## низкие каменные изгороди вдоль дороги и долю елей/рощи на возвышенностях. Приморье (T-088):
+## хвойные — зонтичные сосны (`EnvironmentSet.conifer_kind`), деревья, кусты и валуны не стоят
+## на пляже и в воде (не ниже уровня воды + `shore_clear_m`).
 
 const TREE_MIN_ROAD_M: float = 9.0
 const TREE_MAX_OFFSET_M: float = 200.0
@@ -156,6 +158,28 @@ static func boulder_mesh(material: Material) -> ArrayMesh:
 	)
 
 
+## Зонтичная сосна (приморье, `tracks.md` п. 4.4): тонкий наклонённый ствол с развилкой и плоская
+## широкая крона-«зонт» из нескольких сплюснутых эллипсоидов (0.30, 0.48, 0.25); высота ~10 м.
+## Нормали кроны наклонены вверх — нижняя сторона зонта освещена, крона не чёрная.
+static func umbrella_pine_mesh(material: Material) -> ArrayMesh:
+	return _cached("umbrella_pine", material, func(kit: MeshKit) -> void:
+		var bark := Color(0.46, 0.33, 0.24, 1.0)
+		kit.add_tube(Vector3(0, -0.3, 0), Vector3(0.5, 5.6, 0.1), Vector2(0.24, 0.24), Vector2(0.15, 0.15), bark, 7)
+		kit.add_tube(Vector3(0.45, 5.0, 0.1), Vector3(1.9, 7.6, 0.5), Vector2(0.13, 0.13), Vector2(0.09, 0.09), bark, 5)
+		kit.add_tube(Vector3(0.45, 5.0, 0.1), Vector3(-1.1, 7.8, -0.6), Vector2(0.13, 0.13), Vector2(0.09, 0.09), bark, 5)
+		var crown := Color(0.30, 0.48, 0.25, 1.0)
+		var crown_dark := Color(0.25, 0.41, 0.22, 1.0)
+		kit.add_ellipsoid(Vector3(0.4, 8.1, 0.0), Vector3(3.9, 1.05, 3.6), crown_dark, Basis.IDENTITY, 5, 14)
+		kit.add_ellipsoid(Vector3(1.6, 8.7, 0.7), Vector3(2.3, 0.8, 2.1), crown, Basis.IDENTITY, 5, 12)
+		kit.add_ellipsoid(Vector3(-0.9, 8.8, -0.6), Vector3(2.2, 0.75, 2.2), crown, Basis.IDENTITY, 5, 12)
+		kit.add_ellipsoid(Vector3(0.3, 9.2, 0.1), Vector3(1.8, 0.6, 1.7), crown.lightened(0.06), Basis.IDENTITY, 4, 10)
+		# Нормали кроны подняты вверх: плоский «зонт» снизу не проваливается в тень (средние тона).
+		for i in kit.vertices.size():
+			if kit.vertices[i].y > 6.8:
+				kit.normals[i] = (kit.normals[i] + Vector3.UP * 1.3).normalized()
+	)
+
+
 ## Звено каменной изгороди длиной `WALL_SEGMENT_M` (ось X), низ — на нуле.
 static func wall_mesh(material: Material) -> ArrayMesh:
 	return _cached("wall", material, func(kit: MeshKit) -> void:
@@ -245,7 +269,10 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	var verge_w: float = RoadsideBuilder.verge_width_m(env.road_width_m)
 	var sample := TrackSample.new()
 	var trees := Layer.new("Trees", tree_mesh(material), PerfBudget.RANGE_TREES_M, chunks)
-	var pines := Layer.new("Conifers", conifer_mesh(material), PerfBudget.RANGE_TREES_M, chunks)
+	var pines := Layer.new("Conifers", umbrella_pine_mesh(material) if env.conifer_kind == 1 else conifer_mesh(material),
+		PerfBudget.RANGE_TREES_M, chunks)
+	# Берег (приморье): не на пляже и не в воде.
+	var dry_y: float = shore_line_y(env, field)
 	var bushes := Layer.new("Bushes", bush_mesh(material), PerfBudget.RANGE_BUSHES_M, chunks)
 	var tufts := Layer.new("Tufts", tuft_mesh(material), PerfBudget.RANGE_TUFTS_M, chunks)
 	# Деревья: лиственные и ели — рощами по маске шума.
@@ -272,6 +299,8 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		if ko != null and ko.blocks(p.x, p.z, 2.0):
 			continue
 		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
+		if y < dry_y:
+			continue
 		# Граница леса (горы): выше неё деревьев нет, кромка неровная.
 		if env.tree_line_m < TREE_LINE_OFF_M and y > env.tree_line_m - 45.0 * rng.randf():
 			continue
@@ -303,6 +332,8 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		if ko != null and ko.blocks(p.x, p.z, 1.0):
 			continue
 		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
+		if y < dry_y:
+			continue
 		var sc: float = rng.randf_range(0.6, 1.3)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.1), sc))
 		var shade: float = rng.randf_range(0.85, 1.15)
@@ -363,6 +394,8 @@ static func _place_boulders(layer: Layer, track: Track, env: EnvironmentSet, fie
 		if ko != null and ko.blocks(p.x, p.z, 1.5):
 			continue
 		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
+		if y < shore_line_y(env, field):
+			continue
 		var sc: float = rng.randf_range(0.45, 1.0) * lerpf(1.0, 2.6, far)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.25, 0.25))
 		basis = basis.scaled(Vector3(sc, sc * rng.randf_range(0.7, 1.15), sc * rng.randf_range(0.8, 1.2)))
@@ -471,6 +504,14 @@ static func _place_walls(layer: Layer, track: Track, env: EnvironmentSet, field:
 		var y: Vector3 = z.cross(x).normalized()
 		var shade: float = 0.9 + 0.16 * absf(values[(i * 7) % n])
 		layer.add(Transform3D(Basis(x * xs, y, z), (p0 + p1) * 0.5), Color(shade, shade, shade), PerfBudget.chunk_of(s0, chunk_m, chunks))
+
+
+## Ниже этой высоты деревья, кусты и валуны не ставятся: уровень воды + `shore_clear_m` (пляж и
+## вода); без воды — без ограничения.
+static func shore_line_y(env: EnvironmentSet, field: TerrainField) -> float:
+	if field == null or not field.has_water():
+		return -INF
+	return field.water_level + maxf(env.shore_clear_m, 0.0)
 
 
 static func _ground_y(p: Vector3, w: float, road_y: float, road_width: float, verge_w: float, field: TerrainField) -> float:

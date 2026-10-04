@@ -100,6 +100,9 @@ extends Resource
 @export_range(0.0, 1.0) var tree_hilltop_bias: float = 0.0
 ## Граница леса: выше этой высоты (м над уровнем трассы, абсолютная y) деревьев нет (горы).
 @export var tree_line_m: float = 100000.0
+## Вид хвойных: 0 — ель (конусы), 1 — зонтичная сосна (плоский «зонт» на тонком стволе,
+## приморье, `tracks.md` п. 4.4).
+@export_range(0, 1) var conifer_kind: int = 0
 ## Масштаб и тон елей (горы: ели крупнее и темнее).
 @export var conifer_scale: float = 1.0
 @export var conifer_shade: float = 1.0
@@ -126,6 +129,36 @@ extends Resource
 @export var building_roof_color: Color = Color(0.78, 0.32, 0.24)
 ## Цвет воды ручьёв и озёр ориентиров.
 @export var water_color: Color = Color(0.22, 0.62, 0.72)
+
+@export_group("Water")
+## Вода (T-088, приморье): море и река на уровне воды трассы (`RouteDef.water_level_m`; у трассы
+## без него — `water_level_m`), один меш с шейдером `water.gdshader` (`TerrainField.build_water_mesh`).
+@export var water_enabled: bool = false
+## Материал воды; null — `src/scene3d/materials/water.tres`.
+@export var water_material: Material = null
+@export var water_level_m: float = 0.0
+## Участки трассы по s (x — начало, y — конец, м), у которых снаружи петли море; переход —
+## `sea_blend_m` по s. Пусто — моря нет (только река).
+@export var sea_s_ranges: PackedVector2Array = PackedVector2Array()
+@export var sea_blend_m: float = 300.0
+## Профиль берега (`TerrainField.coast_profile`): склон начинается в `shore_start_m` от оси
+## трассы, уклон дюн `dune_slope` (при большом перепаде — обрыв `cliff_slope`), верх пляжа на
+## `beach_top_m` над водой, ширина пляжа, глубина моря; открытое море за коридором — до `sea_reach_m`.
+@export var shore_start_m: float = 22.0
+@export var dune_slope: float = 0.22
+@export var cliff_slope: float = 0.95
+@export var beach_top_m: float = 2.5
+@export var beach_width_m: float = 60.0
+@export var sea_depth_m: float = 12.0
+@export var sea_reach_m: float = 6000.0
+## Река: опорные точки (x — s, м; y — смещение вправо от оси трассы, м) от истока к устью;
+## точка со смещением ~0 — переход под дорогой (мост — T-090, пока насыпь). Ширина русла, полуоси
+## озера у истока (0 — без озера).
+@export var river_path: PackedVector2Array = PackedVector2Array()
+@export var river_width_m: float = 40.0
+@export var river_lake_radii: Vector2 = Vector2.ZERO
+## Деревья, кусты и валуны — не ниже уровня воды + этот запас, м (не на пляже и не в воде).
+@export var shore_clear_m: float = 4.0
 
 @export_group("Roadside posts")
 ## Повторяющиеся объекты вдоль дороги (сигнальные столбики) — одним `MultiMeshInstance3D`.
