@@ -11,6 +11,7 @@ signal submitted(athlete_id: String, key: String)
 @onready var _athlete_edit: LineEdit = %AthleteIdEdit
 @onready var _key_edit: LineEdit = %KeyEdit
 @onready var _error_label: Label = %ErrorLabel
+@onready var _hint_label: Label = $VBox/Hint
 
 
 func _ready() -> void:
@@ -24,7 +25,25 @@ func open(current_athlete_id: String = "") -> void:
 	_key_edit.text = ""
 	_error_label.visible = false
 	_error_label.text = ""
+	_fit_wrapped_text()
 	popup_centered()
+
+
+## Перенос подсказки — по ширине содержимого до показа (T-144, REQ-UIX-05 п.2). Пока окно
+## скрыто, контейнер содержимого детей не раскладывает: у переносимой по словам подписи, ни разу
+## не показанной, ширина 1 px, и её минимальная высота — текст по букве в строке (~2000 lp).
+## Окно с `wrap_controls` дорастает до этого минимума и остаётся таким к `popup_centered()`:
+## при первом открытии форма уходила за низ окна. Подписи получают ширину содержимого диалога
+## (ширина окна минус поля панели `panel`), минимум пересчитывается, окно сжимается до него.
+func _fit_wrapped_text() -> void:
+	var panel := get_theme_stylebox(&"panel")
+	var width := float(maxi(size.x, min_size.x)) - (panel.get_minimum_size().x if panel != null else 0.0)
+	for label: Label in [_hint_label, _error_label]:
+		if label.autowrap_mode == TextServer.AUTOWRAP_OFF or width <= 0.0:
+			continue
+		label.size = Vector2(width, label.size.y)
+		label.update_minimum_size()
+	reset_size()
 
 
 func fill(athlete_id: String, key: String) -> void:
