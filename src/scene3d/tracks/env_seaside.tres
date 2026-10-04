@@ -65,6 +65,7 @@ hills_full_m = 640.0
 hills_power = 2.0
 conifer_threshold = -0.45
 conifer_kind = 1
+conifer_forms = {"stone_pine": 0.55, "stone_pine_lean": 0.15, "stone_pine_young": 0.3}
 tree_hilltop_bias = 0.0
 landmarks_enabled = true
 building_wall_color = Color(0.95, 0.95, 0.93, 1)

@@ -58,6 +58,7 @@ tuft_count = 900
 scenery_seed = 23
 cross_slope_gain = 2.5
 conifer_threshold = 0.5
+conifer_forms = {"fir": 0.15, "spruce": 0.5, "spruce_young": 0.35}
 tree_hilltop_bias = 0.0
 windbreak_rows_per_km = 2.6
 windbreak_length_m = Vector2(160, 420)

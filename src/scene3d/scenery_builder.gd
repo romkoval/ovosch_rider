@@ -12,7 +12,8 @@ extends RefCounted
 ## хвойные — зонтичные сосны (`EnvironmentSet.conifer_kind`), деревья, кусты и валуны не стоят
 ## на пляже и в воде (не ниже уровня воды + `shore_clear_m`). Мосты (T-090, `BridgeBuilder.ranges`):
 ## на мосту и подходе к нему объекты «у дороги» (высота — по полосе травы) не ставятся — под
-## полотном долина; пучки травы — только не на мосту и устоях.
+## полотном долина; пучки травы — только не на мосту и устоях. Хвойные (T-107, `ConiferKit`):
+## семь форм с долями по трассам, слой MultiMesh на уровень детализации (по удалению от трассы).
 
 const TREE_MIN_ROAD_M: float = 9.0
 const TREE_MAX_OFFSET_M: float = 200.0
@@ -25,7 +26,12 @@ const WALL_SEGMENT_M: float = 4.0
 const TREE_LINE_OFF_M: float = 99999.0
 ## Слои, которые есть не в каждом наборе окружения (лесополосы, изгороди): `RideScene` держит
 ## их в отдельном контейнере, чтобы состав корня окружения не зависел от трассы.
-const EXTRA_LAYERS: Array[String] = ["Poplars", "StoneWalls", "Boulders"]
+const EXTRA_LAYERS: Array[String] = ["Poplars", "StoneWalls", "Boulders", "ConifersLod2"]
+## Слои хвойных по уровням детализации (T-107): LOD0 и LOD1 — в каждом мире, LOD2 — только
+## если есть деревья дальше `ConiferKit.LOD_FAR_M` от трассы.
+const CONIFER_LAYERS: Array[String] = ["Conifers", "ConifersLod1", "ConifersLod2"]
+## Тень отбрасывают уровни детализации меньше этого.
+const CONIFER_SHADOW_LODS: int = 2
 
 static var _meshes: Dictionary = {}
 
@@ -56,14 +62,9 @@ static func tree_mesh(material: Material) -> ArrayMesh:
 	)
 
 
+## Ель взрослая (LOD0, `ConiferKit`) — для ориентиров; растительность трассы — слои хвойных.
 static func conifer_mesh(material: Material) -> ArrayMesh:
-	return _cached("conifer", material, func(kit: MeshKit) -> void:
-		kit.add_tube(Vector3(0, -0.3, 0), Vector3(0, 1.4, 0), Vector2(0.16, 0.16), Vector2(0.12, 0.12), Color(0.38, 0.28, 0.2, 1.0), 6)
-		var c := Color(0.20, 0.42, 0.25, 1.0)
-		kit.add_cone(Vector3(0, 1.0, 0), 3.2, 1.7, c, 9)
-		kit.add_cone(Vector3(0, 2.7, 0), 2.8, 1.3, c.lightened(0.05), 9)
-		kit.add_cone(Vector3(0, 4.2, 0), 2.6, 0.95, c.lightened(0.1), 9)
-	)
+	return ConiferKit.single_mesh(ConiferKit.M_SPRUCE, 0, material)
 
 
 static func bush_mesh(material: Material) -> ArrayMesh:
@@ -160,26 +161,10 @@ static func boulder_mesh(material: Material) -> ArrayMesh:
 	)
 
 
-## Зонтичная сосна (приморье, `tracks.md` п. 4.4): тонкий наклонённый ствол с развилкой и плоская
-## широкая крона-«зонт» из нескольких сплюснутых эллипсоидов (0.30, 0.48, 0.25); высота ~10 м.
-## Нормали кроны наклонены вверх — нижняя сторона зонта освещена, крона не чёрная.
+## Зонтичная сосна — пиния (LOD0, `ConiferKit`) — для ориентиров; растительность трассы —
+## слои хвойных.
 static func umbrella_pine_mesh(material: Material) -> ArrayMesh:
-	return _cached("umbrella_pine", material, func(kit: MeshKit) -> void:
-		var bark := Color(0.46, 0.33, 0.24, 1.0)
-		kit.add_tube(Vector3(0, -0.3, 0), Vector3(0.5, 5.6, 0.1), Vector2(0.24, 0.24), Vector2(0.15, 0.15), bark, 7)
-		kit.add_tube(Vector3(0.45, 5.0, 0.1), Vector3(1.9, 7.6, 0.5), Vector2(0.13, 0.13), Vector2(0.09, 0.09), bark, 5)
-		kit.add_tube(Vector3(0.45, 5.0, 0.1), Vector3(-1.1, 7.8, -0.6), Vector2(0.13, 0.13), Vector2(0.09, 0.09), bark, 5)
-		var crown := Color(0.30, 0.48, 0.25, 1.0)
-		var crown_dark := Color(0.25, 0.41, 0.22, 1.0)
-		kit.add_ellipsoid(Vector3(0.4, 8.1, 0.0), Vector3(3.9, 1.05, 3.6), crown_dark, Basis.IDENTITY, 5, 14)
-		kit.add_ellipsoid(Vector3(1.6, 8.7, 0.7), Vector3(2.3, 0.8, 2.1), crown, Basis.IDENTITY, 5, 12)
-		kit.add_ellipsoid(Vector3(-0.9, 8.8, -0.6), Vector3(2.2, 0.75, 2.2), crown, Basis.IDENTITY, 5, 12)
-		kit.add_ellipsoid(Vector3(0.3, 9.2, 0.1), Vector3(1.8, 0.6, 1.7), crown.lightened(0.06), Basis.IDENTITY, 4, 10)
-		# Нормали кроны подняты вверх: плоский «зонт» снизу не проваливается в тень (средние тона).
-		for i in kit.vertices.size():
-			if kit.vertices[i].y > 6.8:
-				kit.normals[i] = (kit.normals[i] + Vector3.UP * 1.3).normalized()
-	)
+	return ConiferKit.single_mesh(ConiferKit.M_PINE, 0, material)
 
 
 ## Звено каменной изгороди длиной `WALL_SEGMENT_M` (ось X), низ — на нуле.
@@ -223,8 +208,12 @@ static func build(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		total_budget: int = PerfBudget.MAX_MULTIMESH_INSTANCES, keep_out: LandmarkBuilder.KeepOut = null) -> Array[MultiMeshInstance3D]:
 	var out: Array[MultiMeshInstance3D] = []
 	for layer in place(track, env, field, material, budget, total_budget, keep_out):
-		out.append(chunked_multimesh(layer.name, layer.mesh, layer.xf, layer.col, layer.chunk, layer.chunks,
-			layer.range_m if layer.chunks > 1 else 0.0, layer.keep))
+		var node: MultiMeshInstance3D = chunked_multimesh(layer.name, layer.mesh, layer.xf, layer.col, layer.chunk, layer.chunks,
+			layer.range_m if layer.chunks > 1 else 0.0, layer.keep, layer.custom, layer.tris)
+		if not layer.shadow:
+			for part: GeometryInstance3D in [node] + node.get_children():
+				part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		out.append(node)
 	return out
 
 
@@ -272,15 +261,15 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	var bridges: PackedVector2Array = BridgeBuilder.ranges(track)
 	var sample := TrackSample.new()
 	var trees := Layer.new("Trees", tree_mesh(material), PerfBudget.RANGE_TREES_M, chunks)
-	var pines := Layer.new("Conifers", umbrella_pine_mesh(material) if env.conifer_kind == 1 else conifer_mesh(material),
-		PerfBudget.RANGE_TREES_M, chunks)
+	# Хвойные: точки рощ здесь, формы, уровни и вариации — `ConiferKit.plant` после расстановки.
+	var plants: Array[ConiferKit.Plant] = []
 	# Берег (приморье): не на пляже и не в воде.
 	var dry_y: float = shore_line_y(env, field)
 	var bushes := Layer.new("Bushes", bush_mesh(material), PerfBudget.RANGE_BUSHES_M, chunks)
 	var tufts := Layer.new("Tufts", tuft_mesh(material), PerfBudget.RANGE_TUFTS_M, chunks)
 	# Деревья: лиственные и ели — рощами по маске шума.
 	var attempts: int = n_trees * 8
-	while attempts > 0 and trees.xf.size() + pines.xf.size() < n_trees:
+	while attempts > 0 and trees.xf.size() + plants.size() < n_trees:
 		attempts -= 1
 		var s: float = rng.randf() * length
 		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
@@ -316,10 +305,18 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var shade: float = rng.randf_range(0.85, 1.12)
 		var chunk: int = PerfBudget.chunk_of(s, chunk_m, chunks)
 		if conifer:
-			if env.conifer_scale != 1.0:
-				xf.basis = xf.basis.scaled(Vector3.ONE * env.conifer_scale)
-			shade *= env.conifer_shade
-			pines.add(xf, Color(shade, shade, shade * rng.randf_range(0.95, 1.05), 1.0), chunk)
+			# Тот же расход случайных чисел, что у лиственного: расстановка рощ не зависит от форм.
+			rng.randf_range(0.95, 1.05)
+			var cp := ConiferKit.Plant.new()
+			cp.origin = xf.origin
+			cp.s = s
+			cp.chunk = chunk
+			# Удаление от ближайшей точки трассы: не больше, чем от своей точки выборки; ближе к
+			# соседнему витку серпантина — по полю расстояний рельефа (точно ближе `near_radius_m`).
+			cp.road_m = absf(sgn * w + env.road_center_offset_m)
+			if field != null:
+				cp.road_m = minf(cp.road_m, field.road_distance_at(p.x, p.z))
+			plants.append(cp)
 		else:
 			trees.add(xf, Color(shade * rng.randf_range(0.95, 1.12), shade, shade * 0.9, 1.0), chunk)
 	# Кусты: у кювета и в поле.
@@ -364,8 +361,9 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 			PerfBudget.chunk_of(s, chunk_m, chunks))
 	var boulders := Layer.new("Boulders", boulder_mesh(material), PerfBudget.RANGE_BUSHES_M, chunks)
 	_place_boulders(boulders, track, env, field, n_boulders, chunk_m, chunks, ko)
-	var layers: Array[Layer] = [trees, pines, bushes, tufts]
-	for extra in [poplars, walls, boulders]:
+	var conifers: Array[Layer] = conifer_layers(plants, env, field, material, chunks)
+	var layers: Array[Layer] = [trees, conifers[0], conifers[1], bushes, tufts]
+	for extra in [conifers[2], poplars, walls, boulders]:
 		if not (extra as Layer).xf.is_empty():
 			layers.append(extra)
 	if chunks > 1:
@@ -374,6 +372,36 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 			for layer in layers:
 				layer.keep = float(maxi(budget, 0)) / float(seen)
 	return layers
+
+
+## Слои хвойных (T-107, арт-библия «Уровни детализации»): по слою на уровень детализации —
+## `CONIFER_LAYERS[lod]`; уровень экземпляра назначен при расстановке по удалению от трассы, в
+## кадре ничего не переключается. Меш слоя несёт все формы трассы этого уровня
+## (`ConiferKit.layer_mesh`), форма экземпляра — данные экземпляра (слот модели). Тень
+## отбрасывают уровни меньше `CONIFER_SHADOW_LODS`: тень солнца — до 90 м от камеры, а камера
+## всегда у дороги.
+static func conifer_layers(plants: Array[ConiferKit.Plant], env: EnvironmentSet, field: TerrainField,
+		material: Material, chunks: int) -> Array[Layer]:
+	ConiferKit.plant(plants, env, field)
+	var forms: PackedInt32Array = ConiferKit.mix_forms(ConiferKit.form_mix(env))
+	var out: Array[Layer] = []
+	var models: Array[PackedInt32Array] = []
+	for lod in ConiferKit.LOD_COUNT:
+		var mods: PackedInt32Array = ConiferKit.models_for(forms, lod)
+		models.append(mods)
+		var layer := Layer.new(CONIFER_LAYERS[lod], ConiferKit.layer_mesh(mods, lod, material), PerfBudget.RANGE_TREES_M, chunks)
+		layer.shadow = lod < CONIFER_SHADOW_LODS
+		out.append(layer)
+	for cp in plants:
+		var layer: Layer = out[cp.lod]
+		var mods: PackedInt32Array = models[cp.lod]
+		var model: int = ConiferKit.model_of(cp.form, cp.lod)
+		layer.add(cp.transform(env.conifer_scale), cp.color(env.conifer_shade), cp.chunk)
+		if mods.size() > 1:
+			layer.custom.append(Color(float(mods.find(model)), 0.0, 0.0, 0.0))
+		layer.tris.append(ConiferKit.triangles(model, cp.lod))
+		layer.plants.append(cp)
+	return out
 
 
 ## Валуны (горы): вдоль трассы на склонах — у дороги (осыпь под скальной стенкой) и в поле,
@@ -545,6 +573,14 @@ class Layer:
 	var xf: Array[Transform3D] = []
 	var col: Array[Color] = []
 	var chunk := PackedInt32Array()
+	## Данные экземпляра (`INSTANCE_CUSTOM`): пусто — без них (хвойные — слот формы в меше слоя).
+	var custom: Array[Color] = []
+	## Треугольников экземпляра (хвойные; пусто — не считаются).
+	var tris := PackedInt32Array()
+	## Хвойные: форма, уровень и вариации каждого экземпляра (для тестов и замеров).
+	var plants: Array[ConiferKit.Plant] = []
+	## Слой отбрасывает тень.
+	var shadow: bool = true
 
 	func _init(node_name: String, layer_mesh: Mesh, visible_m: float, chunk_total: int) -> void:
 		name = node_name
@@ -623,9 +659,11 @@ static func _max_visible(layers: Array[Layer], chunks: int, track: Track) -> int
 ## по позициям экземпляров (центр AABB — точка отсчёта дальности видимости); `range_m` > 0 —
 ## дальность видимости куска. `keep` < 1 — в каждом куске остаётся эта доля экземпляров
 ## (первые по порядку расстановки; порядок случайный — прореживание равномерное).
-## `cols` пустой — без цвета экземпляра.
+## `cols` пустой — без цвета экземпляра; `customs` — данные экземпляра (пусто — без них);
+## `tris` — треугольников экземпляра: сумма по куску — в метаданных узла `triangles`.
 static func chunked_multimesh(node_name: String, mesh: Mesh, xforms: Array[Transform3D], cols: Array[Color],
-		chunk: PackedInt32Array, chunks: int, range_m: float, keep: float = 1.0) -> MultiMeshInstance3D:
+		chunk: PackedInt32Array, chunks: int, range_m: float, keep: float = 1.0, customs: Array[Color] = [],
+		tris: PackedInt32Array = PackedInt32Array()) -> MultiMeshInstance3D:
 	var buckets: Array[PackedInt32Array] = []
 	buckets.resize(maxi(chunks, 1))
 	for i in xforms.size():
@@ -641,19 +679,28 @@ static func chunked_multimesh(node_name: String, mesh: Mesh, xforms: Array[Trans
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_colors = not cols.is_empty()
+		mm.use_custom_data = not customs.is_empty()
 		mm.mesh = mesh
 		mm.instance_count = n
 		var lo := Vector3(INF, INF, INF)
 		var hi := Vector3(-INF, -INF, -INF)
+		var tri_sum: int = 0
 		for j in n:
 			var t: Transform3D = xforms[idx[j]]
 			mm.set_instance_transform(j, t)
 			if mm.use_colors:
 				mm.set_instance_color(j, MeshKit.lin(cols[idx[j]]))
+			if mm.use_custom_data:
+				mm.set_instance_custom_data(j, customs[idx[j]])
+			if not tris.is_empty():
+				tri_sum += tris[idx[j]]
 			lo = lo.min(t.origin)
 			hi = hi.max(t.origin)
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = mm
+		if not tris.is_empty():
+			# Треугольников куска без контура (хвойные: только формы своих экземпляров).
+			node.set_meta(&"triangles", tri_sum)
 		if n > 0:
 			var half := Vector3.ONE * pad
 			mm.custom_aabb = AABB(lo - half, (hi - lo) + half * 2.0)

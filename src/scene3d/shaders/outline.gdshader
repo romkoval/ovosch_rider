@@ -4,6 +4,7 @@
 shader_type spatial;
 render_mode cull_front, unshaded, shadows_disabled;
 #include "res://src/scene3d/shaders/render_look.gdshaderinc"
+#include "res://src/scene3d/shaders/conifer_form.gdshaderinc"
 
 uniform vec4 outline_color : source_color = vec4(0.07, 0.06, 0.09, 1.0);
 uniform float outline_width = 0.012;
@@ -14,7 +15,7 @@ uniform float albedo_darken : hint_range(0.0, 1.0) = 0.35;
 varying vec3 v_col;
 
 void vertex() {
-	if (COLOR.a < 0.01) {
+	if (COLOR.a < 0.01 || conifer_hidden(UV2, INSTANCE_CUSTOM)) {
 		VERTEX = vec3(0.0);
 	} else {
 		VERTEX += NORMAL * outline_width * COLOR.a;
