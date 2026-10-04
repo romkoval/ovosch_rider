@@ -58,7 +58,7 @@ T-086: «Шрифт Inter 4.1 — SIL Open Font License 1.1 (© The Inter Projec
 источником. До прихода модели в сцене — временная модель TA с тем же скелетом (своя, строк
 не требует).
 
-Пакет художнику `assets/rider/reference/` (T-106a1: `bike_reference.glb`,
+Эталонный пакет для подготовки `rider.glb` — `assets/rider/reference/` (T-106a1: `bike_reference.glb`,
 `rider_rig_reference.glb`, атласы регионов) — свои файлы, собранные сценарием
 `scripts/rider_artist_kit.sh` из кода проекта; каталог с `.gdignore`, в сборку не входит, строк
 не требует.
