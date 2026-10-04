@@ -205,6 +205,7 @@ func test_stop_requires_confirmation() -> void:
 	_advance(s, 4.0)
 	assert_true(s.request_stop())
 	assert_true(s.is_stop_confirmation_pending(), "REQ-WRK-05 крит. 4: диалог показан")
+	assert_eq(s.pause_overlay().view(), PauseOverlay.View.CONFIRM, "карточка подтверждения")
 	assert_eq(s.session().get_state(), WorkoutSession.State.RUNNING, "до подтверждения не остановлено")
 	s.cancel_stop()
 	assert_false(s.is_stop_confirmation_pending())
@@ -222,11 +223,11 @@ func test_erg_button_toggles_mode_shows_resistance_row_and_sends_commands() -> v
 	var s := _screen()
 	_advance(s, 2.0)
 	assert_false(s.is_resistance_row_visible(), "REQ-WRK-04: ползунок скрыт при ERG")
-	assert_eq((s.get_node("%ErgButton") as Button).text, "ERG on")
-	s.toggle_erg()
+	assert_eq(s.toolbar().button(&"erg").text, "ERG on")
+	s.toolbar().button(&"erg").pressed.emit()
 	assert_false(s.session().erg_enabled, "REQ-WRK-03 крит. 1: одно нажатие")
 	assert_true(s.is_resistance_row_visible())
-	assert_eq((s.get_node("%ErgButton") as Button).text, "ERG off")
+	assert_eq(s.toolbar().button(&"erg").text, "ERG off")
 	assert_eq(_cmds(FakeTrainer.CMD_ERG).back()["value"], false)
 	assert_eq(_cmds(FakeTrainer.CMD_RESISTANCE).back()["value"], 50, "REQ-WRK-03 крит. 2")
 	s.toggle_erg()
@@ -244,7 +245,7 @@ func test_resistance_plus_minus_in_steps_of_5_and_profile_update() -> void:
 	s.adjust_resistance(5)
 	assert_eq(s.session().resistance_level, 55)
 	assert_eq(_cmds(FakeTrainer.CMD_RESISTANCE).back()["value"], 55, "REQ-WRK-04 крит. 2")
-	assert_eq((s.get_node("%ResistanceLabel") as Label).text, "Resistance 55 %")
+	assert_eq(s.toolbar().value_text(&"resistance"), "55 %")
 	s.adjust_resistance(-5)
 	s.adjust_resistance(-5)
 	assert_eq(s.session().resistance_level, 45)
@@ -259,21 +260,23 @@ func test_intensity_plus_minus_changes_target() -> void:
 	assert_almost_eq(s.session().intensity(), 1.05, 1e-9)
 	assert_eq(s.target_text(), "105 W", "REQ-WRK-07 крит. 2, 4")
 	assert_eq(_cmds(FakeTrainer.CMD_TARGET_POWER).back()["value"], 105, "крит. 3: новая цель ушла")
-	assert_eq((s.get_node("%IntensityLabel") as Label).text, "Intensity 105 %")
+	assert_eq(s.toolbar().value_text(&"intensity"), "105 %")
 	s.adjust_intensity(-0.05)
 	s.adjust_intensity(-0.05)
 	assert_eq(s.target_text(), "95 W")
 
 
-func test_progress_bar_has_segments_and_cursor() -> void:
+## REQ-HUD-07 → HUD-10: роль полосы прогресса у графика плана — та же модель сегментов.
+func test_chart_plan_model_has_segments_and_cursor() -> void:
 	var s := _screen()
 	_advance(s, 90.0)
-	var bar := s.progress_bar()
-	assert_eq(bar.segments().size(), 3, "REQ-HUD-07 крит. 1")
-	assert_almost_eq(bar.cursor(), 0.5, 1e-9)
-	assert_eq(bar.segments()[0]["status"], HudModel.SEGMENT_DONE)
-	assert_eq(bar.segments()[2]["status"], HudModel.SEGMENT_CURRENT)
+	var model := s.chart().plan_model()
+	assert_eq(model.segments().size(), 3, "REQ-HUD-07 крит. 1")
+	assert_almost_eq(model.cursor_fraction(), 0.5, 1e-9)
+	assert_eq(model.segments()[0]["status"], PlanChartModel.STATUS_DONE)
+	assert_eq(model.segments()[2]["status"], PlanChartModel.STATUS_CURRENT)
 	assert_eq(s.hud().progress_segments().size(), 3)
+	assert_almost_eq(s.hud().cursor(), model.cursor_fraction(), 1e-9, "одна модель: курсор HUD = курсор графика")
 
 
 func test_cue_label_shows_and_hides() -> void:

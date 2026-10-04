@@ -16,7 +16,7 @@ const INTERVALS_FIXTURES: String = "res://tests/fixtures/intervals/"
 const TODAY: String = "2026-10-02"
 const KEY: String = "plan-cards-key-0001"
 const FTP: int = 250
-const PLAN_FILES: Array[String] = ["res://src/ui/plan/plan_screen.tscn", "res://src/ui/plan/plan_screen.gd", "res://src/ui/plan/workout_chart.gd"]
+const PLAN_FILES: Array[String] = ["res://src/ui/plan/plan_screen.tscn", "res://src/ui/plan/plan_screen.gd"]
 
 var _dir: String
 var _repo: ProfileRepository

@@ -183,9 +183,14 @@ func test_grade_wedge_color_and_height() -> void:
 	for g: float in [-8.0, -3.0, 0.0, 1.5, 3.0, 6.4, 8.0, 12.0]:
 		p.set_state(_state({"grade_pct": g}))
 		assert_eq(p.grade_wedge_color(), UiTokens.grade_color(g), "клин цвета палитры уклона (%s)" % g)
+		# Клин заполняет рамку при |g| ≥ 8 %, ниже — пропорционально (T-084, `WEDGE_FULL_GRADE_PCT`).
 		var expected: float = HudMetricPanel.WEDGE_MIN_HEIGHT if g == 0.0 else \
-				clampf(32.0 * 2.0 * absf(g) / 100.0, HudMetricPanel.WEDGE_MIN_HEIGHT, 14.0)
-		assert_almost_eq(p.grade_wedge_height(), expected, 1e-6, "наклон ×2 в рамке 32 × 14 (%s)" % g)
+				clampf(14.0 * absf(g) / 8.0, HudMetricPanel.WEDGE_MIN_HEIGHT, 14.0)
+		assert_almost_eq(p.grade_wedge_height(), expected, 1e-6, "высота клина в рамке 32 × 14 (%s)" % g)
+	p.set_state(_state({"grade_pct": 8.0}))
+	assert_almost_eq(p.grade_wedge_height(), 14.0, 1e-6, "8 %% — клин во всю рамку")
+	p.set_state(_state({"grade_pct": 4.0}))
+	assert_almost_eq(p.grade_wedge_height(), 7.0, 1e-6, "4 %% — половина рамки")
 	var wedge: Control = p.free_ride_nodes()["grade_wedge"]
 	assert_eq(wedge.size, Vector2(32, 14))
 	assert_true(Rect2(Vector2.ZERO, p.grade_card().size).encloses(Rect2(wedge.position, wedge.size)), "клин внутри карточки")

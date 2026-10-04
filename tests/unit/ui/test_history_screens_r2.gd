@@ -353,7 +353,6 @@ func test_req_frd_07_c6_free_ride_card_without_target_with_altitude_profile() ->
 	assert_string_contains(d.meta_text(), "Средняя цель плана: — Вт")
 	assert_string_contains(d.meta_text(), tr("track.flat.name"), "трасса в параметрах заезда")
 	assert_false(d.series().has_data(RideSeries.TARGET), "серии цели нет")
-	assert_false((d.get_node("%PowerChart") as RideChart).has_target(), "график без серии цели")
 	assert_false(d.effort_chart().has_plan(), "общий график — без плана")
 	assert_eq(d.effort_chart().mode, HudChart.Mode.WINDOW)
 	assert_gt(EffortSeries.point_count(d.effort_chart().effort_series().power_runs(0.0, 1200.0, 800, 1000.0)), 0, "линия мощности есть")

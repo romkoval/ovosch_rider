@@ -10,7 +10,8 @@ extends GutTest
 const SCENE: String = "res://src/ui/settings/settings_screen.tscn"
 const MAIN_SCENE: String = "res://src/app/main.tscn"
 const ATHLETE_FIXTURE: String = "res://tests/fixtures/intervals/athlete.json"
-const CSV_PATH: String = "res://assets/i18n/strings.csv"
+## Таблицы переводов: `strings.csv` и файлы по областям `strings_<область>.csv` (T-060).
+const CSV_DIR: String = "res://assets/i18n/"
 const SECRET: String = "SECRETKEY-q7w8e9r0t1y2"
 const ATHLETE_ID: String = "i12345"
 ## Префикс сообщений вспомогательного теста к критерию [ручная проверка] (REQ-INF-04 крит. 3).
@@ -40,17 +41,23 @@ var _pm: BlePowerMeter = null
 
 
 func before_all() -> void:
-	var f := FileAccess.open(CSV_PATH, FileAccess.READ)
-	var header := f.get_csv_line()
-	while not f.eof_reached():
-		var line := f.get_csv_line()
-		if line.size() < header.size() or line[0].is_empty():
-			continue
-		var row: Dictionary = {}
-		for i in range(1, header.size()):
-			row[header[i]] = line[i]
-		_csv[line[0]] = row
-	f.close()
+	var files: Array[String] = []
+	for name in DirAccess.get_files_at(CSV_DIR):
+		if name.begins_with("strings") and name.ends_with(".csv"):
+			files.append(CSV_DIR + name)
+	assert_true(files.has(CSV_DIR + "strings.csv"), "предусловие: strings.csv найден")
+	for path in files:
+		var f := FileAccess.open(path, FileAccess.READ)
+		var header := f.get_csv_line()
+		while not f.eof_reached():
+			var line := f.get_csv_line()
+			if line.size() < header.size() or line[0].is_empty():
+				continue
+			var row: Dictionary = {}
+			for i in range(1, header.size()):
+				row[header[i]] = line[i]
+			_csv[line[0]] = row
+		f.close()
 
 
 func before_each() -> void:
@@ -738,7 +745,7 @@ func test_i18n_settings_keys_exist_in_csv_with_ru_and_en() -> void:
 			used[m.get_string(1)] = path
 	assert_gt(used.size(), 40, "ключи экрана найдены")
 	for key in used:
-		assert_true(_csv.has(key), "ключ %s (%s) отсутствует в strings.csv" % [key, used[key]])
+		assert_true(_csv.has(key), "ключ %s (%s) отсутствует в strings*.csv" % [key, used[key]])
 		for locale in ["ru", "en"]:
 			assert_false(_csv_text(key, locale).strip_edges().is_empty(), "пустой перевод %s [%s]" % [key, locale])
 

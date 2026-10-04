@@ -280,8 +280,10 @@ func test_req_prf_01_c5_delete_button_disabled_for_last_profile_and_error_transl
 	var state := AppState.new(repo)
 	var s := _standalone_select(repo, state)
 	s.select_index(0)
-	assert_true((s.get_node("%DeleteButton") as Button).disabled, "кнопка удаления недоступна")
-	assert_false((s.get_node("%SelectButton") as Button).disabled)
+	# T-086: удаление — пункт меню «⋯» карточки; у единственного профиля «⋯» нет.
+	assert_eq(s.cards().size(), 1)
+	assert_false(s.cards()[0].menu_button().visible, "удаление недоступно: у последнего профиля нет «⋯»")
+	assert_false(s.cards()[0].disabled, "выбор карточкой доступен")
 	assert_true(s.request_delete(), "даже если дошли до подтверждения —")
 	assert_eq(s.confirm_delete(), ProfileRepository.ERR_LAST_PROFILE)
 	assert_eq(s.error_text(), "The last profile cannot be deleted")
@@ -298,12 +300,15 @@ func test_req_prf_01_c5_after_deleting_down_to_one_delete_button_becomes_disable
 	repo.create("Alice")
 	repo.create("Bob")
 	var s := _standalone_select(repo, AppState.new(repo))
-	s.select_index(1)
-	assert_false((s.get_node("%DeleteButton") as Button).disabled)
-	s.request_delete()
+	for card in s.cards():
+		assert_true(card.menu_button().visible, "при двух профилях у карточки есть «⋯»")
+	s.open_card_menu(s.cards()[1].profile_id)
+	s.activate_card_menu_item(ProfileSelectScreen.MENU_DELETE_ID)
+	assert_ne(s.pending_delete_id(), "", "«Удалить профиль» в «⋯» — подтверждение")
+	s.card_menu().hide()
 	assert_eq(s.confirm_delete(), "")
-	s.select_index(0)
-	assert_true((s.get_node("%DeleteButton") as Button).disabled)
+	assert_eq(s.cards().size(), 1)
+	assert_false(s.cards()[0].menu_button().visible, "остался один профиль — «⋯» пропало")
 
 
 # ===========================================================================
@@ -420,7 +425,7 @@ func test_req_nfr_08_c1_screen_texts_resolve_to_translations_not_keys_in_both_lo
 	var s := _select_screen(main)
 	var home := _home_screen(main)
 	var labelled: Array[Node] = [
-		s.get_node("%SelectButton"), s.get_node("%CreateButton"), s.get_node("%DeleteButton"),
+		s.create_card(),
 		s.get_node("%EmptyHint"), s.get_node("%SaveButton"), s.get_node("%CancelButton"),
 		home.get_node("%WorkoutButton"), home.get_node("%HistoryButton"), home.get_node("%SettingsButton"),
 		home.get_node("%DevButton"), home.get_node("%SwitchProfileButton"),
@@ -432,9 +437,12 @@ func test_req_nfr_08_c1_screen_texts_resolve_to_translations_not_keys_in_both_lo
 			assert_false(shown.begins_with("ui."), "%s: «%s» не переведён в %s" % [node.name, shown, locale])
 			assert_false(shown.is_empty())
 	TranslationServer.set_locale("ru")
-	assert_eq((s.get_node("%SelectButton") as Button).tr("ui.profile_select.select"), "Выбрать")
+	s.refresh()
+	assert_eq(s.cards()[0].name_text(), "Alice")
+	assert_string_contains(s.cards()[0].stats_text(), "FTP 200 Вт")
 	TranslationServer.set_locale("en")
-	assert_eq((s.get_node("%SelectButton") as Button).tr("ui.profile_select.select"), "Select")
+	s.refresh()
+	assert_string_contains(s.cards()[0].stats_text(), "FTP 200 W")
 
 
 func test_req_nfr_08_c3_list_items_and_home_label_follow_locale() -> void:
@@ -449,12 +457,13 @@ func test_req_nfr_08_c3_list_items_and_home_label_follow_locale() -> void:
 	var home: HomeScreen = load(HOME_SCENE).instantiate()
 	home.setup(repo, state)
 	add_child_autofree(home)
-	assert_eq((s.get_node("%ProfileList") as ItemList).get_item_text(0), "Alice — FTP 250 W")
+	assert_eq(s.cards()[0].name_text(), "Alice")
+	assert_string_contains(s.cards()[0].stats_text(), "FTP 250 W")
 	assert_eq(home.active_profile_text(), "Profile: Alice")
 	TranslationServer.set_locale("ru")
 	s.refresh()
 	home.refresh()
-	assert_eq((s.get_node("%ProfileList") as ItemList).get_item_text(0), "Alice — FTP 250 Вт")
+	assert_string_contains(s.cards()[0].stats_text(), "FTP 250 Вт")
 	assert_eq(home.active_profile_text(), "Профиль: Alice")
 
 

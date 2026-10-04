@@ -100,13 +100,15 @@ func test_req_uix_04_c1_android_back_walks_the_same_path() -> void:
 	var main := _main()
 	_press(main.screen_node(AppState.Screen.HOME), "WorkoutButton")
 	main.app_state.navigate(AppState.Screen.DEVICES)
+	assert_false(get_tree().quit_on_go_back, "не на корне «назад» перехватывает приложение")
 	_android_back()
 	assert_eq(_screen(main), "plan", "Android «назад»: устройства → выбор тренировки")
 	_android_back()
 	assert_eq(_screen(main), "home")
-	_android_back()
-	assert_eq(_screen(main), "home", "на главном Android «назад» приложение не закрывает и экран не меняет")
-	assert_false(get_tree().quit_on_go_back, "движок не закрывает приложение по «назад»")
+	# Новая редакция крит. 1 (У-4): на корне «назад» Android не поглощается приложением — движок
+	# сворачивает/закрывает приложение (`quit_on_go_back`); само сворачивание — ручная проверка.
+	assert_true(get_tree().quit_on_go_back, "на главном событие «назад» отдаётся движку")
+	assert_eq(_screen(main), "home", "экран и стек не менялись")
 
 
 func test_req_uix_04_c1_history_settings_devices_back_to_home_by_all_three_ways() -> void:

@@ -45,8 +45,8 @@ func test_empty_repository_opens_create_form_and_disables_buttons() -> void:
 	var s := _screen()
 	assert_eq(s.profile_count(), 0)
 	assert_true(s.is_create_form_open(), "REQ-PRF-05 крит. 3")
-	assert_true((s.get_node("%SelectButton") as Button).disabled)
-	assert_true((s.get_node("%DeleteButton") as Button).disabled)
+	assert_eq(s.cards().size(), 0, "нет карточек — выбирать и удалять нечего")
+	assert_true(s.create_card().visible, "есть «Новый профиль»")
 	assert_true((s.get_node("%EmptyHint") as Label).visible)
 
 
@@ -131,8 +131,8 @@ func test_select_without_selection_does_nothing() -> void:
 	_repo.create("Боб")
 	_state.start()
 	var s := _screen()
-	(s.get_node("%ProfileList") as ItemList).deselect_all()
-	assert_false(s.select_current())
+	# T-086: выбор — только нажатием на карточку; без нажатия экран остаётся на выборе профиля.
+	assert_eq(s.cards().size(), 2)
 	assert_eq(_state.current_screen, AppState.Screen.PROFILE_SELECT)
 
 
@@ -148,7 +148,7 @@ func test_delete_requires_confirmation_and_refuses_last_profile() -> void:
 	assert_eq(_repo.count(), 1)
 	assert_eq(s.profile_count(), 1)
 	s.select_index(0)
-	assert_true((s.get_node("%DeleteButton") as Button).disabled, "последний профиль удалить нельзя")
+	assert_false(s.cards()[0].menu_button().visible, "последний профиль удалить нельзя: «⋯» нет")
 	s.request_delete()
 	assert_eq(s.confirm_delete(), ProfileRepository.ERR_LAST_PROFILE, "REQ-PRF-01 крит. 5")
 	assert_eq(_repo.count(), 1)
@@ -167,8 +167,8 @@ func test_cancel_create_form_hides_it() -> void:
 func test_list_items_are_translated_with_ftp() -> void:
 	_repo.create("Алиса")
 	var s := _screen()
-	var list: ItemList = s.get_node("%ProfileList")
-	assert_eq(list.get_item_text(0), "Алиса — FTP 200 W")
+	assert_eq(s.cards()[0].name_text(), "Алиса")
+	assert_string_contains(s.cards()[0].stats_text(), "FTP 200 W")
 
 
 func test_home_screen_shows_active_profile_and_switches() -> void:

@@ -8,6 +8,9 @@ extends GutTest
 ## REQ-NFR-04 крит. 1, 2; REQ-NFR-08 крит. 1; REQ-DEV-08 крит. 1–4 и REQ-DEV-07 крит. 1
 ## (экран + сессия на `TrainerFactory.create_ble(StubBleBridge)`).
 ## Сцены — headless через `add_child_autofree`; время — подставленные часы тикера.
+## После T-078 органы управления — панель инструментов `toolbar()` (`HudToolbar`, режим «план»)
+## и карточка паузы/подтверждения `pause_overlay()` (`PauseOverlay`); HUD-07 — модель графика
+## `chart().plan_model()` (полосы прогресса на экране нет, HUD-07 «Связь с HUD-10»).
 
 const SCENE: String = "res://src/ui/workout/workout_screen.tscn"
 const MAIN_SCENE: String = "res://src/app/main.tscn"
@@ -115,6 +118,28 @@ func _press(s: Node, unique_name: String) -> void:
 	(s.get_node("%" + unique_name) as Button).pressed.emit()
 
 
+## Кнопка панели инструментов `HudToolbar` (режим «план») по id: `erg`, `intensity_down|up`,
+## `resistance_down|up`, `skip`, `finish`.
+func _tool(s: WorkoutScreen, id: StringName) -> Button:
+	return s.toolbar().button(id)
+
+
+## Нажать кнопку панели инструментов; кнопка должна быть в текущей раскладке панели (её
+## можно нажать), иначе — провал: тест проверяет путь пользователя, а не скрытый узел.
+func _press_tool(s: WorkoutScreen, id: StringName) -> void:
+	var b := _tool(s, id)
+	assert_not_null(b, "кнопка панели «%s» есть" % id)
+	if b == null:
+		return
+	assert_true(s.toolbar().visible_buttons().has(b), "кнопка «%s» есть в раскладке панели" % id)
+	b.pressed.emit()
+
+
+## Подпись узла с автопереводом (ключ в `text`) — как её видит пользователь.
+static func _shown(node: Control) -> String:
+	return node.tr(str(node.get("text")))
+
+
 func _cmds(type: String, since: int = 0) -> Array:
 	var out: Array = []
 	for i in range(since, _trainer.commands.size()):
@@ -155,7 +180,7 @@ func test_req_hud_01_c1_target_text_with_unit_in_both_locales_and_intensity() ->
 	s.refresh()
 	assert_eq(s.target_text(), "100 Вт")
 	TranslationServer.set_locale("en")
-	_press(s, "IntensityPlus")
+	_press_tool(s, &"intensity_up")
 	assert_eq(s.target_text(), "105 W", "множитель 105 %% отражён в цели (WRK-07 крит. 4)")
 	_profile.intensity_default = 110
 	var s2 := _screen()
@@ -365,35 +390,56 @@ func test_req_hud_06_countdown_text_accent_in_last_5s_and_new_duration_on_transi
 
 
 # ===========================================================================
-# REQ-HUD-07 — полоса прогресса
+# REQ-HUD-07 — модель сегментов (на экране её роль у графика HUD-10, связь HUD-07 → HUD-10)
 # ===========================================================================
 
-func test_req_hud_07_progress_bar_segments_cursor_statuses_and_intensity() -> void:
+## Сегменты графика на экране и модель HUD совпадают (одна модель сегментов, HUD-07 «Связь с HUD-10»).
+## Курсор не сравнивается: `HudModel.cursor()` — курсор скрытой полосы (прошедшее / длительность),
+## на экране курсор — у графика (позиция в плане, HUD-07.1 после У-1), он проверяется ниже.
+func _assert_one_model(s: WorkoutScreen, msg: String) -> void:
+	var chart := s.chart().plan_model().segments()
+	var hud := s.hud().progress_segments()
+	assert_eq(chart.size(), hud.size(), "%s: число сегментов графика = модели HUD" % msg)
+	for i in mini(chart.size(), hud.size()):
+		for key in ["duration_sec", "start_watts", "zone_token", "status"]:
+			assert_eq(str(chart[i][key]), str(hud[i][key]), "%s: сегмент %d, %s" % [msg, i, key])
+
+
+func test_req_hud_07_chart_model_segments_cursor_statuses_and_intensity() -> void:
 	var s := _screen()
-	var bar := s.progress_bar()
-	assert_not_null(bar)
-	var segs := bar.segments()
+	var model := s.chart().plan_model()
+	assert_not_null(model, "график плана на экране построен")
+	var segs := model.segments()
 	assert_eq(segs.size(), 3)
 	var total := 0
 	for seg in segs:
 		total += int(seg["duration_sec"])
 	assert_eq(total, 180)
-	assert_eq(segs[0]["status"], HudModel.SEGMENT_CURRENT)
+	assert_eq(segs[0]["status"], PlanChartModel.STATUS_CURRENT)
 	assert_eq(segs[1]["start_watts"], 200)
 	assert_eq(segs[1]["zone_token"], "z4")
-	assert_eq(bar.cursor(), 0.0)
+	assert_eq(model.cursor_fraction(), 0.0)
+	_assert_one_model(s, "старт")
 	_advance(s, 45.0)
-	assert_almost_eq(bar.cursor(), 0.25, 1e-9, "45 / 180")
-	_press(s, "IntensityPlus")
-	_press(s, "IntensityPlus")
-	segs = bar.segments()
+	assert_almost_eq(model.cursor_fraction(), 0.25, 1e-9, "45 / 180")
+	var field := s.chart().field_rect()
+	assert_almost_eq(s.chart().cursor_x(), field.position.x + 0.25 * field.size.x, 1.0, "курсор на графике ±1 px")
+	_press_tool(s, &"intensity_up")
+	_press_tool(s, &"intensity_up")
+	segs = model.segments()
 	assert_eq(segs[1]["start_watts"], 220, "профиль плана отражает множитель 110 %% (WRK-07 крит. 4)")
 	assert_eq(segs[1]["zone_token"], "z5")
-	_press(s, "SkipButton")
-	segs = bar.segments()
-	assert_eq(segs[0]["status"], HudModel.SEGMENT_SKIPPED)
-	assert_eq(segs[1]["status"], HudModel.SEGMENT_CURRENT)
-	assert_eq(segs[2]["status"], HudModel.SEGMENT_UPCOMING)
+	_assert_one_model(s, "множитель 110 %%")
+	_press_tool(s, &"skip")
+	segs = model.segments()
+	assert_eq(segs[0]["status"], PlanChartModel.STATUS_SKIPPED)
+	assert_eq(segs[1]["status"], PlanChartModel.STATUS_CURRENT)
+	assert_eq(segs[2]["status"], PlanChartModel.STATUS_UPCOMING)
+	assert_almost_eq(model.cursor_fraction(), 60.0 / 180.0, 1e-9, "после пропуска курсор — в позиции плана (начало шага 2)")
+	_assert_one_model(s, "после пропуска")
+	_advance(s, 10.0)
+	assert_almost_eq(model.cursor_fraction(), 70.0 / 180.0, 1.0 / 180.0, "позиция плана 60 + 10 с (±1 с плана)")
+	_assert_one_model(s, "через 10 с после пропуска")
 
 
 # ===========================================================================
@@ -421,40 +467,58 @@ func test_req_hud_08_cue_label_visible_from_step_start_hidden_after_10s_and_trun
 
 
 # ===========================================================================
-# REQ-WRK-03 крит. 1 — ERG одной кнопкой, ряд сопротивления только при выкл.
+# REQ-WRK-03 крит. 1 — ERG одной кнопкой панели инструментов, ряд сопротивления только при выкл.
 # ===========================================================================
 
 func test_req_wrk_03_c1_erg_button_toggles_mode_row_visibility_and_commands() -> void:
 	var s := _screen()
 	_advance(s, 5.0)
-	assert_eq((s.get_node("%ErgButton") as Button).text, "ERG on")
+	assert_eq(_tool(s, &"erg").text, "ERG on")
 	assert_false(s.is_resistance_row_visible(), "при ERG ряд сопротивления скрыт")
+	assert_false(s.toolbar().visible_buttons().has(_tool(s, &"resistance_up")), "кнопок сопротивления на панели нет")
 	var before := _trainer.commands.size()
-	_press(s, "ErgButton")
+	_press_tool(s, &"erg")
 	assert_false(s.session().erg_enabled)
-	assert_eq((s.get_node("%ErgButton") as Button).text, "ERG off")
+	assert_eq(_tool(s, &"erg").text, "ERG off")
 	assert_true(s.is_resistance_row_visible(), "при выкл. ERG ряд виден")
 	assert_eq(_types(before), ["erg", "resistance"])
 	assert_eq(_cmds("resistance", before), [[50, 5.0]], "уровень профиля, та же секунда")
 	before = _trainer.commands.size()
-	_press(s, "ErgButton")
+	_press_tool(s, &"erg")
 	assert_true(s.session().erg_enabled)
 	assert_false(s.is_resistance_row_visible())
 	assert_eq(_types(before), ["erg", "target_power"])
 	assert_eq(_cmds("target_power", before), [[100, 5.0]])
 
 
-func test_req_wrk_03_edge_erg_button_on_pause_is_deferred_until_resume() -> void:
+## Горячая клавиша E — то же одно действие (`hud.md` п. 10.3).
+func test_req_wrk_03_c1_hotkey_e_toggles_erg_once() -> void:
+	var s := _screen()
+	_advance(s, 2.0)
+	var before := _trainer.commands.size()
+	assert_true(s.toolbar().trigger(HudToolbar.ACTION_TOGGLE))
+	assert_false(s.session().erg_enabled, "E — ERG выкл")
+	assert_eq(_types(before), ["erg", "resistance"])
+	assert_true(s.toolbar().trigger(HudToolbar.ACTION_TOGGLE))
+	assert_true(s.session().erg_enabled, "E ещё раз — ERG вкл")
+
+
+## На паузе панель инструментов убрана (паузой ведает карточка, `hud.md` п. 10.2) — переключение
+## ERG на паузе доступно только через API экрана; команды откладываются до возобновления.
+func test_req_wrk_03_edge_erg_toggle_on_pause_is_deferred_until_resume() -> void:
 	var s := _screen()
 	_advance(s, 5.0)
 	_press(s, "PauseButton")
+	assert_true(s.toolbar().is_paused(), "на паузе панель инструментов молчит")
+	assert_false(s.toolbar().is_shown(), "и не показана")
 	var before := _trainer.commands.size()
-	_press(s, "ErgButton")
+	s.toggle_erg()
 	assert_false(s.session().erg_enabled, "флаг переключился сразу")
 	assert_true(s.is_resistance_row_visible(), "и UI это показывает")
 	_advance(s, 3.0)
 	assert_eq(_trainer.commands.size(), before, "на паузе команд нет")
-	_press(s, "PauseButton") # resume
+	s.pause_overlay().resume_button().pressed.emit()
+	assert_eq(s.session().get_state(), WorkoutSession.State.RUNNING, "«Продолжить» на карточке паузы")
 	assert_eq(_types(before), ["erg", "resistance"], "отложенное переключение ушло при возобновлении")
 
 
@@ -468,67 +532,78 @@ func test_req_wrk_04_c1_resistance_buttons_step_5_snap_command_and_profile_updat
 	var updated: Array[Profile] = []
 	s.profile_updated.connect(func(p: Profile) -> void: updated.append(p))
 	assert_eq(s.session().resistance_level, 50, "52 из профиля снапнуто к 50 при старте")
-	_press(s, "ErgButton") # ERG выкл → ряд виден, команды уходят
+	_press_tool(s, &"erg") # ERG выкл → кнопки сопротивления на панели, команды уходят
 	var before := _trainer.commands.size()
-	_press(s, "ResistancePlus")
+	_press_tool(s, &"resistance_up")
 	assert_eq(s.session().resistance_level, 55)
-	assert_eq(_label(s, "ResistanceLabel").text, "Resistance 55 %")
+	assert_eq(s.toolbar().value_text(&"resistance"), "55 %")
 	assert_eq(_cmds("resistance", before), [[55, 0.0]], "команда в ту же секунду")
 	assert_eq(updated.size(), 1)
 	assert_eq(_profile.resistance_level_default, 55, "профиль обновлён для сохранения")
-	_press(s, "ResistanceMinus")
-	_press(s, "ResistanceMinus")
+	_press_tool(s, &"resistance_down")
+	_press_tool(s, &"resistance_down")
 	assert_eq(s.session().resistance_level, 45)
 	assert_eq(_profile.resistance_level_default, 45)
 	for i in 15:
-		_press(s, "ResistancePlus")
+		_press_tool(s, &"resistance_up")
 	assert_eq(s.session().resistance_level, 100, "не выше 100")
 	var n := updated.size()
-	_press(s, "ResistancePlus")
+	_press_tool(s, &"resistance_up")
 	assert_eq(updated.size(), n, "на границе без изменения — без сигнала")
 	for i in 25:
-		_press(s, "ResistanceMinus")
+		_press_tool(s, &"resistance_down")
 	assert_eq(s.session().resistance_level, 0, "не ниже 0")
+	assert_eq(s.toolbar().value_text(&"resistance"), "0 %")
 	TranslationServer.set_locale("ru")
 	s.refresh()
-	assert_eq(_label(s, "ResistanceLabel").text, "Сопротивление 0 %")
+	assert_eq(s.toolbar().value_text(&"resistance"), "0 %")
+	assert_eq(_tool(s, &"erg").text, "ERG выкл", "подписи панели — на языке интерфейса")
 
 
-func test_req_wrk_04_c1_resistance_change_in_erg_is_stored_and_profile_updated_but_not_sent() -> void:
+## Крит. 3: при ERG кнопок сопротивления на панели нет; уровень, изменённый в ERG (сигнал панели),
+## сохраняется, но на станок уходит только при выключении ERG.
+func test_req_wrk_04_c3_resistance_change_in_erg_is_stored_and_profile_updated_but_not_sent() -> void:
 	var s := _screen()
+	assert_false(s.toolbar().visible_buttons().has(_tool(s, &"resistance_up")), "в ERG кнопок сопротивления нет")
 	var before := _trainer.commands.size()
-	_press(s, "ResistancePlus")
+	s.toolbar().resistance_step_requested.emit(5)
 	assert_eq(s.session().resistance_level, 55)
 	assert_eq(_profile.resistance_level_default, 55)
 	assert_eq(_trainer.commands.size(), before, "при ERG на станок не уходит")
-	_press(s, "ErgButton")
+	_press_tool(s, &"erg")
 	assert_eq(_cmds("resistance", before), [[55, 0.0]], "уходит при выключении ERG")
 
 
 # ===========================================================================
-# REQ-WRK-05 крит. 4 — стоп только через подтверждение
+# REQ-WRK-05 крит. 4 — стоп только через подтверждение (карточка `PauseOverlay`)
 # ===========================================================================
 
 func test_req_wrk_05_c4_stop_requires_confirmation_cancel_does_nothing_confirm_marks_early() -> void:
 	var s := _screen()
 	var finished: Array[WorkoutSession] = []
 	s.session_finished.connect(func(ses: WorkoutSession) -> void: finished.append(ses))
+	var overlay := s.pause_overlay()
 	_advance(s, 20.0)
-	_press(s, "StopButton")
+	_press_tool(s, &"finish")
 	assert_true(s.is_stop_confirmation_pending())
+	assert_eq(overlay.view(), PauseOverlay.View.CONFIRM, "карточка подтверждения показана")
 	assert_eq(s.session().get_state(), WorkoutSession.State.RUNNING, "без подтверждения тренировка идёт")
-	assert_eq((s.get_node("%StopDialog") as ConfirmationDialog).tr("ui.workout.stop_confirm"), "End the workout early? The ride will be saved as ended early.")
+	assert_eq(_shown(overlay.get_node("%ConfirmTitle") as Label), "End the ride?")
+	assert_eq(_shown(overlay.get_node("%ConfirmBody") as Label), "The workout will be saved as ended early.")
 	s.cancel_stop()
 	assert_false(s.is_stop_confirmation_pending())
+	assert_eq(overlay.view(), PauseOverlay.View.HIDDEN, "отмена убрала карточку")
 	_advance(s, 5.0)
 	assert_eq(s.session().get_state(), WorkoutSession.State.RUNNING)
 	assert_eq(s.session().samples.size(), 25, "отмена ничего не сделала")
 	assert_eq(finished, [])
-	_press(s, "StopButton")
-	(s.get_node("%StopDialog") as ConfirmationDialog).canceled.emit()
-	assert_false(s.is_stop_confirmation_pending(), "отмена через диалог")
-	_press(s, "StopButton")
-	(s.get_node("%StopDialog") as ConfirmationDialog).confirmed.emit()
+	_press_tool(s, &"finish")
+	overlay.cancel_button().pressed.emit()
+	assert_false(s.is_stop_confirmation_pending(), "отмена кнопкой карточки")
+	assert_eq(overlay.view(), PauseOverlay.View.HIDDEN)
+	assert_eq(s.session().get_state(), WorkoutSession.State.RUNNING)
+	_press_tool(s, &"finish")
+	overlay.confirm_button().pressed.emit()
 	assert_eq(s.session().get_state(), WorkoutSession.State.FINISHED)
 	assert_true(s.session().metadata()["stopped_early"])
 	assert_eq(s.session().samples.size(), 25, "данные целы")
@@ -543,14 +618,23 @@ func test_req_wrk_05_c4_stop_requires_confirmation_cancel_does_nothing_confirm_m
 	assert_true(s.summary_text().contains("(завершена досрочно)"))
 
 
-func test_req_wrk_05_c4_stop_from_pause_works_and_plan_completion_is_not_early() -> void:
+func test_req_wrk_05_c4_stop_from_pause_card_works_and_plan_completion_is_not_early() -> void:
 	var s := _screen()
+	var overlay := s.pause_overlay()
 	_advance(s, 10.0)
 	_press(s, "PauseButton")
-	assert_true(s.request_stop())
-	s.confirm_stop()
+	assert_eq(overlay.view(), PauseOverlay.View.PAUSE, "карточка паузы")
+	overlay.finish_button().pressed.emit()
+	assert_eq(overlay.view(), PauseOverlay.View.CONFIRM, "«Завершить» на паузе — подтверждение")
+	assert_eq(s.session().get_state(), WorkoutSession.State.PAUSED, "до подтверждения — пауза")
+	overlay.cancel_button().pressed.emit()
+	assert_eq(overlay.view(), PauseOverlay.View.PAUSE, "«Отмена» возвращает к карточке паузы")
+	assert_eq(s.session().get_state(), WorkoutSession.State.PAUSED)
+	overlay.finish_button().pressed.emit()
+	overlay.confirm_button().pressed.emit()
 	assert_eq(s.session().get_state(), WorkoutSession.State.FINISHED)
 	assert_true(s.session().metadata()["stopped_early"])
+	assert_true(s.is_summary_visible())
 	var s2 := _screen(_plan([WorkoutStep.percent(5, 50.0)]))
 	_advance(s2, 5.0)
 	assert_true(s2.is_summary_visible())
@@ -559,38 +643,66 @@ func test_req_wrk_05_c4_stop_from_pause_works_and_plan_completion_is_not_early()
 
 
 # ===========================================================================
-# REQ-WRK-06 крит. 2 / REQ-WRK-07 крит. 1 — пропуск и интенсивность с кнопок
+# REQ-WRK-06 крит. 2 / REQ-WRK-07 крит. 1 — пропуск и интенсивность с панели инструментов
 # ===========================================================================
 
 func test_req_wrk_06_c2_skip_button_sends_new_target_same_second_and_updates_step_label() -> void:
 	var s := _screen()
 	_advance(s, 12.5)
 	var before := _trainer.commands.size()
-	_press(s, "SkipButton")
+	_press_tool(s, &"skip")
 	assert_eq(_cmds("target_power", before), [[200, 12.5]], "цель нового шага — немедленно")
 	assert_eq(s.step_text(), "Step 2/3")
 	assert_eq(s.target_text(), "200 W")
 	assert_eq(s.countdown_text(), "00:30")
 
 
+## «Пропустить шаг» на карточке паузы (только план): шаг сменён, станку на паузе ничего не уходит,
+## цель нового шага — при возобновлении (WRK-05 крит. 5, WRK-06 крит. 2).
+func test_req_wrk_06_c2_skip_from_pause_card_and_target_on_resume() -> void:
+	var s := _screen()
+	_advance(s, 12.0)
+	_press(s, "PauseButton")
+	var before := _trainer.commands.size()
+	assert_true(s.pause_overlay().visible_buttons().has(s.pause_overlay().skip_button()), "«Пропустить шаг» на карточке")
+	s.pause_overlay().skip_button().pressed.emit()
+	assert_eq(s.step_text(), "Step 2/3")
+	assert_eq(_trainer.commands.size(), before, "на паузе станку ничего")
+	s.pause_overlay().resume_button().pressed.emit()
+	assert_eq(_cmds("target_power", before), [[200, 12.0]], "цель нового шага — при возобновлении")
+
+
 func test_req_wrk_07_c1_intensity_buttons_step_5pct_clamp_and_target_command() -> void:
 	var s := _screen()
 	_advance(s, 7.0)
-	assert_eq(_label(s, "IntensityLabel").text, "Intensity 100 %")
+	assert_eq(s.toolbar().value_text(&"intensity"), "100 %")
 	var before := _trainer.commands.size()
-	_press(s, "IntensityPlus")
-	assert_eq(_label(s, "IntensityLabel").text, "Intensity 105 %")
+	_press_tool(s, &"intensity_up")
+	assert_eq(s.toolbar().value_text(&"intensity"), "105 %")
 	assert_eq(_cmds("target_power", before), [[105, 7.0]], "новая цель в ту же секунду")
 	assert_eq(s.target_text(), "105 W")
 	for i in 20:
-		_press(s, "IntensityPlus")
-	assert_eq(_label(s, "IntensityLabel").text, "Intensity 150 %", "не выше 150")
+		_press_tool(s, &"intensity_up")
+	assert_eq(s.toolbar().value_text(&"intensity"), "150 %", "не выше 150")
 	assert_eq(s.target_text(), "150 W")
 	for i in 40:
-		_press(s, "IntensityMinus")
-	assert_eq(_label(s, "IntensityLabel").text, "Intensity 50 %", "не ниже 50")
+		_press_tool(s, &"intensity_down")
+	assert_eq(s.toolbar().value_text(&"intensity"), "50 %", "не ниже 50")
 	assert_eq(s.target_text(), "50 W")
 	assert_almost_eq(float(s.session().metadata()["intensity"]), 0.5, 1e-9)
+
+
+## Горячие клавиши `+`/`−` и N — те же действия, что кнопки панели.
+func test_req_wrk_07_c1_hotkeys_plus_minus_and_skip() -> void:
+	var s := _screen()
+	_advance(s, 3.0)
+	assert_true(s.toolbar().trigger(HudToolbar.ACTION_PLUS))
+	assert_almost_eq(s.session().intensity(), 1.05, 1e-9, "«+» — +5 %%")
+	assert_true(s.toolbar().trigger(HudToolbar.ACTION_MINUS))
+	assert_true(s.toolbar().trigger(HudToolbar.ACTION_MINUS))
+	assert_almost_eq(s.session().intensity(), 0.95, 1e-9, "«−» дважды — 95 %%")
+	assert_true(s.toolbar().trigger(HudToolbar.ACTION_SKIP))
+	assert_eq(s.step_text(), "Step 2/3", "N — пропуск шага")
 
 
 # ===========================================================================
@@ -619,8 +731,8 @@ func test_req_nfr_04_c1_c2_keep_awake_lifecycle_on_screen() -> void:
 func test_req_nfr_04_c1_stop_and_double_start_release_and_reacquire() -> void:
 	var s := _screen()
 	assert_eq(_keep_calls, [true])
-	_press(s, "StopButton")
-	s.confirm_stop()
+	_press_tool(s, &"finish")
+	s.pause_overlay().confirm_button().pressed.emit()
 	assert_eq(_keep_calls, [true, false], "стоп снимает")
 	assert_true(s.start(), "повторный старт")
 	assert_eq(_keep_calls, [true, false, true])
@@ -656,11 +768,23 @@ func test_req_nfr_08_c1_no_untranslated_keys_on_screen_in_en_and_ru() -> void:
 	assert_eq(s.step_text(), "Шаг 1/3")
 	assert_eq(s.target_text(), "100 Вт")
 	assert_eq((s.get_node("%PauseButton") as Button).text, "Пауза")
-	assert_eq(_label(s, "IntensityLabel").text, "Интенсивность 100 %")
+	assert_eq(_tool(s, &"erg").text, "ERG вкл")
+	assert_eq(s.toolbar().value_text(&"intensity"), "100 %")
+	assert_eq(_tool(s, &"skip").text, "Пропуск")
+	assert_eq(_tool(s, &"finish").text, "Завершить")
 	assert_eq(s.connection_text(), "Станок подключён")
-	var dialog := s.get_node("%StopDialog") as ConfirmationDialog
-	assert_eq(dialog.tr(dialog.ok_button_text), "Стоп")
-	assert_eq(dialog.tr(dialog.cancel_button_text), "Отмена")
+	# Подтверждение досрочного завершения — карточка `PauseOverlay`.
+	_press_tool(s, &"finish")
+	var overlay := s.pause_overlay()
+	assert_eq(_shown(overlay.get_node("%ConfirmTitle") as Label), "Завершить заезд?")
+	assert_eq(_shown(overlay.confirm_button()), "Завершить")
+	assert_eq(_shown(overlay.cancel_button()), "Отмена")
+	var texts_confirm: Array[Dictionary] = []
+	_collect_texts(overlay, texts_confirm)
+	for t in texts_confirm:
+		var shown: String = (t["node"] as Node).tr(str(t["text"]))
+		assert_false(shown.begins_with("ui."), "%s: непереведённый ключ «%s» на карточке подтверждения" % [t["name"], shown])
+	s.cancel_stop()
 	TranslationServer.set_locale("en")
 	s.refresh()
 	assert_eq(s.connection_text(), "Trainer connected")
@@ -786,8 +910,13 @@ func test_edge_start_without_setup_returns_false_and_shows_placeholder() -> void
 	assert_eq(_label(s, "NoSessionLabel").tr(_label(s, "NoSessionLabel").text), "No workout selected")
 	assert_false((s.get_node("%HudRoot") as Control).visible)
 	assert_eq(_keep_calls, [])
-	for b in ["PauseButton", "SkipButton", "StopButton", "ErgButton", "ResistancePlus", "IntensityPlus"]:
-		_press(s, b)
+	_press(s, "PauseButton")
+	for id: StringName in [&"skip", &"finish", &"erg", &"resistance_up", &"intensity_up"]:
+		_tool(s, id).pressed.emit()
+	for action: StringName in [HudToolbar.ACTION_PAUSE, HudToolbar.ACTION_TOGGLE, HudToolbar.ACTION_PLUS, HudToolbar.ACTION_SKIP]:
+		s.toolbar().trigger(action)
+	for b: Button in [s.pause_overlay().resume_button(), s.pause_overlay().skip_button(), s.pause_overlay().finish_button(), s.pause_overlay().confirm_button()]:
+		b.pressed.emit()
 	assert_false(s.request_stop())
 	assert_null(s.session(), "нажатия без сессии безопасны")
 
@@ -856,8 +985,8 @@ func test_main_emulator_workout_button_opens_workout_with_profile_ftp_saves_prof
 	assert_eq(ws.target_text(), "125 W", "50 %% от FTP профиля 250")
 	assert_eq(_keep_calls, [true])
 	# сопротивление → профиль сохранён через main
-	_press(ws, "ErgButton")
-	_press(ws, "ResistancePlus")
+	_press_tool(ws, &"erg")
+	_press_tool(ws, &"resistance_up")
 	assert_eq(ProfileRepository.new(_dir + "profiles/").get_by_id(p.id).resistance_level_default, 55, "уровень сохранён в репозитории")
 	# финиш → хук main.last_finished_session
 	_now_usec += 200_000_000

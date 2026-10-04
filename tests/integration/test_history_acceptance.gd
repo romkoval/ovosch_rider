@@ -83,6 +83,35 @@ func _screen(repo: RideRepository = null) -> HistoryScreen:
 	return s
 
 
+## Общий график карточки (`RideEffortChart`, T-085) вместо скрытых `%PowerChart`/`%HrChart`.
+func _power_points(d: RideDetail) -> int:
+	var series := d.effort_chart().effort_series()
+	return series.raw_points(EffortSeries.SERIES_POWER).size() if series != null else 0
+
+
+func _hr_points(d: RideDetail) -> int:
+	var series := d.effort_chart().effort_series()
+	return series.raw_points(EffortSeries.SERIES_HR).size() if series != null else 0
+
+
+## Точки мощности, которые график отдаёт на отрисовку (прореживание под ширину поля, без зажима).
+func _drawn_power(d: RideDetail) -> PackedVector2Array:
+	var chart := d.effort_chart()
+	var total: float = float(chart.plan_model().total_sec()) if chart.plan_model() != null else float(chart.effort_series().last_time_sec())
+	var width: int = maxi(int(chart.field_rect().size.x), 400)
+	var out := PackedVector2Array()
+	for run in chart.effort_series().runs(EffortSeries.SERIES_POWER, 0.0, total, width, 0.0, 1.0e9):
+		out.append_array(run["points"])
+	return out
+
+
+static func _max_y(points: PackedVector2Array) -> float:
+	var best := -INF
+	for p in points:
+		best = maxf(best, p.y)
+	return best
+
+
 func _ride_dir_exists(profile_id: String, ride_id: String) -> bool:
 	return DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_dir + "rides/").path_join(profile_id).path_join(ride_id))
 
@@ -213,10 +242,13 @@ func test_req_loc_03_c2_card_7200_samples_chart_keeps_sprint_peak() -> void:
 	s.select_index(0)
 	var d := s.detail()
 	assert_lte(d.series().size(), 3600, "≤ 3600 точек")
-	var chart: RideChart = d.get_node("%PowerChart")
-	assert_lte(chart.point_count(), 3600)
-	assert_true(chart.has_target(), "крит. 3: цель поверх мощности")
-	assert_almost_eq(chart.max_value(), 1000.0, 1e-3, "крит. 2: максимум (спринт) виден на графике мощности")
+	# График мощности карточки — общий `RideEffortChart` (T-085): точки, отданные на отрисовку.
+	var chart := d.effort_chart()
+	assert_true(chart.has_plan(), "крит. 3: цель плана под мощностью")
+	var drawn := _drawn_power(d)
+	gut.p("точек мощности на графике: %d, максимум %.0f Вт" % [drawn.size(), _max_y(drawn)])
+	assert_lte(drawn.size(), 3600)
+	assert_almost_eq(_max_y(drawn), 1000.0, 1e-3, "крит. 2: максимум (спринт) виден на графике мощности")
 
 
 func test_req_loc_03_c3_card_target_series_for_free_ride() -> void:
@@ -228,7 +260,7 @@ func test_req_loc_03_c3_card_target_series_for_free_ride() -> void:
 	s.select_index(0)
 	var d := s.detail()
 	assert_eq(d.series().count(RideSeries.TARGET), 90, "серия цели есть и в свободной езде (0)")
-	assert_true((d.get_node("%PowerChart") as RideChart).has_target())
+	assert_true(d.effort_chart().has_plan(), "цель плана под мощностью")
 
 
 func test_req_loc_03_c1_card_edge_ride_without_samples_and_with_one_sample() -> void:
@@ -238,12 +270,12 @@ func test_req_loc_03_c1_card_edge_ride_without_samples_and_with_one_sample() -> 
 	assert_true(s.show_ride(s.summaries()[1].ride_id), "карточка заезда без сэмплов открывается")
 	var d := s.detail()
 	assert_eq(d.series().size(), 0)
-	assert_eq((d.get_node("%PowerChart") as RideChart).point_count(), 0)
+	assert_eq(_power_points(d), 0)
 	assert_string_contains(d.summary_text(), "avg — W", "мощности нет — «—»")
 	assert_true(s.show_ride(s.summaries()[0].ride_id))
 	assert_eq(d.series().points(RideSeries.POWER).size(), 1)
-	assert_eq((d.get_node("%PowerChart") as RideChart).point_count(), 1)
-	assert_eq((d.get_node("%HrChart") as RideChart).point_count(), 1)
+	assert_eq(_power_points(d), 1)
+	assert_eq(_hr_points(d), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +308,7 @@ func test_req_loc_04_c6_card_without_hr_shows_dash_without_errors() -> void:
 	var d := s.detail()
 	assert_string_contains(d.summary_text(), "Heart rate: avg — · max —", "«—» в полях пульса")
 	assert_false(d.summary_text().contains("avg 0 ·"), "не 0 вместо «нет данных»")
-	assert_eq((d.get_node("%HrChart") as RideChart).point_count(), 0, "график пульса пуст, без нулей")
+	assert_eq(_hr_points(d), 0, "график пульса пуст, без нулей")
 	var hbar: ZoneBar = d.get_node("%HrZoneBar")
 	assert_true(not hbar.visible or hbar.total_sec() == 0, "в зонах пульса нет времени без данных пульса (крит. 5)")
 	assert_string_contains(d.summary_text(), "avg 220 W", "мощность при этом показана")

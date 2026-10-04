@@ -88,11 +88,11 @@ func test_android_back_matches_esc_and_returns_to_previous() -> void:
 	main.app_state.navigate(AppState.Screen.DEVICES)
 	_android_back(main)
 	assert_eq(main.app_state.current_screen, AppState.Screen.PLAN, "Android «назад»: устройства → план")
+	assert_false(get_tree().quit_on_go_back, "не на корне «назад» обрабатывает оболочка")
 	_android_back(main)
 	assert_eq(main.app_state.current_screen, AppState.Screen.HOME)
-	_android_back(main)
-	assert_eq(main.app_state.current_screen, AppState.Screen.HOME, "на главном «назад» ничего не делает")
-	assert_false(get_tree().quit_on_go_back, "движок не закрывает приложение сам")
+	# UIX-04 п.1 (У-4): на корне «назад» Android не перехватывается — его отдают движку.
+	assert_true(get_tree().quit_on_go_back, "на главном «назад» — штатное поведение Android (движок)")
 
 
 func test_esc_on_home_and_profile_select_does_nothing() -> void:

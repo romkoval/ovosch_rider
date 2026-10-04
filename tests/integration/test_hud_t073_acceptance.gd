@@ -192,10 +192,12 @@ func _drawing_nodes(root: Node) -> Array[Control]:
 
 
 ## Элементы HUD верхнего уровня (то, что не должно пересекаться): панель, кнопка паузы, фишки статусов,
-## содержимое левого слота, график, панель инструментов, плашка подсказки.
+## список интервалов (левый слот), график, панель инструментов, плашка подсказки или фишка «ДАЛЕЕ».
 func _hud_elements(s: WorkoutScreen) -> Dictionary:
-	var out := {"panel": s.metric_panel(), "pause": s.get_node("%PauseButton"), "list": s.get_node("%StepPlate"),
-		"chart": s.chart_slot(), "toolbar": s.get_node("%Toolbar")}
+	var out := {"panel": s.metric_panel(), "pause": s.get_node("%PauseButton"), "list": s.interval_list(),
+		"chart": s.chart(), "toolbar": s.toolbar()}
+	if s.next_chip().is_shown():
+		out["next"] = s.next_chip()
 	for chip_name in ["TrainerChip", "HrChip", "ModeChip", "IntensityChip"]:
 		var chip := s.get_node("%" + chip_name) as Control
 		if chip.is_visible_in_tree():
