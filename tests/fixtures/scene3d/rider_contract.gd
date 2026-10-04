@@ -28,10 +28,10 @@ const BRIEF_BONES: Dictionary = {
 	"hair_tail.1": ["head", Vector3(0.0, -0.250, 1.390)],
 	"hair_tail.2": ["hair_tail.1", null],
 }
-## Окончание `hair_tail.2` — кончик хвоста в rest (Blender; вердикт game-designer по T-106a2, Г15):
-## хвост от вершины дуги над воротником ложится назад-вниз ≈ 22° к горизонту, вторая кость
-## ≈ 0.092 м, весь хвост ≈ 0.186 м (спека «Причёски»: 0.16–0.20 м). Допуск `HAIR_TAIL_END_TOL_M`.
-const BRIEF_HAIR_TAIL_END := Vector3(0.0, -0.080, 1.395)
+## Окончание `hair_tail.2` — кончик хвоста в rest (Blender; спека «Гонщик» ред. 4.4, бриф ред. 2.4):
+## хвост от вершины дуги над воротником ложится назад-вниз ≈ 28° к горизонту, вторая кость
+## ≈ 0.096 м, весь хвост ≈ 0.190 м (спека «Причёски»: 0.16–0.20 м). Допуск `HAIR_TAIL_END_TOL_M`.
+const BRIEF_HAIR_TAIL_END := Vector3(0.0, -0.080, 1.385)
 const HAIR_TAIL_END_TOL_M: float = 0.005
 ## Сокеты (бриф 5.1): без весов, по ним IK ставит кисти и стопы.
 const BRIEF_SOCKETS: Array[String] = ["grip.L", "grip.R", "cleat.L", "cleat.R", "heel.L", "heel.R"]

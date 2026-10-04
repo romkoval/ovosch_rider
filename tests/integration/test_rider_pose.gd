@@ -28,14 +28,24 @@ const K_LOW: float = 0.35
 const K_HIGH: float = 1.3
 ## Запястье — от линии предплечья (вердикт game-designer по T-106a2, R3).
 const WRIST_MAX_DEG: float = 5.0
-## Хвост в rest (спека «Причёски», вердикт по T-106a2 Г15): длина 0.16–0.20 м; вторая кость
-## 0.092 ± 0.005 м назад-вниз ≈ 22° к горизонту; кончик над джерси с зазором сетка к сетке
-## ≥ 1.3 см — отклонение вниз на предел пружины (4°, ≈ 1.3 см у кончика) не заводит хвост в спину.
+## Хвост в rest (спека «Гонщик» ред. 4.4, «Причёски»): длина 0.16–0.20 м; вторая кость
+## 0.096 ± 0.005 м назад-вниз 28° ± 3° к горизонту. Зазор до джерси — сетка к сетке: у кончика
+## 1.3–2.4 см (номинал ≈ 1.85), контур к контуру ≤ 0.3 см (касание контуров допустимо, просвет
+## фона — дефект); вся сетка хвоста ≥ 1.0 см; отклонение вниз на предел пружины (4° вокруг корня)
+## не заводит хвост в спину.
 const TAIL_LEN_MIN_M: float = 0.16
 const TAIL_LEN_MAX_M: float = 0.20
-const TAIL2_LEN_M: float = 0.092
-const TAIL2_DOWN_DEG: float = 22.0
+const TAIL2_LEN_M: float = 0.096
+const TAIL2_DOWN_DEG: float = 28.0
 const TAIL_TIP_GAP_MIN_M: float = 0.013
+const TAIL_TIP_GAP_MAX_M: float = 0.024
+const TAIL_TIP_OUTLINE_GAP_MAX_M: float = 0.003
+const TAIL_GAP_MIN_M: float = 0.010
+## Корень хвоста с резинкой — вершины `hair_tail.1/2` ближе этого к началу `hair_tail.1`, м: под
+## задним краем шлема у воротника, зазор ≥ 1.0 см к ним не применяется (только «не входит»).
+const TAIL_ROOT_ZONE_M: float = 0.025
+## Пружина хвоста устанавливается за это время от старта каденса; амплитуды сравниваются после, с.
+const TAIL_SETTLE_S: float = 3.0
 ## Кончик хвоста — вершины `hair_tail.2` ближе этого к окончанию кости, м.
 const TAIL_TIP_ZONE_M: float = 0.02
 ## Бюджет треугольников узлов (спека «Состав и бюджет»).
@@ -647,7 +657,8 @@ func test_p18_tail_spring_parameters_in_spec() -> void:
 
 
 ## П.18: при 90, 100, 120 об/мин и k = 1.3 за 60 с хвост в пределах (вбок ±8°, вверх-вниз ±4°,
-## конус 20°), амплитуда за последние 10 оборотов ≤ первых 10 (+2 %); через 3 с после остановки
+## конус 20°), амплитуда за последние 10 оборотов ≤ первых 10 после установления (от 3 с со
+## старта каденса, ред. 4.4) (+2 %); через 3 с после остановки
 ## — ≤ 10 % амплитуды до остановки. Плюс синтетический наклон в повороте ±0.45 рад.
 func test_p18_tail_bounded_stable_and_settles() -> void:
 	var src: Dictionary = RiderContract.POSE_SOURCES[1]
@@ -659,6 +670,7 @@ func test_p18_tail_bounded_stable_and_settles() -> void:
 		r.set_cadence(rpm)
 		var frames: int = 60 * 60
 		var rev_frames: int = int(round(60.0 / float(rpm) * 60.0))
+		var settle: int = int(round(TAIL_SETTLE_S / FRAME))
 		var first: float = 0.0
 		var last: float = 0.0
 		var worst := Vector3.ZERO
@@ -667,7 +679,7 @@ func test_p18_tail_bounded_stable_and_settles() -> void:
 			r.advance(FRAME)
 			var d := _tail_dev(r)
 			worst = Vector3(maxf(worst.x, absf(d.x)), maxf(worst.y, absf(d.y)), maxf(worst.z, d.z))
-			if i < rev_frames * 10:
+			if i >= settle and i < settle + rev_frames * 10:
 				first = maxf(first, d.z)
 			if i >= frames - rev_frames * 10:
 				last = maxf(last, d.z)
@@ -745,18 +757,36 @@ func test_p18_tail_rest_geometry() -> void:
 	assert_almost_eq(reach, len2, 0.01, "кончик сетки у окончания hair_tail.2 (%.4f из %.4f м)" % [reach, len2])
 
 
-## Зазор кончика хвоста до джерси в rest для каждой фигуры: сетка к сетке ≥ 1.3 см; контуры
-## (оболочки `outline_width` × вес, как в кадре) не сливаются; при отклонении хвоста вниз на
-## предел пружины (`TAIL_VERT_MAX_DEG` вокруг корня) сетка не входит в спину.
+## Зазор хвоста до джерси в rest для каждой фигуры (ред. 4.4, сетка к сетке): у кончика (вершины
+## `hair_tail.2` ближе `TAIL_TIP_ZONE_M` к окончанию) сетка к сетке 1.3–2.4 см, контур к контуру
+## (оболочки `outline_width` × вес, как в кадре) ≤ 0.3 см — касание контуров допустимо; сетка хвоста
+## (`hair_tail.1/2`) за корнем — сетка к сетке ≥ 1.0 см, корень с резинкой (`TAIL_ROOT_ZONE_M`, под
+## краем шлема у воротника) — в джерси не входит; хвост, повёрнутый вокруг корня `hair_tail.1` к
+## спине на предел пружины (`TAIL_VERT_MAX_DEG`), в спину не входит. Джерси — треугольники тела
+## не на костях `head`/`neck` (кожа головы и шеи — не джерси).
 func test_p18_tail_tip_clearance_to_jersey() -> void:
 	var meshes: Dictionary = RiderModel.meshes(Rider.RIDER_MATERIAL)
 	var outline: float = ((Rider.RIDER_MATERIAL as ShaderMaterial).next_pass as ShaderMaterial).get_shader_parameter("outline_width")
 	assert_gt(outline, 0.0, "контур гонщика")
+	var t1: int = RiderRig.index_of("hair_tail.1")
 	var t2: int = RiderRig.index_of("hair_tail.2")
 	var end: Vector3 = RiderRig.tail("hair_tail.2")
 	var root: Vector3 = RiderRig.head("hair_tail.1")
 	var down := Transform3D(Basis.IDENTITY, root) * Transform3D(Basis(Vector3.RIGHT,
 		deg_to_rad(RiderMotion.TAIL_VERT_MAX_DEG)), Vector3.ZERO) * Transform3D(Basis.IDENTITY, -root)
+	var skin_bones: Array[int] = [RiderRig.index_of("head"), RiderRig.index_of("neck")]
+	var root_zone := PackedVector3Array()
+	var tail_rest := PackedVector3Array()
+	var tail_down := PackedVector3Array()
+	for p in _bone_points(meshes["hair_tail"], -1, 0.0):
+		if p[0] != t1 and p[0] != t2:
+			continue
+		var v: Vector3 = p[1]
+		if v.distance_to(root) <= TAIL_ROOT_ZONE_M:
+			root_zone.append(v)
+		else:
+			tail_rest.append(v)
+		tail_down.append(down * v)
 	for fig in Rider.FIGURES:
 		var body: Mesh = meshes["body_" + fig]
 		var gaps := PackedFloat32Array()
@@ -765,15 +795,20 @@ func test_p18_tail_tip_clearance_to_jersey() -> void:
 			for p in _bone_points(meshes["hair_tail"], t2, w):
 				if (p[1] as Vector3).distance_to(end) <= TAIL_TIP_ZONE_M + w:
 					tip.append(p[1])
-			gaps.append(_mesh_gap(tip, _tris_near(body, end, 0.15, w)))
-		assert_gte(gaps[0], TAIL_TIP_GAP_MIN_M, "%s: зазор кончика до джерси сетка к сетке %.4f м" % [fig, gaps[0]])
-		assert_gt(gaps[1], 0.0, "%s: контуры кончика и джерси не сливаются (%.4f м)" % [fig, gaps[1]])
-		var tail_down := PackedVector3Array()
-		for p in _bone_points(meshes["hair_tail"], t2, 0.0):
-			tail_down.append(down * (p[1] as Vector3))
-		var low: float = _mesh_gap(tail_down, _tris_near(body, end, 0.15, 0.0))
+			gaps.append(_mesh_gap(tip, _tris_near(body, end, 0.15, w, skin_bones)))
+		assert_between(gaps[0], TAIL_TIP_GAP_MIN_M, TAIL_TIP_GAP_MAX_M,
+			"%s: зазор кончика до джерси сетка к сетке %.4f м" % [fig, gaps[0]])
+		assert_lte(gaps[1], TAIL_TIP_OUTLINE_GAP_MAX_M,
+			"%s: контур к контуру у кончика %.4f м — без просвета фона" % [fig, gaps[1]])
+		var jersey: PackedVector3Array = _tris_near(body, RiderRig.head("hair_tail.2"), 0.3, 0.0, skin_bones)
+		var along: float = _mesh_gap(tail_rest, jersey)
+		assert_gte(along, TAIL_GAP_MIN_M, "%s: хвост за корнем до джерси сетка к сетке %.4f м" % [fig, along])
+		var at_root: float = _mesh_gap(root_zone, jersey)
+		assert_gt(at_root, 0.0, "%s: корень хвоста с резинкой не входит в джерси (%.4f м)" % [fig, at_root])
+		var low: float = _mesh_gap(tail_down, jersey)
 		assert_gt(low, 0.0, "%s: хвост вниз на %.0f° не входит в спину (%.4f м)" % [fig, RiderMotion.TAIL_VERT_MAX_DEG, low])
-		gut.p("%s: зазор кончика — сетка %.4f м, контур к контуру %.4f м, вниз на предел %.4f м" % [fig, gaps[0], gaps[1], low])
+		gut.p("%s: зазор кончика — сетка %.4f м, контур к контуру %.4f м; хвост за корнем %.4f м, корень %.4f м; вниз на предел %.4f м" % [
+			fig, gaps[0], gaps[1], along, at_root, low])
 
 
 ## Вершины сетки rest `[кость, точка]` (кость −1 — все), сдвинутые по нормали на `outline` × вес
@@ -792,15 +827,18 @@ func _bone_points(mesh: Mesh, bone: int, outline: float) -> Array:
 
 
 ## Треугольники сетки rest (тройки точек) с вершиной ближе `radius` к `near`, вершины сдвинуты
-## по нормали на `outline` × вес контура.
-func _tris_near(mesh: Mesh, near: Vector3, radius: float, outline: float) -> PackedVector3Array:
+## по нормали на `outline` × вес контура; треугольники на костях `skip_bones` пропускаются.
+func _tris_near(mesh: Mesh, near: Vector3, radius: float, outline: float, skip_bones: Array[int] = []) -> PackedVector3Array:
 	var arr: Array = mesh.surface_get_arrays(0)
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
 	var c: PackedColorArray = arr[Mesh.ARRAY_COLOR]
 	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
 	var out := PackedVector3Array()
 	for t in range(0, idx.size(), 3):
+		if skip_bones.has(bones[idx[t] * 4]):
+			continue
 		var close: bool = false
 		for j in 3:
 			close = close or v[idx[t + j]].distance_to(near) < radius
