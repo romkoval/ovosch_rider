@@ -77,6 +77,26 @@ func test_delete_is_danger_button_and_dialog_uses_dialog_layout() -> void:
 	assert_ne(_dialog.get_cancel_button().theme_type_variation, DialogLayout.DANGER_VARIATION)
 
 
+## Вердикт game-designer по T-114 (`ui.md` п. 6 «Диалог-выбор», п. 13.3; REQ-LOC-07 крит. 3,
+## REQ-UIX-01 крит. 8): безопасное действие «Сохранить досрочно» — основная `PrimaryButton`
+## и стоит крайней справа, слева от неё — опасная «Удалить».
+func test_keep_is_primary_button_rightmost() -> void:
+	assert_eq(_dialog.get_ok_button().theme_type_variation, &"PrimaryButton", "«Сохранить досрочно» — PrimaryButton")
+	var prev_locale := TranslationServer.get_locale()
+	for loc in ["ru", "en"]:
+		TranslationServer.set_locale(loc)
+		await _open()
+		var row := _visible_row()
+		assert_eq(row.size(), 2, "%s: две кнопки" % loc)
+		if row.size() == 2:
+			assert_eq(row[1], _dialog.get_ok_button(), "%s: PrimaryButton — крайняя справа" % loc)
+			assert_eq(row[0].theme_type_variation, DialogLayout.DANGER_VARIATION, "%s: слева — DangerButton" % loc)
+		assert_eq(_dialog.get_ok_button().theme_type_variation, &"PrimaryButton", "%s: вариация после показа" % loc)
+		_dialog.keep()
+		await wait_process_frames(2)
+	TranslationServer.set_locale(prev_locale)
+
+
 func test_width_480_wrap_and_buttons_at_right_edge() -> void:
 	var prev_locale := TranslationServer.get_locale()
 	for loc in ["ru", "en"]:
