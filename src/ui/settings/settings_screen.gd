@@ -1076,15 +1076,30 @@ func open_licenses() -> void:
 	_licenses_dialog.popup(Rect2i(rect))
 
 
-## Прямоугольник окна лицензий для холста `canvas` и безопасной зоны `safe` (слева, сверху,
-## справа, снизу), lp.
-static func licenses_rect(canvas: Vector2, safe: Vector4, compact: bool) -> Rect2:
+## Прямоугольник окна лицензий (содержимое, без полосы заголовка) для холста `canvas` и
+## безопасной зоны `safe` (слева, сверху, справа, снизу), lp. Полоса заголовка встроенного окна
+## (`title_height` темы `Window`) рисуется над `position`: под неё оставляется место сверху,
+## иначе движок сдвигает окно вниз и лист уходит в нижний отступ (T-142, UIX-05 п.2).
+## `title_height` < 0 — из темы проекта.
+static func licenses_rect(canvas: Vector2, safe: Vector4, compact: bool, title_height: float = -1.0) -> Rect2:
+	var title_h := title_height if title_height >= 0.0 else window_title_height()
 	var avail := Rect2(safe.x, safe.y, canvas.x - safe.x - safe.z, canvas.y - safe.y - safe.w)
-	var height := minf(LICENSES_SIZE.y, avail.size.y - LICENSES_MARGIN)
+	var height := minf(LICENSES_SIZE.y, avail.size.y - LICENSES_MARGIN - title_h)
 	if compact:
 		return Rect2(avail.position.x, avail.end.y - height, avail.size.x, height)
 	var width := minf(LICENSES_SIZE.x, avail.size.x - 2.0 * LICENSES_MARGIN)
-	return Rect2(avail.position + (avail.size - Vector2(width, height)) / 2.0, Vector2(width, height))
+	# По центру вместе с заголовком.
+	var full := Vector2(width, height + title_h)
+	var top_left := avail.position + (avail.size - full) / 2.0
+	return Rect2(top_left + Vector2(0.0, title_h), Vector2(width, height))
+
+
+## Высота полосы заголовка встроенного окна из темы проекта (`Window/title_height`), lp.
+static func window_title_height() -> float:
+	var theme := ThemeDB.get_project_theme()
+	if theme != null and theme.has_constant(&"title_height", &"Window"):
+		return float(theme.get_constant(&"title_height", &"Window"))
+	return float(ThemeDB.get_default_theme().get_constant(&"title_height", &"Window"))
 
 
 func _safe_margins() -> Vector4:
