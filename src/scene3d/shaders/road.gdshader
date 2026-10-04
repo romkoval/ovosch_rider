@@ -1,5 +1,6 @@
 // Асфальт с разметкой (REQ-D3D-07, арт-библия «Дорога»): тёмный холодно-серый асфальт с
-// крупными заплатками и мелким зерном (зерно гаснет с расстоянием, чтобы не мерцать),
+// крупными заплатками и мелким зерном (шумы гаснут к среднему по размеру пикселя на земле —
+// по худшей оси, без муара вдали в любом рендерере),
 // сплошные белые линии по краям, прерывистая осевая. UV меша дороги (RoadBuilder):
 // u — поперёк 0..1, v — дистанция / ширина.
 shader_type spatial;
@@ -35,13 +36,17 @@ void fragment() {
 	float aa = max(fwidth(x), 1e-4);
 	vec2 p = world_pos.xz;
 
+	// Метров на пиксель — по худшей оси: вдоль дороги под скользящим углом шаг в разы больше,
+	// чем поперёк (`aa`), и шум, гасимый только по поперечной оси, рябит муаром (T-102).
+	float px = max(max(fwidth(p.x), fwidth(p.y)), 1e-4);
 	float big = vnoise(p * 0.07);
 	float mid = vnoise(p * 0.9);
-	float patches = smoothstep(0.62, 0.64, big);
+	float patches = smoothstep(0.62 - px * 0.07, 0.64 + px * 0.07, big);
 	vec3 col = mix(asphalt_color.rgb, patch_color.rgb, patches);
-	col *= 0.94 + 0.12 * mid;
-	// Зерно: мелкая рябь только вблизи (по fwidth — без мерцания вдали).
-	float near = 1.0 - smoothstep(0.01, 0.04, aa);
+	// Шум гаснет к среднему, пока его период не стал короче ~4 пикселей.
+	col *= 0.94 + 0.12 * mix(0.5, mid, 1.0 - smoothstep(0.12, 0.28, px));
+	// Зерно: мелкая рябь только вблизи.
+	float near = 1.0 - smoothstep(0.012, 0.03, px);
 	col *= 1.0 + (vnoise(p * 9.0) - 0.5) * 0.10 * near;
 	// Накатанная колея (светлее) и масляная полоса по центру полосы (темнее).
 	float lane = road_width * 0.25;
@@ -57,7 +62,7 @@ void fragment() {
 	float on = dash_length / dash_period;
 	float dash = smoothstep(0.0, ft, ph) * (1.0 - smoothstep(on - ft, on, ph));
 	float center = band(ax, center_width * 0.5, aa) * dash;
-	float paint = max(edge, center) * (0.86 + 0.14 * vnoise(p * 3.0));
+	float paint = max(edge, center) * (0.86 + 0.14 * mix(0.5, vnoise(p * 3.0), 1.0 - smoothstep(0.04, 0.09, px)));
 	col = mix(col, line_color.rgb, paint);
 
 	ALBEDO = col;

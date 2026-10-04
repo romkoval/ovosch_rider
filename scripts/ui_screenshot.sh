@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Снимки экранов UI и HUD тренировки в PNG (см. scripts/dev/ui_screenshot.gd, docs/game/hud.md п. 14).
-# Нужен Godot 4.7 и дисплей: без него (Linux) запускается под xvfb-run, рендер — gl_compatibility.
+# Нужен Godot 4.7 и дисплей: без него (Linux) запускается под xvfb-run. Рендерер — переменная
+# RENDERER: gl_compatibility (по умолчанию), forward_plus (как приложение на macOS) или mobile
+# (как на iOS); Forward+ и Mobile требуют GPU (Metal/Vulkan).
 # На macOS окно открывается поверх остальных (--always-on-top): окно, перекрытое другими,
 # не перерисовывается, и проход зависает. Размер каждого кадра проверяет сам скрипт: кадр не
 # того размера (Retina, растянутое окно) не сохраняется, код выхода ≠ 0.
 # Использование:
-#   ./scripts/ui_screenshot.sh [каталог=screenshots/ui] [разрешение=all] [язык=all] [--safe-area] [--phone]
+#   [RENDERER=forward_plus] ./scripts/ui_screenshot.sh [каталог=screenshots/ui] [разрешение=all] [язык=all] [--safe-area] [--phone]
 # разрешение — WxH, список через запятую или all (1280x720,1024x768,1280x590);
 # язык — ru, en, список через запятую или all (ru,en); --safe-area — имитация безопасной
 # зоны 100/100/0/13 lp (слева/справа/сверху/снизу); --phone — тип устройства «телефон»
@@ -17,6 +19,15 @@ cd "$(dirname "$0")/.."
 GODOT="${GODOT:-$(command -v godot || echo /opt/godot/godot)}"
 ALL_RESOLUTIONS="1280x720,1024x768,1280x590"
 ALL_LANGS="ru,en"
+RENDERER="${RENDERER:-gl_compatibility}"
+case "$RENDERER" in
+  gl_compatibility) driver=(--rendering-driver opengl3) ;;
+  forward_plus | mobile) driver=() ;;
+  *)
+    echo "ui_screenshot.sh: RENDERER='$RENDERER' — ожидается forward_plus, mobile или gl_compatibility" >&2
+    exit 2
+    ;;
+esac
 IS_MACOS=0
 [[ "$(uname -s)" == "Darwin" ]] && IS_MACOS=1
 
@@ -46,7 +57,7 @@ for res in ${RESOLUTIONS//,/ }; do
     exit 2
   fi
   for lang in ${LANGS//,/ }; do
-    run=("$GODOT" --path . --rendering-method gl_compatibility --rendering-driver opengl3
+    run=("$GODOT" --path . --rendering-method "$RENDERER" "${driver[@]+"${driver[@]}"}"
       --resolution "$res")
     if [[ "$IS_MACOS" == 1 ]]; then
       run+=(--always-on-top)

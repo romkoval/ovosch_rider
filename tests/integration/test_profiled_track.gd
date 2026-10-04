@@ -274,14 +274,17 @@ func test_terrain_follows_road_height_not_mean_height() -> void:
 		var tf: TerrainField = s.terrain()
 		var sample := TrackSample.new()
 		var far: Array[String] = []
+		# Порог — из набора окружения трассы (T-102: по умолчанию 20 м на 40 м, горы — 30 м).
+		var limit: float = s.environment_set.terrain_near_rise_max_m
+		assert_between(limit, 20.0, 30.0, "%s: порог перепада у дороги" % id)
 		for at in _points(s.track, 250.0):
 			s.track.sample_into(at, sample)
 			for off in [-40.0, 40.0]:
 				var p: Vector3 = sample.position + sample.right() * off
 				var dh: float = tf.height_at(p.x, p.z) - sample.position.y
-				if absf(dh) > 20.0:
+				if absf(dh) > limit:
 					far.append("s=%.0f off=%+.0f: %+.1f м" % [at, off, dh])
-		assert_eq(far, [] as Array[String], "%s: рельеф в 40 м от дороги — у высоты дороги: %s" % [id, str(far.slice(0, 5))])
+		assert_eq(far, [] as Array[String], "%s: рельеф в 40 м от дороги — у высоты дороги (порог %.0f м): %s" % [id, limit, str(far.slice(0, 5))])
 
 
 func test_cross_slope_on_climbs() -> void:

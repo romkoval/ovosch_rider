@@ -7,6 +7,7 @@ render_mode cull_back, specular_disabled;
 
 #include "res://src/scene3d/shaders/toon_light.gdshaderinc"
 #include "res://src/scene3d/props/shaders/prop_anim.gdshaderinc"
+#include "res://src/scene3d/shaders/render_look.gdshaderinc"
 
 varying float glow;
 
@@ -16,8 +17,9 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = COLOR.rgb;
-	EMISSION = COLOR.rgb * glow;
+	vec3 col = look_vertex_color(COLOR.rgb);
+	ALBEDO = col;
+	EMISSION = col * glow;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 }

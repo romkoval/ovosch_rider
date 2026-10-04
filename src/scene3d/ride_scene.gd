@@ -154,6 +154,9 @@ func set_track(new_track: Track) -> void:
 	_build_world()
 	if _props != null:
 		_environment_root.add_child(_props)
+	# Окружающий свет и туман — в материалы мира и велосипедиста: по ним шейдеры выравнивают
+	# освещённую сторону в Forward+/Mobile под эталон Compatibility (T-102, `RenderLook`).
+	RenderLook.apply(self, environment_set)
 	distance_m = 0.0
 	_lean = 0.0
 	_place_rider(true)

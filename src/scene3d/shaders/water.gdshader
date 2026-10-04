@@ -9,6 +9,7 @@ shader_type spatial;
 render_mode cull_back, diffuse_lambert;
 
 #include "res://src/scene3d/shaders/noise.gdshaderinc"
+#include "res://src/scene3d/shaders/render_look.gdshaderinc"
 
 uniform vec4 deep_color : source_color = vec4(0.10, 0.42, 0.62, 1.0);
 uniform vec4 shallow_color : source_color = vec4(0.22, 0.68, 0.75, 1.0);
@@ -87,7 +88,7 @@ void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(toon_threshold - toon_softness, toon_threshold + toon_softness, ndl);
 	float shadow = smoothstep(0.3, 0.7, ATTENUATION);
-	DIFFUSE_LIGHT += LIGHT_COLOR / PI * lit * shadow;
+	DIFFUSE_LIGHT += look_diffuse(LIGHT_COLOR / PI * lit * shadow, ALBEDO, FRAGCOORD, VIEWPORT_SIZE, INV_PROJECTION_MATRIX);
 	vec3 h = normalize(LIGHT + VIEW);
 	float g = dot(NORMAL, h);
 	float ga = max(fwidth(g), 1e-4);

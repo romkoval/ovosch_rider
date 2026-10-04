@@ -205,6 +205,14 @@ var chunk_tiles: int = MIN_CHUNK_TILES
 ## Поперечный склон на подъёмах (`CROSS_GAIN` по умолчанию; набор окружения может усилить).
 var cross_gain: float = CROSS_GAIN
 var cross_max: float = CROSS_MAX
+## Ослабление поперечного склона у соседних участков трассы (`UPHILL_NEIGHBOR_DAMP` по
+## умолчанию; горы — меньше: склон к верхнему траверсу змейки круче, T-102).
+var neighbor_damp: float = UPHILL_NEIGHBOR_DAMP
+## Откос со стороны склона (горы, T-102; только коридор): высота, м (0 — нет), подъём от края
+## ровной полосы, м, и удаление от оси, где он сходит на нет, м.
+var cut_m: float = 0.0
+var cut_rise_m: float = 12.0
+var cut_reach_m: float = 60.0
 ## «Якорь» дальнего рельефа (T-083): доля, с которой поле высоты трассы вдали от дороги
 ## (`ANCHOR_FROM_M`…`ANCHOR_FULL_M`) уходит к средней высоте трассы. 0 — рельеф везде идёт за
 ## дорогой; > 0 — долины и холмы стоят на месте, дорога поднимается и опускается относительно
@@ -289,6 +297,12 @@ var _neighbor := PackedFloat32Array()
 ## Высота у дороги по вершинам мелких плиток: Σw·h и Σw (только на время построения).
 var _tile_road_y: Array[PackedFloat32Array] = []
 var _tile_road_w: Array[PackedFloat32Array] = []
+## Откос по вершинам мелких плиток (вес 1/d⁶ ближайших точек трассы): Σw·высота дороги,
+## Σw·высота откоса со стороны склона, Σw и расстояние до оси (только на время построения).
+var _tile_cut_y: Array[PackedFloat32Array] = []
+var _tile_cut_v: Array[PackedFloat32Array] = []
+var _tile_cut_w: Array[PackedFloat32Array] = []
+var _tile_cut_d: Array[PackedFloat32Array] = []
 
 
 static func build(track: Track, rolling_m: float, hills_m: float, seed: int,
@@ -311,6 +325,10 @@ static func build_for(track: Track, env: EnvironmentSet) -> TerrainField:
 	f.hills_scale_m = maxf(env.hills_scale_m, 50.0)
 	f.cross_mode = env.cross_slope_side
 	f.cross_reach_m = clampf(env.cross_slope_reach_m, 30.0, 400.0)
+	f.neighbor_damp = clampf(env.cross_slope_neighbor_damp, 0.0, 1.0)
+	f.cut_m = maxf(env.cut_bank_m, 0.0)
+	f.cut_rise_m = maxf(env.cut_bank_rise_m, 1.0)
+	f.cut_reach_m = maxf(env.cut_bank_reach_m, FLAT_RADIUS_M + f.cut_rise_m)
 	f.shoulder_m = clampf(env.terrain_shoulder_m, 24.0, NEAR_RADIUS_M)
 	f.kernel_m = clampf(env.terrain_kernel_m, 40.0, 240.0)
 	f.view_m = maxf(env.view_distance_m, RANGE_M)
@@ -430,7 +448,7 @@ func _sample_track(track: Track) -> PackedVector3Array:
 			var kappa: float = wrapf(heading[b] - heading[a], -PI, PI) / (float(w * 2) * SAMPLE_STEP_M)
 			var turn: float = clampf(kappa * CROSS_FULL_RADIUS_M, -1.0, 1.0)
 			side = clampf(turn + inner * (1.0 - absf(turn)), -1.0, 1.0)
-		var damp: float = 1.0 - UPHILL_NEIGHBOR_DAMP * _neighbor[i] if cross_mode == CROSS_UPHILL else 1.0
+		var damp: float = 1.0 - neighbor_damp * _neighbor[i] if cross_mode == CROSS_UPHILL else 1.0
 		_cross[i] = clampf(cross_gain * absf(grade[i]), 0.0, cross_max) * side * damp
 	return pts
 
@@ -697,6 +715,8 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 		_chamfer_far_distance()
 	_select_tiles(tiles_x, tiles_z)
 	_stamp_near(pts)
+	if cut_m > 0.0:
+		_stamp_cut(pts)
 	var noises := _noises(seed)
 	for ti in tile_keys.size():
 		var key: Vector2i = tile_keys[ti]
@@ -709,6 +729,11 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 		var rd: PackedFloat32Array = tile_road_dist[ti]
 		var ry: PackedFloat32Array = _tile_road_y[ti]
 		var rw: PackedFloat32Array = _tile_road_w[ti]
+		var cut: bool = fine and not _tile_cut_w.is_empty() and not _tile_cut_w[ti].is_empty()
+		var cy: PackedFloat32Array = _tile_cut_y[ti] if cut else PackedFloat32Array()
+		var cv: PackedFloat32Array = _tile_cut_v[ti] if cut else PackedFloat32Array()
+		var cw: PackedFloat32Array = _tile_cut_w[ti] if cut else PackedFloat32Array()
+		var cd: PackedFloat32Array = _tile_cut_d[ti] if cut else PackedFloat32Array()
 		for j in n:
 			var z: float = origin.y + float(key.y * TILE_CELLS + j * step) * cell_m
 			for i in n:
@@ -719,6 +744,15 @@ func _build_corridor(track: Track, rolling_m: float, hills_m: float, seed: int) 
 				var near_d: float = rd[k] if fine else FAR
 				var near_y: float = ry[k] / rw[k] if fine and rw[k] > 0.0 else mean_y
 				h[k] = _height(x, z, t, near_d, near_y, noises[0], noises[1], rolling_m, hills_m, d_far)
+				if cut and cw[k] > 0.0 and cv[k] > 0.01 * cw[k]:
+					# Откос начинается на полъячейки дальше ровной полосы: у треугольников, задевающих
+					# полотно и бордюр, все вершины остаются ровными (рельеф не выше полотна).
+					var dc: float = minf(cd[k], rd[k])
+					var from_m: float = flat_radius_m + cell_m * 0.5
+					var ramp: float = smoothstep(from_m, from_m + cut_rise_m, dc) \
+						* (1.0 - smoothstep(cut_reach_m * 0.7, cut_reach_m, dc))
+					if ramp > 0.0:
+						h[k] = maxf(h[k], (cy[k] + cv[k] * ramp) / cw[k] - ROAD_SINK_M)
 				rel[k] = h[k] - _last_far
 		tile_heights[ti] = h
 		tile_rel.append(rel)
@@ -861,6 +895,10 @@ func _far_grid_at(values: PackedFloat32Array, x: float, z: float, empty: float) 
 func _release_build_data() -> void:
 	_tile_road_y.clear()
 	_tile_road_w.clear()
+	_tile_cut_y.clear()
+	_tile_cut_v.clear()
+	_tile_cut_w.clear()
+	_tile_cut_d.clear()
 	_far_dist = PackedFloat32Array()
 	_far_h = PackedFloat32Array()
 	_far_up = PackedFloat32Array()
@@ -955,6 +993,74 @@ func _stamp_near(pts: PackedVector3Array) -> void:
 				tile_road_dist[ti] = rd
 				_tile_road_y[ti] = ry
 				_tile_road_w[ti] = rw
+
+
+## Откос со стороны склона (`cut_m`): по мелким плиткам до `cut_reach_m` от оси — высота
+## дороги, высота откоса (только с той стороны, где поперечный склон идёт вверх; полная — при
+## поперечном склоне от 0.2 `cross_max`, на подъёмах и спусках) и расстояние до оси, с
+## весом 1/d⁶ ближайших точек трассы (через одну: откосу хватает шага 10 м). На стыке двух
+## участков трассы (серпантин) берётся ближний — откос не поднимает землю у соседней дороги:
+## в её ровной полосе расстояние до оси меньше начала подъёма откоса.
+func _stamp_cut(pts: PackedVector3Array) -> void:
+	for ti in tile_keys.size():
+		var size: int = (TILE_CELLS + 1) * (TILE_CELLS + 1) if tile_step[ti] == 1 else 0
+		var cy := PackedFloat32Array()
+		var cv := PackedFloat32Array()
+		var cw := PackedFloat32Array()
+		var cd := PackedFloat32Array()
+		cy.resize(size)
+		cv.resize(size)
+		cw.resize(size)
+		cd.resize(size)
+		cd.fill(FAR)
+		_tile_cut_y.append(cy)
+		_tile_cut_v.append(cv)
+		_tile_cut_w.append(cw)
+		_tile_cut_d.append(cd)
+	var reach: int = int(ceil(cut_reach_m / cell_m))
+	var full: float = maxf(cross_max * 0.2, 1e-3)
+	for i in range(0, pts.size(), 2):
+		var p: Vector3 = pts[i]
+		var r: Vector2 = _rights[i]
+		var c: float = _cross[i]
+		var v_up: float = cut_m * clampf(absf(c) / full, 0.0, 1.0)
+		var cx: int = int(round((p.x - origin.x) / cell_m))
+		var cz: int = int(round((p.z - origin.y) / cell_m))
+		var gx0: int = maxi(cx - reach, 0)
+		var gx1: int = mini(cx + reach, nx - 1)
+		var gz0: int = maxi(cz - reach, 0)
+		var gz1: int = mini(cz + reach, nz - 1)
+		for tz in range(ceili(float(gz0 - TILE_CELLS) / float(TILE_CELLS)), floori(float(gz1) / float(TILE_CELLS)) + 1):
+			for tx in range(ceili(float(gx0 - TILE_CELLS) / float(TILE_CELLS)), floori(float(gx1) / float(TILE_CELLS)) + 1):
+				var key := Vector2i(tx, tz)
+				if not tile_index.has(key):
+					continue
+				var ti: int = tile_index[key]
+				if tile_step[ti] != 1:
+					continue
+				var cy: PackedFloat32Array = _tile_cut_y[ti]
+				var cv: PackedFloat32Array = _tile_cut_v[ti]
+				var cw: PackedFloat32Array = _tile_cut_w[ti]
+				var cd: PackedFloat32Array = _tile_cut_d[ti]
+				var n: int = TILE_CELLS + 1
+				var bx: int = tx * TILE_CELLS
+				var bz: int = tz * TILE_CELLS
+				for gz in range(maxi(gz0, bz), mini(gz1, bz + TILE_CELLS) + 1):
+					var vz: float = origin.y + float(gz) * cell_m - p.z
+					for gx in range(maxi(gx0, bx), mini(gx1, bx + TILE_CELLS) + 1):
+						var vx: float = origin.x + float(gx) * cell_m - p.x
+						var d2: float = vx * vx + vz * vz
+						var k: int = (gz - bz) * n + (gx - bx)
+						cd[k] = minf(cd[k], sqrt(d2))
+						var wt: float = 1.0 / (d2 * d2 * d2 + NEAR_EPS)
+						cw[k] += wt
+						cy[k] += wt * p.y
+						if (vx * r.x + vz * r.y) * c > 0.0:
+							cv[k] += wt * v_up
+				_tile_cut_y[ti] = cy
+				_tile_cut_v[ti] = cv
+				_tile_cut_w[ti] = cw
+				_tile_cut_d[ti] = cd
 
 
 ## Рёбра более мелкой плитки, соседней с более крупной: промежуточные вершины — на прямой

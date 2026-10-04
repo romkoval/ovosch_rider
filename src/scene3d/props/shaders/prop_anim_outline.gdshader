@@ -4,6 +4,7 @@ shader_type spatial;
 render_mode cull_front, unshaded, shadows_disabled;
 
 #include "res://src/scene3d/props/shaders/prop_anim.gdshaderinc"
+#include "res://src/scene3d/shaders/render_look.gdshaderinc"
 
 uniform vec4 outline_color : source_color = vec4(0.10, 0.12, 0.10, 1.0);
 uniform float outline_width = 0.06;
@@ -19,7 +20,7 @@ void vertex() {
 	} else {
 		VERTEX += NORMAL * outline_width * COLOR.a;
 	}
-	v_col = COLOR.rgb;
+	v_col = look_vertex_color(COLOR.rgb);
 }
 
 void fragment() {

@@ -14,6 +14,7 @@ render_mode cull_back, specular_disabled;
 
 #include "res://src/scene3d/shaders/toon_light.gdshaderinc"
 #include "res://src/scene3d/shaders/noise.gdshaderinc"
+#include "res://src/scene3d/shaders/render_look.gdshaderinc"
 
 uniform vec4 grass_light : source_color = vec4(0.40, 0.60, 0.25, 1.0);
 uniform vec4 grass_mid : source_color = vec4(0.33, 0.52, 0.22, 1.0);
@@ -88,7 +89,10 @@ void vertex() {
 
 void fragment() {
 	vec2 p = world_pos.xz;
-	float aa = max(fwidth(p.x * patch_scale), 1e-4) * 2.0;
+	// Метров на пиксель по худшей оси (вдаль под скользящим углом шаг в разы больше, чем
+	// поперёк): по нему — ширина границ пятен и угасание мелких деталей без муара (T-102).
+	float px = max(max(fwidth(p.x), fwidth(p.y)), 1e-4);
+	float aa = px * patch_scale * 2.0;
 	float n1 = fbm3(p * patch_scale);
 	float n2 = vnoise(p * patch_scale * 3.7 + vec2(31.0, 7.0));
 	vec3 col = grass_mid.rgb;
@@ -96,7 +100,7 @@ void fragment() {
 	col = mix(col, grass_dark.rgb, 1.0 - smoothstep(0.40 - aa, 0.40 + aa, n1));
 	col = mix(col, grass_dry.rgb, smoothstep(0.78 - aa, 0.78 + aa, n2) * 0.6);
 	// Мелкая вариация вблизи — рябь травы, гаснет с расстоянием.
-	float near = 1.0 - smoothstep(0.004, 0.02, aa);
+	float near = 1.0 - smoothstep(0.05, 0.12, px);
 	float rel_y = rel_h;
 	float fmask = field_strength * (1.0 - COLOR.a) * smoothstep(0.80, 0.90, world_normal.y)
 		* (1.0 - smoothstep(field_max_height_m * 0.7, field_max_height_m, rel_y));
@@ -116,9 +120,9 @@ void fragment() {
 		crop = pick < field_weights.x ? field_a.rgb : crop;
 		crop *= 0.94 + 0.12 * hash12(cell + vec2(2.9, 8.4));
 		// Борозды вдоль длинной или короткой стороны участка, только вблизи.
-		float fa = max(fwidth(q.x), 1e-4);
+		float fa = max(max(fwidth(q.x), fwidth(q.y)), 1e-4);
 		float along = hash12(cell + vec2(7.7, 1.3)) < 0.5 ? f.x : f.y;
-		float furrow = sin(along * 6.2832 / furrow_period_m) * (1.0 - smoothstep(0.05, 0.25, fa / furrow_period_m));
+		float furrow = sin(along * 6.2832 / furrow_period_m) * (1.0 - smoothstep(0.04, 0.12, fa / furrow_period_m));
 		crop *= 1.0 + furrow * furrow_contrast;
 		// Межа: полоса травы по краю участка (гаснет, когда тоньше пикселя).
 		float edge = min(min(f.x, field_size.x - f.x), min(f.y, field_size.y - f.y));
@@ -181,7 +185,7 @@ void fragment() {
 		sandc = mix(seabed_color.rgb, sandc, smoothstep(-0.8, -0.1, hw));
 		col = mix(col, sandc, max(sand, 1.0 - smoothstep(-0.5, 0.0, hw)));
 	}
-	ALBEDO = col * COLOR.rgb;
+	ALBEDO = col * look_vertex_color(COLOR.rgb);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 }
