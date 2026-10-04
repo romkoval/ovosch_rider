@@ -91,6 +91,8 @@ var _stop_pending: bool = false
 var _ride_id: String = ""
 ## Общая рамка HUD: фишки, слоты, панель инструментов, слот подсказки, Esc на карточке паузы.
 var _frame: HudScreenFrame
+## Статистика кадров заезда в журнал (T-116a): от старта сессии до FINISHED.
+var _frame_probe: FrameStatsProbe
 
 @onready var _ride_scene: RideScene = %RideScene
 @onready var _viewport_container: SubViewportContainer = %ViewportContainer
@@ -168,6 +170,7 @@ func _ready() -> void:
 	_summary_root.home_requested.connect(go_home)
 	_summary_root.history_requested.connect(open_history)
 	_frame.install_escape_guard(_on_escape_on_pause_card)
+	_frame_probe = FrameStatsProbe.attach(self)
 	_fit_viewport()
 	refresh()
 
@@ -202,6 +205,7 @@ func start() -> bool:
 		_connections.ticks_devices = false
 	_stop_pending = false
 	_ride_scene.bind(_session, _profile)
+	_frame_probe.begin({"mode": "workout", "route": _ride_scene.route_id}, _viewport)
 	session_created.emit(_session)
 	_session.start()
 	_ticker.start()
@@ -786,6 +790,7 @@ static func _with_unit(value: int, unit: String) -> String:
 
 func _on_session_state(state: int) -> void:
 	if state == WorkoutSession.State.FINISHED:
+		_frame_probe.finish({"elapsed_s": _session.executor.elapsed_sec()})
 		if _ticker != null:
 			_ticker.stop()
 		if _connections != null:

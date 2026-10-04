@@ -76,6 +76,8 @@ var _hud: FreeRideHudModel
 var _ride_scene: RideScene
 ## Общая рамка HUD: фишки, слоты, панель инструментов, слот подсказки, Esc на карточке паузы.
 var _frame: HudScreenFrame
+## Статистика кадров заезда в журнал (T-116a): от старта сессии до FINISHED.
+var _frame_probe: FrameStatsProbe
 var _keep_on: bool = false
 var _notice_left_sec: float = 0.0
 var _ride_id: String = ""
@@ -156,6 +158,7 @@ func _ready() -> void:
 	for b: Button in [_back_button, _pause_button]:
 		TouchTarget.attach(b, TouchTarget.Kind.HUD)
 	_frame.install_escape_guard(_on_escape_on_pause_card)
+	_frame_probe = FrameStatsProbe.attach(self)
 	set_process(false)
 	_fit_viewport()
 	refresh()
@@ -206,6 +209,7 @@ func start() -> bool:
 		_connections.ticks_devices = false
 	_notice_left_sec = 0.0
 	_reset_rider_tracking()
+	_frame_probe.begin({"mode": "free_ride", "route": _session.route.id}, _viewport)
 	session_created.emit(_session)
 	_session.start()
 	_ticker.start()
@@ -722,6 +726,7 @@ func _on_session_state(state: int) -> void:
 			if _pause_overlay.view() == PauseOverlay.View.PAUSE:
 				_pause_overlay.hide_overlay()
 		WorkoutSession.State.FINISHED:
+			_frame_probe.finish({"elapsed_s": _session.elapsed_sec(), "distance_m": roundi(_session.distance_m())})
 			if _ticker != null:
 				_ticker.stop()
 			if _connections != null:

@@ -94,3 +94,25 @@ ui.settings.intervals_forget_confirm.ok,Отвязать,Unlink
 ui.settings.strava_disconnect_confirm.title,Отвязать Strava?,Disconnect Strava?
 ui.settings.strava_disconnect_confirm.body,Новые заезды перестанут выгружаться в Strava.,New rides will no longer be uploaded to Strava.
 ui.settings.strava_disconnect_confirm.ok,Отвязать,Disconnect
+ui.settings.diag_log_title,Журнал диагностики,Diagnostic log
+ui.settings.diag_log_hint,"События приложения и замеры кадров — для команды. Ключей и токенов в журнале нет","App events and frame measurements for the team. No keys or tokens are logged"
+ui.settings.diag_log_save,Сохранить журнал,Save log
+ui.settings.diag_log_saved,Журнал сохранён: {path},Log saved: {path}
+ui.settings.diag_log_failed,Не удалось сохранить журнал: {path},Could not save the log: {path}
+ui.settings.fps_bench_title,Замер FPS,FPS benchmark
+ui.settings.fps_bench_hint,"Сцена заезда без станка с постоянной скоростью; итог — на экране и в журнале","Ride scene without a trainer at constant speed; the result is shown and logged"
+ui.settings.fps_bench_run,Запустить,Run
+ui.settings.fps_bench_minutes,{min} мин,{min} min
+ui.settings.fps_limit_title,Ограничить FPS до {fps},Limit FPS to {fps}
+ui.settings.fps_limit_hint,Отладка: действует до перезапуска приложения,Debug: lasts until the app restarts
+ui.fps_bench.warmup,Замер FPS · {route} · прогрев,FPS benchmark · {route} · warming up
+ui.fps_bench.progress,Замер FPS · {route} · {elapsed} / {total},FPS benchmark · {route} · {elapsed} / {total}
+ui.fps_bench.result_title,Замер FPS · {route},FPS benchmark · {route}
+ui.fps_bench.avg_fps,Средний FPS: {value},Average FPS: {value}
+ui.fps_bench.low_1pct,1 % худших кадров: {value} FPS,1% low: {value} FPS
+ui.fps_bench.frame_time,Время кадра p95 / p99 / макс.: {p95} / {p99} / {max} мс,Frame time p95 / p99 / max: {p95} / {p99} / {max} ms
+ui.fps_bench.slow_frames,Кадров дольше 16.7 мс: {slow} %; дольше 33 мс: {very_slow} %,Frames over 16.7 ms: {slow}%; over 33 ms: {very_slow}%
+ui.fps_bench.frames,Кадров: {frames} за {duration} с,Frames: {frames} in {duration} s
+ui.fps_bench.render,{renderer} · окно {window} · 3D {viewport} · draw calls до {draw_calls},{renderer} · window {window} · 3D {viewport} · up to {draw_calls} draw calls
+ui.fps_bench.repeat,Повторить,Repeat
+ui.fps_bench.close,Закрыть,Close
