@@ -165,6 +165,19 @@ func set_last_route_id(profile_id: String, route_id: String) -> Array[String]:
 	return save(profile)
 
 
+## Запомнить последнюю выбранную тренировку на экране плана (T-098, по образцу
+## `set_last_route_id`): правка одного поля поверх сохранённого снимка. Идентификатор неверного
+## формата сохраняется как "" (`Profile.normalize`). Коды ошибок — как у `save()`, плюс
+## `profile_not_found`; пустой массив — сохранено на диск.
+func set_last_workout_id(profile_id: String, workout_id: String) -> Array[String]:
+	var profile := get_by_id(profile_id)
+	if profile == null:
+		last_errors = [ERR_PROFILE_NOT_FOUND]
+		return last_errors.duplicate()
+	profile.last_workout_id = workout_id
+	return save(profile)
+
+
 ## Сохранить крутизну SIM профиля (REQ-FRD-05 крит. 1: 0–100 % с шагом 5, между сессиями).
 ## Значение приводится `Profile.normalize` (ограничение 0–100, округление до шага 5 %).
 func set_sim_steepness_pct(profile_id: String, pct: int) -> Array[String]:

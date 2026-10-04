@@ -43,6 +43,9 @@ const DEFAULT_SIM_STEEPNESS_PCT: int = 50
 const DEFAULT_ROUTE_ID: String = "flat"
 ## Идентификатор трассы: латиница в нижнем регистре, цифры, `_`, `-`; не длиннее 64.
 const MAX_ROUTE_ID_LENGTH: int = 64
+## Идентификатор последней выбранной тренировки (`last_workout_id`): не длиннее 128 символов,
+## без управляющих символов. Формат задаёт экран плана (`icu:<event_id>` или id записи библиотеки).
+const MAX_WORKOUT_ID_LENGTH: int = 128
 
 ## Коды ошибок валидации.
 const ERR_ID_EMPTY: String = "id_empty"
@@ -103,6 +106,11 @@ var power_source: String = POWER_SOURCE_TRAINER
 ## тогда действует `DEFAULT_ROUTE_ID` (см. `effective_route_id`). Есть ли такая трасса
 ## в каталоге, проверяет экран выбора трассы, не профиль.
 var last_route_id: String = ""
+## Последняя выбранная тренировка на экране плана (T-098, REQ-UIX-03 крит. 3; Н-17 — запоминать,
+## по образцу `last_route_id`): идентификатор элемента списка плана; "" — не выбиралась. Есть ли
+## такая тренировка в списке, проверяет экран плана, не профиль: нет — действует прежнее правило
+## предвыбора (REQ-INT-04 крит. 1).
+var last_workout_id: String = ""
 ## Крутизна SIM, % (REQ-FRD-05 крит. 1): доля уклона трассы, уходящая на станок.
 var sim_steepness_pct: int = DEFAULT_SIM_STEEPNESS_PCT
 
@@ -170,6 +178,17 @@ static func is_valid_route_id(route_id: String) -> bool:
 	return true
 
 
+## Формат идентификатора тренировки: пустая строка («не выбиралась») или до 128 символов без
+## управляющих (перевод строки, табуляция и т. п.).
+static func is_valid_workout_id(workout_id: String) -> bool:
+	if workout_id.length() > MAX_WORKOUT_ID_LENGTH:
+		return false
+	for i in workout_id.length():
+		if workout_id.unicode_at(i) < 0x20 or workout_id.unicode_at(i) == 0x7F:
+			return false
+	return true
+
+
 ## Крутизна SIM в допустимом диапазоне и на шаге 5 % (REQ-FRD-05 крит. 1).
 static func is_valid_sim_steepness(pct: int) -> bool:
 	return pct >= MIN_SIM_STEEPNESS_PCT and pct <= MAX_SIM_STEEPNESS_PCT \
@@ -223,8 +242,8 @@ func hr_zone_of(bpm: int) -> int:
 
 
 ## Привести поля к хранимому виду: имя без краевых пробелов, вес с шагом 0.1
-## (19.96 → 20.0), крутизна SIM — в 0–100 % на шаг 5 % (52 → 50), идентификатор трассы
-## неверного формата — "" (трасса по умолчанию). Вызывается репозиторием перед валидацией
+## (19.96 → 20.0), крутизна SIM — в 0–100 % на шаг 5 % (52 → 50), идентификаторы трассы и
+## тренировки неверного формата — "" (трасса по умолчанию, тренировка не выбиралась). Вызывается репозиторием перед валидацией
 ## и записью, чтобы введённое и сохранённое совпадали. Поля свободной езды приводятся, а не
 ## отклоняются: правят их слайдер и выбор из каталога, отдельных кодов ошибок (и строк
 ## перевода) для них нет.
@@ -234,6 +253,8 @@ func normalize() -> void:
 	sim_steepness_pct = snap_sim_steepness(sim_steepness_pct)
 	if not is_valid_route_id(last_route_id):
 		last_route_id = ""
+	if not is_valid_workout_id(last_workout_id):
+		last_workout_id = ""
 
 
 ## Коды ошибок; пустой массив — профиль корректен. Вес проверяется с шагом 0.1.
@@ -303,6 +324,7 @@ func to_dict() -> Dictionary:
 		"strava_auto_upload": strava_auto_upload,
 		"power_source": power_source,
 		"last_route_id": last_route_id,
+		"last_workout_id": last_workout_id,
 		"sim_steepness_pct": sim_steepness_pct,
 	}
 
@@ -311,7 +333,7 @@ func to_dict() -> Dictionary:
 ## Отсутствующие поля (или null) получают значения по умолчанию; значения
 ## неподходящего типа приводятся к 0/"" — так `validate()` их отклонит, а не
 ## подменит умолчанием. Не падает ни на каких входных типах.
-## Исключение — поля свободной езды (`last_route_id`, `sim_steepness_pct`): они не
+## Исключение — поля выбора (`last_route_id`, `last_workout_id`, `sim_steepness_pct`): они не
 ## валидируются, а приводятся к допустимому, как в `normalize` (трасса неверного формата —
 ## "" → `DEFAULT_ROUTE_ID`, крутизна — к шагу 5 % в пределах 0–100, нечисловая — 50).
 static func from_dict(data: Dictionary) -> Profile:
@@ -338,6 +360,8 @@ static func from_dict(data: Dictionary) -> Profile:
 		p.power_source = POWER_SOURCE_TRAINER
 	var route: Variant = data.get("last_route_id", "")
 	p.last_route_id = route if route is String and is_valid_route_id(route) else ""
+	var workout_id: Variant = data.get("last_workout_id", "")
+	p.last_workout_id = workout_id if workout_id is String and is_valid_workout_id(workout_id) else ""
 	var steepness: Variant = data.get("sim_steepness_pct", null)
 	if steepness is int or steepness is float:
 		p.sim_steepness_pct = snap_sim_steepness(float(steepness))

@@ -508,6 +508,8 @@ static func share_color(share: Dictionary) -> Color:
 # Выбор и предпросмотр
 # ---------------------------------------------------------------------------
 
+## Выбрать карточку (нажатие, импорт, тесты). Выбор запускаемой тренировки запоминается в
+## профиле (`last_workout_id`, T-098): после перезапуска она снова предвыбрана.
 func select_index(index: int) -> void:
 	if index < 0 or index >= _items.size():
 		_selected = -1
@@ -515,6 +517,7 @@ func select_index(index: int) -> void:
 		_selected = index
 	_sync_card_selection()
 	_render_preview()
+	_remember_selection()
 
 
 func selected_index() -> int:
@@ -925,6 +928,10 @@ func _rebuild_items() -> void:
 		for i in _items.size():
 			if _items[i]["id"] == previous_id:
 				_selected = i
+	# T-098 (REQ-UIX-03 крит. 3, У-14): последняя выбранная в профиле, если она есть в списке
+	# и запускается; нет — правило REQ-INT-04 крит. 1.
+	if _selected < 0:
+		_selected = remembered_index()
 	# REQ-INT-04 крит. 1: единственная тренировка на сегодня предлагается к запуску сразу.
 	if _selected < 0:
 		var runnable := _runnable_intervals_indices()
@@ -985,6 +992,30 @@ func _apply_card_texts(card: ListRow, it: Dictionary) -> void:
 func _sync_card_selection() -> void:
 	for i in _cards.size():
 		_cards[i].set_selected(i == _selected)
+
+
+## Индекс тренировки, запомненной в профиле (`last_workout_id`), или -1: не выбиралась, нет в
+## списке (удалена, план другого дня) или не разобралась.
+func remembered_index() -> int:
+	var remembered := _profile.last_workout_id if _profile != null else ""
+	if remembered.is_empty():
+		return -1
+	for i in _items.size():
+		if str(_items[i]["id"]) == remembered and _items[i]["workout"] != null:
+			return i
+	return -1
+
+
+## Записать выбранную тренировку в профиль (только запускаемую и только при смене).
+func _remember_selection() -> void:
+	var item := selected_item()
+	if item.is_empty() or item["workout"] == null or _repo == null or not _is_current_profile(_profile):
+		return
+	var id := str(item["id"])
+	if id.is_empty() or id == _profile.last_workout_id:
+		return
+	if _repo.set_last_workout_id(_profile.id, id).is_empty():
+		_profile.last_workout_id = id
 
 
 func _runnable_intervals_indices() -> Array[int]:
