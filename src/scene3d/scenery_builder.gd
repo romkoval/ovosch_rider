@@ -367,7 +367,9 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	var boulders := Layer.new("Boulders", boulder_mesh(material), PerfBudget.RANGE_BUSHES_M, chunks)
 	_place_boulders(boulders, track, env, field, n_boulders, chunk_m, chunks, ko)
 	ConiferKit.refine_road_distance(plants, track)
-	var conifers: Array[Layer] = conifer_layers(plants, env, field, material, chunks)
+	# Хвойные: слои по уровням (позиции), прореживание, затем формы — с учётом того, какие
+	# деревья останутся в сцене (`ConiferKit.Plant.kept`): доли форм выдерживаются в кадре.
+	var conifers: Array[Layer] = _conifer_slots(plants, env, material, chunks)
 	var layers: Array[Layer] = [trees, conifers[0], conifers[1], bushes, tufts]
 	for extra in [conifers[2], poplars, walls, boulders]:
 		if not (extra as Layer).xf.is_empty():
@@ -377,6 +379,13 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		if seen > budget:
 			for layer in layers:
 				layer.keep = float(maxi(budget, 0)) / float(seen)
+	for layer in conifers:
+		for cp in layer.plants:
+			cp.kept = false
+		for i in layer.kept():
+			layer.plants[i].kept = true
+	ConiferKit.plant(plants, env, field)
+	_fill_conifers(conifers, env)
 	return layers
 
 
@@ -387,27 +396,51 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 ## отбрасывают уровни меньше `CONIFER_SHADOW_LODS`.
 static func conifer_layers(plants: Array[ConiferKit.Plant], env: EnvironmentSet, field: TerrainField,
 		material: Material, chunks: int) -> Array[Layer]:
+	var out: Array[Layer] = _conifer_slots(plants, env, material, chunks)
 	ConiferKit.plant(plants, env, field)
+	_fill_conifers(out, env)
+	return out
+
+
+## Слои хвойных по уровням детализации (`ConiferKit.lod_of` по `road_m`) с экземплярами в точках
+## деревьев — для подсчёта видимого и прореживания до назначения форм; трансформы, цвета, слоты
+## и треугольники — `_fill_conifers` после `ConiferKit.plant`. Порядок экземпляров — порядок
+## расстановки (от него зависит, какие останутся после `keep`, — не от форм).
+static func _conifer_slots(plants: Array[ConiferKit.Plant], env: EnvironmentSet, material: Material,
+		chunks: int) -> Array[Layer]:
 	var forms: PackedInt32Array = ConiferKit.mix_forms(ConiferKit.form_mix(env))
 	var out: Array[Layer] = []
-	var models: Array[PackedInt32Array] = []
 	for lod in ConiferKit.LOD_COUNT:
 		var mods: PackedInt32Array = ConiferKit.models_for(forms, lod)
-		models.append(mods)
 		var layer := Layer.new(CONIFER_LAYERS[lod], ConiferKit.layer_mesh(mods, lod, material), PerfBudget.RANGE_TREES_M, chunks)
 		layer.shadow = lod < CONIFER_SHADOW_LODS
 		layer.spread_keep = true
 		out.append(layer)
 	for cp in plants:
+		cp.lod = ConiferKit.lod_of(cp.road_m)
 		var layer: Layer = out[cp.lod]
-		var mods: PackedInt32Array = models[cp.lod]
-		var model: int = ConiferKit.model_of(cp.form, cp.lod)
-		layer.add(cp.transform(env.conifer_scale), cp.color(env.conifer_shade), cp.chunk)
-		if mods.size() > 1:
-			layer.custom.append(Color(float(mods.find(model)), 0.0, 0.0, 0.0))
-		layer.tris.append(ConiferKit.triangles(model, cp.lod))
+		layer.add(Transform3D(Basis.IDENTITY, cp.origin), Color.WHITE, cp.chunk)
 		layer.plants.append(cp)
 	return out
+
+
+## Трансформы, цвета, слоты формы в меше слоя и треугольники экземпляров хвойных (формы и
+## вариации уже назначены `ConiferKit.plant`).
+static func _fill_conifers(layers: Array[Layer], env: EnvironmentSet) -> void:
+	var forms: PackedInt32Array = ConiferKit.mix_forms(ConiferKit.form_mix(env))
+	for lod in layers.size():
+		var layer: Layer = layers[lod]
+		var mods: PackedInt32Array = ConiferKit.models_for(forms, lod)
+		layer.custom.clear()
+		layer.tris.clear()
+		for i in layer.plants.size():
+			var cp: ConiferKit.Plant = layer.plants[i]
+			var model: int = ConiferKit.model_of(cp.form, cp.lod)
+			layer.xf[i] = cp.transform(env.conifer_scale)
+			layer.col[i] = cp.color(env.conifer_shade)
+			if mods.size() > 1:
+				layer.custom.append(Color(float(mods.find(model)), 0.0, 0.0, 0.0))
+			layer.tris.append(ConiferKit.triangles(model, cp.lod))
 
 
 ## Экземпляров каждой формы в узлах слоя хвойных (с учётом прореживания `keep`): ключ формы →

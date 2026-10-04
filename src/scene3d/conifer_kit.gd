@@ -72,6 +72,13 @@ const TILT_PINE_DEG: float = 4.0
 const LEAN_TILT_DEG: float = 12.0
 ## Направление наклона наклонной пинии — к воде ±35°.
 const LEAN_YAW_JITTER_DEG: float = 35.0
+## Поиск ближайшей воды для наклона (`_shore_dir`): шаг колец, м, и число направлений (5°).
+const SHORE_STEP_M: float = 2.0
+const SHORE_DIRS: int = 72
+## Ель-ветровал — не выше 15 % хвойных трассы (спека, «Распределение по трассам»); квота
+## ограничена с запасом `WIND_SHARE_MARGIN` (≤ 14 %), лишнее — ели и пихте.
+const WIND_SHARE_MAX: float = 0.15
+const WIND_SHARE_MARGIN: float = 0.01
 ## Яркость и множители R / B цвета экземпляра.
 const BRIGHT_SPRUCE: Vector2 = Vector2(0.88, 1.10)
 const BRIGHT_PINE: Vector2 = Vector2(0.90, 1.10)
@@ -265,6 +272,9 @@ class Plant:
 	var tint := Vector3.ONE
 	## Наклонная пиния: горизонтальное направление к воде (ноль — не у берега).
 	var lean_dir := Vector3.ZERO
+	## Останется в сцене после прореживания `keep` (`SceneryBuilder.place` отмечает до `plant`):
+	## доли форм выдерживаются отдельно среди оставшихся и среди прорежённых.
+	var kept: bool = true
 
 	## Трансформ экземпляра: масштаб формы (и поправка модели уровня), поворот, наклон.
 	func transform(conifer_scale: float) -> Transform3D:
@@ -355,10 +365,14 @@ static func refine_road_distance(plants: Array[Plant], track: Track) -> void:
 
 
 ## Формы, уровни и вариации хвойных трассы. Доли форм — `form_mix` (точно по числу деревьев,
-## наибольшие остатки). Горы: в полосе `conifer_tree_line_band_m` ниже границы леса пихта и
-## ветровал вместе — не меньше `conifer_tree_line_share`. Приморье: наклонная пиния — только в
-## `conifer_lean_shore_m` от воды, наклон к воде; не хватило мест у берега — остаток долей
-## другим пиниям. Своя последовательность случайных чисел (расстановка рощ от неё не зависит).
+## наибольшие остатки) — отдельно среди деревьев, что останутся в сцене после прореживания
+## (`Plant.kept`), и среди прорежённых: прореживание по кускам и уровням не сдвигает доли в кадре
+## (горы: ветровал до прореживания 15 % давал в сцене 15.1 %). Ветровал — не выше
+## `WIND_SHARE_MAX` с запасом. Горы: в полосе `conifer_tree_line_band_m` ниже границы леса пихта
+## и ветровал вместе — не меньше `conifer_tree_line_share`. Приморье: наклонная пиния — только в
+## `conifer_lean_shore_m` от воды, наклон к ближайшей воде (`_shore_dir`); не хватило мест у
+## берега — остаток долей другим пиниям. Своя последовательность случайных чисел (расстановка
+## рощ от неё не зависит).
 static func plant(plants: Array[Plant], env: EnvironmentSet, field: TerrainField) -> void:
 	var n: int = plants.size()
 	if n == 0:
@@ -367,14 +381,44 @@ static func plant(plants: Array[Plant], env: EnvironmentSet, field: TerrainField
 	rng.seed = env.scenery_seed + 53
 	var mix: Dictionary = form_mix(env)
 	var forms: PackedInt32Array = mix_forms(mix)
-	var quota: Dictionary = _quotas(mix, forms, n)
-	var assigned := PackedInt32Array()
+	# Массив (не Packed): `_assign` пишет в него по ссылке.
+	var assigned: Array[int] = []
 	assigned.resize(n)
 	assigned.fill(-1)
+	var kept := PackedInt32Array()
+	var thinned := PackedInt32Array()
+	for i in n:
+		if plants[i].kept:
+			kept.append(i)
+		else:
+			thinned.append(i)
+	for group in [kept, thinned]:
+		if not (group as PackedInt32Array).is_empty():
+			_assign(plants, group, assigned, env, field, mix, forms, rng)
+	for i in n:
+		if assigned[i] == STONE_PINE_LEAN and plants[i].lean_dir != Vector3.ZERO:
+			var d: Vector3 = _shore_dir(field, plants[i].origin, env.conifer_lean_shore_m)
+			if d != Vector3.ZERO:
+				plants[i].lean_dir = d
+		_vary(plants[i], assigned[i], field, rng)
+
+
+## Формы деревьев `idx` (индексы `plants`) в `assigned`: квоты по долям на `idx.size()`, полоса у
+## границы леса, наклонные пинии у воды, остальное — перемешанный пул квот.
+static func _assign(plants: Array[Plant], idx: PackedInt32Array, assigned: Array[int], env: EnvironmentSet,
+		field: TerrainField, mix: Dictionary, forms: PackedInt32Array, rng: RandomNumberGenerator) -> void:
+	var n: int = idx.size()
+	var quota: Dictionary = _quotas(mix, forms, n)
+	if quota.has(SPRUCE_WIND):
+		var cap: int = int(floor((WIND_SHARE_MAX - WIND_SHARE_MARGIN) * float(n)))
+		var extra: int = int(quota[SPRUCE_WIND]) - cap
+		if extra > 0:
+			quota[SPRUCE_WIND] = cap
+			_give_spare(quota, extra, [SPRUCE, FIR], mix)
 	if quota.has(STONE_PINE_LEAN):
 		var band := PackedInt32Array()
 		if field != null and field.has_water():
-			for i in n:
+			for i in idx:
 				var d: Vector3 = _water_dir(field, plants[i].origin, env.conifer_lean_shore_m)
 				if d != Vector3.ZERO:
 					plants[i].lean_dir = d
@@ -392,7 +436,7 @@ static func plant(plants: Array[Plant], env: EnvironmentSet, field: TerrainField
 			high.append(f)
 	if not high.is_empty() and env.tree_line_m < SceneryBuilder.TREE_LINE_OFF_M:
 		var band := PackedInt32Array()
-		for i in n:
+		for i in idx:
 			if plants[i].origin.y > env.tree_line_m - env.conifer_tree_line_band_m:
 				band.append(i)
 		_shuffle(band, rng)
@@ -414,12 +458,10 @@ static func plant(plants: Array[Plant], env: EnvironmentSet, field: TerrainField
 			pool.append(f)
 	_shuffle(pool, rng)
 	var next: int = 0
-	for i in n:
+	for i in idx:
 		if assigned[i] < 0:
 			assigned[i] = pool[next] if next < pool.size() else forms[0]
 			next += 1
-	for i in n:
-		_vary(plants[i], assigned[i], field, rng)
 
 
 ## Вариации экземпляра формы `form` по таблице спеки.
@@ -516,7 +558,8 @@ static func _shuffle(a: PackedInt32Array, rng: RandomNumberGenerator) -> void:
 		a[j] = t
 
 
-## Направление к ближайшей воде в пределах `reach_m` (8 направлений, 4 дальности), ноль — нет.
+## Есть ли вода в пределах `reach_m` (грубо: 8 направлений, 4 дальности): направление первого
+## попадания, ноль — нет. Отбор мест наклонных пиний; наклон — по `_shore_dir`.
 static func _water_dir(field: TerrainField, p: Vector3, reach_m: float) -> Vector3:
 	for step in 4:
 		var d: float = reach_m * float(step + 1) / 4.0
@@ -527,6 +570,52 @@ static func _water_dir(field: TerrainField, p: Vector3, reach_m: float) -> Vecto
 			if field.water_depth_at(q.x, q.z) > 0.3:
 				return dir
 	return Vector3.ZERO
+
+
+## Направление на ближайшую кромку воды (глубина > 0) в пределах `reach_m`: кольца с шагом
+## `SHORE_STEP_M`, `SHORE_DIRS` направлений; на первом кольце с водой — середина самой длинной
+## дуги попаданий (вода с двух сторон — к большей). Ноль — воды нет. Только при расстановке.
+static func _shore_dir(field: TerrainField, p: Vector3, reach_m: float) -> Vector3:
+	var d: float = SHORE_STEP_M
+	var hit := PackedByteArray()
+	hit.resize(SHORE_DIRS)
+	while d <= reach_m + SHORE_STEP_M:
+		var any: bool = false
+		for k in SHORE_DIRS:
+			var a: float = TAU * float(k) / float(SHORE_DIRS)
+			var w: bool = field.water_depth_at(p.x + cos(a) * d, p.z + sin(a) * d) > 0.0
+			hit[k] = 1 if w else 0
+			any = any or w
+		if any:
+			return _longest_arc_mid(hit)
+		d += SHORE_STEP_M
+	return Vector3.ZERO
+
+
+## Середина самой длинной дуги подряд идущих попаданий `hit` (по кругу) — направление в плане.
+static func _longest_arc_mid(hit: PackedByteArray) -> Vector3:
+	var m: int = hit.size()
+	var start: int = -1
+	for k in m:
+		if hit[k] == 0:
+			start = k
+			break
+	if start < 0:
+		return Vector3.ZERO
+	var best_len: int = 0
+	var best_from: int = 0
+	var run: int = 0
+	for j in range(1, m + 1):
+		var k: int = (start + j) % m
+		if hit[k] == 1:
+			run += 1
+			if run > best_len:
+				best_len = run
+				best_from = k - run + 1
+		else:
+			run = 0
+	var a: float = TAU * (float(best_from) + float(best_len - 1) * 0.5) / float(m)
+	return Vector3(cos(a), 0.0, sin(a))
 
 
 # ---------------------------------------------------------------------------
