@@ -7,8 +7,8 @@ extends GutTest
 ## на змейке), п.8 (ориентиры в кадре у своих s, не больше трёх в кадре; подъём читается),
 ## п.12 (ориентиры в мире не реже 1.5 км, сторона и план). Приморье (T-088): море и река — одна
 ## водная поверхность на уровне воды трассы, рельеф уходит под воду, пляж, зонтичные сосны не на
-## песке, маяк на мысу со светом без источника света, ориентиры seaside (мост — T-090: пока насыпь
-## над рекой) — REQ-D3D-08 п.6 (вода, высота горизонта равнина < приморье < холмы), п.8, п.11, п.12.
+## песке, маяк на мысу со светом без источника света, ориентиры seaside (мост — T-090,
+## `test_seaside_bridge.gd`) — REQ-D3D-08 п.6 (вода, высота горизонта равнина < приморье < холмы), п.8, п.11, п.12.
 
 const SCENE: String = "res://src/scene3d/ride_scene.tscn"
 const FRAME: float = 1.0 / 60.0
@@ -745,7 +745,7 @@ func test_seaside_river_under_bridge_range_and_deck_10m_above_water() -> void:
 	var sample := TrackSample.new()
 	s.track.sample_into(tf.river_crossing_s, sample)
 	assert_gte(sample.position.y - def.water_level_m, 10.0, "полотно над водой ≥ 10 м")
-	# У перехода — вода реки по обе стороны насыпи (мост — T-090).
+	# У перехода — вода реки по обе стороны дороги (под мостом, T-090).
 	var cross: Vector3 = tf.river_crossing
 	var near: Array[Vector3] = []
 	for p in tf.river_points:

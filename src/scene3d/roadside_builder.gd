@@ -10,6 +10,10 @@ extends RefCounted
 ## кромка совпадают, щели «асфальт — бордюр» нет. Куски — как у дороги
 ## (`RoadBuilder.chunk_rings`): кусок 0 — узел, остальные — его дети с дальностью видимости.
 ## Строится один раз в `set_track()`.
+##
+## Мосты трассы (`BridgeBuilder.ranges`, T-090): на мосту — кромка цвета бетона и бордюр, без
+## полосы травы и отбойника (перила и карниз — `BridgeBuilder`); на подходе (`BridgeBuilder.APPROACH_M`)
+## полоса травы сужается к ширине устоя; сигнальных столбиков на мосту нет.
 
 const SHOULDER_M: float = 0.35
 const CURB_W_M: float = 0.2
@@ -28,6 +32,8 @@ const RAIL_TOP_M: float = 0.74
 const POST_H_M: float = 0.68
 
 const C_GRAVEL := Color(0.60, 0.57, 0.50, 0.0)
+## Кромка на мосту — бетон (`tracks.md` п. 6), а не гравий.
+const C_BRIDGE_EDGE := Color(0.64, 0.64, 0.62, 0.0)
 const C_CURB_TOP := Color(0.78, 0.78, 0.76, 0.0)
 const C_CURB_FACE := Color(0.66, 0.66, 0.65, 0.0)
 const C_RAIL := Color(0.70, 0.73, 0.77, 0.0)
@@ -78,6 +84,7 @@ static func build(track: Track, road_width_m: float, center_offset_m: float, wor
 	var sample := TrackSample.new()
 	var pa := TrackSample.new()
 	var pb := TrackSample.new()
+	var bridges: PackedVector2Array = BridgeBuilder.ranges(track)
 	var noise := FastNoiseLite.new()
 	noise.seed = seed
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
@@ -107,14 +114,25 @@ static func build(track: Track, road_width_m: float, center_offset_m: float, wor
 			var inner_sgn: float = -1.0 if k > 0.0 else 1.0
 			if absf(k) > 1e-5 and inner_sgn == sgn:
 				limit = 0.8 / absf(k) - center_offset_m * sgn
+			limit = minf(limit, _bridge_verge_limit(bridges, dist[i]))
 			limit_side.append(maxf(limit, curb_out + 0.5))
 		limits.append(limit_side)
+		var active := PackedByteArray()
 		if not guardrail:
-			rails.append(PackedByteArray())
+			pass
 		elif valley_field != null:
-			rails.append(valley_rails(centers, rights, sgn, valley_field))
+			active = valley_rails(centers, rights, sgn, valley_field)
 		else:
-			rails.append(_guardrail_active(dist, kappa, sgn, noise))
+			active = _guardrail_active(dist, kappa, sgn, noise)
+		for i in active.size():
+			if BridgeBuilder.in_ranges(bridges, dist[i]):
+				active[i] = 0
+		rails.append(active)
+	# Сегменты на мосту (оба кольца на мосту): без травы, кромка — бетон.
+	var on_bridge := PackedByteArray()
+	on_bridge.resize(rings)
+	for i in rings - 1:
+		on_bridge[i] = 1 if BridgeBuilder.in_ranges(bridges, dist[i]) and BridgeBuilder.in_ranges(bridges, dist[i + 1]) else 0
 	var chunks: int = RoadBuilder.chunk_count(track)
 	var roadside: MeshInstance3D = null
 	var verge_root: MeshInstance3D = null
@@ -131,8 +149,9 @@ static func build(track: Track, road_width_m: float, center_offset_m: float, wor
 				var o1: Vector3 = rights[i + 1] * sgn
 				var u0: Vector3 = ups[i]
 				var u1: Vector3 = ups[i + 1]
-				# Гравийная кромка.
-				kit.add_quad(c0 + o0 * half, c1 + o1 * half, c1 + o1 * curb_in, c0 + o0 * curb_in, u0, C_GRAVEL)
+				# Гравийная кромка (на мосту — бетон).
+				kit.add_quad(c0 + o0 * half, c1 + o1 * half, c1 + o1 * curb_in, c0 + o0 * curb_in, u0,
+					C_BRIDGE_EDGE if on_bridge[i] == 1 else C_GRAVEL)
 				# Бордюр: внутренняя грань, верх, внешняя грань.
 				kit.add_quad(c0 + o0 * curb_in, c1 + o1 * curb_in, c1 + o1 * curb_in + u1 * CURB_H_M,
 					c0 + o0 * curb_in + u0 * CURB_H_M, -o0, C_CURB_FACE)
@@ -141,7 +160,7 @@ static func build(track: Track, road_width_m: float, center_offset_m: float, wor
 				kit.add_quad(c0 + o0 * curb_out + u0 * CURB_H_M, c1 + o1 * curb_out + u1 * CURB_H_M,
 					c1 + o1 * curb_out + u1 * (GRASS_AT_CURB_M - 0.02), c0 + o0 * curb_out + u0 * (GRASS_AT_CURB_M - 0.02),
 					o0, C_CURB_FACE)
-			_add_verge_side(verge, centers, rights, ups, limits[side_i], sgn, curb_out, span)
+			_add_verge_side(verge, centers, rights, ups, limits[side_i], sgn, curb_out, span, on_bridge)
 			if guardrail:
 				var post_end: int = span.y if (span.y == last and not track.is_loop()) else span.y - 1
 				_add_guardrail_side(kit, centers, rights, ups, rails[side_i], sgn, curb_out, Vector2i(span.x, post_end))
@@ -202,8 +221,11 @@ static func place_posts(track: Track, env: EnvironmentSet) -> Dictionary:
 	var sample := TrackSample.new()
 	var ground: float = verge_height(env.prop_offset_m, env.road_width_m) - 0.05
 	var spacing: float = maxf(env.prop_spacing_m, track.length_m() / float(per_side))
+	var bridges: PackedVector2Array = BridgeBuilder.ranges(track)
 	for i in count:
 		var s: float = float(i / 2) * spacing
+		if BridgeBuilder.in_ranges(bridges, s, 3.0):
+			continue
 		track.sample_into(s, sample)
 		var side: float = -1.0 if i % 2 == 0 else 1.0
 		var right: Vector3 = sample.right()
@@ -214,7 +236,8 @@ static func place_posts(track: Track, env: EnvironmentSet) -> Dictionary:
 
 
 static func _add_verge_side(kit: MeshKit, centers: PackedVector3Array, rights: PackedVector3Array,
-		ups: PackedVector3Array, limits: PackedFloat32Array, sgn: float, curb_out: float, span: Vector2i) -> void:
+		ups: PackedVector3Array, limits: PackedFloat32Array, sgn: float, curb_out: float, span: Vector2i,
+		skip: PackedByteArray = PackedByteArray()) -> void:
 	var cols: int = VERGE_PROFILE.size()
 	var start: int = kit.vertices.size()
 	for i in range(span.x, span.y + 1):
@@ -240,6 +263,8 @@ static func _add_verge_side(kit: MeshKit, centers: PackedVector3Array, rights: P
 			kit.normals.append(nrm)
 			kit.colors.append(col)
 	for i in span.y - span.x:
+		if not skip.is_empty() and skip[span.x + i] == 1:
+			continue
 		for j in cols - 1:
 			var a: int = start + i * cols + j
 			var b: int = a + 1
@@ -350,6 +375,22 @@ static func _add_guardrail_side(kit: MeshKit, centers: PackedVector3Array, right
 				p0 + back_off + up * y1, o, C_RAIL_GROOVE)
 		kit.add_quad(p0 + up * (ground + RAIL_TOP_M), p1 + up1 * (ground + RAIL_TOP_M),
 			p1 + o1 * 0.03 + up1 * (ground + RAIL_TOP_M), p0 + o * 0.03 + up * (ground + RAIL_TOP_M), up, C_RAIL)
+
+
+## Ширина полосы травы (от центра дороги) у моста: на подходе `BridgeBuilder.APPROACH_M` сужается
+## к полуширине устоя, на мосту — до бордюра (сегменты моста не строятся); вдали — без ограничения.
+static func _bridge_verge_limit(bridges: PackedVector2Array, s: float) -> float:
+	var limit: float = 1.0e6
+	for b in bridges:
+		var before: float = b.x - s
+		var after: float = s - b.y
+		var gap: float = maxf(before, after)
+		if gap <= 0.0:
+			return BridgeBuilder.ABUT_HALF_W_M - 0.3
+		if gap < BridgeBuilder.APPROACH_M:
+			var t: float = smoothstep(0.0, BridgeBuilder.APPROACH_M, BridgeBuilder.APPROACH_M - gap)
+			limit = minf(limit, lerpf(40.0, BridgeBuilder.ABUT_HALF_W_M - 0.3, t))
+	return limit
 
 
 static func _profile_y(x_from_curb: float) -> float:

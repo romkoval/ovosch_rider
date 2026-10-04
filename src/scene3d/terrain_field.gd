@@ -39,10 +39,14 @@ extends RefCounted
 ## (по s) внешняя сторона петли — море: за полосой у дороги рельеф уходит к воде — склон дюн
 ## (на мысу — обрыв), пляж и дно, холмы горизонта со стороны моря гаснут (горизонт открыт).
 ## Маска «суша/море» — по ближайшей точке трассы (знаковое расстояние и вес участка на грубой
-## сетке, без перебора пар). Река — русло по ломаной (`carve_river`) с озером у истока, насыпь
-## дороги на переходе не срезается (мост — T-090). Вода — один меш (`build_water_mesh`) на уровне
-## воды: плитки коридора, где рельеф ниже уровня (глубина под водой — в UV.x для шейдера), и
-## открытое море за коридором до `sea_reach_m`.
+## сетке, без перебора пар). Река — русло по ломаной (`carve_river`) с озером у истока. Вода — один
+## меш (`build_water_mesh`) на уровне воды: плитки коридора, где рельеф ниже уровня (глубина под
+## водой — в UV.x для шейдера), и открытое море за коридором до `sea_reach_m`.
+##
+## Мосты (T-090, `BridgeBuilder.ranges`): если переход реки — на мосту, насыпь у оси не
+## защищается, а под всем пролётом прорезается долина (`carve_bridge_valley`): заводь реки
+## посередине (опоры в воде), пляж и пойма, к устоям — откосы до `BridgeBuilder.ABUT_DROP_M`
+## ниже полотна. Только опускает: рельеф нигде не выше полотна.
 
 const SAMPLE_STEP_M: float = 5.0
 ## Дальше этого расстояния от трассы рельеф не зависит от высоты дороги (минимум; на
@@ -156,6 +160,20 @@ const EMBANK_FLAT_M: float = 15.0
 const EMBANK_SLOPE: float = 0.75
 ## Мыс под маяк (`raise_headland`): обрыв вокруг площадки.
 const HEADLAND_CLIFF_SLOPE: float = 1.5
+## Долина под мостом (`carve_bridge_valley`): эллипс по «нормированному радиусу» e — вдоль дороги
+## полуось от середины моста до лицевой грани устоя, поперёк — `BRIDGE_VALLEY_HALF_M`. До
+## `BRIDGE_LAGOON_E` — дно заводи на `BRIDGE_LAGOON_DEPTH_M` под водой, до `BRIDGE_SHORE_E` — урез
+## и пляж (`BRIDGE_BEACH_M` над водой), до `BRIDGE_MEADOW_E` — пойма (`BRIDGE_MEADOW_M`), к e = 1 —
+## откос к устою, дальше — подъём `BRIDGE_OUT_RISE_M` на единицу e. Шаг оси для проекции, м.
+const BRIDGE_VALLEY_HALF_M: float = 120.0
+const BRIDGE_LAGOON_E: float = 0.55
+const BRIDGE_SHORE_E: float = 0.64
+const BRIDGE_MEADOW_E: float = 0.78
+const BRIDGE_LAGOON_DEPTH_M: float = 2.8
+const BRIDGE_BEACH_M: float = 0.6
+const BRIDGE_MEADOW_M: float = 3.4
+const BRIDGE_OUT_RISE_M: float = 40.0
+const BRIDGE_PROBE_M: float = 10.0
 
 var origin := Vector2.ZERO
 var cell_m: float = MIN_CELL_M
@@ -240,6 +258,8 @@ var river_half_m: float = 0.0
 ## Точка перехода реки под дорогой (ось дороги) и s этой точки; NAN — реки нет.
 var river_crossing := Vector3.ZERO
 var river_crossing_s: float = NAN
+## Диапазоны мостов трассы по s (`BridgeBuilder.ranges`); под ними — долина, насыпи нет.
+var bridge_ranges := PackedVector2Array()
 
 ## Маска моря по грубой сетке (хранится после построения): знаковое удаление от трассы (> 0 —
 ## снаружи петли; у трассы — поперечная составляющая до ближайшей точки, дальше — расстояние) и
@@ -305,9 +325,12 @@ static func build_for(track: Track, env: EnvironmentSet) -> TerrainField:
 		f.beach_width_m = maxf(env.beach_width_m, 5.0)
 		f.sea_depth_m = maxf(env.sea_depth_m, 1.0)
 		f.sea_reach_m = maxf(env.sea_reach_m, 0.0)
+	f.bridge_ranges = BridgeBuilder.ranges(track)
 	f._run(track, env.rolling_height_m, env.hills_height_m, env.scenery_seed)
 	if env.water_enabled and env.river_path.size() >= 2:
 		f._carve_route_river(track, env)
+	for b in f.bridge_ranges:
+		f.carve_bridge_valley(track, b)
 	return f
 
 
@@ -1116,7 +1139,8 @@ func _carve_route_river(track: Track, env: EnvironmentSet) -> void:
 			if best_lat < 1.0:
 				river_crossing = sample.position
 				river_crossing_s = track.wrap_distance(v.x)
-				embank_y = sample.position.y
+				# На мосту насыпи нет — русло проходит под пролётом.
+				embank_y = -FAR if BridgeBuilder.in_ranges(bridge_ranges, river_crossing_s) else sample.position.y
 	river_points = smooth_polyline(ctrl, 20.0)
 	river_half_m = maxf(env.river_width_m * 0.5, 4.0)
 	if env.river_lake_radii.x > 0.0 and river_points.size() >= 2:
@@ -1124,6 +1148,117 @@ func _carve_route_river(track: Track, env: EnvironmentSet) -> void:
 		var axis: Vector3 = river_points[0] - river_points[mini(3, river_points.size() - 1)]
 		carve_basin(head, axis, env.river_lake_radii, water_level)
 	carve_river(river_points, river_half_m, water_level, embank_y)
+
+
+## Долина под мостом `b` (диапазон s): заводь, пляж, пойма и откосы к устоям (см. `BRIDGE_*`).
+## Вершины, которые проецируются на ось дороги вне моста, не меняются (насыпь подхода остаётся).
+## Только опускает. Вызывается до `build_mesh`/`build_water_mesh`.
+func carve_bridge_valley(track: Track, b: Vector2) -> void:
+	var v := _BridgeValley.new()
+	var sample := TrackSample.new()
+	var n: int = maxi(int(ceil((b.y - b.x) / BRIDGE_PROBE_M)), 1)
+	for i in n + 1:
+		var s: float = lerpf(b.x, b.y, float(i) / float(n))
+		track.sample_into(s, sample)
+		v.pts.append(Vector2(sample.position.x, sample.position.z))
+		v.ss.append(s)
+	track.sample_into(b.x, sample)
+	v.y_a = sample.position.y
+	track.sample_into(b.y, sample)
+	v.y_b = sample.position.y
+	v.mid = (b.x + b.y) * 0.5
+	v.ax = maxf((b.y - b.x) * 0.5 - BridgeBuilder.ABUT_IN_M, 10.0)
+	v.wet = has_water()
+	v.level = water_level if v.wet else minf(v.y_a, v.y_b) - 12.0
+	var reach: float = BRIDGE_VALLEY_HALF_M * 2.0
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for p in v.pts:
+		lo = Vector2(minf(lo.x, p.x), minf(lo.y, p.y))
+		hi = Vector2(maxf(hi.x, p.x), maxf(hi.y, p.y))
+	lo -= Vector2(reach, reach)
+	hi += Vector2(reach, reach)
+	if corridor:
+		for ti in tile_keys.size():
+			var key: Vector2i = tile_keys[ti]
+			var step: int = tile_step[ti]
+			var tn: int = TILE_CELLS / step + 1
+			var x0: float = origin.x + float(key.x * TILE_CELLS) * cell_m
+			var z0: float = origin.y + float(key.y * TILE_CELLS) * cell_m
+			var span: float = cell_m * float(TILE_CELLS)
+			if x0 > hi.x or x0 + span < lo.x or z0 > hi.y or z0 + span < lo.y:
+				continue
+			var h: PackedFloat32Array = tile_heights[ti]
+			var rel: PackedFloat32Array = tile_rel[ti]
+			for j in tn:
+				for i in tn:
+					var k: int = j * tn + i
+					var nh: float = v.height(h[k], Vector2(x0 + float(i * step) * cell_m, z0 + float(j * step) * cell_m))
+					rel[k] += nh - h[k]
+					h[k] = nh
+			tile_heights[ti] = h
+			tile_rel[ti] = rel
+	else:
+		for iz in nz:
+			for ix in nx:
+				var p := Vector2(origin.x + float(ix) * cell_m, origin.y + float(iz) * cell_m)
+				if p.x < lo.x or p.x > hi.x or p.y < lo.y or p.y > hi.y:
+					continue
+				var k: int = iz * nx + ix
+				var nh: float = v.height(heights[k], p)
+				heights_rel[k] += nh - heights[k]
+				heights[k] = nh
+
+
+## Форма долины под мостом: ось дороги (x, z) и s её точек, высоты концов, середина, полуось.
+class _BridgeValley:
+	var pts := PackedVector2Array()
+	var ss := PackedFloat32Array()
+	var y_a: float = 0.0
+	var y_b: float = 0.0
+	var mid: float = 0.0
+	var ax: float = 1.0
+	var wet: bool = false
+	var level: float = 0.0
+
+	## Высота с долиной в точке `p` поверх исходной `h` (не выше её).
+	func height(h: float, p: Vector2) -> float:
+		var best: float = INF
+		var s_proj: float = 0.0
+		var last: int = pts.size() - 2
+		for i in last + 1:
+			var a: Vector2 = pts[i]
+			var ab: Vector2 = pts[i + 1] - a
+			var len2: float = maxf(ab.length_squared(), 1e-6)
+			var raw: float = (p - a).dot(ab) / len2
+			# За концами моста (проекция вне оси) — насыпь подхода, не трогаем.
+			if (i == 0 and raw < 0.0) or (i == last and raw > 1.0):
+				continue
+			var t: float = clampf(raw, 0.0, 1.0)
+			var d2: float = p.distance_squared_to(a + ab * t)
+			if d2 < best:
+				best = d2
+				s_proj = lerpf(ss[i], ss[i + 1], t)
+		if best == INF:
+			return h
+		var x: float = s_proj - mid
+		var e: float = Vector2(x / ax, sqrt(best) / BRIDGE_VALLEY_HALF_M).length()
+		var meadow: float = level + BRIDGE_MEADOW_M
+		var top: float = maxf((y_a if x < 0.0 else y_b) - BridgeBuilder.ABUT_DROP_M, meadow)
+		var y: float
+		if e >= 1.0:
+			y = top + (e - 1.0) * BRIDGE_OUT_RISE_M
+		elif e >= BRIDGE_MEADOW_E:
+			y = lerpf(meadow, top, (e - BRIDGE_MEADOW_E) / (1.0 - BRIDGE_MEADOW_E))
+		elif not wet:
+			y = meadow
+		elif e >= BRIDGE_SHORE_E:
+			y = lerpf(level + BRIDGE_BEACH_M, meadow, smoothstep(BRIDGE_SHORE_E, BRIDGE_MEADOW_E, e))
+		elif e >= BRIDGE_LAGOON_E:
+			y = lerpf(level - BRIDGE_LAGOON_DEPTH_M, level + BRIDGE_BEACH_M, smoothstep(BRIDGE_LAGOON_E, BRIDGE_SHORE_E, e))
+		else:
+			y = level - BRIDGE_LAGOON_DEPTH_M
+		return minf(h, y)
 
 
 ## Ломаная через опорные точки (Catmull-Rom), шаг ~`step_m`; концы — опорные точки.

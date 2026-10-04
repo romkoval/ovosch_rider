@@ -10,7 +10,9 @@ extends RefCounted
 ## Наборы окружения трасс (T-083) добавляют лесополосы тополей (ряды вдоль полей и поперёк),
 ## низкие каменные изгороди вдоль дороги и долю елей/рощи на возвышенностях. Приморье (T-088):
 ## хвойные — зонтичные сосны (`EnvironmentSet.conifer_kind`), деревья, кусты и валуны не стоят
-## на пляже и в воде (не ниже уровня воды + `shore_clear_m`).
+## на пляже и в воде (не ниже уровня воды + `shore_clear_m`). Мосты (T-090, `BridgeBuilder.ranges`):
+## на мосту и подходе к нему объекты «у дороги» (высота — по полосе травы) не ставятся — под
+## полотном долина; пучки травы — только не на мосту и устоях.
 
 const TREE_MIN_ROAD_M: float = 9.0
 const TREE_MAX_OFFSET_M: float = 200.0
@@ -267,6 +269,7 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	forest.frequency = 1.0 / 140.0
 	var curb_out: float = RoadsideBuilder.curb_outer_m(env.road_width_m)
 	var verge_w: float = RoadsideBuilder.verge_width_m(env.road_width_m)
+	var bridges: PackedVector2Array = BridgeBuilder.ranges(track)
 	var sample := TrackSample.new()
 	var trees := Layer.new("Trees", tree_mesh(material), PerfBudget.RANGE_TREES_M, chunks)
 	var pines := Layer.new("Conifers", umbrella_pine_mesh(material) if env.conifer_kind == 1 else conifer_mesh(material),
@@ -283,6 +286,8 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
 		var near_row: bool = rng.randf() < 0.4
 		var w: float = (curb_out + 4.5 + rng.randf() * 14.0) if near_row else (TREE_MIN_ROAD_M + 4.0 + pow(rng.randf(), 1.8) * TREE_MAX_OFFSET_M)
+		if _on_bridge_verge(bridges, s, w, verge_w):
+			continue
 		track.sample_into(s, sample)
 		var right: Vector3 = sample.right()
 		var c: Vector3 = sample.position + right * env.road_center_offset_m
@@ -324,6 +329,8 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var s: float = rng.randf() * length
 		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
 		var w: float = curb_out + 3.2 + pow(rng.randf(), 2.0) * 40.0
+		if _on_bridge_verge(bridges, s, w, verge_w):
+			continue
 		track.sample_into(s, sample)
 		var right: Vector3 = sample.right()
 		var p: Vector3 = sample.position + right * (env.road_center_offset_m + sgn * w)
@@ -344,6 +351,8 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var s: float = rng.randf() * length
 		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
 		var w: float = (curb_out + rng.randf_range(0.05, 0.9)) if rng.randf() < 0.85 else (curb_out + rng.randf_range(1.0, 9.0))
+		if BridgeBuilder.in_ranges(bridges, s, BridgeBuilder.ABUT_BACK_M):
+			continue
 		track.sample_into(s, sample)
 		var right: Vector3 = sample.right()
 		var p: Vector3 = sample.position + right * (env.road_center_offset_m + sgn * w)
@@ -512,6 +521,11 @@ static func shore_line_y(env: EnvironmentSet, field: TerrainField) -> float:
 	if field == null or not field.has_water():
 		return -INF
 	return field.water_level + maxf(env.shore_clear_m, 0.0)
+
+
+## Объект у дороги с высотой по полосе травы (`_ground_y`) на мосту или подходе: под ним нет земли.
+static func _on_bridge_verge(bridges: PackedVector2Array, s: float, w: float, verge_w: float) -> bool:
+	return not bridges.is_empty() and w < verge_w - 1.5 and BridgeBuilder.in_ranges(bridges, s, BridgeBuilder.APPROACH_M)
 
 
 static func _ground_y(p: Vector3, w: float, road_y: float, road_width: float, verge_w: float, field: TerrainField) -> float:

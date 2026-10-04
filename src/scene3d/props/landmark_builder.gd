@@ -21,8 +21,9 @@ extends RefCounted
 ## Приморье (T-088): причал, пляж, вышка спасателя — по береговой линии рельефа (`TerrainField`,
 ## уровень воды); лодки и парусники — на воде (покачиваются и плывут в шейдере); маяк — на мысу,
 ## который ориентир поднимает в рельефе (`Headland`), свет маяка вращается и светится в шейдере;
-## устье — камыши по берегам реки (`TerrainField.river_points`). Мост (`bridge`) — T-090: пока
-## дорога идёт по насыпи, у её подножия у реки — каменная наброска.
+## устье — камыши по берегам реки (`TerrainField.river_points`). Мост (`bridge`, T-090): сама
+## конструкция строится по `RouteDef.bridges` (`BridgeBuilder`), ориентир — камыши по берегам
+## заводи под мостом и лодки на ней.
 
 const ANIM_MATERIAL: String = "res://src/scene3d/props/materials/prop_anim.tres"
 ## Дальность видимости частей ориентира по плану, м (до центра AABB части).
@@ -457,6 +458,12 @@ static func min_clearance(type: String) -> float:
 	return float(TYPE_CLEARANCE.get(type, MIN_CLEARANCE_M))
 
 
+## Узел части (`MultiMeshInstance3D` с дальностью видимости `range_m`) — для мостов
+## (`BridgeBuilder`), которые строятся так же, как ориентиры.
+static func multimesh_node(part: Part, range_m: float) -> MultiMeshInstance3D:
+	return _multimesh(part, range_m)
+
+
 static func _multimesh(part: Part, range_m: float) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -598,7 +605,7 @@ static func _build_type(ctx: Ctx, type: String) -> void:
 		"river_mouth":
 			_river_mouth(ctx)
 		"bridge":
-			_bridge_embankment(ctx)
+			_bridge_banks(ctx)
 		"pine_forest":
 			_pine_forest(ctx)
 		"olive_terraces":
@@ -1423,33 +1430,64 @@ static func _river_mouth(ctx: Ctx) -> void:
 		ctx.anchor = reeds.xf[0].origin
 
 
-## Мост через реку — T-090. Пока дорога идёт по насыпи (рельеф у оси не срезан руслом), у
-## подножия насыпи по обе стороны от русла — каменная наброска; привязка — ось дороги над рекой.
-static func _bridge_embankment(ctx: Ctx) -> void:
-	var s_c: float = ctx.placed.s_m + 250.0
-	if ctx.field != null and not is_nan(ctx.field.river_crossing_s):
+## Мост через реку (T-090): конструкция — `BridgeBuilder` по `RouteDef.bridges`; ориентир — берега
+## заводи под мостом: камыши куртинами по урезу (не под полотном) и две лодки на воде. Точка
+## привязки — ось дороги над рекой (середина моста, если перехода нет).
+const BANK_REEDS_MAX: int = 70
+
+
+static func _bridge_banks(ctx: Ctx) -> void:
+	var span := Vector2(ctx.placed.s_m, ctx.placed.s_m + 500.0)
+	for b in BridgeBuilder.ranges(ctx.track):
+		if ctx.placed.s_m >= b.x - 400.0 and ctx.placed.s_m <= b.y:
+			span = b
+			break
+	var s_c: float = (span.x + span.y) * 0.5
+	if ctx.field != null and not is_nan(ctx.field.river_crossing_s) and BridgeBuilder.in_ranges(PackedVector2Array([span]), ctx.field.river_crossing_s):
 		s_c = ctx.field.river_crossing_s
-	var sample := TrackSample.new()
-	ctx.track.sample_into(ctx.track.wrap_distance(s_c), sample)
-	var r: Vector3 = sample.right()
-	r.y = 0.0
-	r = r.normalized()
-	var f := Vector3(sample.forward.x, 0.0, sample.forward.z).normalized()
-	var center: Vector3 = sample.position + r * ctx.env.road_center_offset_m
-	var rock: Mesh = SceneryBuilder.boulder_mesh(ctx.material)
 	var lvl: float = _water_y(ctx)
-	for sgn in [-1.0, 1.0]:
-		for k in 12:
-			var u: float = ctx.rng.randf_range(-34.0, 34.0)
-			var w: float = ctx.rng.randf_range(15.0, 30.0)
-			var p: Vector3 = center + r * float(sgn) * w + f * u
-			var g: float = ctx.ground(p)
-			if g < lvl - 0.8:
+	var deck: float = BridgeBuilder.deck_half_m(ctx.env.road_width_m)
+	var reeds: Part = null
+	var count: int = 0
+	var u: float = span.x + 12.0
+	while u < span.y - 12.0 and count < BANK_REEDS_MAX:
+		var sp: Spot = _spot(ctx, u - ctx.placed.s_m)
+		var v: float = -150.0
+		while v < 150.0 and count < BANK_REEDS_MAX:
+			var w: float = v + ctx.rng.randf_range(-2.5, 2.5)
+			if absf(w) > deck + 3.0 and ctx.rng.randf() < 0.45:
+				var p: Vector3 = sp.center + sp.right * w + sp.fwd * ctx.rng.randf_range(-3.0, 3.0)
+				var g: float = ctx.ground(p)
+				if g > lvl + 0.1 and g < lvl + 1.3:
+					p.y = g
+					reeds = ctx.part("reeds", 1.2)
+					reeds.add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3.ONE * ctx.rng.randf_range(0.8, 1.4)), p))
+					count += 1
+			v += 5.0
+		u += 7.0
+	if ctx.field != null and ctx.field.has_water():
+		var hull := PropMeshes.mesh("boat", ctx.anim_material)
+		var boats: int = 0
+		for k in 8:
+			if boats >= 2:
+				break
+			var sp: Spot = _spot(ctx, s_c - ctx.placed.s_m + ctx.rng.randf_range(-90.0, 90.0))
+			var sgn: float = -1.0 if k % 2 == 0 else 1.0
+			var p: Vector3 = sp.center + sp.right * sgn * ctx.rng.randf_range(deck + 14.0, deck + 45.0)
+			if ctx.ground(p) > lvl - 0.8:
 				continue
-			var sc: float = ctx.rng.randf_range(0.7, 1.5)
-			ctx.part_mesh("riprap", rock, 0.0).add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3.ONE * sc),
-				Vector3(p.x, g - 0.25 * sc, p.z)), Color(0.95, 0.93, 0.88))
-	ctx.anchor = Vector3(center.x, sample.position.y, center.z)
+			p.y = lvl
+			var part: Part = ctx.part_mesh("lagoon_boats", hull, 0.0)
+			part.animated = true
+			part.add(Transform3D(_along(sp.fwd.rotated(Vector3.UP, ctx.rng.randf_range(-0.8, 0.8))), p), Color(0.92, 0.90, 0.84),
+				Color(0.0, ctx.rng.randf() * TAU, 0.0, 0.12))
+			boats += 1
+	var at: Spot = _spot(ctx, s_c - ctx.placed.s_m)
+	ctx.anchor = at.center
+	ctx.anchor.y = at.road_y
+	if reeds == null and ctx.placed.instance_count() == 0:
+		# Без воды (набор без реки) — пятно у моста, чтобы ориентир не пропал.
+		ctx.put("reeds", 1.2, 0.0, deck + 6.0)
 
 
 ## Сосновый лес (по обе стороны): зонтичные сосны рощей у дороги на ~260 м.

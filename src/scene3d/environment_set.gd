@@ -152,7 +152,8 @@ extends Resource
 @export var sea_depth_m: float = 12.0
 @export var sea_reach_m: float = 6000.0
 ## Река: опорные точки (x — s, м; y — смещение вправо от оси трассы, м) от истока к устью;
-## точка со смещением ~0 — переход под дорогой (мост — T-090, пока насыпь). Ширина русла, полуоси
+## точка со смещением ~0 — переход под дорогой (на мосту `RouteDef.bridges` насыпи нет — долина
+## под пролётом, T-090). Ширина русла, полуоси
 ## озера у истока (0 — без озера).
 @export var river_path: PackedVector2Array = PackedVector2Array()
 @export var river_width_m: float = 40.0

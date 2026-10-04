@@ -78,6 +78,9 @@ var _env_instance: Node = null
 ## Ориентиры трассы каталога (T-083): расстановка и узлы (входят в `_world_nodes`).
 var _landmarks_placed: Array[LandmarkBuilder.Placed] = []
 var _landmark_nodes: Array[MultiMeshInstance3D] = []
+## Мосты трассы (T-090, `BridgeBuilder` по `RouteDef.bridges`): расстановка и узлы (входят в `_world_nodes`).
+var _bridges_placed: Array[LandmarkBuilder.Placed] = []
+var _bridge_nodes: Array[MultiMeshInstance3D] = []
 ## Контейнер того, что есть не на каждой трассе (ориентиры, лесополосы, изгороди): живёт всё
 ## время сцены, поэтому число детей корня окружения от трассы не зависит.
 var _features: Node3D = null
@@ -139,6 +142,8 @@ func set_track(new_track: Track) -> void:
 	_water = null
 	_landmarks_placed.clear()
 	_landmark_nodes.clear()
+	_bridges_placed.clear()
+	_bridge_nodes.clear()
 	if not is_node_ready():
 		return
 	var env: EnvironmentSet = environment_set
@@ -194,6 +199,16 @@ func landmark_nodes() -> Array[MultiMeshInstance3D]:
 ## Расстановка ориентиров (данные для тестов: тип, s, точка привязки, экземпляры частей).
 func landmarks_placed() -> Array[LandmarkBuilder.Placed]:
 	return _landmarks_placed
+
+
+## Узлы мостов трассы (`BridgeBuilder`; корни, фонари — их дети). Пусто — мостов нет.
+func bridge_nodes() -> Array[MultiMeshInstance3D]:
+	return _bridge_nodes
+
+
+## Расстановка мостов (данные для тестов: части, точка привязки).
+func bridges_placed() -> Array[LandmarkBuilder.Placed]:
+	return _bridges_placed
 
 
 func rider_position() -> Vector3:
@@ -426,6 +441,12 @@ func _build_world() -> void:
 	if _terrain != null:
 		LandmarkBuilder.carve(_landmarks_placed, _terrain)
 		_add_world_node(_no_shadow(_terrain.build_mesh(grass_mat)))
+	# Мосты — по данным трассы, после правок рельефа (опоры стоят на дне долины).
+	_bridges_placed = BridgeBuilder.place(track, e, _terrain, world_mat)
+	_bridge_nodes = BridgeBuilder.nodes(_bridges_placed)
+	for node in _bridge_nodes:
+		_add_world_node(node, true)
+	if _terrain != null:
 		# Вода — после всех правок рельефа (котловины, русло, мыс): глубина под водой — по ним.
 		if e.water_enabled:
 			_water = _terrain.build_water_mesh(_material_or(e.water_material, DEFAULT_WATER_MATERIAL))
@@ -438,12 +459,16 @@ func _build_world() -> void:
 	var fixed: Array = []
 	fixed.append(_props)
 	fixed.append_array(_landmark_nodes)
+	fixed.append_array(_bridge_nodes)
 	var fixed_visible: int = PerfBudget.max_visible_along(fixed, track)
 	var fixed_total: int = 0
 	for node in fixed:
 		if node != null:
 			fixed_total += int(PerfBudget.count(node)["multimesh_instances"])
-	var keep: LandmarkBuilder.KeepOut = LandmarkBuilder.keep_out(_landmarks_placed)
+	var spots: Array[LandmarkBuilder.Placed] = []
+	spots.append_array(_landmarks_placed)
+	spots.append_array(_bridges_placed)
+	var keep: LandmarkBuilder.KeepOut = LandmarkBuilder.keep_out(spots)
 	# Длинная трасса: видимое считается по точкам через 50 м — между ними (и на сложенной
 	# змейке) может быть чуть больше; запас — `EnvironmentSet.visible_reserve`. Компактный мир
 	# виден целиком — без запаса.
