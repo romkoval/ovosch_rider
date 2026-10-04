@@ -5,10 +5,12 @@
 # не перерисовывается, и проход зависает. Размер каждого кадра проверяет сам скрипт: кадр не
 # того размера (Retina, растянутое окно) не сохраняется, код выхода ≠ 0.
 # Использование:
-#   ./scripts/ui_screenshot.sh [каталог=screenshots/ui] [разрешение=all] [язык=all] [--safe-area]
+#   ./scripts/ui_screenshot.sh [каталог=screenshots/ui] [разрешение=all] [язык=all] [--safe-area] [--phone]
 # разрешение — WxH, список через запятую или all (1280x720,1024x768,1280x590);
 # язык — ru, en, список через запятую или all (ru,en); --safe-area — имитация безопасной
-# зоны 100/100/0/13 lp (слева/справа/сверху/снизу). На каждую пару «разрешение × язык» —
+# зоны 100/100/0/13 lp (слева/справа/сверху/снизу); --phone — тип устройства «телефон»
+# (масштаб HUD 1.2, кнопки 72 lp, фишки столбиком; файлы с суффиксом _phone; обычно вместе с
+# 1280x590 и --safe-area). На каждую пару «разрешение × язык» —
 # отдельный запуск Godot с окном нужного размера. Код выхода ≠ 0, если упал хоть один запуск.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -19,10 +21,13 @@ IS_MACOS=0
 [[ "$(uname -s)" == "Darwin" ]] && IS_MACOS=1
 
 safe=0
+phone=0
 positional=()
 for arg in "$@"; do
   if [[ "$arg" == "--safe-area" ]]; then
     safe=1
+  elif [[ "$arg" == "--phone" ]]; then
+    phone=1
   else
     positional+=("$arg")
   fi
@@ -49,6 +54,9 @@ for res in ${RESOLUTIONS//,/ }; do
     run+=(-s res://scripts/dev/ui_screenshot.gd -- "$OUT" "$res" "$lang")
     if [[ "$safe" == 1 ]]; then
       run+=(--safe-area)
+    fi
+    if [[ "$phone" == 1 ]]; then
+      run+=(--phone)
     fi
     # xvfb — только Linux без дисплея; на macOS всегда своё окно (даже если стоит XQuartz).
     if [[ "$IS_MACOS" == 0 && -z "${DISPLAY:-}" ]] && command -v xvfb-run >/dev/null; then

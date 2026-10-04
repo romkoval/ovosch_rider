@@ -1,6 +1,12 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://src/ui/free_ride/free_ride_screen.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://src/ui/hud/hud_metric_panel.tscn" id="2_panel"]
+[ext_resource type="PackedScene" path="res://src/ui/hud/hud_toolbar.tscn" id="3_toolbar"]
+[ext_resource type="PackedScene" path="res://src/ui/hud/pause_overlay.tscn" id="4_pause"]
+[ext_resource type="Script" path="res://src/ui/hud/hud_chart.gd" id="5_chart"]
+[ext_resource type="Script" path="res://src/ui/hud/relief_panel.gd" id="6_relief"]
+[ext_resource type="Texture2D" path="res://assets/icons/lucide/pause.svg" id="7_pause_icon"]
 
 [node name="FreeRideScreen" type="Control"]
 layout_mode = 3
@@ -11,7 +17,149 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="ViewportContainer" type="SubViewportContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 2
+stretch = true
+
+[node name="Viewport" type="SubViewport" parent="ViewportContainer"]
+unique_name_in_owner = true
+handle_input_locally = false
+msaa_3d = 2
+size = Vector2i(1280, 720)
+render_target_update_mode = 3
+
+[node name="PauseOverlay" parent="." instance=ExtResource("4_pause")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="HudRoot" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ChartSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="Chart" type="Control" parent="HudRoot/ChartSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+script = ExtResource("5_chart")
+legend_power_key = "ui.hud.chart.legend_power"
+legend_hr_key = "ui.hud.chart.legend_hr"
+
+[node name="ListSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="Relief" type="Control" parent="HudRoot/ListSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+script = ExtResource("6_relief")
+
+[node name="MetricPanel" parent="HudRoot" instance=ExtResource("2_panel")]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="HintSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="NoticePlate" type="PanelContainer" parent="HudRoot/HintSlot"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudPlate"
+
+[node name="NoticeLabel" type="Label" parent="HudRoot/HintSlot/NoticePlate"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"BodyStrongLabel"
+text = "ui.free_ride.notice.no_sim"
+horizontal_alignment = 1
+autowrap_mode = 3
+max_lines_visible = 2
+
+[node name="StatusSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="TrainerChip" type="Control" parent="HudRoot/StatusSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="TrainerStatusLabel" type="Label" parent="HudRoot/StatusSlot/TrainerChip"]
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.status.trainer"
+
+[node name="HrChip" type="Control" parent="HudRoot/StatusSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="HrStatusLabel" type="Label" parent="HudRoot/StatusSlot/HrChip"]
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.hud.status.hr"
+
+[node name="ModeChip" type="Control" parent="HudRoot/StatusSlot"]
+unique_name_in_owner = true
+layout_mode = 0
+
+[node name="ModeStatusLabel" type="Label" parent="HudRoot/StatusSlot/ModeChip"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudCaptionLabel"
+text = "ui.free_ride.status.sim"
+
+[node name="PauseButton" type="Button" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+focus_mode = 0
+theme_type_variation = &"HudButton"
+icon = ExtResource("7_pause_icon")
+icon_alignment = 1
+
+[node name="ToolbarSlot" type="Control" parent="HudRoot"]
+unique_name_in_owner = true
+layout_mode = 0
+mouse_filter = 2
+
+[node name="Toolbar" parent="HudRoot/ToolbarSlot" instance=ExtResource("3_toolbar")]
+unique_name_in_owner = true
+layout_mode = 0
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 0.0
+offset_right = 0.0
+grow_horizontal = 1
+grow_vertical = 1
+
+[node name="NoSessionRoot" type="CenterContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -19,15 +167,88 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBox" type="VBoxContainer" parent="Center"]
+[node name="VBox" type="VBoxContainer" parent="NoSessionRoot"]
 layout_mode = 2
+theme_type_variation = &"Stack12"
 
-[node name="ComingSoonLabel" type="Label" parent="Center/VBox"]
+[node name="NoSessionLabel" type="Label" parent="NoSessionRoot/VBox"]
+unique_name_in_owner = true
 layout_mode = 2
-text = "ui.common.coming_soon"
+text = "ui.free_ride.no_session"
 horizontal_alignment = 1
 
-[node name="BackButton" type="Button" parent="Center/VBox"]
+[node name="BackButton" type="Button" parent="NoSessionRoot/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "ui.plan.back"
+
+[node name="SummaryRoot" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="SummaryRoot"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Center" type="CenterContainer" parent="SummaryRoot"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SummaryCard" type="PanelContainer" parent="SummaryRoot/Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(720, 0)
+layout_mode = 2
+theme_type_variation = &"HudPauseCard"
+
+[node name="SummaryVBox" type="VBoxContainer" parent="SummaryRoot/Center/SummaryCard"]
+layout_mode = 2
+theme_type_variation = &"Stack16"
+
+[node name="SummaryTitle" type="Label" parent="SummaryRoot/Center/SummaryCard/SummaryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+text = "ui.free_ride.summary.title"
+horizontal_alignment = 1
+
+[node name="SummaryRoute" type="Label" parent="SummaryRoot/Center/SummaryCard/SummaryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SecondaryLabel"
+horizontal_alignment = 1
+
+[node name="StatsGrid" type="GridContainer" parent="SummaryRoot/Center/SummaryCard/SummaryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 3
+
+[node name="Buttons" type="HBoxContainer" parent="SummaryRoot/Center/SummaryCard/SummaryVBox"]
+layout_mode = 2
+theme_type_variation = &"Row12"
+alignment = 1
+
+[node name="HistoryButton" type="Button" parent="SummaryRoot/Center/SummaryCard/SummaryVBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.free_ride.summary.history"
+
+[node name="HomeButton" type="Button" parent="SummaryRoot/Center/SummaryCard/SummaryVBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "ui.free_ride.summary.home"

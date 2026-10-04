@@ -27,7 +27,8 @@ extends PanelContainer
 ## - полоса — прогресс круга трассы, заливка `hud.text` с альфой 0.85;
 ## - вместо карточки цели — карточка «УКЛОН»: полный уклон трассы g(s) (не переданный станку),
 ##   знак всегда, один знак после точки («+6.4», «−3.0» с U+2212, «0.0»), белым; справа в строке
-##   заголовка клин 32 × 14 цвета палитры уклона (`UiTokens.grade_color`) с наклоном ×2;
+##   заголовка клин 32 × 14 цвета палитры уклона (`UiTokens.grade_color`): заполняет рамку при
+##   |g| ≥ 8 %, ниже — пропорционально (иначе реальные 3–7 % дают едва заметные 2–4 lp);
 ##   строка 3 — режим нагрузки и крутизна «SIM 50 %» или уровень «СОПР. 40 %»;
 ## - герой — факт мощности с фишкой и полосой зоны, без отклонения; пульс и каденс — как в плане;
 ##   цели, отсчёта и списка нет. Отсутствующее значение — «—».
@@ -101,10 +102,11 @@ const VITALS_SIDE_GAP: float = 8.0
 const CHIP_SIZE: Vector2 = UiTokens.HUD_ZONE_CHIP_SIZE
 ## Полоса круга в свободной езде (`hud.md` п. 8).
 const LAP_BAR_COLOR: Color = Color(UiTokens.HUD_TEXT, 0.85)
-## Клин уклона: рамка 32 × 14, наклон утрирован ×2 (высота = ширина × 2 × |g| / 100, не больше
-## рамки); ровно (|g| < 0.05 %) — полоска `WEDGE_MIN_HEIGHT`.
+## Клин уклона: рамка 32 × 14; высота = высота рамки × min(|g| / `WEDGE_FULL_GRADE_PCT`, 1) —
+## при |g| ≥ 8 % клин заполняет рамку, ниже пропорционально (не меньше `WEDGE_MIN_HEIGHT`);
+## ровно (|g| < 0.05 %) — полоска `WEDGE_MIN_HEIGHT`.
 const WEDGE_SIZE: Vector2 = Vector2(32, 14)
-const WEDGE_EXAGGERATION: float = 2.0
+const WEDGE_FULL_GRADE_PCT: float = 8.0
 const WEDGE_MIN_HEIGHT: float = 2.0
 
 var _mode: Mode = Mode.PLAN
@@ -335,7 +337,7 @@ func grade_wedge_height() -> float:
 	var g := roundf(_grade * 10.0) / 10.0
 	if g == 0.0:
 		return WEDGE_MIN_HEIGHT
-	return clampf(WEDGE_SIZE.x * WEDGE_EXAGGERATION * absf(g) / 100.0, WEDGE_MIN_HEIGHT, WEDGE_SIZE.y)
+	return clampf(WEDGE_SIZE.y * absf(g) / WEDGE_FULL_GRADE_PCT, WEDGE_MIN_HEIGHT, WEDGE_SIZE.y)
 
 
 ## Набор за заезд — целые метры или «—» (REQ-FRD-06 крит. 1).

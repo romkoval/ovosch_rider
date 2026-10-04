@@ -52,6 +52,12 @@ var _recovery_dialog: RecoveryDialog
 var last_finished_session: WorkoutSession = null
 ## Эмулятор, созданный для «тренировки на эмуляторе» (временно, до этапа 4).
 var _emulator_trainer: TrainerDevice = null
+## Свободная езда, ожидающая станка: `{route_id, steepness_pct}` (пусто — нет).
+var _pending_free_ride: Dictionary = {}
+## Диалог «станок не подключён» при старте свободной езды (FRD-01 крит. 4).
+var _free_ride_trainer_dialog: ConfirmationDialog
+## Последняя завершённая свободная езда (заезд уже сохранён `RideRecorder`).
+var last_finished_free_ride: FreeRideSession = null
 
 var _screens: Dictionary = {}
 
@@ -79,6 +85,7 @@ func _ready() -> void:
 	_recovery_dialog = RecoveryDialog.new()
 	_recovery_dialog.resolved.connect(_on_recovery_resolved)
 	add_child(_recovery_dialog)
+	_build_free_ride_trainer_dialog()
 	bridge = BleBridge.create_default()
 	connections = ConnectionManager.new(bridge, devices, trainer_kind)
 	app_state = AppState.new(repo, app_settings)
@@ -86,9 +93,6 @@ func _ready() -> void:
 	app_state.profile_selected.connect(_on_profile_selected)
 	app_state.locale_changed.connect(_on_locale_changed)
 	_build_screens()
-	# «Назад» Android обрабатывает оболочка (REQ-UIX-04 крит. 1): движок не должен закрывать
-	# приложение на любом экране. На корневом экране «назад» ничего не делает.
-	get_tree().quit_on_go_back = false
 	app_state.start()
 	_show_screen(app_state.current_screen)
 
@@ -147,9 +151,14 @@ func _build_screens() -> void:
 	_add_screen(AppState.Screen.HISTORY, history)
 	var route_select: RouteSelectScreen = load(ROUTE_SELECT_SCENE).instantiate()
 	route_select.setup(repo, app_state)
+	route_select.start_requested.connect(start_free_ride)
 	_add_screen(AppState.Screen.ROUTE_SELECT, route_select)
 	var free_ride: FreeRideScreen = load(FREE_RIDE_SCENE).instantiate()
 	free_ride.setup(app_state)
+	free_ride.session_created.connect(_on_free_ride_created)
+	free_ride.session_finished.connect(_on_free_ride_finished)
+	free_ride.profile_updated.connect(func(p: Profile) -> void: repo.save(p))
+	free_ride.history_requested.connect(open_ride_in_history)
 	_add_screen(AppState.Screen.FREE_RIDE, free_ride)
 
 
@@ -214,10 +223,10 @@ func _on_home_import() -> void:
 		plan_screen().open_import_dialog()
 
 
-## «Поехать» в карточке свободной езды (FRD-01 крит. 1). Сессию по трассе запускает T-084
-## (`start_free_ride`); до неё — переход на экран свободной езды.
-func _on_home_free_ride(_route_id: String) -> void:
-	app_state.navigate(AppState.Screen.FREE_RIDE)
+## «Поехать» в карточке свободной езды (FRD-01 крит. 1): трасса карточки и крутизна SIM профиля.
+func _on_home_free_ride(route_id: String) -> void:
+	var profile: Profile = repo.get_active()
+	start_free_ride(route_id, profile.sim_steepness_pct if profile != null else Profile.DEFAULT_SIM_STEEPNESS_PCT)
 
 
 ## Кнопка Home «Тренировка на эмуляторе» (временно): тестовый план на эмуляторе.
@@ -230,6 +239,14 @@ func start_workout_on_emulator(workout: Workout) -> bool:
 	var screen := workout_screen()
 	if screen == null or workout == null:
 		return false
+	if not _make_emulator():
+		return false
+	_pending_workout = null
+	return _launch(screen, workout, _emulator_trainer, null)
+
+
+## Новый эмулятор станка (`TrainerFactory.create("fake")`, подключён сразу); прежний отключается.
+func _make_emulator() -> bool:
 	if _emulator_trainer != null:
 		_emulator_trainer.disconnect_device()
 	_emulator_trainer = TrainerFactory.create(TrainerFactory.KIND_FAKE)
@@ -237,8 +254,12 @@ func start_workout_on_emulator(workout: Workout) -> bool:
 		return false
 	_emulator_trainer.set("connect_delay_sec", 0.0)
 	_emulator_trainer.connect_device("emulator")
-	_pending_workout = null
-	return _launch(screen, workout, _emulator_trainer, null)
+	return true
+
+
+## Эмулятор последнего запуска «на эмуляторе» (null — не создавался).
+func emulator_trainer() -> TrainerDevice:
+	return _emulator_trainer
 
 
 ## Станок подключён через `ConnectionManager` (хаб готов к сессии).
@@ -276,6 +297,121 @@ func _launch(screen: WorkoutScreen, workout: Workout, trainer: TrainerDevice, ma
 	if app_state.navigate(AppState.Screen.WORKOUT):
 		return screen.start()
 	return false
+
+
+# ---------------------------------------------------------------------------
+# Свободная езда (REQ-FRD-01 крит. 1, 4; REQ-FRD-07 крит. 2, 6, 7)
+# ---------------------------------------------------------------------------
+
+## Запуск свободной езды по трассе с крутизной SIM («Поехать» на главном и на экране выбора
+## трассы). Правило станка — как у плана: подключён станок (хаб `ConnectionManager`) — заезд
+## стартует на нём; нет — сессия не создаётся, диалог поясняет и ведёт на «Устройства», а в
+## отладочной сборке предлагает эмулятор (FRD-01 крит. 4). true — заезд запущен сразу.
+func start_free_ride(route_id: String, steepness_pct: int) -> bool:
+	if free_ride_screen() == null:
+		return false
+	if is_trainer_ready():
+		_pending_free_ride = {}
+		return launch_free_ride(connections.hub, route_id, steepness_pct, connections)
+	_pending_free_ride = {"route_id": route_id, "steepness_pct": steepness_pct}
+	_free_ride_trainer_dialog.popup_centered()
+	return false
+
+
+## Свободная езда на эмуляторе станка (отладка, снимки UI).
+func start_free_ride_on_emulator(route_id: String, steepness_pct: int) -> bool:
+	if not _make_emulator():
+		return false
+	_pending_free_ride = {}
+	return launch_free_ride(_emulator_trainer, route_id, steepness_pct, null)
+
+
+## Свободная езда на заданном станке: экран свободной езды, затем старт сессии.
+func launch_free_ride(trainer: TrainerDevice, route_id: String, steepness_pct: int,
+		manager: ConnectionManager = null) -> bool:
+	var screen := free_ride_screen()
+	if screen == null or trainer == null:
+		return false
+	var profile: Profile = repo.get_active()
+	if profile == null:
+		profile = Profile.create("—")
+	screen.setup(app_state, profile, trainer, route_id, steepness_pct, manager)
+	if app_state.navigate(AppState.Screen.FREE_RIDE):
+		return screen.start()
+	return false
+
+
+## Заезд, ожидающий станка (`{route_id, steepness_pct}`; пусто — нет).
+func pending_free_ride() -> Dictionary:
+	return _pending_free_ride.duplicate()
+
+
+func free_ride_trainer_dialog() -> ConfirmationDialog:
+	return _free_ride_trainer_dialog
+
+
+## Диалог «станок не подключён»: «Устройства» (основная), «Отмена»; в отладке — «Эмулятор».
+func _build_free_ride_trainer_dialog() -> void:
+	_free_ride_trainer_dialog = ConfirmationDialog.new()
+	_free_ride_trainer_dialog.name = "FreeRideTrainerDialog"
+	_free_ride_trainer_dialog.title = "ui.free_ride.no_trainer.title"
+	_free_ride_trainer_dialog.dialog_text = "ui.free_ride.no_trainer.text"
+	_free_ride_trainer_dialog.dialog_autowrap = true
+	_free_ride_trainer_dialog.ok_button_text = "ui.free_ride.no_trainer.devices"
+	_free_ride_trainer_dialog.cancel_button_text = "ui.common.cancel"
+	if is_debug_build():
+		_free_ride_trainer_dialog.add_button("ui.free_ride.no_trainer.emulator", true, &"emulator")
+		_free_ride_trainer_dialog.custom_action.connect(_on_free_ride_trainer_action)
+	_free_ride_trainer_dialog.confirmed.connect(_on_free_ride_devices_chosen)
+	_free_ride_trainer_dialog.canceled.connect(_on_free_ride_choice_canceled)
+	add_child(_free_ride_trainer_dialog)
+
+
+## «Эмулятор» в диалоге (только отладка, FRD-01 крит. 4): ожидающий заезд — на эмуляторе.
+func choose_free_ride_emulator() -> bool:
+	if _pending_free_ride.is_empty() or not is_debug_build():
+		return false
+	var pending := _pending_free_ride
+	_free_ride_trainer_dialog.hide()
+	return start_free_ride_on_emulator(str(pending["route_id"]), int(pending["steepness_pct"]))
+
+
+func _on_free_ride_trainer_action(action: StringName) -> void:
+	if action == &"emulator":
+		choose_free_ride_emulator()
+
+
+func _on_free_ride_devices_chosen() -> void:
+	_pending_free_ride = {}
+	app_state.navigate(AppState.Screen.DEVICES)
+
+
+func _on_free_ride_choice_canceled() -> void:
+	_pending_free_ride = {}
+
+
+## Сессия свободной езды создана (до старта): запись заезда на диск (REQ-LOC-07, FRD-07 крит. 2–4).
+func _on_free_ride_created(session: FreeRideSession) -> void:
+	if ride_recorder != null:
+		ride_recorder.dispose()
+	ride_recorder = RideRecorder.new(ride_repository, repo.get_active(), session)
+
+
+## Заезд завершён и сохранён `RideRecorder` (`RideRepository.save` → очередь Strava по
+## `ride_saved`, FRD-07 крит. 7): экран показывает итог сохранённого заезда.
+func _on_free_ride_finished(session: FreeRideSession) -> void:
+	last_finished_free_ride = session
+	if ride_recorder != null and ride_recorder.session == session and ride_recorder.ride != null:
+		free_ride_screen().show_saved_ride(ride_recorder.ride)
+
+
+## Открыть заезд в истории (итог свободной езды): список истории и карточка заезда.
+func open_ride_in_history(ride_id: String) -> void:
+	if not app_state.navigate(AppState.Screen.HISTORY):
+		return
+	var history := history_screen()
+	if history != null and not ride_id.is_empty():
+		history.show_ride(ride_id)
 
 
 func plan_screen() -> PlanScreen:
@@ -331,6 +467,8 @@ func _show_screen(screen: int) -> void:
 	var previous := visible_screen_node()
 	if previous is WorkoutScreen and screen != AppState.Screen.WORKOUT:
 		(previous as WorkoutScreen).on_screen_exited()
+	if previous is FreeRideScreen and screen != AppState.Screen.FREE_RIDE:
+		(previous as FreeRideScreen).on_screen_exited()
 	# Leaving the devices screen stops manual scanning (REQ-DEV-01 crit. 4, D-5);
 	# a running auto-connect keeps its own scan and stops it by itself.
 	if previous is DevicesScreen and screen != AppState.Screen.DEVICES and connections != null:
@@ -357,6 +495,9 @@ func _show_screen(screen: int) -> void:
 		(node as HistoryScreen).refresh()
 	elif node is RouteSelectScreen:
 		(node as RouteSelectScreen).refresh()
+	elif node is FreeRideScreen:
+		(node as FreeRideScreen).on_screen_entered()
+	_sync_go_back_policy()
 
 
 func route_select_screen() -> RouteSelectScreen:
@@ -409,6 +550,9 @@ func _screen_handles_back(node: Control) -> bool:
 		return true
 	if node is RouteSelectScreen:
 		return (node as RouteSelectScreen).handle_back()
+	if node is PlanScreen:
+		# Открытый на телефоне лист предпросмотра закрывается, экран остаётся.
+		return (node as PlanScreen).handle_back()
 	return false
 
 
@@ -416,15 +560,41 @@ func _screen_handles_back(node: Control) -> bool:
 ## `NOTIFICATION_WM_CLOSE_REQUEST` → у `AcceptDialog` это «Отмена» (сигнал `canceled`).
 ## Нужно для Android: системный «назад» приходит уведомлением, а не событием ввода в окно.
 func _close_top_dialog() -> bool:
+	var window := _top_dialog()
+	if window == null:
+		return false
+	window.notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	if window.visible:
+		window.hide()
+	return true
+
+
+## Верхний видимый диалог внутри оболочки или null.
+func _top_dialog() -> Window:
 	var windows: Array[Window] = get_viewport().get_embedded_subwindows()
 	for i in range(windows.size() - 1, -1, -1):
 		var window: Window = windows[i]
 		if window.visible and is_ancestor_of(window):
-			window.notification(NOTIFICATION_WM_CLOSE_REQUEST)
-			if window.visible:
-				window.hide()
-			return true
-	return false
+			return window
+	return null
+
+
+## Системный «назад» Android на корне стека навигации (главный, выбор профиля) приложение
+## не перехватывает (REQ-UIX-04 крит. 1, У-4): штатное поведение движка — закрыть
+## приложение (`SceneTree.quit_on_go_back`). Открытый диалог закрывается «назад» и на корне;
+## на остальных экранах «назад» обрабатывает оболочка (`handle_back`). Политика сверяется
+## при смене экрана и каждый кадр (диалоги открываются без смены экрана).
+func _sync_go_back_policy() -> void:
+	if not is_inside_tree() or app_state == null:
+		return
+	var native := AppState.is_root_screen(app_state.current_screen) and _top_dialog() == null
+	if get_tree().quit_on_go_back != native:
+		get_tree().quit_on_go_back = native
+
+
+## Приложение отдаёт «назад» движку (корень стека, диалогов нет).
+func is_go_back_native() -> bool:
+	return is_inside_tree() and get_tree().quit_on_go_back
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -434,7 +604,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		handle_back()
+		# На корне событие не поглощается: приложение закрывает движок (`quit_on_go_back`).
+		if not is_go_back_native():
+			handle_back()
 
 
 func settings_screen() -> SettingsScreen:
@@ -520,6 +692,7 @@ func _on_locale_changed(_locale: String) -> void:
 ## a workout session later takes over device ticking via `SessionTicker`
 ## (`connections.ticks_devices = false`).
 func _process(delta: float) -> void:
+	_sync_go_back_policy()
 	if connections != null:
 		connections.tick(delta)
 	if strava != null:
@@ -528,6 +701,8 @@ func _process(delta: float) -> void:
 
 
 func _exit_tree() -> void:
+	# Оболочки нет — «назад» снова решает движок (значение по умолчанию).
+	get_tree().quit_on_go_back = true
 	if strava != null:
 		strava.dispose()
 	if ride_recorder != null:

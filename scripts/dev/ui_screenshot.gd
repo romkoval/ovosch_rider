@@ -1,10 +1,13 @@
 extends SceneTree
 ## Снимки экранов UI и HUD тренировки в PNG — инструмент приёмки HUD и меню (`docs/game/hud.md`
 ## п. 14, T-059). Запуск: ./scripts/ui_screenshot.sh [каталог] [разрешение] [язык] [--safe-area]
-## (оболочка перебирает разрешения и языки; этот скрипт снимает одно разрешение и один язык).
+## [--phone] (оболочка перебирает разрешения и языки; этот скрипт снимает одно разрешение и
+## один язык).
 ##
 ## Аргументы после `--`: каталог, разрешение `WxH` (имя файла и обязательный размер кадра; окно
-## открывает `--resolution`), язык `ru|en`, флаг `--safe-area`.
+## открывает `--resolution`), язык `ru|en`, флаги `--safe-area` и `--phone` (тип устройства
+## «телефон» через `Engine.set_meta("ui_debug_device", "phone")`: масштаб HUD 1.2, кнопки 72 lp,
+## фишки статусов столбиком, слот подсказки у низа кадра, компактная панель инструментов).
 ##
 ## Размер кадра проверяется: кадр должен быть ровно запрошенного разрешения в пикселях. Если окно
 ## оказалось другого размера (Retina/HiDPI, оконный менеджер растянул окно — на macOS был кадр
@@ -19,7 +22,13 @@ extends SceneTree
 ## `WorkoutScreen.clock_usec`: каждый кадр часы уходят вперёд на `TIME_SCALE × FRAME_DT`
 ## (×30), поэтому снимок детерминирован и не зависит от скорости машины.
 ##
-## Имя файла: `<id>_<WxH>_<язык>[_safe].png`. Код выхода 0 — все снимки сохранены.
+## Свободная езда (T-084): на эмуляторе (`start_free_ride_on_emulator`) по трассе «горы» с
+## подменёнными часами `FreeRideScreen.clock_usec`; гонщик доезжает до дистанции `s_m` первого
+## круга (ровно, подъём, спуск) с ускорением `FREE_TIME_SCALE`, мощность эмулятора — по участку
+## (`power_w`). Отдельно — станок без SIM (`set_simulation_supported(false)`): сообщение
+## «станок не поддерживает SIM» и «СОПР.» в карточке уклона.
+##
+## Имя файла: `<id>_<WxH>_<язык>[_safe][_phone].png`. Код выхода 0 — все снимки сохранены.
 
 const MAIN_SCENE: String = "res://src/app/main.tscn"
 const PLAN_FIXTURE: String = "res://tests/fixtures/workouts_acceptance/acc_full.zwo"
@@ -38,8 +47,19 @@ const RESIZE_ATTEMPTS: int = 3
 ## Отладочная безопасная зона (lp): читает `UiScale` (T-060).
 const SAFE_AREA_META: StringName = &"ui_debug_safe_area"
 const SAFE_AREA_LP: Dictionary = {"left": 100.0, "right": 100.0, "top": 0.0, "bottom": 13.0}
+## Отладочный тип устройства (`--phone`): читает `UiScale` (T-060).
+const DEVICE_META: StringName = &"ui_debug_device"
 ## Экраны `AppState`, которые не снимаются общим проходом: у них свои сценарии в таблице.
+## Свободная езда в общем проходе снимается пустой (до заезда — «Заезд не запущен»), заезд —
+## своими сценариями `free_ride_*` в конце таблицы.
 const SCREENS_WITH_SCENARIOS: Array[String] = ["workout"]
+## Свободная езда: ускорение часов на переездах (сессионных секунд на секунду кадров) и предел
+## кадров на один переезд.
+const FREE_TIME_SCALE: float = 120.0
+const FREE_MAX_ADVANCE_FRAMES: int = 6000
+const FREE_ROUTE: String = "mountains"
+const FREE_NO_SIM_ROUTE: String = "hills"
+const FREE_STEEPNESS_PCT: int = 50
 
 ## Виды сценариев (обработчики — `_run_scenario`).
 const KIND_APP_SCREENS: String = "app_screens"
@@ -49,12 +69,19 @@ const KIND_WORKOUT_PAUSED: String = "workout_paused"
 const KIND_WORKOUT_LAST_STEP: String = "workout_last_step"
 const KIND_WORKOUT_SUMMARY: String = "workout_summary"
 const KIND_RIDE_DETAIL: String = "ride_detail"
+const KIND_FREE_RIDE_AT: String = "free_ride_at"
+const KIND_FREE_RIDE_PAUSED: String = "free_ride_paused"
+const KIND_FREE_RIDE_FINISH: String = "free_ride_finish"
+const KIND_FREE_RIDE_NO_SIM: String = "free_ride_no_sim"
 
 ## Таблица сценариев, выполняется по порядку (тренировка продолжается от сценария к сценарию).
 ## Новые сценарии (свободная езда — T-084) добавляются строками и веткой в `_run_scenario`.
 ## Поля: `id` — префикс имени файла; `kind`; `at_sec` — сессионное время тренировки
 ## (для `workout_*` сначала доехать до него); `lead_sec` — за сколько секунд до смены шага;
-## `offset_sec` — сдвиг от начала последнего шага.
+## `offset_sec` — сдвиг от начала последнего шага. Свободная езда: `s_m` — дистанция от старта
+## по трассе `FREE_ROUTE` (на первом круге — позиция на круге), `at_sec` — время сессии,
+## `power_w` — мощность эмулятора на переезде, `toolbar` — показать панель инструментов,
+## `confirm_id` — снять ещё и подтверждение завершения.
 const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_0030", "kind": KIND_WORKOUT_AT, "at_sec": 30},
 	{"id": "hud_1700", "kind": KIND_WORKOUT_AT, "at_sec": 1020},
@@ -64,6 +91,13 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_summary", "kind": KIND_WORKOUT_SUMMARY},
 	{"id": "screen", "kind": KIND_APP_SCREENS},
 	{"id": "history_ride_detail", "kind": KIND_RIDE_DETAIL},
+	{"id": "free_start", "kind": KIND_FREE_RIDE_AT, "at_sec": 20, "power_w": 190},
+	{"id": "free_flat", "kind": KIND_FREE_RIDE_AT, "s_m": 1600.0, "power_w": 200},
+	{"id": "free_climb", "kind": KIND_FREE_RIDE_AT, "s_m": 6300.0, "power_w": 265, "toolbar": true},
+	{"id": "free_paused", "kind": KIND_FREE_RIDE_PAUSED},
+	{"id": "free_descent", "kind": KIND_FREE_RIDE_AT, "s_m": 13600.0, "power_w": 140},
+	{"id": "free_summary", "kind": KIND_FREE_RIDE_FINISH, "confirm_id": "free_finish_confirm"},
+	{"id": "free_no_sim", "kind": KIND_FREE_RIDE_NO_SIM, "at_sec": 4},
 ]
 
 var _out_dir: String = "screenshots/ui"
@@ -72,6 +106,7 @@ var _resolution: String = ""
 var _requested_size := Vector2i.ZERO
 var _lang: String = "ru"
 var _safe_area: bool = false
+var _phone: bool = false
 var _data_dir: String = ""
 var _main: AppMain = null
 var _workout: Workout = null
@@ -88,6 +123,13 @@ func _run() -> void:
 	_parse_args()
 	if _safe_area:
 		Engine.set_meta(SAFE_AREA_META, SAFE_AREA_LP)
+	if _phone:
+		Engine.set_meta(DEVICE_META, "phone")
+	# Автозагрузка `UiScaleRuntime` определила устройство до разбора аргументов — переопределяем.
+	var ui := root.get_node_or_null(^"UiScaleRuntime") as UiScale
+	if ui != null:
+		ui.device = UiScale.detect_device()
+		ui.set_mode(ui.mode)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	# Окно фиксированного размера: оконный менеджер не растягивает его во время прохода.
 	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_RESIZE_DISABLED, true)
@@ -112,6 +154,8 @@ func _parse_args() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--safe-area":
 			_safe_area = true
+		elif arg == "--phone":
+			_phone = true
 		else:
 			positional.append(arg)
 	if positional.size() > 0 and not positional[0].is_empty():
@@ -184,6 +228,9 @@ func _start_app() -> bool:
 func _run_scenario(scenario: Dictionary) -> void:
 	var id: String = str(scenario["id"])
 	var kind: String = str(scenario["kind"])
+	if kind.begins_with("free_ride_"):
+		await _run_free_ride_scenario(id, kind, scenario)
+		return
 	if kind.begins_with("workout_"):
 		if not _ensure_workout():
 			_fail("%s: тренировка на эмуляторе не запущена" % id)
@@ -283,11 +330,112 @@ func _ignore_keep_awake(_on: bool) -> void:
 
 
 # ---------------------------------------------------------------------------
+# Свободная езда
+# ---------------------------------------------------------------------------
+
+func _run_free_ride_scenario(id: String, kind: String, scenario: Dictionary) -> void:
+	var screen: FreeRideScreen = _main.free_ride_screen()
+	match kind:
+		KIND_FREE_RIDE_AT:
+			if not _ensure_free_ride():
+				_fail("%s: свободная езда на эмуляторе не запущена" % id)
+				return
+			_set_free_power(int(scenario.get("power_w", 0)))
+			if scenario.has("at_sec"):
+				await _advance_free_ride(_reached_time.bind(int(scenario["at_sec"])))
+			if scenario.has("s_m"):
+				await _advance_free_ride(_reached_distance.bind(float(scenario["s_m"])))
+			if bool(scenario.get("toolbar", false)):
+				screen.toolbar().poke()
+				# Панель проявляется за 200 мс — снимаем после проявления.
+				await create_timer(HudToolbar.FADE_SEC + 0.1).timeout
+			await _shoot(id)
+		KIND_FREE_RIDE_PAUSED:
+			if not screen.is_session_active():
+				_fail("%s: свободная езда не запущена" % id)
+				return
+			screen.pause()
+			await _shoot(id)
+			screen.resume()
+		KIND_FREE_RIDE_FINISH:
+			if not screen.is_session_active():
+				_fail("%s: свободная езда не запущена" % id)
+				return
+			screen.request_finish()
+			if scenario.has("confirm_id"):
+				await _shoot(str(scenario["confirm_id"]))
+			screen.confirm_finish()
+			if not screen.is_summary_visible():
+				_fail("%s: итог заезда не показан" % id)
+			await _shoot(id)
+		KIND_FREE_RIDE_NO_SIM:
+			var trainer := TrainerFactory.create(TrainerFactory.KIND_FAKE) as FakeTrainer
+			trainer.connect_delay_sec = 0.0
+			trainer.set_simulation_supported(false)
+			trainer.set_rider_power(180)
+			trainer.connect_device("emulator_no_sim")
+			screen.clock_usec = _virtual_clock
+			screen.keep_awake_setter = _ignore_keep_awake
+			if not _main.launch_free_ride(trainer, FREE_NO_SIM_ROUTE, FREE_STEEPNESS_PCT):
+				_fail("%s: свободная езда без SIM не запущена" % id)
+				return
+			await _advance_free_ride(_reached_time.bind(int(scenario.get("at_sec", 3))))
+			if not screen.is_notice_visible():
+				_fail("%s: сообщение «станок не поддерживает SIM» не показано" % id)
+			await _shoot(id)
+			screen.request_finish()
+			screen.confirm_finish()
+
+
+## Свободная езда на эмуляторе один раз; часы экрана — виртуальные.
+func _ensure_free_ride() -> bool:
+	var screen: FreeRideScreen = _main.free_ride_screen()
+	if screen.is_session_active():
+		return true
+	screen.clock_usec = _virtual_clock
+	screen.keep_awake_setter = _ignore_keep_awake
+	return _main.start_free_ride_on_emulator(FREE_ROUTE, FREE_STEEPNESS_PCT) and screen.session() != null
+
+
+## Мощность эмулятора на переезде (0 — не менять).
+func _set_free_power(watts: int) -> void:
+	var trainer := _main.emulator_trainer() as FakeTrainer
+	if trainer != null and watts > 0:
+		trainer.set_rider_power(watts)
+
+
+static func _reached_time(session: FreeRideSession, at_sec: int) -> bool:
+	return session.elapsed_sec() >= at_sec
+
+
+static func _reached_distance(session: FreeRideSession, distance_m: float) -> bool:
+	return session.distance_m() >= distance_m
+
+
+## Двигать виртуальные часы (×`FREE_TIME_SCALE`) по кадру, пока `done(session)` не станет true.
+func _advance_free_ride(done: Callable) -> void:
+	var session: FreeRideSession = _main.free_ride_screen().session()
+	var step_usec: int = int(round(FREE_TIME_SCALE * FRAME_DT * 1_000_000.0))
+	var frames: int = 0
+	while not bool(done.call(session)):
+		if session.get_state() != WorkoutSession.State.RUNNING:
+			_fail("свободная езда не идёт (состояние %d)" % session.get_state())
+			return
+		if frames >= FREE_MAX_ADVANCE_FRAMES:
+			_fail("свободная езда: условие не выполнено за %d кадров" % frames)
+			return
+		_clock_usec += step_usec
+		frames += 1
+		await process_frame
+
+
+# ---------------------------------------------------------------------------
 # Снимок и служебное
 # ---------------------------------------------------------------------------
 
 func _shoot(id: String) -> void:
-	var name: String = "%s_%s_%s%s.png" % [id, _resolution, _lang, "_safe" if _safe_area else ""]
+	var name: String = "%s_%s_%s%s%s.png" % [id, _resolution, _lang, "_safe" if _safe_area else "",
+			"_phone" if _phone else ""]
 	var path: String = _out_dir.path_join(name)
 	var image: Image = await _capture()
 	var attempt: int = 0
@@ -338,6 +486,8 @@ func _cleanup() -> void:
 		_main = null
 	if Engine.has_meta(SAFE_AREA_META):
 		Engine.remove_meta(SAFE_AREA_META)
+	if Engine.has_meta(DEVICE_META):
+		Engine.remove_meta(DEVICE_META)
 	_remove_tree(ProjectSettings.globalize_path(_data_dir))
 
 

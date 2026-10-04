@@ -14,3 +14,22 @@ ui.free_ride.grade.fixed,СОПР. {value} %,RES. {value} %
 ui.free_ride.unit.pct,%,%
 ui.free_ride.unit.m,м,m
 ui.free_ride.chart.now,сейчас,now
+ui.free_ride.no_session,Заезд не запущен,No ride in progress
+ui.free_ride.status.sim,SIM,SIM
+ui.free_ride.status.fixed,СОПР.,RES.
+ui.free_ride.status.sim_hint,"SIM: уклон трассы передаётся станку, крутизна {value} %","SIM: track grade sent to the trainer, steepness {value} %"
+ui.free_ride.status.fixed_hint,Фиксированное сопротивление {value} %,Fixed resistance {value} %
+ui.free_ride.notice.no_sim,Станок не поддерживает SIM — фиксированное сопротивление,Trainer does not support SIM — fixed resistance
+ui.free_ride.summary.title,Заезд завершён,Ride complete
+ui.free_ride.summary.time,Время,Time
+ui.free_ride.summary.distance,Дистанция,Distance
+ui.free_ride.summary.avg_power,Ср. мощность,Avg power
+ui.free_ride.summary.np,NP,NP
+ui.free_ride.summary.avg_hr,Ср. пульс,Avg heart rate
+ui.free_ride.summary.ascent,Набор,Elevation gain
+ui.free_ride.summary.home,На главный,Home
+ui.free_ride.summary.history,Открыть в истории,Open in history
+ui.free_ride.no_trainer.title,Станок не подключён,No trainer connected
+ui.free_ride.no_trainer.text,Для свободной езды нужен подключённый станок. Подключите его на экране «Устройства».,Free ride needs a connected trainer. Connect it on the Devices screen.
+ui.free_ride.no_trainer.devices,Устройства,Devices
+ui.free_ride.no_trainer.emulator,Эмулятор,Emulator
