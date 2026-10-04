@@ -30,8 +30,11 @@ const EXTRA_LAYERS: Array[String] = ["Poplars", "StoneWalls", "Boulders", "Conif
 ## Слои хвойных по уровням детализации (T-107): LOD0 и LOD1 — в каждом мире, LOD2 — только
 ## если есть деревья дальше `ConiferKit.LOD_FAR_M` от трассы.
 const CONIFER_LAYERS: Array[String] = ["Conifers", "ConifersLod1", "ConifersLod2"]
-## Тень отбрасывают уровни детализации меньше этого.
-const CONIFER_SHADOW_LODS: int = 2
+## Тень отбрасывают уровни детализации меньше этого: только LOD0 (до 60 м от трассы). Тень
+## солнца — до 90 м от камеры, а камера всегда у дороги: тени LOD1 в кадре — лишь в 60–90 м,
+## LOD2 — никогда. Без них на «Перевале» −5 вызовов отрисовки в среднем (замер T-107, запасной
+## план арт-библии, шаг 2).
+const CONIFER_SHADOW_LODS: int = 1
 
 static var _meshes: Dictionary = {}
 
@@ -209,10 +212,12 @@ static func build(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	var out: Array[MultiMeshInstance3D] = []
 	for layer in place(track, env, field, material, budget, total_budget, keep_out):
 		var node: MultiMeshInstance3D = chunked_multimesh(layer.name, layer.mesh, layer.xf, layer.col, layer.chunk, layer.chunks,
-			layer.range_m if layer.chunks > 1 else 0.0, layer.keep, layer.custom, layer.tris)
+			layer.range_m if layer.chunks > 1 else 0.0, layer.keep, layer.custom, layer.tris, layer.kept())
 		if not layer.shadow:
 			for part: GeometryInstance3D in [node] + node.get_children():
 				part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if not layer.plants.is_empty() or layer.name in CONIFER_LAYERS:
+			node.set_meta(&"conifer_forms", conifer_form_counts(layer))
 		out.append(node)
 	return out
 
@@ -378,8 +383,7 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 ## `CONIFER_LAYERS[lod]`; уровень экземпляра назначен при расстановке по удалению от трассы, в
 ## кадре ничего не переключается. Меш слоя несёт все формы трассы этого уровня
 ## (`ConiferKit.layer_mesh`), форма экземпляра — данные экземпляра (слот модели). Тень
-## отбрасывают уровни меньше `CONIFER_SHADOW_LODS`: тень солнца — до 90 м от камеры, а камера
-## всегда у дороги.
+## отбрасывают уровни меньше `CONIFER_SHADOW_LODS`.
 static func conifer_layers(plants: Array[ConiferKit.Plant], env: EnvironmentSet, field: TerrainField,
 		material: Material, chunks: int) -> Array[Layer]:
 	ConiferKit.plant(plants, env, field)
@@ -391,6 +395,7 @@ static func conifer_layers(plants: Array[ConiferKit.Plant], env: EnvironmentSet,
 		models.append(mods)
 		var layer := Layer.new(CONIFER_LAYERS[lod], ConiferKit.layer_mesh(mods, lod, material), PerfBudget.RANGE_TREES_M, chunks)
 		layer.shadow = lod < CONIFER_SHADOW_LODS
+		layer.spread_keep = true
 		out.append(layer)
 	for cp in plants:
 		var layer: Layer = out[cp.lod]
@@ -401,6 +406,19 @@ static func conifer_layers(plants: Array[ConiferKit.Plant], env: EnvironmentSet,
 			layer.custom.append(Color(float(mods.find(model)), 0.0, 0.0, 0.0))
 		layer.tris.append(ConiferKit.triangles(model, cp.lod))
 		layer.plants.append(cp)
+	return out
+
+
+## Экземпляров каждой формы в узлах слоя хвойных (с учётом прореживания `keep`): ключ формы →
+## число. Пишется в метаданные узла слоя `conifer_forms` (тесты и замеры: данные экземпляров
+## MultiMesh на headless-сервере недоступны).
+static func conifer_form_counts(layer: Layer) -> Dictionary:
+	var out: Dictionary = {}
+	if layer.plants.is_empty():
+		return out
+	for i in layer.kept():
+		var key: String = ConiferKit.FORM_KEYS[layer.plants[i].form]
+		out[key] = int(out.get(key, 0)) + 1
 	return out
 
 
@@ -581,6 +599,8 @@ class Layer:
 	var plants: Array[ConiferKit.Plant] = []
 	## Слой отбрасывает тень.
 	var shadow: bool = true
+	## Прореживание с раздачей остатков округления (`limits`).
+	var spread_keep: bool = false
 
 	func _init(node_name: String, layer_mesh: Mesh, visible_m: float, chunk_total: int) -> void:
 		name = node_name
@@ -593,6 +613,37 @@ class Layer:
 		col.append(c)
 		chunk.append(chunk_index)
 
+	## Сколько экземпляров останется в каждом куске (`per_chunk` — сколько расставлено): доля
+	## `keep` с округлением вниз; у редкого слоя (`spread_keep`, хвойные) — та же сумма по слою,
+	## а остатки округления раздаются кускам с наибольшими дробными частями: иначе куски с одним-
+	## двумя деревьями (хвойные равнины) пустеют целиком.
+	func limits(per_chunk: PackedInt32Array) -> PackedInt32Array:
+		var limit := PackedInt32Array()
+		limit.resize(per_chunk.size())
+		if keep >= 1.0:
+			return per_chunk.duplicate()
+		var k_keep: float = maxf(keep, 0.0)
+		var total: int = 0
+		var rest: Array = []
+		for k in per_chunk.size():
+			var exact: float = float(per_chunk[k]) * k_keep
+			limit[k] = int(exact)
+			total += per_chunk[k]
+			rest.append([exact - floor(exact), k])
+		if spread_keep:
+			var target: int = int(float(total) * k_keep)
+			var used: int = 0
+			for k in limit.size():
+				used += limit[k]
+			rest.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+			for r in rest:
+				if used >= target:
+					break
+				if float(r[0]) > 0.0:
+					limit[int(r[1])] += 1
+					used += 1
+		return limit
+
 	## Индексы экземпляров, которые попадут в узлы (с учётом `keep`).
 	func kept() -> PackedInt32Array:
 		var out := PackedInt32Array()
@@ -600,10 +651,7 @@ class Layer:
 		per_chunk.resize(maxi(chunks, 1))
 		for i in xf.size():
 			per_chunk[chunk[i] if chunks > 1 else 0] += 1
-		var limit := PackedInt32Array()
-		limit.resize(per_chunk.size())
-		for k in per_chunk.size():
-			limit[k] = per_chunk[k] if keep >= 1.0 else int(float(per_chunk[k]) * maxf(keep, 0.0))
+		var limit: PackedInt32Array = limits(per_chunk)
 		var used := PackedInt32Array()
 		used.resize(per_chunk.size())
 		for i in xf.size():
@@ -660,20 +708,21 @@ static func _max_visible(layers: Array[Layer], chunks: int, track: Track) -> int
 ## дальность видимости куска. `keep` < 1 — в каждом куске остаётся эта доля экземпляров
 ## (первые по порядку расстановки; порядок случайный — прореживание равномерное).
 ## `cols` пустой — без цвета экземпляра; `customs` — данные экземпляра (пусто — без них);
-## `tris` — треугольников экземпляра: сумма по куску — в метаданных узла `triangles`.
+## `tris` — треугольников экземпляра: сумма по куску — в метаданных узла `triangles`; `kept` —
+## индексы экземпляров, которые останутся (`Layer.kept`; пусто — доля `keep` в каждом куске).
 static func chunked_multimesh(node_name: String, mesh: Mesh, xforms: Array[Transform3D], cols: Array[Color],
 		chunk: PackedInt32Array, chunks: int, range_m: float, keep: float = 1.0, customs: Array[Color] = [],
-		tris: PackedInt32Array = PackedInt32Array()) -> MultiMeshInstance3D:
+		tris: PackedInt32Array = PackedInt32Array(), kept: PackedInt32Array = PackedInt32Array()) -> MultiMeshInstance3D:
 	var buckets: Array[PackedInt32Array] = []
 	buckets.resize(maxi(chunks, 1))
-	for i in xforms.size():
+	for i in (kept if not kept.is_empty() else range(xforms.size())):
 		var k: int = chunk[i] if chunks > 1 else 0
 		buckets[k].append(i)
 	var pad: float = mesh.get_aabb().size.length() if mesh != null else 1.0
 	var root: MultiMeshInstance3D = null
 	for k in buckets.size():
 		var idx: PackedInt32Array = buckets[k]
-		var n: int = idx.size() if keep >= 1.0 else int(float(idx.size()) * maxf(keep, 0.0))
+		var n: int = idx.size() if keep >= 1.0 or not kept.is_empty() else int(float(idx.size()) * maxf(keep, 0.0))
 		if k > 0 and n == 0:
 			continue
 		var mm := MultiMesh.new()

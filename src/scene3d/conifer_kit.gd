@@ -17,7 +17,8 @@ extends RefCounted
 ## вершины чужих форм шейдер схлопывает (`conifer_form.gdshaderinc`) — слоёв и вызовов отрисовки
 ## не больше, чем уровней. Крона (y = 1) не принимает тень (`toon.gdshader`): самозатенение
 ## граней яруса при наклонённых вверх нормалях давало в Forward+ полосы и пятна («acne»), а
-## тон «верх светлый, низ тенью» задают нормали и цвет вершин. Ствол тень принимает.
+## тон «верх светлый, низ тенью» задают нормали и цвет вершин. Ствол ели тень принимает, ствол
+## и ветви пинии — нет (под широкой кроной они чернели).
 
 const SPRUCE: int = 0
 const SPRUCE_YOUNG: int = 1
@@ -80,6 +81,11 @@ const TONES_SPRUCE: PackedColorArray = [Color(0.22, 0.45, 0.28), Color(0.13, 0.2
 const TONES_FIR: PackedColorArray = [Color(0.22, 0.43, 0.35), Color(0.12, 0.27, 0.25), Color(0.30, 0.52, 0.40), Color(0.38, 0.30, 0.25)]
 const TONES_WIND: PackedColorArray = [Color(0.26, 0.44, 0.27), Color(0.15, 0.29, 0.21), Color(0.36, 0.52, 0.30), Color(0.40, 0.29, 0.21), Color(0.42, 0.38, 0.34)]
 const TONES_PINE: PackedColorArray = [Color(0.33, 0.52, 0.27), Color(0.20, 0.36, 0.22), Color(0.40, 0.58, 0.30), Color(0.55, 0.36, 0.25), Color(0.36, 0.24, 0.18)]
+## Калибровка тонов кроны (свет, тень, кончики) под яркость в кадре (арт-библия «Не чёрные»:
+## освещённый верх HSV V 0.38–0.55, тень — не ниже 0.18): тун-свет мира (солнце 0.8, холодный
+## окружающий) отдаёт таблице ~0.6 её V у ели и ~0.75 у пинии; оттенок таблицы сохраняется.
+const TONE_GAIN_SPRUCE: float = 1.4
+const TONE_GAIN_PINE: float = 1.15
 
 ## Нормали верха: + вверх (ель) и (пиния).
 const UP_TILT_SPRUCE: float = 0.8
@@ -467,7 +473,7 @@ static func _spruce(g: Geo, rng: RandomNumberGenerator, lod: int) -> void:
 	var size: Vector2 = MODEL_SIZE[M_SPRUCE]
 	var H: float = size.x
 	var p := TierParams.new()
-	p.tones = TONES_SPRUCE
+	p.tones = _crown_tones(TONES_SPRUCE, TONE_GAIN_SPRUCE)
 	p.notch = Vector2(0.15, 0.25)
 	p.droop_deg = 12.0
 	p.apex_k = 1.3
@@ -476,14 +482,14 @@ static func _spruce(g: Geo, rng: RandomNumberGenerator, lod: int) -> void:
 	elif lod == 1:
 		_spruce_like(g, rng, H, size.y, 4, [6, 6, 6, 6], 0.12, 0.94, 0.26, 0.16, 0.9, p, false)
 	else:
-		_far_cones(g, H, size.y, 0.12, 0.94, TONES_SPRUCE)
+		_far_cones(g, H, size.y, 0.12, 0.94, p.tones)
 
 
 ## Пихта узкая: колонна, 8 ярусов (LOD0), 5 (LOD1); выемки мельче, лапы опущены меньше.
 static func _fir(g: Geo, rng: RandomNumberGenerator, lod: int) -> void:
 	var size: Vector2 = MODEL_SIZE[M_FIR]
 	var p := TierParams.new()
-	p.tones = TONES_FIR
+	p.tones = _crown_tones(TONES_FIR, TONE_GAIN_SPRUCE)
 	p.notch = Vector2(0.08, 0.12)
 	p.droop_deg = 6.5
 	p.apex_k = 1.45
@@ -499,7 +505,7 @@ static func _wind(g: Geo, rng: RandomNumberGenerator) -> void:
 	var size: Vector2 = MODEL_SIZE[M_WIND]
 	var H: float = size.x
 	var p := TierParams.new()
-	p.tones = TONES_WIND
+	p.tones = _crown_tones(TONES_WIND, TONE_GAIN_SPRUCE)
 	p.notch = Vector2(0.15, 0.25)
 	p.droop_deg = 12.0
 	p.apex_k = 1.3
@@ -519,6 +525,14 @@ static func _wind(g: Geo, rng: RandomNumberGenerator) -> void:
 		var root := Vector3(0.0, y, 0.0)
 		g.tube(root, root + dir * length, 0.035, 0.012, 4, TONES_WIND[4], TONES_WIND[4], 0.0)
 	g.crown = 1.0
+
+
+## Тоны с калибровкой кроны: первые три (свет, тень, кончики) × `gain`, ствол и ветки — как в таблице.
+static func _crown_tones(tones: PackedColorArray, gain: float) -> PackedColorArray:
+	var out := tones.duplicate()
+	for i in 3:
+		out[i] = Color(minf(tones[i].r * gain, 1.0), minf(tones[i].g * gain, 1.0), minf(tones[i].b * gain, 1.0))
+	return out
 
 
 class TierParams:
@@ -682,7 +696,7 @@ static func _far_cones(g: Geo, H: float, W: float, b0_k: float, top_k: float, to
 ## просветы. `lean_deg` > 0 — наклонная: ствол наклонён к +X, крона смещена и асимметрична.
 ## LOD1 — 4 подушки без колец, ствол 2 звена; LOD2 — 2 плоских диска на трубке 4 граней.
 static func _pine(g: Geo, rng: RandomNumberGenerator, lod: int, lean_deg: float, H: float) -> void:
-	var tn: PackedColorArray = TONES_PINE
+	var tn: PackedColorArray = _crown_tones(TONES_PINE, TONE_GAIN_PINE)
 	var lean: float = tan(deg_to_rad(lean_deg))
 	var asym: float = 0.06 * H if lean_deg > 0.0 else 0.0
 	var trunk_pts: Array[Vector3] = [Vector3(0.0, -0.3, 0.0), Vector3(0.035 * H, 0.2 * H, 0.01 * H),
@@ -707,15 +721,17 @@ static func _pine(g: Geo, rng: RandomNumberGenerator, lod: int, lean_deg: float,
 			r *= 1.1 if cos(a) > 0.2 else 0.92
 		centers.append(c)
 		sizes.append(Vector3(r, float(pd[4]) * H, float(pd[5])))
+	# Ствол и ветви пинии тоже не принимают тень и их нормали подняты вверх (+ 0.7): под широкой
+	# кроной ствол целиком в её тени и с теневой стороны был чёрным (V ≈ 0.13); теперь он бурый,
+	# стороны различает тон вершин (низ — свет коры, у кроны — тень коры).
+	var v_trunk: int = g.v.size()
 	if lod == 2:
-		g.crown = 0.0
 		g.tube(trunk_pts[0], fork, radii[0], radii[3], 4, tn[3], tn[4], 1.0)
-		g.crown = 1.0
+		g.lift_normals(v_trunk, 0.7)
 		var hub := Vector3(fork.x + 0.03 * H, 0.0, fork.z)
 		_disk(g, hub + Vector3(asym, 0.69 * H, 0.0), 0.40 * H, 0.10 * H, tn)
 		_disk(g, hub + Vector3(asym * 1.4 + lean * 0.12 * H, 0.81 * H, 0.0), 0.27 * H, 0.08 * H, tn)
 		return
-	g.crown = 0.0
 	if lod == 0:
 		for i in 3:
 			g.tube(trunk_pts[i], trunk_pts[i + 1], radii[i], radii[i + 1], 6, tn[3].lerp(tn[4], float(i) / 3.0),
@@ -731,7 +747,7 @@ static func _pine(g: Geo, rng: RandomNumberGenerator, lod: int, lean_deg: float,
 		for k in 2:
 			var target: Vector3 = centers[k] - Vector3(0.0, 0.2 * sizes[k].y, 0.0)
 			g.tube(fork, target, 0.013 * H, 0.008 * H, 4, tn[4], tn[4], 1.0)
-	g.crown = 1.0
+	g.lift_normals(v_trunk, 0.7)
 	var phase: float = rng.randf() * TAU
 	for k in centers.size():
 		if lod == 1 and k >= 3 and k < 6:
@@ -909,6 +925,11 @@ class Geo:
 			var out: Vector3 = u * cos(ang) + w * sin(ang)
 			tri(i0, i1, i0 + 1, out)
 			tri(i0 + 1, i1, i1 + 1, out)
+
+	## Нормали вершин с индексом ≥ `v_from` (до текущего конца) подняты на `up` × вверх.
+	func lift_normals(v_from: int, up: float) -> void:
+		for i in range(v_from, v.size()):
+			n[i] = (n[i] + Vector3.UP * up).normalized()
 
 	## Лидер ели: тонкая четырёхгранная пирамида без донца.
 	func leader(base: Vector3, tip: Vector3, r: float, col: Color) -> void:
