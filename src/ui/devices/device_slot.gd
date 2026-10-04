@@ -7,7 +7,9 @@ extends PanelContainer
 ## точка цвета состояния — как у фишек главного экрана, `HomeScreen.chip_dot_color`).
 ## Устройство подключено (или подключается/переподключается) — имя, сигнал и заряд с иконками
 ## `signal`/`battery` и кнопка «Отключить» (`GhostButton`); нет — «Не подключено», имя
-## запомненного устройства (если есть) и кнопка «Найти».
+## запомненного устройства (если есть) и кнопка «Найти». После срыва подключения вместо
+## «Не подключено» — причина (REQ-DEV-07 крит. 1, Н-55), точка фишки — `danger_text`
+## («ошибка подключения», `ui.md` п. 8.7).
 ##
 ## Слот только показывает готовые строки (переводит экран) и испускает сигналы; логика — в
 ## `DevicesScreen` через `ConnectionManager`.
@@ -20,6 +22,8 @@ const DOT_DIAMETER: float = 10.0
 var kind: String = ""
 var device_id: String = ""
 var _state: int = TrainerDevice.ConnectionState.DISCONNECTED
+## Последняя попытка подключения сорвалась (точка фишки — `danger_text`).
+var _failed: bool = false
 var _dot_placeholder: ImageTexture = null
 
 @onready var _icon: TextureRect = %Icon
@@ -61,6 +65,7 @@ func setup(slot_kind: String, icon_name: String, title_text: String) -> void:
 func show_device(id: String, conn_state: int, state_text: String, name_text: String,
 		signal_text: String, battery_text: String, disconnect_text: String) -> void:
 	device_id = id
+	_failed = false
 	_set_state(conn_state, state_text)
 	_connected.visible = true
 	_empty.visible = false
@@ -70,10 +75,12 @@ func show_device(id: String, conn_state: int, state_text: String, name_text: Str
 	_disconnect_button.text = disconnect_text
 
 
-## Устройства нет: «Не подключено», имя запомненного (пусто — строка скрыта) и «Найти».
+## Устройства нет: «Не подключено» (после срыва — причина, `failed`), имя запомненного или
+## последнего подключавшегося (пусто — строка скрыта) и «Найти».
 func show_empty(state_text: String, empty_text: String, remembered_name: String, find_text: String,
-		find_enabled: bool) -> void:
+		find_enabled: bool, failed: bool = false) -> void:
 	device_id = ""
+	_failed = failed
 	_set_state(TrainerDevice.ConnectionState.DISCONNECTED, state_text)
 	_connected.visible = false
 	_empty.visible = true
@@ -104,6 +111,20 @@ func name_text() -> String:
 	return _name.text if _connected.visible else _remembered_label.text
 
 
+## Текст под статусом в пустом виде: «Не подключено» или причина срыва.
+func empty_text() -> String:
+	return _empty_label.text
+
+
+func is_failed() -> bool:
+	return _failed
+
+
+## Цвет точки фишки: `danger_text` после срыва, иначе по состоянию (как у фишек главного).
+func dot_color() -> Color:
+	return UiTokens.DANGER_TEXT if _failed else HomeScreen.chip_dot_color(_state)
+
+
 func battery_text() -> String:
 	return _battery_label.text
 
@@ -130,7 +151,7 @@ func _draw_dot() -> void:
 	var box := _chip.get_theme_stylebox("normal")
 	var left: float = box.get_margin(SIDE_LEFT) if box != null else 0.0
 	var center := Vector2(left + DOT_DIAMETER * 0.5, _chip.size.y * 0.5)
-	_chip.draw_circle(center, DOT_DIAMETER * 0.5, HomeScreen.chip_dot_color(_state), true, -1.0, true)
+	_chip.draw_circle(center, DOT_DIAMETER * 0.5, dot_color(), true, -1.0, true)
 
 
 func _on_disconnect_pressed() -> void:

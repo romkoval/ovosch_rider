@@ -11,7 +11,7 @@ extends RefCounted
 ## Формат — JSON Lines, одна запись на строку:
 ## `{"t":"2026-10-04T12:34:56.789Z","up_ms":1234,"cat":"frames","ev":"ride_stats","data":{…}}`.
 ## `t` — время UTC, `up_ms` — миллисекунды с запуска движка (для интервалов между событиями),
-## `cat` — категория (`CAT_*`; T-116b добавит `ble`), `ev` — событие, `data` — поля события.
+## `cat` — категория (`CAT_*`; `ble` — T-154, T-116b), `ev` — событие, `data` — поля события.
 ## Каждая строка до записи проходит `SecureStoreFilter`, после записи — `flush()` (журнал полезен
 ## и после падения).
 ##
@@ -36,6 +36,8 @@ const DEFAULT_MAX_FILES: int = 20
 const CAT_APP: String = "app"
 const CAT_FRAMES: String = "frames"
 const CAT_SETTINGS: String = "settings"
+## BLE: события подключения датчиков (T-154); пакеты, станок и Control Point — T-116b.
+const CAT_BLE: String = "ble"
 
 ## Общий журнал приложения (null — не установлен).
 static var _shared: DiagLog = null

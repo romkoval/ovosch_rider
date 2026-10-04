@@ -9,6 +9,8 @@ extends Control
 ## - строка статуса (поиск, ожидание запомненных, «устройство не найдено», REQ-DEV-06 крит. 3);
 ## - три слота `DeviceSlot` — «Станок», «Пульсометр», «Каденс» (UIX-04 крит. 5): в ряд на
 ##   regular, столбиком на compact;
+## - после срыва подключения датчика под статусом слота и в подзаголовке его строки — одна и та
+##   же причина (`failure_text`, REQ-DEV-07 крит. 1, Н-55), пока не началась новая попытка;
 ## - раздел «Найденные устройства» — строки списка (`ListRow`, вариация `ListRowButton`, UIX-04
 ##   крит. 3): иконка типа, имя, тип, колонки сигнала, состояния и заряда, кнопка «Подключить» /
 ##   «Отключить»; пусто — пустое состояние с действием «Искать» (UIX-04 крит. 4);
@@ -367,6 +369,45 @@ static func state_key(state: int) -> String:
 	return "ui.devices.state.disconnected"
 
 
+## Ключ текста причины срыва подключения (`SensorDevice.FailureReason`, Н-55); "" — причины нет.
+## «Нет сервиса» — по типу датчика: у пульсометра с подсказкой включить трансляцию пульса.
+static func failure_key(kind: String, reason: int) -> String:
+	match reason:
+		SensorDevice.FailureReason.REFUSED:
+			return "ui.devices.reason.refused"
+		SensorDevice.FailureReason.NO_SERVICE:
+			match kind:
+				RememberedDevices.KIND_HR:
+					return "ui.devices.reason.no_service_hr"
+				RememberedDevices.KIND_CADENCE:
+					return "ui.devices.reason.no_service_cadence"
+				RememberedDevices.KIND_POWER:
+					return "ui.devices.reason.no_service_power"
+			return "ui.devices.reason.no_service"
+		SensorDevice.FailureReason.LINK_LOST:
+			return "ui.devices.reason.link_lost"
+		SensorDevice.FailureReason.NO_RESPONSE:
+			return "ui.devices.reason.no_response"
+		SensorDevice.FailureReason.BLUETOOTH_OFF:
+			return "ui.devices.reason.bluetooth_off"
+	return ""
+
+
+## Причина под статусом устройства — только в «не подключено» после срыва ("" — нет).
+## Одна функция для слота и строки списка: они показывают одно и то же.
+func failure_text(id: String) -> String:
+	if _manager == null or id.is_empty():
+		return ""
+	var states := _manager.device_states()
+	if not states.has(id):
+		return ""
+	var st: Dictionary = states[id]
+	if int(st["state"]) != TrainerDevice.ConnectionState.DISCONNECTED:
+		return ""
+	var key := failure_key(str(st["kind"]), int(st["failure"]))
+	return tr(key) if not key.is_empty() else ""
+
+
 func _status_text() -> String:
 	if not _manager.is_ble_available():
 		return tr("ui.devices.ble_unavailable")
@@ -432,8 +473,11 @@ func _render_slots() -> void:
 				device_name if not device_name.is_empty() else tr("ui.devices.unnamed"),
 				signal_text, battery_text, tr("ui.devices.disconnect"))
 		else:
-			device_slot.show_empty(tr(state_key(state)), tr("ui.devices.slot.not_connected"), device_name,
-				tr("ui.devices.slot.find"), available and not scanning)
+			# После срыва — причина вместо «Не подключено» (REQ-DEV-07 крит. 1, Н-55).
+			var failure := failure_text(id)
+			device_slot.show_empty(tr(state_key(state)),
+				failure if not failure.is_empty() else tr("ui.devices.slot.not_connected"), device_name,
+				tr("ui.devices.slot.find"), available and not scanning, not failure.is_empty())
 
 
 ## Запись устройства слота: подключаемое сейчас (`trainer_id` / `sensor_ids`), иначе
@@ -517,6 +561,10 @@ func _update_row(r: Dictionary, record: Dictionary, is_remembered: bool) -> void
 			subtitle.append(rssi_text)
 	if record.has("rssi") and not record.get("available", true):
 		subtitle.append(tr("ui.devices.unavailable"))
+	# Причина срыва — та же, что под статусом слота (строка и слот согласованы).
+	var failure := failure_text(id)
+	if not failure.is_empty():
+		subtitle.append(failure)
 	var battery_text := tr("ui.devices.battery").format({"percent": battery}) if battery >= 0 else tr("ui.devices.battery_unknown")
 	var list_row: ListRow = r["list_row"]
 	var connect_button: Button = r["connect_button"]

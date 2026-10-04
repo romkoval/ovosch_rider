@@ -11,7 +11,12 @@ extends RefCounted
 ##   через `AUTO_CONNECT_TIMEOUT_SEC` (30 с) без рекламы — `auto_connect_timed_out(ids)`
 ##   («устройство не найдено», крит. 3). Незапомненные устройства не подключаются.
 ## - `forget(profile_id, id)` — отключение и удаление из реестра (крит. 4).
-## - `device_states()` — `id → {state, battery, kind}` для UI, `state_changed(id)`.
+## - `device_states()` — `id → {state, battery, kind, failure}` для UI, `state_changed(id)`.
+## - `failure_of(id)` — причина последнего срыва подключения или обрыва датчика
+##   (`SensorDevice.FailureReason`, REQ-DEV-07 крит. 1, Н-55): хранится у датчика до следующей
+##   попытки (`connect_sensor`) или ручного отключения; экран показывает её под статусом.
+##   Датчик запоминается только после CONNECTED (DEV-06 крит. 1): неудачная попытка в реестр
+##   не попадает, имя в слоте — из списка найденных.
 ## - Станок создаётся через `TrainerFactory`: `"ble"` → `BleTrainer` поверх моста,
 ##   иначе (`"fake"`) — эмулятор для режима разработки.
 ## - REQ-DEV-01 крит. 7: при `bridge.is_available() == false` или адаптере не POWERED_ON
@@ -211,6 +216,8 @@ func connect_sensor(id: String, kind: String) -> bool:
 		sensor.disconnect_device()
 	sensor_ids[kind] = id
 	_auto_pending.erase(id)
+	if sensor is BleSensorBase:
+		(sensor as BleSensorBase).device_name = _name_of(id)
 	sensor.connect_device(id)
 	state_changed.emit(id)
 	return true
@@ -345,16 +352,26 @@ func tick(delta_sec: float) -> void:
 		auto_connect_timed_out.emit(ids)
 
 
-## `id → {state, battery, kind}` для всех устройств, которым отдавалась команда подключения.
+## `id → {state, battery, kind, failure}` для всех устройств, которым отдавалась команда
+## подключения; `failure` — `SensorDevice.FailureReason` (у станка всегда NONE).
 func device_states() -> Dictionary:
 	var out: Dictionary = {}
 	if not trainer_id.is_empty():
 		out[trainer_id] = {"state": trainer.get_connection_state(), "battery": battery_of(trainer_id),
-			"kind": RememberedDevices.KIND_TRAINER}
+			"kind": RememberedDevices.KIND_TRAINER, "failure": SensorDevice.FailureReason.NONE}
 	for kind in sensor_ids:
 		var id: String = str(sensor_ids[kind])
-		out[id] = {"state": (sensors[kind] as SensorDevice).get_connection_state(), "battery": battery_of(id), "kind": kind}
+		var s: SensorDevice = sensors[kind]
+		out[id] = {"state": s.get_connection_state(), "battery": battery_of(id), "kind": kind,
+			"failure": s.last_failure()}
 	return out
+
+
+## Причина последнего срыва подключения или обрыва устройства (`SensorDevice.FailureReason`);
+## NONE — не было, идёт новая попытка или устройство не датчик.
+func failure_of(id: String) -> int:
+	var states := device_states()
+	return int(states[id]["failure"]) if states.has(id) else SensorDevice.FailureReason.NONE
 
 
 ## Состояние устройства (`TrainerDevice.ConnectionState`); DISCONNECTED, если неизвестно.
@@ -469,6 +486,14 @@ func _stop_scan_if_idle() -> void:
 	if _auto_pending.is_empty():
 		_auto_started_scan = false
 		scanner.stop()
+
+
+## Имя устройства: из списка найденных, иначе из реестра профиля ("" — неизвестно).
+func _name_of(id: String) -> String:
+	var name: String = str(scanner.find(id).get("name", ""))
+	if name.is_empty():
+		name = str(remembered.find(profile_id, id).get("name", ""))
+	return name
 
 
 ## После успешного подключения: запомнить (DEV-06 крит. 1) или отметить «видели».

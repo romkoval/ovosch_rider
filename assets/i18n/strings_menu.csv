@@ -79,6 +79,14 @@ ui.devices.slot.hr,Пульсометр,Heart-rate monitor
 ui.devices.slot.cadence,Каденс,Cadence
 ui.devices.slot.not_connected,Не подключено,Not connected
 ui.devices.slot.find,Найти,Find
+ui.devices.reason.refused,Устройство отклонило подключение,The device refused the connection
+ui.devices.reason.no_service_hr,Нет сервиса пульса — включите на часах трансляцию пульса (Broadcast Heart Rate),No heart-rate service — turn on heart-rate broadcast on your watch (Broadcast Heart Rate)
+ui.devices.reason.no_service_cadence,Нет сервиса каденса (CSC),No cadence service (CSC)
+ui.devices.reason.no_service_power,Нет сервиса мощности (CPS),No cycling power service (CPS)
+ui.devices.reason.no_service,Нет нужного сервиса,The required service is missing
+ui.devices.reason.link_lost,Связь прервалась,Connection lost
+ui.devices.reason.no_response,Устройство не ответило,The device did not respond
+ui.devices.reason.bluetooth_off,Bluetooth выключен или недоступен,Bluetooth is off or unavailable
 ui.devices.empty_title,Устройства не найдены,No devices found
 ui.devices.empty_text,"Крутаните педали, чтобы разбудить станок",Spin the pedals to wake the trainer up
 ui.devices.empty_action,Искать,Search
