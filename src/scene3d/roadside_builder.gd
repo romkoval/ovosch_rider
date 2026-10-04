@@ -65,8 +65,10 @@ static func curvature(track: Track, s: float, probe_m: float, a: TrackSample, b:
 
 
 ## Построить `{roadside: MeshInstance3D, verge: MeshInstance3D}` (корни кусков).
+## `valley_field` (горы, T-087): отбойник не участками по поворотам, а со стороны долины —
+## там, где рельеф за полосой травы заметно ниже полотна.
 static func build(track: Track, road_width_m: float, center_offset_m: float, world_material: Material,
-		grass_material: Material, guardrail: bool, seed: int) -> Dictionary:
+		grass_material: Material, guardrail: bool, seed: int, valley_field: TerrainField = null) -> Dictionary:
 	var dist: PackedFloat64Array = RoadBuilder.ring_distances(track)
 	var rings: int = dist.size()
 	var last: int = rings - 1
@@ -107,7 +109,12 @@ static func build(track: Track, road_width_m: float, center_offset_m: float, wor
 				limit = 0.8 / absf(k) - center_offset_m * sgn
 			limit_side.append(maxf(limit, curb_out + 0.5))
 		limits.append(limit_side)
-		rails.append(_guardrail_active(dist, kappa, sgn, noise) if guardrail else PackedByteArray())
+		if not guardrail:
+			rails.append(PackedByteArray())
+		elif valley_field != null:
+			rails.append(valley_rails(centers, rights, sgn, valley_field))
+		else:
+			rails.append(_guardrail_active(dist, kappa, sgn, noise))
 	var chunks: int = RoadBuilder.chunk_count(track)
 	var roadside: MeshInstance3D = null
 	var verge_root: MeshInstance3D = null
@@ -253,6 +260,53 @@ static func _guardrail_active(dist: PackedFloat64Array, kappa: PackedFloat32Arra
 		var want_side: float = outer_sgn if absf(k) > 1.0 / 900.0 else 1.0
 		var on: bool = noise.get_noise_1d(dist[i]) > -0.05 and want_side == sgn
 		active[i] = 1 if on else 0
+	return active
+
+
+## Отбойник со стороны долины: перепад «полотно − рельеф» на 22 и 40 м от кромки на стороне
+## `sgn` больше `VALLEY_DROP_M` и больше, чем на другой стороне (по окну ±`VALLEY_WINDOW`
+## колец); разрывы короче `VALLEY_GAP` колец заполняются.
+const VALLEY_DROP_M: float = 2.5
+const VALLEY_WINDOW: int = 8
+const VALLEY_GAP: int = 10
+
+
+static func valley_rails(centers: PackedVector3Array, rights: PackedVector3Array, sgn: float,
+		field: TerrainField) -> PackedByteArray:
+	var n: int = centers.size()
+	var diff := PackedFloat32Array()
+	var drop := PackedFloat32Array()
+	diff.resize(n)
+	drop.resize(n)
+	for i in n:
+		var c: Vector3 = centers[i]
+		var d_side: float = 0.0
+		var d_other: float = 0.0
+		for w in [22.0, 40.0]:
+			var a: Vector3 = c + rights[i] * sgn * float(w)
+			var b: Vector3 = c - rights[i] * sgn * float(w)
+			d_side += (c.y - field.height_at(a.x, a.z)) * 0.5
+			d_other += (c.y - field.height_at(b.x, b.z)) * 0.5
+		drop[i] = d_side
+		diff[i] = d_side - d_other
+	var active := PackedByteArray()
+	active.resize(n)
+	for i in n:
+		var sd: float = 0.0
+		var sf: float = 0.0
+		for k in range(-VALLEY_WINDOW, VALLEY_WINDOW + 1):
+			var j: int = clampi(i + k, 0, n - 1)
+			sd += drop[j]
+			sf += diff[j]
+		active[i] = 1 if sd > VALLEY_DROP_M * float(VALLEY_WINDOW * 2 + 1) and sf > 0.0 else 0
+	var last_on: int = -1
+	for i in n:
+		if active[i] == 0:
+			continue
+		if last_on >= 0 and i - last_on > 1 and i - last_on <= VALLEY_GAP:
+			for j in range(last_on + 1, i):
+				active[j] = 1
+		last_on = i
 	return active
 
 

@@ -37,6 +37,36 @@ const TYPE_PLACE: Dictionary = {
 	"chapel": Vector2(36.0, 75.0),
 	"tv_tower": Vector2(42.0, 120.0),
 	"lone_tree_bench": Vector2(20.0, 45.0),
+	# Горы (T-087): таблички — на обочине за столбиками (от оси дороги) и чуть впереди своей s.
+	"pass_sign": Vector2(6.6, 26.0),
+	"summit_km_sign": Vector2(6.6, 26.0),
+	"valley_village": Vector2(115.0, 280.0),
+	"waterfall": Vector2(130.0, 240.0),
+	"switchbacks_view": Vector2(320.0, 500.0),
+	"pass_summit": Vector2(22.0, 35.0),
+	"snow_patch": Vector2(30.0, 40.0),
+	"shepherd_hut": Vector2(110.0, 220.0),
+	"cow_pasture": Vector2(36.0, 70.0),
+	"sawmill": Vector2(32.0, 60.0),
+	"campsite": Vector2(30.0, 60.0),
+}
+## Дальность видимости отдельных типов, м (таблички мелкие — видны за 300–400 м и не
+## занимают место среди «2–3 ориентиров в кадре»; дальние горные — ближе, чем по плану).
+const TYPE_RANGE: Dictionary = {
+	"pass_sign": 350.0,
+	"summit_km_sign": 300.0,
+	"switchbacks_view": 1100.0,
+	"shepherd_hut": 1100.0,
+	"clouds_below": 1000.0,
+	"mountain_lake": 1300.0,
+}
+## Мелкие ориентиры-таблички у обочины (видны за 300 м): в правило «в кадре 2–3 ориентира»
+## (`tracks.md` п. 5) не входят — это не предмет композиции кадра, а «верстовые столбы».
+const MINOR_TYPES: Array[String] = ["pass_sign", "summit_km_sign"]
+## Запас до оси трассы для отдельных типов, м (таблички стоят на обочине, вместо `MIN_CLEARANCE_M`).
+const TYPE_CLEARANCE: Dictionary = {
+	"pass_sign": 3.0,
+	"summit_km_sign": 3.0,
 }
 ## Ближе этого к оси трассы части ориентира (кроме ориентиров на дороге) не ставятся, м.
 const MIN_CLEARANCE_M: float = 16.0
@@ -87,6 +117,8 @@ class Placed:
 	var parts: Array[Part] = []
 	## Котловины под воду для рельефа (`TerrainField.carve_basin`): центр, ось, полуоси, уровень.
 	var basins: Array[Basin] = []
+	## Прорези вида (`TerrainField.carve_notch`): рельеф опускается под луч взгляда на ориентир.
+	var notches: Array[Notch] = []
 
 	## Позиции экземпляров видимых частей (без мешей в мировых координатах и пятен).
 	func origins() -> PackedVector3Array:
@@ -115,13 +147,22 @@ class Basin:
 	var level: float = 0.0
 
 
-## Опустить рельеф под водой ориентиров (до `TerrainField.build_mesh`).
+## Прорезь вида: от `from` до `to` рельеф не выше луча (минус запас), полуширина `half_width`.
+class Notch:
+	var from := Vector3.ZERO
+	var to := Vector3.ZERO
+	var half_width: float = 40.0
+
+
+## Опустить рельеф под водой ориентиров и в прорезях вида (до `TerrainField.build_mesh`).
 static func carve(placed: Array[Placed], field: TerrainField) -> void:
 	if field == null:
 		return
 	for pl in placed:
 		for b in pl.basins:
 			field.carve_basin(b.center, b.axis, b.radii, b.level)
+		for nt in pl.notches:
+			field.carve_notch(nt.from, nt.to, nt.half_width)
 
 
 ## Пятна, куда растительность не ставится: (x, z, радиус) по сетке 64 м.
@@ -250,7 +291,7 @@ static func place(track: Track, landmarks: Array, env: EnvironmentSet, field: Te
 			ctx.placed.s_m = lm.s_m
 			ctx.placed.side = lm.side
 			ctx.placed.plane = lm.plane
-			ctx.placed.range_m = _range_for(lm.plane)
+			ctx.placed.range_m = _range_for(lm.type, lm.plane)
 			track.sample_into(track.wrap_distance(lm.s_m), sample)
 			_frame(ctx, sample, lm, TRIES[k])
 			_build_type(ctx, lm.type)
@@ -311,7 +352,9 @@ static func keep_out(placed: Array[Placed]) -> KeepOut:
 	return ko
 
 
-static func _range_for(plane: String) -> float:
+static func _range_for(type: String, plane: String) -> float:
+	if TYPE_RANGE.has(type):
+		return float(TYPE_RANGE[type])
 	match plane:
 		RouteCatalog.Landmark.PLANE_MID:
 			return RANGE_MID_M
@@ -379,9 +422,14 @@ static func _clearance(pl: Placed, pts: PackedVector3Array) -> float:
 		for t in part.xf:
 			var d: float = _dist_to_track(t.origin, pts)
 			var sc: float = t.basis.get_scale().x
-			worst = minf(worst, d - part.footprint_m * sc - MIN_CLEARANCE_M)
+			worst = minf(worst, d - part.footprint_m * sc - min_clearance(pl.type))
 			worst = minf(worst, MAX_FROM_TRACK_M - d)
 	return worst
+
+
+## Запас до оси трассы для типа ориентира, м.
+static func min_clearance(type: String) -> float:
+	return float(TYPE_CLEARANCE.get(type, MIN_CLEARANCE_M))
 
 
 static func _multimesh(part: Part, range_m: float) -> MultiMeshInstance3D:
@@ -471,9 +519,48 @@ static func _build_type(ctx: Ctx, type: String) -> void:
 			ctx.part("windmill_sails", 0.0, true).add(t * Transform3D(Basis.IDENTITY, PropMeshes.WINDMILL_HUB), Color.WHITE,
 				Color(0.45, ctx.rng.randf() * TAU, 0.0, 0.0))
 		"lake_view":
-			_lake(ctx)
+			# Сектор 8–36° от курса: центр озера в кадре у своей s (T-087: на 56° озеро было за краем кадра).
+			_lake(ctx, Vector3(260.0, 60.0, 12.0), LAKE_DROP_M, MAX_FROM_TRACK_M + 60.0, 8, 0.0, 30.0, 15.0)
 		"horse_paddock":
 			_paddock(ctx)
+		# --- Горы (T-087) ---
+		"valley_village":
+			_village(ctx, 7)
+			ctx.put("chapel", 8.0, 46.0, 4.0, ctx.rng.randf_range(-0.25, 0.25))
+		"pass_sign":
+			_sign(ctx, "pass_sign_%d" % _km_to_summit(ctx.placed.s_m))
+		"summit_km_sign":
+			_sign(ctx, "km_sign_%d" % _km_to_summit(ctx.placed.s_m))
+		"waterfall":
+			ctx.put("waterfall", 18.0, 0.0, 0.0, ctx.rng.randf_range(-0.15, 0.15), 1.0, Color.WHITE, -1.5)
+			_conifers(ctx, 6, Vector2(0.0, -6.0), 30.0)
+		"switchbacks_view":
+			ctx.put("crag", 14.0, 0.0, 0.0, ctx.rng.randf() * TAU, 1.0, Color.WHITE, -1.0)
+		"clouds_below":
+			_clouds(ctx)
+		"pass_summit":
+			ctx.put("monument", 2.5, 0.0, 0.0, ctx.rng.randf_range(-0.2, 0.2))
+			ctx.put("flags", 0.0, 13.0, 3.0, 0.1)
+			ctx.put("chalet", 9.0, -30.0, 16.0, ctx.rng.randf_range(-0.15, 0.15))
+			ctx.put("bench", 1.0, 5.0, -2.0, 0.0)
+			ctx.put("bench", 1.0, -6.0, -2.0, 0.0)
+		"snow_patch":
+			_snow(ctx)
+		"mountain_lake":
+			_lake(ctx, Vector3(380.0, 70.0, 13.0), 240.0, 1800.0, 10)
+		"shepherd_hut":
+			_shepherd(ctx)
+		"avalanche_gallery":
+			_gallery(ctx)
+		"cable_car":
+			_cable_car(ctx)
+		"cow_pasture":
+			var hides: Array[Color] = [Color.WHITE, Color(0.86, 0.72, 0.58), Color.WHITE, Color(0.72, 0.56, 0.42), Color.WHITE, Color(0.95, 0.9, 0.84)]
+			_paddock(ctx, "cow", hides, Vector2(24.0, 15.0), 1.8)
+		"sawmill":
+			_sawmill(ctx)
+		"campsite":
+			_campsite(ctx)
 		"castle_ruins":
 			ctx.put("castle", 26.0, 0.0, 0.0, ctx.rng.randf_range(-0.5, 0.5), 1.3, Color.WHITE, -1.0)
 		"tv_tower":
@@ -607,21 +694,43 @@ const LAKE_RADII := Vector2(140.0, 85.0)
 const LAKE_DROP_M: float = 30.0
 
 
-static func _lake(ctx: Ctx) -> void:
+## `dists` — первое удаление, шаг и число удалений сектора, м; `drop_max` — насколько озеро может
+## быть ниже дороги; `far_cap` — дальше этого от трассы котловина не ставится (рельеф-коридор).
+## Горное озеро (T-087) ищется дальше и глубже: вода в долине внизу видна только издали.
+## `notch_m` > 0: если в секторе озеро нигде не видно, берётся место, где рельеф выступает над
+## лучом взгляда не больше чем на `notch_m`, и вдоль луча режется прорезь (`Notch`) — вид на
+## озеро открывается (холмы, `lake_view`: соседние холмы закрывали вид, T-087).
+const NOTCH_START_M: float = 45.0
+const NOTCH_HALF_W_M: float = 45.0
+
+
+static func _lake(ctx: Ctx, dists: Vector3 = Vector3(260.0, 60.0, 8.0), drop_max: float = LAKE_DROP_M,
+		far_cap: float = MAX_FROM_TRACK_M + 60.0, angles: int = 13, isolate_m: float = 0.0, notch_m: float = 0.0,
+		min_drop: float = 0.0) -> void:
 	var eye: Vector3 = ctx.at + Vector3.UP * 2.5
 	var best := Vector3.ZERO
 	var best_score: float = INF
 	var best_level: float = 0.0
+	var best_cut: float = 0.0
+	var best_target := Vector3.ZERO
 	var reach: float = maxf(LAKE_RADII.x, LAKE_RADII.y)
-	for ia in 13:
+	var drops: Array[float] = [LAKE_DROP_M, 22.0, 15.0, 9.0, 4.0, 0.0]
+	if drop_max != LAKE_DROP_M:
+		drops = [drop_max, drop_max * 0.73, drop_max * 0.5, drop_max * 0.3, drop_max * 0.13, 0.0]
+	for ia in angles:
 		var th: float = deg_to_rad(8.0 + 4.0 * float(ia))
-		for idist in 8:
-			var d: float = 260.0 + 60.0 * float(idist)
+		for idist in int(dists.z):
+			var d: float = dists.x + dists.y * float(idist)
 			var p: Vector3 = ctx.at + ctx.fwd * cos(th) * d + ctx.out * sin(th) * d
 			# Котловина с долиной не подходит к дороге (рельеф у полотна не поднимается) и лежит
 			# в рельефе-коридоре.
 			var to_track: float = _dist_to_track(p, ctx.probe)
-			var clear: float = minf(to_track - reach * TerrainField.BASIN_REACH - 40.0, TerrainField.CORRIDOR_RADIUS_M - 60.0 - to_track - reach)
+			# Озеро — ориентир своего участка: с других частей петли (дальше 2 км по дуге) оно не
+			# видно ближе `isolate_m` (иначе с подъёма в кадре лишний ориентир).
+			if isolate_m > 0.0 and _dist_to_other_parts(p, ctx, 2000.0) < isolate_m:
+				continue
+			var corridor: float = ctx.field.reach_m if ctx.field != null else TerrainField.CORRIDOR_RADIUS_M
+			var clear: float = minf(to_track - reach * TerrainField.BASIN_REACH - 40.0, minf(corridor, far_cap) - 60.0 - to_track - reach)
 			if clear < 0.0:
 				continue
 			p.y = ctx.ground(p)
@@ -629,28 +738,42 @@ static func _lake(ctx: Ctx) -> void:
 			# виден с дороги: луч от глаз к ближней кромке воды не уходит под рельеф.
 			var near_edge: Vector3 = p + (eye - p).normalized() * reach * 0.8
 			var level: float = INF
-			for drop in [LAKE_DROP_M, 22.0, 15.0, 9.0, 4.0, 0.0]:
-				var lv: float = minf(p.y + 1.0, ctx.road_y - float(drop))
-				var target := Vector3(near_edge.x, lv, near_edge.z)
-				var blocked: bool = false
-				for k in range(1, 24):
-					var q: Vector3 = eye.lerp(target, float(k) / 24.0)
-					if q.distance_to(target) < reach * 0.25:
-						break
-					if ctx.ground(q) > q.y - 0.5:
-						blocked = true
-						break
-				if not blocked:
-					level = lv
+			var cut: float = INF
+			var target := Vector3.ZERO
+			for drop in drops:
+				if float(drop) < min_drop:
 					break
+				var lv: float = minf(p.y + 1.0, ctx.road_y - float(drop))
+				var tgt := Vector3(near_edge.x, lv, near_edge.z)
+				# Насколько рельеф выступает над лучом (≤ 0 — берег виден).
+				var excess: float = -INF
+				for k in range(1, 24):
+					var q: Vector3 = eye.lerp(tgt, float(k) / 24.0)
+					if q.distance_to(tgt) < reach * 0.25:
+						break
+					excess = maxf(excess, ctx.ground(q) - (q.y - 0.5))
+					if excess > 0.0 and notch_m <= 0.0:
+						break
+				if excess <= 0.0:
+					level = lv
+					cut = 0.0
+					target = tgt
+					break
+				if notch_m > 0.0 and excess <= notch_m and cut == INF:
+					level = lv
+					cut = excess
+					target = tgt
 			if level == INF:
 				continue
-			# Ниже — лучше; ближе к курсу — лучше (озеро в кадре).
-			var score: float = level + rad_to_deg(th) * 0.4
+			# Ниже — лучше; ближе к курсу — лучше (озеро в кадре); прорезь — хуже.
+			# В режиме прорези — ещё и ближе (вода под малым углом видна узкой полоской).
+			var score: float = level + rad_to_deg(th) * 0.4 + cut * 0.5 + (d * 0.05 if notch_m > 0.0 else 0.0)
 			if score < best_score:
 				best_score = score
 				best = p
 				best_level = level
+				best_cut = cut
+				best_target = target
 	if best_score == INF:
 		return
 	var best_y: float = best_level
@@ -680,14 +803,37 @@ static func _lake(ctx: Ctx) -> void:
 		kit.add_quad(c + e0 * 0.8, c + e1 * 0.8, c + e1, c + e0, Vector3.UP, shallow)
 	ctx.part_mesh("lake", kit.to_mesh(ctx.material), 0.0, true).add(Transform3D.IDENTITY)
 	ctx.placed.basins.append(basin)
+	if best_cut > 0.0:
+		var dir: Vector3 = best_target - eye
+		var nt := Notch.new()
+		nt.from = eye + dir * (NOTCH_START_M / maxf(Vector2(dir.x, dir.z).length(), 1.0))
+		nt.to = best_target
+		nt.half_width = NOTCH_HALF_W_M
+		ctx.placed.notches.append(nt)
 	# Пятно озера для растительности — по центру.
 	ctx.part_mesh("lake_footprint", null, 210.0).add(Transform3D(Basis.IDENTITY, best))
 
 
-## Загон: жердевая изгородь прямоугольником 36 × 24 м, внутри три лошади.
-static func _paddock(ctx: Ctx) -> void:
-	var hw: float = 18.0
-	var hd: float = 12.0
+## Расстояние от точки до участков трассы дальше `arc_m` по дуге от s ориентира, м.
+static func _dist_to_other_parts(p: Vector3, ctx: Ctx, arc_m: float) -> float:
+	var best: float = INF
+	var length: float = ctx.track.length_m()
+	for k in ctx.probe.size():
+		var arc: float = absf(float(k) * TRACK_PROBE_M - ctx.placed.s_m)
+		arc = minf(arc, length - arc)
+		if arc < arc_m:
+			continue
+		var q: Vector3 = ctx.probe[k]
+		best = minf(best, Vector2(p.x - q.x, p.z - q.z).length())
+	return best
+
+
+## Загон: жердевая изгородь прямоугольником 2·`half` (по умолчанию 36 × 24 м), внутри животные
+## `animal` (по умолчанию три лошади) мастей `coats`.
+static func _paddock(ctx: Ctx, animal: String = "horse", coats: Array[Color] = [Color(0.62, 0.42, 0.28), Color(0.34, 0.25, 0.20),
+		Color(0.90, 0.88, 0.82)], half: Vector2 = Vector2(18.0, 12.0), footprint: float = 1.5) -> void:
+	var hw: float = half.x
+	var hd: float = half.y
 	var edges: Array[Vector4] = [
 		Vector4(-hw, -hd, hw, -hd), Vector4(hw, -hd, hw, hd), Vector4(hw, hd, -hw, hd), Vector4(-hw, hd, -hw, -hd),
 	]
@@ -701,11 +847,10 @@ static func _paddock(ctx: Ctx) -> void:
 			var dir: Vector3 = ctx.fwd * (b.x - a.x) + ctx.out * (b.y - a.y)
 			var x: Vector3 = Vector3(dir.x, 0.0, dir.z).normalized()
 			ctx.part("fence", 0.0).add(Transform3D(Basis(x, Vector3.UP, x.cross(Vector3.UP)), p))
-	var coats: Array[Color] = [Color(0.62, 0.42, 0.28), Color(0.34, 0.25, 0.20), Color(0.90, 0.88, 0.82)]
-	for i in 3:
-		ctx.put("horse", 1.5, ctx.rng.randf_range(-12.0, 12.0), ctx.rng.randf_range(-7.0, 7.0), ctx.rng.randf() * TAU,
+	for i in coats.size():
+		ctx.put(animal, footprint, ctx.rng.randf_range(-(hw - 6.0), hw - 6.0), ctx.rng.randf_range(-(hd - 5.0), hd - 5.0), ctx.rng.randf() * TAU,
 			ctx.rng.randf_range(0.95, 1.05), coats[i])
-	ctx.part_mesh("paddock_footprint", null, 22.0).add(Transform3D(Basis.IDENTITY, ctx.local(0.0, 0.0)))
+	ctx.part_mesh("paddock_footprint", null, maxf(hw, hd) + 4.0).add(Transform3D(Basis.IDENTITY, ctx.local(0.0, 0.0)))
 
 
 ## Виноградник: 7 рядов шпалер вдоль дороги по 5 звеньев, звенья наклонены по склону.
@@ -722,3 +867,262 @@ static func _vineyard(ctx: Ctx) -> void:
 			var z: Vector3 = x.cross(Vector3.UP).normalized()
 			ctx.part("vines", 0.0).add(Transform3D(Basis(x * xs, z.cross(x).normalized(), z), (p0 + p1) * 0.5 - Vector3.UP * 0.05))
 	ctx.part_mesh("vineyard_footprint", null, 26.0).add(Transform3D(Basis.IDENTITY, ctx.local(0.0, 0.0)))
+
+
+# ---------------------------------------------------------------------------
+# Горы (T-087, `tracks.md` п. 4.3, 4.5)
+# ---------------------------------------------------------------------------
+
+## Конец подъёма «Перевала» по s, м: цифра на табличке — (`SUMMIT_S_M` − s) / 1000 км.
+const SUMMIT_S_M: float = 10000.0
+
+
+static func _km_to_summit(s_m: float) -> int:
+	return clampi(roundi((SUMMIT_S_M - s_m) / 1000.0), 0, 9)
+
+
+## Табличка на обочине: впереди по дороге (не по прямой — на змейке дорога поворачивает) на
+## первом из `SIGN_LEADS_M`, где она остаётся на своей стороне относительно точки s и не ближе
+## запаса типа к другим участкам трассы; на удалении плана от центра полотна; лицом навстречу
+## гонщику (чуть развёрнута к дороге). Привязка — основание таблички.
+const SIGN_LEADS_M: Array[float] = [24.0, 18.0, 13.0]
+
+
+static func _sign(ctx: Ctx, key: String) -> void:
+	var sample := TrackSample.new()
+	var sgn: float = -1.0 if ctx.placed.side == RouteCatalog.Landmark.SIDE_LEFT else 1.0
+	var dist: float = float((TYPE_PLACE.get(ctx.placed.type, PLACE_NEAR) as Vector2).x)
+	var center0: Vector3 = ctx.at + ctx.right * ctx.env.road_center_offset_m
+	var p := Vector3.ZERO
+	var face := Vector3.ZERO
+	for lead in SIGN_LEADS_M:
+		ctx.track.sample_into(ctx.track.wrap_distance(ctx.placed.s_m + lead), sample)
+		var r: Vector3 = sample.right()
+		r.y = 0.0
+		r = r.normalized()
+		var f := Vector3(sample.forward.x, 0.0, sample.forward.z).normalized()
+		p = sample.position + r * (ctx.env.road_center_offset_m + sgn * dist)
+		face = -f - r * sgn * 0.25
+		var lateral: float = (p - center0).dot(ctx.right) * sgn
+		if lateral >= dist * 0.85 and _dist_to_track(p, ctx.probe) >= min_clearance(ctx.placed.type) + 1.0:
+			break
+	p.y = ctx.ground(p)
+	ctx.anchor = p
+	ctx.part(key, 0.6).add(Transform3D(ctx.facing(face), p))
+
+
+## Ели вокруг точки (u, v) от привязки — разброс `spread`, крупнее и темнее, как в лесу гор.
+static func _conifers(ctx: Ctx, count: int, center: Vector2, spread: float) -> void:
+	var m: Mesh = SceneryBuilder.conifer_mesh(ctx.material)
+	for i in count:
+		var p: Vector3 = ctx.local(center.x + ctx.rng.randf_range(-spread, spread), center.y + ctx.rng.randf_range(-spread * 0.5, spread * 0.5))
+		var sc: float = ctx.rng.randf_range(1.1, 1.6)
+		ctx.part_mesh("conifers", m, 2.0).add(Transform3D(ctx.facing(-ctx.out, ctx.rng.randf() * TAU, Vector3.ONE * sc), p - Vector3.UP * 0.1),
+			Color(0.8, 0.8, 0.82))
+
+
+## Облака под дорогой (дальний план): плоские кучевые облака над долиной на 25–45 м ниже
+## полотна, но не ниже рельефа + 12 м; меш в мировых координатах (белый верх, голубоватый низ,
+## без контура). Привязка — центр облаков.
+static func _clouds(ctx: Ctx) -> void:
+	var kit := MeshKit.new()
+	var top := Color(0.98, 0.98, 1.0, 0.0)
+	var shade := Color(0.80, 0.85, 0.95, 0.0)
+	var sum := Vector3.ZERO
+	var placed: int = 0
+	for attempt in 2:
+		for i in 8:
+			var u: float = ctx.rng.randf_range(250.0, 750.0)
+			var v: float = ctx.rng.randf_range(160.0, 480.0)
+			var p: Vector3 = ctx.at + ctx.fwd * u + ctx.out * v
+			var g: float = ctx.ground(p)
+			var y: float = maxf(ctx.road_y - ctx.rng.randf_range(35.0, 60.0), g + 14.0)
+			# Облака — над долиной, заметно ниже дороги (иначе с перевала они «лежат» на лугу).
+			if y > ctx.road_y - (30.0 if attempt == 0 else 18.0):
+				continue
+			p.y = y
+			for k in 4:
+				var off := Vector3(ctx.rng.randf_range(-30.0, 30.0), ctx.rng.randf_range(0.0, 4.0), ctx.rng.randf_range(-20.0, 20.0))
+				var r := Vector3(ctx.rng.randf_range(18.0, 32.0), ctx.rng.randf_range(5.0, 8.0), ctx.rng.randf_range(14.0, 24.0))
+				var b := Basis(Vector3.UP, ctx.rng.randf() * TAU)
+				kit.add_ellipsoid(p + b * off - Vector3.UP * 1.5, r * Vector3(1.05, 0.7, 1.05), shade, b, 4, 12)
+				kit.add_ellipsoid(p + b * off + Vector3.UP * 1.0, r, top, b, 5, 12)
+			sum += p
+			placed += 1
+		if placed >= 3:
+			break
+	if placed == 0:
+		return
+	ctx.part_mesh("clouds", kit.to_mesh(ctx.material), 0.0, true).add(Transform3D.IDENTITY)
+	ctx.anchor = sum / float(placed)
+
+
+## Снежник у дороги: пять неровных белых пятен по рельефу (меш в мировых координатах), вокруг —
+## валуны. Пятна — на 30–60 м от оси дороги.
+static func _snow(ctx: Ctx) -> void:
+	var kit := MeshKit.new()
+	var snow := Color(0.95, 0.97, 1.0, 0.0)
+	var edge := Color(0.84, 0.89, 0.97, 0.0)
+	for i in 5:
+		var c: Vector3 = ctx.local(ctx.rng.randf_range(-35.0, 40.0), ctx.rng.randf_range(0.0, 26.0))
+		var r: float = ctx.rng.randf_range(5.0, 12.0)
+		var n: int = 14
+		var center := Vector3(c.x, ctx.ground(c) + 0.22, c.z)
+		var ring := PackedVector3Array()
+		for k in n:
+			var a: float = TAU * float(k) / float(n)
+			var rr: float = r * ctx.rng.randf_range(0.65, 1.15) * (1.0 if k % 2 == 0 else 0.85)
+			var q := Vector3(c.x + cos(a) * rr * 1.4, 0.0, c.z + sin(a) * rr)
+			q.y = ctx.ground(q) + 0.15
+			ring.append(q)
+		for k in n:
+			var a: Vector3 = ring[k]
+			var b: Vector3 = ring[(k + 1) % n]
+			var a2: Vector3 = center.lerp(a, 0.8)
+			var b2: Vector3 = center.lerp(b, 0.8)
+			kit.add_triangle(center, a2, b2, Vector3.UP, snow)
+			kit.add_quad(a2, b2, b, a, Vector3.UP, edge)
+	ctx.part_mesh("snow", kit.to_mesh(ctx.material), 0.0, true).add(Transform3D.IDENTITY)
+	var rock: Mesh = SceneryBuilder.boulder_mesh(ctx.material)
+	for i in 6:
+		var p: Vector3 = ctx.local(ctx.rng.randf_range(-40.0, 45.0), ctx.rng.randf_range(-4.0, 30.0))
+		var sc: float = ctx.rng.randf_range(0.8, 2.2)
+		ctx.part_mesh("rocks", rock, 1.5).add(Transform3D(Basis(Vector3.UP, ctx.rng.randf() * TAU).scaled(Vector3.ONE * sc), p - Vector3.UP * 0.2 * sc))
+	ctx.part_mesh("snow_footprint", null, 38.0).add(Transform3D(Basis.IDENTITY, ctx.local(0.0, 13.0)))
+
+
+## Хижина пастуха: каменная хижина, загон из каменной кладки рядом, овцы.
+static func _shepherd(ctx: Ctx) -> void:
+	ctx.put("stone_hut", 5.0, 0.0, 0.0, ctx.rng.randf_range(-0.3, 0.3))
+	var wall: Mesh = SceneryBuilder.wall_mesh(ctx.material)
+	var c := Vector2(16.0, 2.0)
+	var half: float = 8.0
+	for side in 4:
+		for k in 4:
+			if side == 3 and k == 1:
+				continue
+			var t: float = -half + SceneryBuilder.WALL_SEGMENT_M * (float(k) + 0.5)
+			var uv: Vector2 = c
+			match side:
+				0:
+					uv += Vector2(t, -half)
+				1:
+					uv += Vector2(half, t)
+				2:
+					uv += Vector2(-t, half)
+				_:
+					uv += Vector2(-half, -t)
+			var p: Vector3 = ctx.local(uv.x, uv.y)
+			var dir: Vector3 = ctx.fwd if side % 2 == 0 else ctx.out
+			var x: Vector3 = Vector3(dir.x, 0.0, dir.z).normalized()
+			ctx.part_mesh("pen", wall, 0.0).add(Transform3D(Basis(x, Vector3.UP, x.cross(Vector3.UP)), p - Vector3.UP * 0.12))
+	for i in 6:
+		ctx.put("sheep", 0.8, c.x + ctx.rng.randf_range(-5.5, 5.5), c.y + ctx.rng.randf_range(-5.5, 5.5), ctx.rng.randf() * TAU,
+			ctx.rng.randf_range(0.9, 1.1))
+	ctx.part_mesh("hut_footprint", null, 16.0).add(Transform3D(Basis.IDENTITY, ctx.local(8.0, 2.0)))
+
+
+## Противолавинная галерея: пролёты по `PropMeshes.GALLERY_BAY_M` на `GALLERY_LENGTH_M` дороги,
+## начиная чуть впереди s (на снимке у s въезд — перед гонщиком); глухая стена — со стороны
+## склона (где рельеф выше), к долине — опоры.
+const GALLERY_LENGTH_M: float = 150.0
+const GALLERY_LEAD_M: float = 18.0
+
+
+static func _gallery(ctx: Ctx) -> void:
+	var sample := TrackSample.new()
+	var start: float = ctx.placed.s_m + GALLERY_LEAD_M
+	ctx.track.sample_into(ctx.track.wrap_distance(start + GALLERY_LENGTH_M * 0.5), sample)
+	var r0: Vector3 = sample.right()
+	var c0: Vector3 = sample.position + r0 * ctx.env.road_center_offset_m
+	var up_side: float = 1.0 if ctx.ground(c0 + r0 * 30.0) >= ctx.ground(c0 - r0 * 30.0) else -1.0
+	var bays: int = int(GALLERY_LENGTH_M / PropMeshes.GALLERY_BAY_M)
+	for i in bays:
+		ctx.track.sample_into(ctx.track.wrap_distance(start + (float(i) + 0.5) * PropMeshes.GALLERY_BAY_M), sample)
+		var r: Vector3 = sample.right()
+		var center: Vector3 = sample.position + r * ctx.env.road_center_offset_m
+		var basis := Basis(sample.forward, sample.up, r) if up_side > 0.0 else Basis(-sample.forward, sample.up, -r)
+		ctx.part("gallery_bay", 6.0).add(Transform3D(basis, center))
+
+
+## Канатная дорога над спуском: линия поперёк дороги чуть впереди s — станции и опоры по обе
+## стороны, два троса с провисом (меш в мировых координатах), кабинки медленно ездят вдоль
+## троса туда-обратно (шейдер `prop_anim`, ≤ 0.5 м/с). Базис кабинки: X — вдоль троса (с
+## уклоном), Y — вертикаль: кабина висит отвесно.
+const CABLE_LEAD_M: float = 70.0
+const CABLE_SUPPORTS: Array[float] = [-330.0, -195.0, -70.0, 70.0, 195.0, 330.0]
+const CABLE_GAP_M: float = 1.6
+const CABLE_SAG: float = 0.015
+const CABIN_DRIFT_M: float = 9.0
+
+
+static func _cable_car(ctx: Ctx) -> void:
+	var sample := TrackSample.new()
+	ctx.track.sample_into(ctx.track.wrap_distance(ctx.placed.s_m + CABLE_LEAD_M), sample)
+	var r: Vector3 = sample.right()
+	r.y = 0.0
+	r = r.normalized()
+	var center: Vector3 = sample.position + r * ctx.env.road_center_offset_m
+	var side: Vector3 = r.cross(Vector3.UP).normalized()
+	var tops := PackedVector3Array()
+	for k in CABLE_SUPPORTS.size():
+		var off: float = CABLE_SUPPORTS[k]
+		var p: Vector3 = center + r * off
+		p.y = ctx.ground(p)
+		var station: bool = k == 0 or k == CABLE_SUPPORTS.size() - 1
+		var basis := Basis(r, Vector3.UP, side)
+		if station:
+			ctx.part("cable_station", 7.0).add(Transform3D(basis, p - Vector3.UP * 0.3))
+			tops.append(p + Vector3.UP * 6.8)
+		else:
+			ctx.part("cable_tower", 3.0).add(Transform3D(basis, p))
+			tops.append(p + Vector3.UP * PropMeshes.CABLE_TOWER_TOP)
+	var kit := MeshKit.new()
+	var steel := Color(0.18, 0.18, 0.20, 0.0)
+	for sgn in [-1.0, 1.0]:
+		var lane: Vector3 = side * CABLE_GAP_M * float(sgn)
+		for k in tops.size() - 1:
+			var a: Vector3 = tops[k] + lane
+			var b: Vector3 = tops[k + 1] + lane
+			var sag: float = a.distance_to(b) * CABLE_SAG
+			var prev: Vector3 = a
+			for j in range(1, 7):
+				var t: float = float(j) / 6.0
+				var q: Vector3 = a.lerp(b, t) - Vector3.UP * 4.0 * sag * t * (1.0 - t)
+				kit.add_tube(prev, q, Vector2(0.09, 0.09), Vector2(0.09, 0.09), steel, 4, false)
+				prev = q
+	ctx.part_mesh("cable", kit.to_mesh(ctx.material), 0.0, true).add(Transform3D.IDENTITY)
+	# Кабинки: по одной на трос в пролёте над дорогой и в соседних.
+	var spans: Array[Vector2i] = [Vector2i(1, 1), Vector2i(2, -1), Vector2i(2, 1), Vector2i(3, -1)]
+	for sp in spans:
+		var a: Vector3 = tops[sp.x] + side * CABLE_GAP_M * float(sp.y)
+		var b: Vector3 = tops[sp.x + 1] + side * CABLE_GAP_M * float(sp.y)
+		var x: Vector3 = (b - a).normalized()
+		var xh := Vector3(x.x, 0.0, x.z).normalized()
+		var mid: Vector3 = a.lerp(b, 0.5) - Vector3.UP * a.distance_to(b) * CABLE_SAG
+		var basis := Basis(x, Vector3.UP, xh.cross(Vector3.UP).normalized())
+		ctx.part("cabin", 0.0, true).add(Transform3D(basis, mid), Color.WHITE, Color(0.0, ctx.rng.randf() * TAU, CABIN_DRIFT_M, 0.0))
+
+
+## Лесопилка у реки: навес, штабели брёвен, водяное колесо у торца.
+static func _sawmill(ctx: Ctx) -> void:
+	ctx.put("sawmill_shed", 9.0, 0.0, 0.0, ctx.rng.randf_range(-0.15, 0.15))
+	for i in 4:
+		ctx.put("log_pile", 3.5, 15.0 + float(i % 2) * 8.0, -3.0 + float(i / 2) * 6.0, PI * 0.5 + ctx.rng.randf_range(-0.2, 0.2),
+			ctx.rng.randf_range(0.9, 1.1))
+	ctx.put("water_wheel", 0.0, -11.2, 1.0, PI * 0.5, 1.0, Color.WHITE, 2.1)
+	_conifers(ctx, 5, Vector2(-4.0, 18.0), 24.0)
+
+
+## Кемпинг у реки: палатки приглушённых цветов, кострище, скамейки, ели.
+static func _campsite(ctx: Ctx) -> void:
+	var cloth: Array[Color] = [Color(0.80, 0.52, 0.30), Color(0.42, 0.56, 0.40), Color(0.42, 0.52, 0.64), Color(0.86, 0.78, 0.56),
+		Color(0.74, 0.40, 0.30), Color(0.50, 0.58, 0.66)]
+	for i in cloth.size():
+		var u: float = (float(i % 3) - 1.0) * 9.0 + ctx.rng.randf_range(-2.0, 2.0)
+		var v: float = (float(i / 3) - 0.5) * 10.0 + ctx.rng.randf_range(-1.5, 1.5)
+		ctx.put("tent", 1.8, u, v, ctx.rng.randf_range(-0.6, 0.6) + PI * 0.5, ctx.rng.randf_range(0.9, 1.15), cloth[i])
+	ctx.put("fire_ring", 1.2, 2.0, 1.0, 0.0)
+	ctx.put("bench", 1.0, 4.5, 1.0, PI * 0.5)
+	ctx.put("bench", 1.0, -0.5, 1.0, -PI * 0.5)
+	_conifers(ctx, 6, Vector2(0.0, 20.0), 30.0)

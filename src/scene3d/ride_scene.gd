@@ -384,6 +384,7 @@ func _apply_environment() -> void:
 	_sun.light_color = e.sun_color
 	_sun.light_energy = e.sun_energy
 	_sun.rotation_degrees = e.sun_rotation_deg
+	_camera.far = maxf(e.view_distance_m, TerrainField.RANGE_M)
 	if _env_instance != null:
 		_env_instance.queue_free()
 		_env_instance = null
@@ -403,14 +404,14 @@ func _build_world() -> void:
 	var e: EnvironmentSet = environment_set
 	var world_mat: Material = _material_or(e.world_material, DEFAULT_WORLD_MATERIAL)
 	var grass_mat: Material = _material_or(e.terrain_material, DEFAULT_TERRAIN_MATERIAL)
+	# Поле высот — до обочины: отбойник со стороны долины смотрит на рельеф (горы).
+	if e.terrain_enabled:
+		_terrain = TerrainField.build_for(track, e)
 	if e.roadside_enabled:
 		var side: Dictionary = RoadsideBuilder.build(track, e.road_width_m, e.road_center_offset_m, world_mat, grass_mat,
-			e.guardrail_enabled, e.scenery_seed)
+			e.guardrail_enabled, e.scenery_seed, _terrain if e.guardrail_valley_side else null)
 		_add_world_node(side["roadside"])
 		_add_world_node(_no_shadow(side["verge"]))
-	if e.terrain_enabled:
-		_terrain = TerrainField.build(track, e.rolling_height_m, e.hills_height_m, e.scenery_seed, e.cross_slope_gain, e.relief_anchor,
-			e.cross_slope_max)
 	# Ориентиры расставляются по рельефу до его меша: озёра опускают землю под водой.
 	_place_landmarks(world_mat)
 	if _terrain != null:
@@ -429,7 +430,11 @@ func _build_world() -> void:
 		if node != null:
 			fixed_total += int(PerfBudget.count(node)["multimesh_instances"])
 	var keep: LandmarkBuilder.KeepOut = LandmarkBuilder.keep_out(_landmarks_placed)
-	for node in SceneryBuilder.build(track, e, _terrain, world_mat, PerfBudget.MAX_VISIBLE_MULTIMESH_INSTANCES - fixed_visible,
+	# Длинная трасса: видимое считается по точкам через 50 м — между ними (и на сложенной
+	# змейке) может быть чуть больше; запас — `EnvironmentSet.visible_reserve`. Компактный мир
+	# виден целиком — без запаса.
+	var reserve: int = 0 if PerfBudget.is_compact(track) else maxi(e.visible_reserve, 0)
+	for node in SceneryBuilder.build(track, e, _terrain, world_mat, PerfBudget.MAX_VISIBLE_MULTIMESH_INSTANCES - fixed_visible - reserve,
 			PerfBudget.MAX_MULTIMESH_INSTANCES - fixed_total, keep):
 		_add_world_node(node, SceneryBuilder.EXTRA_LAYERS.has(String(node.name)))
 

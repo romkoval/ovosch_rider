@@ -47,6 +47,23 @@ uniform float field_max_height_m = 400.0;
 // пересекают кадр. 0 — выключено.
 uniform float contour_m = 0.0;
 uniform float contour_contrast = 0.0;
+// Полосы гаснут, когда их период по экрану меньше этих долей пикселя (вдали — без муара).
+uniform vec2 contour_fade = vec2(0.25, 0.6);
+// Горы (T-087, `tracks.md` п. 4.3): выше `rock_from_m`…`rock_to_m` (абсолютная высота, м) луг
+// сменяется камнем двух тонов со слоями-уступами по горизонталям через `strata_m` (уступы
+// горизонтальны — уклон дороги читается по ним), выше `snow_from_m`…`snow_to_m` на пологих
+// местах — снег (тень снега — от тун-света и холодного окружающего). У дороги (альфа цвета
+// вершины) камня меньше — там луг. По умолчанию выключено.
+uniform float rock_from_m = 100000.0;
+uniform float rock_to_m = 100001.0;
+uniform vec4 rock_light : source_color = vec4(0.55, 0.54, 0.56, 1.0);
+uniform vec4 rock_dark : source_color = vec4(0.42, 0.42, 0.46, 1.0);
+uniform float strata_m = 0.0;
+uniform float snow_from_m = 100000.0;
+uniform float snow_to_m = 100001.0;
+uniform vec4 snow_color : source_color = vec4(0.95, 0.97, 1.0, 1.0);
+// Снег — не ниже этой высоты над полем высоты трассы (UV.x рельефа), м.
+uniform float snow_rel_m = 0.0;
 
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -105,7 +122,7 @@ void fragment() {
 		float cw = max(fwidth(cy), 1e-4);
 		float band = 1.0 - smoothstep(0.18 - cw, 0.18 + cw, abs(fract(cy) - 0.5) * 2.0 - 0.62);
 		float slope = 1.0 - smoothstep(0.93, 0.985, world_normal.y);
-		float fade = 1.0 - smoothstep(0.25, 0.6, cw);
+		float fade = 1.0 - smoothstep(contour_fade.x, contour_fade.y, cw);
 		col *= 1.0 - contour_contrast * (1.0 - band) * slope * fade * (1.0 - COLOR.a);
 	}
 	col *= 1.0 + (vnoise(p * 2.5) - 0.5) * 0.16 * near;
@@ -113,6 +130,33 @@ void fragment() {
 	float steep = 1.0 - smoothstep(0.72, 0.80, world_normal.y);
 	col = mix(col, rock_color.rgb, steep);
 	col = mix(col, hill_color.rgb, 0.7 * smoothstep(hill_from_m, hill_to_m, rel_y));
+	if (rock_from_m < 50000.0) {
+		float wy = world_pos.y;
+		float nr = vnoise(p * 0.011) - 0.5;
+		float alt = smoothstep(rock_from_m + nr * 70.0, rock_to_m + nr * 70.0, wy);
+		// Высоко камень — на склонах; пологие места остаются выгоревшим альпийским лугом.
+		// Границы камня чёткие (плакатная заливка), с рваным краем по шуму.
+		float ny = world_normal.y + (vnoise(p * 0.05 + vec2(9.0, 4.0)) - 0.5) * 0.1;
+		float naa = max(fwidth(ny), 0.004);
+		float sloped = 1.0 - smoothstep(0.90 - naa, 0.90 + naa, ny);
+		col = mix(col, grass_dry.rgb, alt * 0.45 * (1.0 - sloped));
+		float cliff = 1.0 - smoothstep(0.76 - naa, 0.76 + naa, ny);
+		float rmask = max(step(0.5, alt) * sloped * (1.0 - 0.8 * COLOR.a), cliff);
+		vec3 rock = mix(rock_dark.rgb, rock_light.rgb, smoothstep(0.42, 0.58, vnoise(p * 0.035 + vec2(5.0, 1.0))));
+		if (strata_m > 0.0) {
+			float sy = wy / strata_m + vnoise(p * 0.015) * 0.8;
+			float sw = max(fwidth(sy), 1e-4);
+			float ledge = smoothstep(0.80 - sw, 0.80 + sw, fract(sy)) * (1.0 - smoothstep(0.02, 0.07, sw));
+			rock = mix(rock, rock_dark.rgb * 0.82, ledge * (1.0 - smoothstep(0.75, 0.9, world_normal.y)));
+		}
+		col = mix(col, rock, rmask);
+		float ns = vnoise(p * 0.006 + vec2(17.0, 3.0)) - 0.5;
+		// Снег — только на вершинах: высоко и над полем высоты трассы (не на плато у перевала).
+		float smask = smoothstep(snow_from_m + ns * 120.0, snow_to_m + ns * 120.0, wy)
+			* smoothstep(snow_rel_m + ns * 80.0, snow_rel_m + 40.0 + ns * 80.0, rel_y)
+			* smoothstep(0.62 - naa, 0.62 + naa, ny);
+		col = mix(col, snow_color.rgb, smask);
+	}
 	ALBEDO = col * COLOR.rgb;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;

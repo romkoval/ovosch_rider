@@ -17,9 +17,11 @@ const TREE_MAX_OFFSET_M: float = 200.0
 const DENSITY_REFERENCE_M: float = 2200.0
 ## Звено каменной изгороди, м.
 const WALL_SEGMENT_M: float = 4.0
+## `EnvironmentSet.tree_line_m` не ниже этого — граница леса выключена.
+const TREE_LINE_OFF_M: float = 99999.0
 ## Слои, которые есть не в каждом наборе окружения (лесополосы, изгороди): `RideScene` держит
 ## их в отдельном контейнере, чтобы состав корня окружения не зависел от трассы.
-const EXTRA_LAYERS: Array[String] = ["Poplars", "StoneWalls"]
+const EXTRA_LAYERS: Array[String] = ["Poplars", "StoneWalls", "Boulders"]
 
 static var _meshes: Dictionary = {}
 
@@ -111,6 +113,49 @@ static func poplar_mesh(material: Material) -> ArrayMesh:
 	)
 
 
+## Валун (горы, T-087): неровный низкополигональный камень с гранями (плоские нормали), два
+## тона камня, контур; низ — немного ниже нуля (камень «врос» в склон). Размер ~2 × 1.3 × 1.7 м.
+static func boulder_mesh(material: Material) -> ArrayMesh:
+	return _cached("boulder", material, func(kit: MeshKit) -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 9173
+		var rings: int = 4
+		var segs: int = 7
+		var radii := Vector3(1.05, 0.75, 0.85)
+		var grid: Array[PackedVector3Array] = []
+		for r in rings + 1:
+			var phi: float = PI * float(r) / float(rings)
+			var row := PackedVector3Array()
+			for k in segs:
+				var th: float = TAU * (float(k) + 0.5 * float(r % 2)) / float(segs)
+				var j: float = rng.randf_range(0.78, 1.18) if r > 0 and r < rings else 1.0
+				var unit := Vector3(sin(phi) * cos(th), cos(phi), sin(phi) * sin(th))
+				var v: Vector3 = unit * radii * j
+				v.y = maxf(v.y, -0.35) + 0.25
+				row.append(v)
+			grid.append(row)
+		var light := Color(0.60, 0.59, 0.60, 1.0)
+		var dark := Color(0.46, 0.46, 0.50, 1.0)
+		for r in rings:
+			for k in segs:
+				var a: Vector3 = grid[r][k]
+				var b: Vector3 = grid[r][(k + 1) % segs]
+				var c: Vector3 = grid[r + 1][(k + 1) % segs]
+				var d: Vector3 = grid[r + 1][k]
+				for tri in [[a, c, b], [a, d, c]]:
+					var p0: Vector3 = tri[0]
+					var p1: Vector3 = tri[1]
+					var p2: Vector3 = tri[2]
+					var n: Vector3 = (p1 - p0).cross(p2 - p0)
+					if n.length_squared() < 1e-10:
+						continue
+					n = n.normalized()
+					if n.dot((p0 + p1 + p2) / 3.0 - Vector3(0.0, 0.25, 0.0)) < 0.0:
+						n = -n
+					kit.add_triangle(p0, p1, p2, n, light if n.y > 0.35 else dark)
+	)
+
+
 ## Звено каменной изгороди длиной `WALL_SEGMENT_M` (ось X), низ — на нуле.
 static func wall_mesh(material: Material) -> ArrayMesh:
 	return _cached("wall", material, func(kit: MeshKit) -> void:
@@ -169,7 +214,8 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	var chunks: int = PerfBudget.chunk_count(track, chunk_m)
 	var length: float = track.length_m()
 	var per_length: float = maxf(1.0, length / DENSITY_REFERENCE_M)
-	var wanted: int = int((maxi(env.tree_count, 0) + maxi(env.bush_count, 0) + maxi(env.tuft_count, 0)) * per_length)
+	var wanted: int = int((maxi(env.tree_count, 0) + maxi(env.bush_count, 0) + maxi(env.tuft_count, 0)
+		+ maxi(env.boulder_count, 0)) * per_length)
 	var cap: int = maxi(total_budget, 0)
 	# Компактный мир виден целиком — урезается заранее; на длинной трассе видимое
 	# считается после расстановки по кускам.
@@ -188,6 +234,7 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 	var n_trees: int = int(env.tree_count * scale)
 	var n_bushes: int = int(env.bush_count * scale)
 	var n_tufts: int = int(env.tuft_count * scale)
+	var n_boulders: int = int(maxi(env.boulder_count, 0) * scale)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = env.scenery_seed
 	var forest := FastNoiseLite.new()
@@ -225,6 +272,9 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		if ko != null and ko.blocks(p.x, p.z, 2.0):
 			continue
 		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
+		# Граница леса (горы): выше неё деревьев нет, кромка неровная.
+		if env.tree_line_m < TREE_LINE_OFF_M and y > env.tree_line_m - 45.0 * rng.randf():
+			continue
 		var sc: float = rng.randf_range(0.75, 1.35)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.9, 1.15), sc))
 		var xf := Transform3D(basis, Vector3(p.x, y - 0.1, p.z))
@@ -232,6 +282,9 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var shade: float = rng.randf_range(0.85, 1.12)
 		var chunk: int = PerfBudget.chunk_of(s, chunk_m, chunks)
 		if conifer:
+			if env.conifer_scale != 1.0:
+				xf.basis = xf.basis.scaled(Vector3.ONE * env.conifer_scale)
+			shade *= env.conifer_shade
 			pines.add(xf, Color(shade, shade, shade * rng.randf_range(0.95, 1.05), 1.0), chunk)
 		else:
 			trees.add(xf, Color(shade * rng.randf_range(0.95, 1.12), shade, shade * 0.9, 1.0), chunk)
@@ -269,8 +322,10 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 		var dry: float = rng.randf()
 		tufts.add(Transform3D(basis, Vector3(p.x, y - 0.02, p.z)), Color(1.0 + dry * 0.15, 1.0, 1.0 - dry * 0.2, 1.0),
 			PerfBudget.chunk_of(s, chunk_m, chunks))
+	var boulders := Layer.new("Boulders", boulder_mesh(material), PerfBudget.RANGE_BUSHES_M, chunks)
+	_place_boulders(boulders, track, env, field, n_boulders, chunk_m, chunks, ko)
 	var layers: Array[Layer] = [trees, pines, bushes, tufts]
-	for extra in [poplars, walls]:
+	for extra in [poplars, walls, boulders]:
 		if not (extra as Layer).xf.is_empty():
 			layers.append(extra)
 	if chunks > 1:
@@ -279,6 +334,41 @@ static func place(track: Track, env: EnvironmentSet, field: TerrainField, materi
 			for layer in layers:
 				layer.keep = float(maxi(budget, 0)) / float(seen)
 	return layers
+
+
+## Валуны (горы): вдоль трассы на склонах — у дороги (осыпь под скальной стенкой) и в поле,
+## дальше от дороги — крупнее; не на дороге и не в пятнах ориентиров. Своя последовательность
+## случайных чисел (расстановка остальных слоёв от валунов не зависит).
+static func _place_boulders(layer: Layer, track: Track, env: EnvironmentSet, field: TerrainField, count: int,
+		chunk_m: float, chunks: int, ko: LandmarkBuilder.KeepOut = null) -> void:
+	if count <= 0:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = env.scenery_seed + 41
+	var length: float = track.length_m()
+	var sample := TrackSample.new()
+	var curb_out: float = RoadsideBuilder.curb_outer_m(env.road_width_m)
+	var verge_w: float = RoadsideBuilder.verge_width_m(env.road_width_m)
+	var attempts: int = count * 4
+	while attempts > 0 and layer.xf.size() < count:
+		attempts -= 1
+		var s: float = rng.randf() * length
+		var sgn: float = -1.0 if rng.randf() < 0.5 else 1.0
+		var far: float = pow(rng.randf(), 1.6)
+		var w: float = curb_out + 4.0 + far * 160.0
+		track.sample_into(s, sample)
+		var p: Vector3 = sample.position + sample.right() * (env.road_center_offset_m + sgn * w) + sample.forward * rng.randf_range(-3.0, 3.0)
+		if field != null and field.road_distance_at(p.x, p.z) < curb_out + 3.5:
+			continue
+		if ko != null and ko.blocks(p.x, p.z, 1.5):
+			continue
+		var y: float = _ground_y(p, w, sample.position.y, env.road_width_m, verge_w, field)
+		var sc: float = rng.randf_range(0.45, 1.0) * lerpf(1.0, 2.6, far)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.25, 0.25))
+		basis = basis.scaled(Vector3(sc, sc * rng.randf_range(0.7, 1.15), sc * rng.randf_range(0.8, 1.2)))
+		var shade: float = rng.randf_range(0.86, 1.1)
+		layer.add(Transform3D(basis, Vector3(p.x, y - 0.15 * sc, p.z)), Color(shade, shade, shade * rng.randf_range(0.97, 1.04), 1.0),
+			PerfBudget.chunk_of(s, chunk_m, chunks))
 
 
 ## Лесополосы: ряды тополей вдоль дороги (по её изгибу, на постоянном удалении) и поперёк

@@ -1,0 +1,89 @@
+[gd_resource type="Resource" script_class="EnvironmentSet" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/scene3d/environment_set.gd" id="1_env"]
+[ext_resource type="Shader" path="res://src/scene3d/shaders/grass.gdshader" id="2_grass"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_alpine"]
+shader = ExtResource("2_grass")
+shader_parameter/toon_threshold = 0.05
+shader_parameter/toon_softness = 0.08
+shader_parameter/toon_sun_gain = 1.0
+shader_parameter/toon_rim = 0.0
+shader_parameter/grass_light = Color(0.42, 0.57, 0.27, 1)
+shader_parameter/grass_mid = Color(0.36, 0.51, 0.24, 1)
+shader_parameter/grass_dark = Color(0.29, 0.43, 0.2, 1)
+shader_parameter/grass_dry = Color(0.6, 0.59, 0.36, 1)
+shader_parameter/rock_color = Color(0.35, 0.35, 0.37, 1)
+shader_parameter/hill_color = Color(0.3, 0.42, 0.3, 1)
+shader_parameter/hill_from_m = 40.0
+shader_parameter/hill_to_m = 420.0
+shader_parameter/field_strength = 0.0
+shader_parameter/contour_m = 4.0
+shader_parameter/contour_contrast = 0.14
+shader_parameter/contour_fade = Vector2(0.1, 0.25)
+shader_parameter/rock_from_m = 640.0
+shader_parameter/rock_to_m = 720.0
+shader_parameter/rock_light = Color(0.43, 0.42, 0.43, 1)
+shader_parameter/rock_dark = Color(0.32, 0.32, 0.34, 1)
+shader_parameter/strata_m = 12.0
+shader_parameter/snow_from_m = 960.0
+shader_parameter/snow_to_m = 1000.0
+shader_parameter/snow_rel_m = 330.0
+shader_parameter/snow_color = Color(0.95, 0.97, 1, 1)
+
+[resource]
+script = ExtResource("1_env")
+sky_color = Color(0.24, 0.48, 0.86, 1)
+cloud_cover = 0.3
+sky_ground_color = Color(0.64, 0.73, 0.88, 1)
+horizon_color = Color(0.7, 0.8, 0.92, 1)
+fog_color = Color(0.64, 0.73, 0.88, 1)
+fog_density = 0.00025
+ambient_color = Color(0.52, 0.6, 0.84, 1)
+ambient_energy = 0.9
+sun_color = Color(1, 0.97, 0.9, 1)
+sun_energy = 0.85
+sun_rotation_deg = Vector3(-46, 150, 0)
+view_distance_m = 5500.0
+road_width_m = 6.5
+road_center_offset_m = -1.4
+roadside_enabled = true
+guardrail_enabled = true
+guardrail_valley_side = true
+terrain_material = SubResource("ShaderMaterial_alpine")
+terrain_enabled = true
+hills_height_m = 760.0
+rolling_height_m = 6.0
+tree_count = 330
+bush_count = 110
+tuft_count = 700
+scenery_seed = 37
+visible_reserve = 150
+cross_slope_gain = 8.0
+cross_slope_max = 0.4
+relief_anchor = 0.8
+relief_anchor_level = 0.1
+cross_slope_side = 1
+cross_slope_reach_m = 240.0
+terrain_shoulder_m = 30.0
+terrain_kernel_m = 70.0
+terrain_reach_m = 1900.0
+hills_full_m = 1500.0
+hills_power = 1.5
+hills_ridged = true
+hills_scale_m = 750.0
+conifer_threshold = -1.0
+tree_hilltop_bias = 0.0
+tree_line_m = 650.0
+conifer_scale = 1.35
+conifer_shade = 0.8
+boulder_count = 260
+windbreak_rows_per_km = 0.0
+stone_wall_share = 0.0
+landmarks_enabled = true
+building_wall_color = Color(0.92, 0.88, 0.8, 1)
+building_roof_color = Color(0.5, 0.32, 0.25, 1)
+water_color = Color(0.24, 0.62, 0.7, 1)
+prop_size = Vector3(0.12, 1, 0.12)
+prop_spacing_m = 25.0
+prop_offset_m = 4.6
