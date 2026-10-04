@@ -27,6 +27,7 @@ var lean_rad: float = 0.0
 
 @onready var _anim: AnimationPlayer = %PedalPlayer
 @onready var _crank: Node3D = %Crank
+@onready var _crank_rig: Skeleton3D = %CrankRig
 @onready var _front_wheel: Node3D = %FrontWheel
 @onready var _rear_wheel: Node3D = %RearWheel
 @onready var _lean: Node3D = %Lean
@@ -85,6 +86,16 @@ func crank_rotation_rad() -> float:
 	return _crank.rotation.x
 
 
+## Поставить шатун на угол φ, рад (0 — правая педаль вверху, π/2 — впереди) и позу по нему:
+## эталонные ракурсы и тесты. Анимация переводится на ту же фазу — при каденсе > 0 оборот
+## продолжится с этого угла. Не для кадра.
+func set_crank_angle(rad: float) -> void:
+	var phi: float = fposmod(rad, TAU)
+	_anim.seek(phi / TAU, true)
+	_crank.rotation = Vector3(phi, 0.0, 0.0)
+	_pose_body()
+
+
 ## Продвинуть анимацию на `delta` с (доступно тестам). Отдельно стоящий велосипедист
 ## продвигается из своего `_process`; внутри `RideScene` его `_process` выключен и
 ## `advance` вызывает только сцена — ровно один раз за кадр.
@@ -131,6 +142,9 @@ func _pose_body() -> void:
 	var sway: float = SWAY_RAD * s * effort
 	var basis := Basis(Vector3.BACK, sway)
 	_upper.transform = Transform3D(basis, RiderModel.PELVIS - basis * RiderModel.PELVIS)
+	# Контактные педали держат угол стопы θ(φ) (кости 1, 2 скелета шатуна).
+	_crank_rig.set_bone_pose_rotation(1, Quaternion(Vector3.RIGHT, RiderModel.pedal_bone_angle(phi, false)))
+	_crank_rig.set_bone_pose_rotation(2, Quaternion(Vector3.RIGHT, RiderModel.pedal_bone_angle(phi, true)))
 
 
 func _solve_leg(hip: Vector3, pedal: Vector3, thigh: Node3D, shin: Node3D, shoe: Node3D) -> void:
@@ -150,7 +164,10 @@ func _build_model() -> void:
 	(%Bike as MeshInstance3D).mesh = m["bike"]
 	(_front_wheel as MeshInstance3D).mesh = m["wheel"]
 	(_rear_wheel as MeshInstance3D).mesh = m["rear_wheel"]
-	(%CrankArm as MeshInstance3D).mesh = m["crank"]
+	var arm := %CrankArm as MeshInstance3D
+	arm.mesh = m["crank"]
+	arm.skin = RiderModel.setup_crank_rig(_crank_rig)
+	arm.skeleton = arm.get_path_to(_crank_rig)
 	(_upper as MeshInstance3D).mesh = m["upper"]
 	for leg in [[_thigh_l, _shin_l, _shoe_l], [_thigh_r, _shin_r, _shoe_r]]:
 		(leg[0] as MeshInstance3D).mesh = m["thigh"]

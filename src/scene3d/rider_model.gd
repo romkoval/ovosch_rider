@@ -10,11 +10,28 @@ extends RefCounted
 ## (`Rider._solve_leg`), поэтому бедро, голень и туфля — отдельные меши. Меши строятся
 ## один раз на процесс (статический кэш).
 
-const BB := Vector3(0.0, 0.27, 0.0)
-const REAR_AXLE := Vector3(0.0, 0.335, 0.405)
-const FRONT_AXLE := Vector3(0.0, 0.335, -0.585)
-const CRANK_LENGTH_M: float = 0.17
-const PEDAL_X_M: float = 0.115
+## Велосипед подогнан под контракт скелета (`RiderRig`, T-106a1): верх седла 0.965 м под
+## точкой опоры таза S, центр ладони на тормозной ручке (±0.21, 0.885, −0.62), шатун 0.17 м,
+## ось педали ±0.115 м, контактные педали. Рама, база 0.99 м и колёса 700c — как были.
+const BB := RiderRig.BB
+const REAR_AXLE := RiderRig.REAR_AXLE
+const FRONT_AXLE := RiderRig.FRONT_AXLE
+const CRANK_LENGTH_M: float = RiderRig.CRANK_LENGTH_M
+const PEDAL_X_M: float = RiderRig.PEDAL_X_M
+## Центр ладони — над верхом тормозной ручки на половину толщины кисти в перчатке.
+const HOOD_PALM_CLEARANCE_M: float = 0.015
+## Шатун по X (середина плеча шатуна) и толщина плеча: внешняя грань — 0.09 м, корпус педали
+## (ширина 0.054 м) — снаружи, его середина на оси педали ±0.115 м.
+const CRANK_ARM_X_M: float = 0.08
+const PEDAL_BODY_WIDTH_M: float = 0.054
+## Кости шатуна (`Skeleton3D` под узлом `Crank`): шатуны со звездой и две педали, которые
+## держат угол стопы θ(φ) (`RiderRig.foot_pitch_rad`) при вращении шатуна.
+const CRANK_BONES := ["crank", "pedal.R", "pedal.L"]
+## Начала костей педалей в системе узла `Crank` (локальный −X — правая сторона, длина по +Y).
+const PEDAL_R_REST := Vector3(-RiderRig.PEDAL_X_M, RiderRig.CRANK_LENGTH_M, 0.0)
+const PEDAL_L_REST := Vector3(RiderRig.PEDAL_X_M, -RiderRig.CRANK_LENGTH_M, 0.0)
+## Нынешний процедурный гонщик (до манекена на `Skeleton3D`, T-106a2) — его суставы и длины
+## пока свои; контракт для модели художника — `RiderRig`.
 ## Тазобедренные суставы (x — по модулю), длины бедра и голени.
 const HIP := Vector3(0.09, 0.975, 0.215)
 const THIGH_M: float = 0.44
@@ -55,7 +72,7 @@ static func meshes(material: Material) -> Dictionary:
 		"bike": _bike().to_mesh(material),
 		"wheel": _wheel(false).to_mesh(material),
 		"rear_wheel": _wheel(true).to_mesh(material),
-		"crank": _crank().to_mesh(material),
+		"crank": crank_mesh(material),
 		"upper": _upper().to_mesh(material),
 		"thigh": _thigh().to_mesh(material),
 		"shin": _shin().to_mesh(material),
@@ -97,7 +114,6 @@ static func _bike() -> MeshKit:
 	var st_top: Vector3 = BB + seat_dir * 0.53
 	var ht_top := Vector3(0.0, 0.83, -0.40)
 	var ht_bot := Vector3(0.0, 0.69, -0.445)
-	var saddle: Vector3 = BB + seat_dir * 0.70
 	# Рама: верхняя (акцент), нижняя, подседельная, перья.
 	k.add_tube(st_top + Vector3(0, -0.01, -0.01), ht_top + Vector3(0, -0.02, 0.0), Vector2(0.02, 0.02), Vector2(0.021, 0.021), C_ACCENT, 10)
 	k.add_tube(BB, ht_bot, Vector2(0.03, 0.026), Vector2(0.026, 0.024), C_FRAME, 10)
@@ -109,19 +125,8 @@ static func _bike() -> MeshKit:
 		k.add_tube(st_top + Vector3(0.022 * sx, -0.02, 0.0), axle, Vector2(0.011, 0.011), Vector2(0.008, 0.008), C_ACCENT, 7)
 		# Вилка.
 		k.add_tube(ht_bot + Vector3(0.03 * sx, 0.0, 0.0), FRONT_AXLE + Vector3(0.05 * sx, 0.0, 0.0), Vector2(0.016, 0.02), Vector2(0.009, 0.01), C_FRAME, 7)
-	# Подседельный штырь и седло.
-	k.add_tube(st_top, saddle, Vector2(0.014, 0.014), Vector2(0.014, 0.014), C_BLACK, 8)
-	k.add_ellipsoid(saddle + Vector3(0.0, 0.025, -0.02), Vector3(0.065, 0.028, 0.14), C_BLACK, Basis.IDENTITY, 5, 10)
-	# Вынос и руль: верхний хват, «бараны» и тормозные ручки.
-	var stem_end := Vector3(0.0, 0.86, -0.51)
-	k.add_tube(ht_top, stem_end, Vector2(0.018, 0.018), Vector2(0.016, 0.016), C_BLACK, 8)
-	k.add_tube(Vector3(-0.21, 0.86, -0.51), Vector3(0.21, 0.86, -0.51), Vector2(0.014, 0.014), Vector2(0.014, 0.014), C_BLACK, 8)
-	for sx in [-1.0, 1.0]:
-		var x: float = 0.21 * sx
-		var drop := PackedVector3Array([Vector3(x, 0.86, -0.51), Vector3(x, 0.86, -0.59), Vector3(x, 0.80, -0.63),
-			Vector3(x, 0.72, -0.60), Vector3(x, 0.70, -0.52)])
-		k.add_limb(drop, PackedFloat32Array([0.014, 0.014, 0.014, 0.014, 0.014]), C_BLACK, 7)
-		k.add_ellipsoid(Vector3(x, 0.885, -0.6), Vector3(0.018, 0.03, 0.045), C_BLACK, Basis.IDENTITY, 4, 8)
+	_add_saddle(k, seat_dir, st_top)
+	_add_cockpit(k, ht_bot, ht_top)
 	# Цепь и задний переключатель (правая сторона, +X).
 	var cog := REAR_AXLE + Vector3(0.045, 0.0, 0.0)
 	var ring := BB + Vector3(0.065, 0.0, 0.0)
@@ -133,6 +138,90 @@ static func _bike() -> MeshKit:
 	var bottle_b: Vector3 = BB.lerp(ht_bot, 0.62) + Vector3(0, 0.05, 0.0)
 	k.add_tube(bottle_a, bottle_b, Vector2(0.034, 0.034), Vector2(0.034, 0.034), C_JERSEY_BLUE, 9)
 	return k
+
+
+## Седло под точку опоры таза S (`pelvis`): верх под S — ровно 0.965 м, длина 0.27 м, ширина
+## сзади 0.13 м, задний край в 0.065 м позади S. Лофт по сечениям-суперэллипсам (верх почти
+## плоский поперёк), нос чуть ниже, задний край с подъёмом; штырь и рамки под седлом.
+static func _add_saddle(k: MeshKit, seat_dir: Vector3, st_top: Vector3) -> void:
+	var s: Vector3 = RiderRig.head("pelvis")
+	var rear_z: float = s.z + RiderRig.SADDLE_REAR_BEHIND_S_M
+	var nose_z: float = rear_z - RiderRig.SADDLE_LENGTH_M
+	var stations: int = 10
+	var sides: int = 12
+	var expo: float = 3.0
+	var col := MeshKit.lin(C_BLACK)
+	var start: int = k.vertices.size()
+	var centers: Array[Vector3] = []
+	for i in stations + 1:
+		var t: float = float(i) / float(stations)
+		var z: float = lerpf(nose_z, rear_z, t)
+		var w: float = lerpf(0.018, RiderRig.SADDLE_REAR_WIDTH_M * 0.5, smoothstep(0.25, 0.92, t))
+		var top: float = s.y - 0.008 * (1.0 - smoothstep(0.0, 0.6, t)) + 0.006 * smoothstep(0.86, 1.0, t)
+		var hh: float = lerpf(0.022, 0.032, t) * 0.5
+		var yc: float = top - hh
+		centers.append(Vector3(0.0, yc, z))
+		for j in sides + 1:
+			var a: float = TAU * float(j) / float(sides)
+			var c: float = cos(a)
+			var sn: float = sin(a)
+			var px: float = w * signf(c) * pow(absf(c), 2.0 / expo)
+			var py: float = hh * signf(sn) * pow(absf(sn), 2.0 / expo)
+			var nx: float = signf(c) * pow(absf(c), 2.0 * (expo - 1.0) / expo) / w
+			var ny: float = signf(sn) * pow(absf(sn), 2.0 * (expo - 1.0) / expo) / hh
+			k.vertices.append(Vector3(px, yc + py, z))
+			k.normals.append(Vector3(nx, ny, 0.0).normalized())
+			k.colors.append(col)
+	for i in stations:
+		for j in sides:
+			var i0: int = start + i * (sides + 1) + j
+			var i1: int = i0 + sides + 1
+			k.indices.append_array(PackedInt32Array([i0, i1, i0 + 1, i0 + 1, i1, i1 + 1]))
+	# Торцы — веер из центра сечения.
+	for end in [0, stations]:
+		var ring0: int = start + end * (sides + 1)
+		var c0: int = k.vertices.size()
+		k.vertices.append(centers[end])
+		k.normals.append(Vector3(0.0, 0.0, -1.0 if end == 0 else 1.0))
+		k.colors.append(col)
+		for j in sides:
+			k.indices.append_array(PackedInt32Array([c0, ring0 + j, ring0 + j + 1]))
+	# Подседельный штырь до замка рамок (на 4 см ниже верха седла) и рамки.
+	var clamp_y: float = s.y - 0.04
+	var clamp: Vector3 = BB + seat_dir * ((clamp_y - BB.y) / seat_dir.y)
+	k.add_tube(st_top, clamp, Vector2(0.014, 0.014), Vector2(0.014, 0.014), C_BLACK, 8)
+	k.add_box(Transform3D(Basis.IDENTITY, clamp), Vector3(0.036, 0.016, 0.04), C_BLACK)
+	for sx in [-1.0, 1.0]:
+		k.add_tube(Vector3(0.022 * sx, clamp_y + 0.002, nose_z + 0.06), Vector3(0.03 * sx, clamp_y + 0.006, rear_z - 0.04),
+			Vector2(0.0035, 0.0035), Vector2(0.0035, 0.0035), C_SILVER, 5, false)
+
+
+## Вынос и руль: верхний хват, «бараны», тормозные ручки (корпус, рог, рычаг). Центр ладони
+## на ручке — `grip.L/R` контракта: верх корпуса ручки ниже него на `HOOD_PALM_CLEARANCE_M`.
+static func _add_cockpit(k: MeshKit, ht_bot: Vector3, ht_top: Vector3) -> void:
+	var grip: Vector3 = RiderRig.head("grip.R")
+	var bar_y: float = grip.y - 0.03
+	var clamp_z: float = grip.z + 0.09
+	var steer: Vector3 = (ht_top - ht_bot).normalized()
+	var stem_start: Vector3 = ht_top + steer * 0.02
+	var stem_end := Vector3(0.0, bar_y, clamp_z)
+	k.add_tube(ht_top, stem_start + steer * 0.012, Vector2(0.017, 0.017), Vector2(0.017, 0.017), C_BLACK, 8)
+	k.add_tube(stem_start, stem_end, Vector2(0.018, 0.018), Vector2(0.016, 0.016), C_BLACK, 8)
+	k.add_tube(Vector3(-grip.x, bar_y, clamp_z), Vector3(grip.x, bar_y, clamp_z), Vector2(0.013, 0.013), Vector2(0.013, 0.013), C_BLACK, 8)
+	for sx in [-1.0, 1.0]:
+		var x: float = grip.x * sx
+		var drop := PackedVector3Array([Vector3(x, bar_y, clamp_z), Vector3(x, bar_y, grip.z + 0.025),
+			Vector3(x, bar_y - 0.045, grip.z - 0.02), Vector3(x, bar_y - 0.13, grip.z - 0.005),
+			Vector3(x, bar_y - 0.155, grip.z + 0.06)])
+		k.add_limb(drop, PackedFloat32Array([0.013, 0.013, 0.013, 0.013, 0.013]), C_BLACK, 8)
+		# Корпус ручки: верх в точке хвата — grip.y − HOOD_PALM_CLEARANCE_M.
+		var hood_r := Vector3(0.016, 0.017, 0.040)
+		var hood_c := Vector3(x, grip.y - HOOD_PALM_CLEARANCE_M - hood_r.y, grip.z)
+		k.add_ellipsoid(hood_c, hood_r, C_BLACK, Basis.IDENTITY, 5, 10)
+		# Рог ручки и рычаг тормоза.
+		k.add_ellipsoid(Vector3(x, grip.y - 0.017, grip.z - 0.04), Vector3(0.013, 0.012, 0.014), C_BLACK, Basis.IDENTITY, 4, 8)
+		k.add_limb(PackedVector3Array([Vector3(x, grip.y - 0.033, grip.z - 0.035), Vector3(x, grip.y - 0.085, grip.z - 0.052),
+			Vector3(x, grip.y - 0.135, grip.z - 0.04)]), PackedFloat32Array([0.007, 0.007, 0.006]), C_SILVER, 6)
 
 
 static func _wheel(rear: bool) -> MeshKit:
@@ -163,20 +252,130 @@ static func _wheel(rear: bool) -> MeshKit:
 
 
 ## Шатуны в системе узла `Crank` (он развёрнут на 180° вокруг Y: локальный +X — левая сторона
-## велосипеда, положительный поворот вокруг X — педалирование вперёд).
-static func _crank() -> MeshKit:
+## велосипеда, локальный +Z — вперёд, положительный поворот вокруг X — педалирование вперёд):
+## ось каретки, плечи шатунов, звезда, оси педалей. Кость `crank`.
+static func _crank_arms() -> MeshKit:
 	var k := MeshKit.new()
 	var l: float = CRANK_LENGTH_M
-	k.add_tube(Vector3(-0.1, 0, 0), Vector3(0.1, 0, 0), Vector2(0.014, 0.014), Vector2(0.014, 0.014), C_SILVER, 8)
-	k.add_tube(Vector3(-0.09, 0, 0), Vector3(-0.09, l, 0), Vector2(0.016, 0.022), Vector2(0.012, 0.014), C_BLACK, 8)
-	k.add_tube(Vector3(0.09, 0, 0), Vector3(0.09, -l, 0), Vector2(0.016, 0.022), Vector2(0.012, 0.014), C_BLACK, 8)
-	k.add_box(Transform3D(Basis.IDENTITY, Vector3(-PEDAL_X_M - 0.01, l, 0)), Vector3(0.07, 0.018, 0.08), C_BLACK)
-	k.add_box(Transform3D(Basis.IDENTITY, Vector3(PEDAL_X_M + 0.01, -l, 0)), Vector3(0.07, 0.018, 0.08), C_BLACK)
+	var ax: float = CRANK_ARM_X_M
+	k.add_tube(Vector3(-ax, 0, 0), Vector3(ax, 0, 0), Vector2(0.013, 0.013), Vector2(0.013, 0.013), C_SILVER, 8)
+	k.add_tube(Vector3(-ax, 0, 0), Vector3(-ax, l, 0), Vector2(0.01, 0.02), Vector2(0.008, 0.013), C_BLACK, 8)
+	k.add_tube(Vector3(ax, 0, 0), Vector3(ax, -l, 0), Vector2(0.01, 0.02), Vector2(0.008, 0.013), C_BLACK, 8)
+	# Оси педалей — от плеча шатуна до корпуса педали (соосны оси педали: им всё равно, как
+	# повёрнута педаль).
+	var inner: float = PEDAL_X_M - PEDAL_BODY_WIDTH_M * 0.5
+	k.add_tube(Vector3(-ax, l, 0), Vector3(-inner, l, 0), Vector2(0.006, 0.006), Vector2(0.006, 0.006), C_SILVER, 6)
+	k.add_tube(Vector3(ax, -l, 0), Vector3(inner, -l, 0), Vector2(0.006, 0.006), Vector2(0.006, 0.006), C_SILVER, 6)
 	var ring_col := Color(0.15, 0.15, 0.17, 0.0)
 	k.add_annulus_x(-0.068, 0.06, 0.105, ring_col, -1.0, 36)
 	k.add_annulus_x(-0.062, 0.06, 0.105, ring_col, 1.0, 36)
 	k.add_band_x(-0.068, -0.062, 0.105, C_SILVER, true, 36)
 	return k
+
+
+## Контактная педаль в своей системе: начало — ось педали (центр шипа), корпус горизонтален,
+## нос — вперёд (+Z системы `Crank`), верх корпуса на 2 мм ниже оси — под шипом туфли.
+static func _pedal() -> MeshKit:
+	var k := MeshKit.new()
+	var w: float = PEDAL_BODY_WIDTH_M
+	k.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, -0.010, -0.004)), Vector3(w, 0.016, 0.066), C_BLACK)
+	k.add_box(Transform3D(Basis(Vector3.RIGHT, 0.32), Vector3(0.0, -0.011, 0.036)), Vector3(w * 0.7, 0.012, 0.026), C_BLACK)
+	k.add_box(Transform3D(Basis.IDENTITY, Vector3(0.0, -0.004, -0.032)), Vector3(w * 0.9, 0.006, 0.012), C_SILVER)
+	return k
+
+
+## Шатуны с педалями — один меш со скиннингом на 3 кости (`CRANK_BONES`, вес 1): педали
+## держат угол стопы, а узел остаётся один (бюджет гонщика — 10 `MeshInstance3D`).
+static func crank_mesh(material: Material) -> ArrayMesh:
+	var parts: Array[MeshKit] = [_crank_arms(), _moved(_pedal(), Transform3D(Basis.IDENTITY, PEDAL_R_REST)),
+		_moved(_pedal(), Transform3D(Basis.IDENTITY, PEDAL_L_REST))]
+	var k := MeshKit.new()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for bone in parts.size():
+		_append(k, parts[bone])
+		for i in parts[bone].vertices.size():
+			bones.append_array(PackedInt32Array([bone, 0, 0, 0]))
+			weights.append_array(PackedFloat32Array([1.0, 0.0, 0.0, 0.0]))
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = k.vertices
+	arrays[Mesh.ARRAY_NORMAL] = k.normals
+	arrays[Mesh.ARRAY_COLOR] = k.colors
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	arrays[Mesh.ARRAY_INDEX] = k.indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	if material != null:
+		mesh.surface_set_material(0, material)
+	return mesh
+
+
+## Кости шатуна в `skeleton` (rest — без поворота) и `Skin` к мешу `crank_mesh`.
+static func setup_crank_rig(skeleton: Skeleton3D) -> Skin:
+	skeleton.clear_bones()
+	var rests: Array[Vector3] = [Vector3.ZERO, PEDAL_R_REST, PEDAL_L_REST]
+	var skin := Skin.new()
+	for i in CRANK_BONES.size():
+		skeleton.add_bone(CRANK_BONES[i])
+		skeleton.set_bone_rest(i, Transform3D(Basis.IDENTITY, rests[i]))
+		skin.add_named_bind(CRANK_BONES[i], Transform3D(Basis.IDENTITY, -rests[i]))
+	skeleton.reset_bone_poses()
+	return skin
+
+
+## Поворот кости педали вокруг оси педали (локальный X узла `Crank`) при угле шатуна φ, чтобы
+## корпус педали стоял под углом стопы θ к горизонту (`RiderRig.foot_pitch_rad`, левая —
+## при φ + 180°). Узел `Crank` развёрнут на 180° вокруг Y, поэтому его поворот на φ вокруг
+## своего X — это −φ вокруг X велосипеда; педаль: −(φ + β) = θ, β = −θ − φ.
+static func pedal_bone_angle(crank_rad: float, left: bool) -> float:
+	var side_phi: float = crank_rad + PI if left else crank_rad
+	return -RiderRig.foot_pitch_rad(side_phi) - crank_rad
+
+
+## Части велосипеда для пакета художнику (`bike_reference.glb`) в системе гонщика (Godot):
+## рама с седлом и рулём, колёса на своих осях, шатуны с педалями при угле `crank_rad`. Левая
+## педаль — под углом стопы, как в игре; правая — под подошвой правой стопы rest (≈ −8°,
+## `RiderRig.rest_sole_pitch_rad`): художник ставит на неё туфлю позы привязки. Наборы без
+## скиннинга; цвета вершин — линейные.
+static func reference_kits(crank_rad: float) -> Dictionary:
+	var mount := Transform3D(Basis(Vector3.UP, PI), BB) * Transform3D(Basis(Vector3.RIGHT, crank_rad), Vector3.ZERO)
+	var crank := _moved(_crank_arms(), mount)
+	var rests: Array[Vector3] = [PEDAL_R_REST, PEDAL_L_REST]
+	var angles: Array[float] = [-RiderRig.rest_sole_pitch_rad() - crank_rad, pedal_bone_angle(crank_rad, true)]
+	for side in 2:
+		var pose := Transform3D(Basis(Vector3.RIGHT, angles[side]), rests[side])
+		_append(crank, _moved(_pedal(), mount * pose))
+	return {
+		"bike_frame": _bike(),
+		"wheel_front": _moved(_wheel(false), Transform3D(Basis.IDENTITY, FRONT_AXLE)),
+		"wheel_rear": _moved(_wheel(true), Transform3D(Basis.IDENTITY, REAR_AXLE)),
+		"crankset": crank,
+	}
+
+
+## Копия набора с трансформом вершин и нормалей (обход граней сначала приводится к нормалям).
+static func _moved(src: MeshKit, xf: Transform3D) -> MeshKit:
+	src.fix_winding()
+	var k := MeshKit.new()
+	for i in src.vertices.size():
+		k.vertices.append(xf * src.vertices[i])
+		k.normals.append((xf.basis * src.normals[i]).normalized())
+	k.colors = src.colors.duplicate()
+	k.indices = src.indices.duplicate()
+	return k
+
+
+## Дописать `src` в `dst` (индексы со сдвигом).
+static func _append(dst: MeshKit, src: MeshKit) -> void:
+	src.fix_winding()
+	var base: int = dst.vertices.size()
+	dst.vertices.append_array(src.vertices)
+	dst.normals.append_array(src.normals)
+	dst.colors.append_array(src.colors)
+	for i in src.indices:
+		dst.indices.append(base + i)
 
 
 static func _upper() -> MeshKit:
@@ -201,7 +400,9 @@ static func _upper() -> MeshKit:
 	# Руки: от плеча к тормозной ручке, локти слегка наружу и вниз.
 	for sx in [-1.0, 1.0]:
 		var shoulder := Vector3(0.18 * sx, 1.21, -0.28)
-		var hand := Vector3(0.205 * sx, 0.895, -0.6)
+		# Кисть — на центр ладони тормозной ручки контракта (`grip.L/R`).
+		var grip: Vector3 = RiderRig.head("grip.R")
+		var hand := Vector3(grip.x * sx, grip.y, grip.z)
 		var elbow: Vector3 = two_bone_joint(shoulder, hand, 0.25, 0.24, Vector3(0.35 * sx, 0.6, 0.7))
 		var cuff: Vector3 = shoulder.lerp(elbow, 0.5)
 		var cuff_end: Vector3 = shoulder.lerp(elbow, 0.64)

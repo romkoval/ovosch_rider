@@ -72,7 +72,14 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
   (`MultiMeshInstance3D` на тип), урезается под остаток бюджета MultiMesh; сигнальные столбики —
   `RideScene.props()`.
 - `MeshKit` — процедурные меши с цветом вершин (альфа — вес контура); `RiderModel` — меши и
-  геометрия велосипедиста (IK ног `two_bone_joint`, `bone_transform`).
+  геометрия велосипедиста (IK ног `two_bone_joint`, `bone_transform`); велосипед подогнан под
+  контракт скелета (T-106a1): седло, тормозные ручки, контактные педали — шатуны одним мешем со
+  скиннингом на 3 кости (`CrankRig`), педали держат угол стопы θ(φ).
+- `RiderRig` — контракт скелета гонщика с художником (25 костей, rest, точки велосипеда,
+  перевод осей Godot ↔ Blender ↔ glTF, эталонные ракурсы `VIEWS`, контрольные позы);
+  `RiderRegions` — регионы цвета (UV-код), палитра `classic`, атласы для художника. Пакет
+  художнику — `assets/rider/reference/` (`./scripts/rider_artist_kit.sh`, в сборку не входит),
+  ракурсы — `./scripts/rider_views.sh`.
 - Материалы — `src/scene3d/materials/`, шейдеры — `src/scene3d/shaders/` (общий тун-свет
   `toon_light.gdshaderinc`; контур — `next_pass`). Пустой материал в `EnvironmentSet` заменяется
   материалом по умолчанию.
