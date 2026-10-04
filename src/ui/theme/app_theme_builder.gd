@@ -52,6 +52,12 @@ const OVERLINE_SPACING_PX: int = 1
 ## Внутреннее поле `SpinBox` в Godot 4.7 — `LineEdit` с вариацией `SpinBoxInnerLineEdit`:
 ## через неё полю задаётся шрифт цифр (`ui.md` п. 9.1), стили остаются от `LineEdit`.
 const SPINBOX_FIELD: String = "SpinBoxInnerLineEdit"
+## Заголовок встроенного окна (`ui.md` п. 6 «Диалог», п. 9.1): `inter_700` 20.
+const WINDOW_TITLE_FONT_SIZE: int = 20
+## Окна с полосой заголовка: `Window` и встроенные классы-наследники, которыми приложение
+## открывает диалоги (`FileDialog` — выбор файла, если он открыт встроенным окном).
+## Вариации (`FormDialog`) наследуют от своей базы и отдельной записи не требуют.
+const TITLED_WINDOW_TYPES: Array[String] = ["Window", "AcceptDialog", "ConfirmationDialog", "FileDialog"]
 ## Шаги вертикальных (`StackN`) и горизонтальных (`RowN`) контейнеров, lp.
 const STACK_GAPS: Array[int] = [0, 8, 12, 16, 24]
 ## Разрывы сеток (`GridN`: `h_separation` и `v_separation` = N) и переносимых рядов
@@ -332,8 +338,15 @@ static func _base_types(t: Theme, fonts: Dictionary) -> void:
 		border.set_corner_radius_all(RADIUS_LARGE)
 		_shadow(border)
 		t.set_stylebox(state, "Window", border)
-	t.set_font("title_font", "Window", fonts["inter_700"])
-	t.set_font_size("title_font_size", "Window", 20)
+	# Заголовок окна (`ui.md` п. 6, 9.1): `inter_700` 20 — у `Window` и у каждого его наследника
+	# с полосой заголовка (T-145). Шрифт и кегль от `Window` к наследникам не доходят: у темы есть
+	# `default_font` и `default_font_size`, а `Theme.has_font` / `has_font_size` при них отвечают
+	# «есть» для любого типа, поэтому поиск по цепочке типов `ConfirmationDialog` → `AcceptDialog`
+	# → `Window` останавливается на первом же типе и отдаёт шрифт по умолчанию (16 / 400). Цвета,
+	# стили и константы значений по умолчанию не имеют и наследуются как обычно.
+	for window_type: String in TITLED_WINDOW_TYPES:
+		t.set_font("title_font", window_type, fonts["inter_700"])
+		t.set_font_size("title_font_size", window_type, WINDOW_TITLE_FONT_SIZE)
 	t.set_color("title_color", "Window", UiTokens.TEXT)
 	t.set_stylebox("panel", "AcceptDialog", _box(UiTokens.SURFACE1, 0, Vector2(24, 24)))
 	t.set_constant("buttons_separation", "AcceptDialog", 12)
