@@ -73,6 +73,9 @@ const KIND_WORKOUT_BEFORE_CHANGE: String = "workout_before_change"
 const KIND_WORKOUT_PAUSED: String = "workout_paused"
 const KIND_WORKOUT_LAST_STEP: String = "workout_last_step"
 const KIND_WORKOUT_SUMMARY: String = "workout_summary"
+## Итог с паузой (REQ-HUD-14 крит. 8): короткая тренировка `DevScreen.test_workout()` заново, пауза
+## `pause_sec` секунд сессии в начале, затем до финиша.
+const KIND_WORKOUT_SUMMARY_PAUSED: String = "workout_summary_paused"
 const KIND_RIDE_DETAIL: String = "ride_detail"
 const KIND_FREE_RIDE_AT: String = "free_ride_at"
 const KIND_FREE_RIDE_PAUSED: String = "free_ride_paused"
@@ -95,6 +98,7 @@ const KIND_DIALOG: String = "dialog"
 ## подтверждение «Отвязать Intervals.icu».
 const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_0030", "kind": KIND_WORKOUT_AT, "at_sec": 30},
+	{"id": "hud_toolbar_plan", "kind": KIND_WORKOUT_AT, "at_sec": 60, "toolbar": true},
 	{"id": "hud_1700", "kind": KIND_WORKOUT_AT, "at_sec": 1020},
 	{"id": "hud_next", "kind": KIND_WORKOUT_BEFORE_CHANGE, "lead_sec": 5},
 	{"id": "hud_paused", "kind": KIND_WORKOUT_PAUSED, "at_sec": 1230},
@@ -107,6 +111,7 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "history_ride_detail_end", "kind": KIND_RIDE_DETAIL, "scroll_end": true},
 	{"id": "free_start", "kind": KIND_FREE_RIDE_AT, "at_sec": 20, "power_w": 190},
 	{"id": "free_flat", "kind": KIND_FREE_RIDE_AT, "s_m": 1600.0, "power_w": 200},
+	{"id": "hud_toolbar_free", "kind": KIND_FREE_RIDE_AT, "s_m": 1700.0, "power_w": 200, "toolbar": true},
 	{"id": "free_climb", "kind": KIND_FREE_RIDE_AT, "s_m": 6300.0, "power_w": 265, "toolbar": true},
 	{"id": "free_paused", "kind": KIND_FREE_RIDE_PAUSED},
 	{"id": "free_descent", "kind": KIND_FREE_RIDE_AT, "s_m": 13600.0, "power_w": 140},
@@ -116,6 +121,8 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "free_no_sim", "kind": KIND_FREE_RIDE_NO_SIM, "at_sec": 4},
 	{"id": "history_empty", "kind": KIND_HISTORY_ROWS, "rides": 0},
 	{"id": "history_20", "kind": KIND_HISTORY_ROWS, "rides": 20},
+	# Последним: новая тренировка добавляет заезд в историю — кадры истории выше её не видят.
+	{"id": "hud_summary_paused", "kind": KIND_WORKOUT_SUMMARY_PAUSED, "pause_sec": 75},
 ]
 
 var _out_dir: String = "screenshots/ui"
@@ -259,6 +266,10 @@ func _run_scenario(scenario: Dictionary) -> void:
 		KIND_APP_SCREENS:
 			await _shoot_app_screens(id)
 		KIND_WORKOUT_AT:
+			if bool(scenario.get("toolbar", false)):
+				_main.workout_screen().toolbar().poke()
+				# Панель проявляется за 200 мс — снимаем после проявления.
+				await create_timer(HudToolbar.FADE_SEC + 0.1).timeout
 			await _shoot(id)
 		KIND_WORKOUT_BEFORE_CHANGE:
 			var executor: IntervalExecutor = _session().executor
@@ -275,6 +286,20 @@ func _run_scenario(scenario: Dictionary) -> void:
 			await _shoot(id)
 		KIND_WORKOUT_SUMMARY:
 			await _advance_to(_workout.total_duration_sec() + 1)
+			if _session().get_state() != WorkoutSession.State.FINISHED:
+				_fail("%s: тренировка не завершилась" % id)
+			await _shoot(id)
+		KIND_WORKOUT_SUMMARY_PAUSED:
+			if not _main.start_workout_on_emulator(DevScreen.test_workout()) or _session() == null:
+				_fail("%s: короткая тренировка не запущена" % id)
+				return
+			await _advance_to(5)
+			var screen: WorkoutScreen = _main.workout_screen()
+			screen.toggle_pause()
+			_clock_usec += int(scenario.get("pause_sec", 75)) * 1_000_000
+			await process_frame
+			screen.toggle_pause()
+			await _advance_to(_session().executor.workout.total_duration_sec() + 1)
 			if _session().get_state() != WorkoutSession.State.FINISHED:
 				_fail("%s: тренировка не завершилась" % id)
 			await _shoot(id)

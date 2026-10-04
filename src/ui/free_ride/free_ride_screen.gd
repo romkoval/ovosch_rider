@@ -56,10 +56,7 @@ const POSITION_SNAP_M: float = 50.0
 const RIDE_SCENE: PackedScene = preload("res://src/scene3d/ride_scene.tscn")
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
 const ICON_PLAY: Texture2D = preload("res://assets/icons/lucide/play.svg")
-## Итог: ширина карточки (`ui.md` п. 8.8), поля экрана на узком холсте.
-const SUMMARY_WIDTH: float = 720.0
-const SUMMARY_MARGIN: float = 16.0
-## Плитки итога: ключ подписи → поле.
+## Плитки итога (`ui.md` п. 8.8): ключ плитки; подпись — `ui.free_ride.summary.<ключ>`.
 const SUMMARY_STATS: Array[String] = ["time", "distance", "avg_power", "np", "avg_hr", "ascent"]
 
 ## Подставляемые часы тикера (пусто — системные).
@@ -89,7 +86,6 @@ var _base_speed_mps: float = 0.0
 var _base_sec: int = -1
 var _blend_offset_m: float = 0.0
 var _last_session_time: float = 0.0
-var _stat_values: Dictionary = {}
 
 @onready var _viewport_container: SubViewportContainer = %ViewportContainer
 @onready var _viewport: SubViewport = %Viewport
@@ -113,13 +109,7 @@ var _stat_values: Dictionary = {}
 @onready var _toolbar: HudToolbar = %Toolbar
 @onready var _no_session_root: Control = %NoSessionRoot
 @onready var _back_button: Button = %BackButton
-@onready var _summary_root: Control = %SummaryRoot
-@onready var _scrim: ColorRect = %Scrim
-@onready var _summary_card: PanelContainer = %SummaryCard
-@onready var _summary_route: Label = %SummaryRoute
-@onready var _stats_grid: GridContainer = %StatsGrid
-@onready var _history_button: Button = %HistoryButton
-@onready var _home_button: Button = %HomeButton
+@onready var _summary_root: RideSummaryCard = %SummaryRoot
 
 
 ## Подготовить заезд: профиль (вес, FTP, зоны, уровень сопротивления), станок, трасса и
@@ -143,7 +133,7 @@ func setup(app_state: AppState, profile: Profile = null, trainer: TrainerDevice 
 func _ready() -> void:
 	var chips: Array[Control] = [_trainer_chip, _hr_chip, _mode_chip]
 	_frame = HudScreenFrame.new(self, chips)
-	_scrim.color = UiTokens.SCRIM
+	_summary_root.share_unique_names(self)
 	_metric_panel.set_mode(HudMetricPanel.Mode.FREE_RIDE)
 	_toolbar.set_mode(HudToolbar.Mode.FREE_RIDE)
 	_pause_overlay.set_mode(HudToolbar.Mode.FREE_RIDE)
@@ -152,8 +142,8 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	_pause_button.pressed.connect(toggle_pause)
 	_back_button.pressed.connect(back)
-	_home_button.pressed.connect(go_home)
-	_history_button.pressed.connect(open_history)
+	_summary_root.home_requested.connect(go_home)
+	_summary_root.history_requested.connect(open_history)
 	_toolbar.pause_requested.connect(_on_toolbar_escape)
 	_toolbar.sim_toggle_requested.connect(toggle_mode)
 	_toolbar.steepness_step_requested.connect(adjust_steepness)
@@ -161,9 +151,9 @@ func _ready() -> void:
 	_toolbar.finish_requested.connect(request_finish)
 	_pause_overlay.resume_requested.connect(resume)
 	_pause_overlay.finish_confirmed.connect(confirm_finish)
-	# Экран в масштабе HUD: кнопки итога и «назад» — цель `touch_hud` (на телефоне 72 lp HUD,
-	# UIX-05 крит. 1), как у кнопок HUD.
-	for b: Button in [_back_button, _home_button, _history_button, _pause_button]:
+	# Экран в масштабе HUD: кнопка «назад» — цель `touch_hud` (на телефоне 72 lp HUD,
+	# UIX-05 крит. 1), как у кнопок HUD; кнопки итога цепляет сам `RideSummaryCard`.
+	for b: Button in [_back_button, _pause_button]:
 		TouchTarget.attach(b, TouchTarget.Kind.HUD)
 	_frame.install_escape_guard(_on_escape_on_pause_card)
 	set_process(false)
@@ -467,8 +457,12 @@ func mode_chip_text() -> String:
 
 
 func summary_value_text(stat: String) -> String:
-	var label: Label = _stat_values.get(stat, null)
-	return label.text if label != null else ""
+	return _summary_root.value_text(stat)
+
+
+## Карточка итога (`RideSummaryCard`).
+func summary_card() -> RideSummaryCard:
+	return _summary_root
 
 
 # ---------------------------------------------------------------------------
@@ -529,22 +523,11 @@ func _render_status(s: Dictionary) -> void:
 
 
 func _build_summary_stats() -> void:
+	var stats: Array[Dictionary] = []
 	for key in SUMMARY_STATS:
-		var box := VBoxContainer.new()
-		box.name = "Stat_" + key
-		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var value := Label.new()
-		value.theme_type_variation = &"StatLargeLabel"
-		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		value.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-		var caption := Label.new()
-		caption.theme_type_variation = &"CaptionLabel"
-		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		caption.text = "ui.free_ride.summary." + key
-		box.add_child(value)
-		box.add_child(caption)
-		_stats_grid.add_child(box)
-		_stat_values[key] = value
+		stats.append({"key": key, "caption": "ui.free_ride.summary." + key})
+	_summary_root.setup_stats(stats)
+	_summary_root.set_title("ui.free_ride.summary.title")
 
 
 ## Итог (`ui.md` п. 8.8): время, дистанция, ср. мощность, NP, ср. пульс, набор. Сводка —
@@ -560,16 +543,17 @@ func _render_summary() -> void:
 	var distance_m: float = _session.distance_m() if _session != null else (summary.distance_m if summary != null else 0.0)
 	var ascent_m: float = _session.ascent_m() if _session != null else (summary.ascent_m if summary != null else 0.0)
 	var elapsed: int = _session.elapsed_sec() if _session != null else (summary.duration_sec if summary != null else 0)
-	_stat_values["time"].text = HudModel.format_elapsed(elapsed)
-	_stat_values["distance"].text = "%.1f %s" % [distance_m / 1000.0, km]
-	_stat_values["avg_power"].text = _with_unit(summary.avg_power_w if summary != null else -1, unit_w)
-	_stat_values["np"].text = _with_unit(summary.normalized_power_w if summary != null else -1, unit_w)
-	_stat_values["avg_hr"].text = _with_unit(summary.avg_hr if summary != null else -1, tr("ui.hud.unit.bpm"))
-	_stat_values["ascent"].text = "%d %s" % [roundi(ascent_m), tr("ui.free_ride.unit.m")]
-	_summary_route.text = tr(_session.route.name_key) if _session != null else ""
-	_history_button.disabled = _ride_id.is_empty()
-	var width := minf(SUMMARY_WIDTH, maxf(size.x - 2.0 * SUMMARY_MARGIN, 0.0))
-	_summary_card.custom_minimum_size = Vector2(width, 0)
+	var card := _summary_root
+	card.set_value("time", HudModel.format_elapsed(elapsed))
+	card.set_value("distance", "%.1f %s" % [distance_m / 1000.0, km])
+	card.set_value("avg_power", _with_unit(summary.avg_power_w if summary != null else -1, unit_w))
+	card.set_value("np", _with_unit(summary.normalized_power_w if summary != null else -1, unit_w))
+	card.set_value("avg_hr", _with_unit(summary.avg_hr if summary != null else -1, tr("ui.hud.unit.bpm")))
+	card.set_value("ascent", "%d %s" % [roundi(ascent_m), tr("ui.free_ride.unit.m")])
+	card.set_subtitle(tr(_session.route.name_key) if _session != null else "")
+	card.set_paused_sec(float(_session.metadata().get("paused_total_sec", 0.0)) if _session != null else 0.0)
+	card.set_history_enabled(not _ride_id.is_empty())
+	card.fit()
 
 
 static func _with_unit(value: int, unit: String) -> String:
@@ -583,8 +567,6 @@ static func _with_unit(value: int, unit: String) -> String:
 func _on_resized() -> void:
 	_fit_viewport()
 	_layout_hud()
-	if _summary_root.visible:
-		_render_summary()
 
 
 ## Вьюпорт 3D — в пикселях окна; контейнер уменьшен `scale` обратно до размера экрана.

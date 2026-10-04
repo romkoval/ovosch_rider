@@ -157,6 +157,9 @@ const STATIC_TEXTS: Dictionary = {
 
 ## Брейкпоинт compact по ширине холста, lp — тот же, что у AppBar (`ui.md` п. 3).
 const COMPACT_MAX_WIDTH: float = AppBar.COMPACT_MAX_WIDTH
+## Окно списка лицензий на regular и поле от края области (`open_licenses`).
+const LICENSES_SIZE: Vector2 = Vector2(560, 360)
+const LICENSES_MARGIN: float = 16.0
 ## Навигация по разделам (regular) и ширина содержимого (`ui.md` п. 8.6).
 const NAV_WIDTH: float = 260.0
 const NAV_ROW_HEIGHT: float = 48.0
@@ -303,6 +306,10 @@ func _ready() -> void:
 	_disconnect_strava_dialog.confirmed.connect(confirm_disconnect_strava)
 	_disconnect_strava_dialog.get_ok_button().theme_type_variation = &"DangerButton"
 	_licenses_button.pressed.connect(open_licenses)
+	# Диалоги — по `ui.md` п. 6 (480 lp, кнопки справа, фокус опасных — «Отмена»); у лицензий своя
+	# раскладка (`open_licenses`: на compact — лист снизу).
+	DialogLayout.attach(_licenses_dialog, false)
+	DialogLayout.attach_all(self)
 	_scroll.follow_focus = true
 	_scroll.get_v_scroll_bar().value_changed.connect(_on_scrolled)
 	_attach_touch_targets()
@@ -1048,11 +1055,30 @@ func is_reset_store_pending() -> bool:
 # «О программе»
 # ---------------------------------------------------------------------------
 
-## Открыть лист лицензий.
+## Открыть список лицензий (`ui.md` п. 8.6 «О программе»): regular — окно 560 × 360 по центру;
+## compact (телефон) — лист на всю ширину снизу. Высота не больше области внутри безопасной зоны
+## (с полем 16 сверху), текст прокручивается внутри.
 func open_licenses() -> void:
 	_licenses_dialog.title = tr(SettingsSections.LICENSES_TITLE)
 	_licenses_dialog.ok_button_text = tr("ui.common.ok")
-	_licenses_dialog.popup_centered()
+	var rect := licenses_rect(get_viewport_rect().size, _safe_margins(), _compact)
+	_licenses_dialog.popup(Rect2i(rect))
+
+
+## Прямоугольник окна лицензий для холста `canvas` и безопасной зоны `safe` (слева, сверху,
+## справа, снизу), lp.
+static func licenses_rect(canvas: Vector2, safe: Vector4, compact: bool) -> Rect2:
+	var avail := Rect2(safe.x, safe.y, canvas.x - safe.x - safe.z, canvas.y - safe.y - safe.w)
+	var height := minf(LICENSES_SIZE.y, avail.size.y - LICENSES_MARGIN)
+	if compact:
+		return Rect2(avail.position.x, avail.end.y - height, avail.size.x, height)
+	var width := minf(LICENSES_SIZE.x, avail.size.x - 2.0 * LICENSES_MARGIN)
+	return Rect2(avail.position + (avail.size - Vector2(width, height)) / 2.0, Vector2(width, height))
+
+
+func _safe_margins() -> Vector4:
+	var scale_source := TouchTarget.default_runtime()
+	return scale_source.safe_margins() if scale_source != null else Vector4.ZERO
 
 
 func version_text() -> String:

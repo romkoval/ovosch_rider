@@ -100,9 +100,10 @@ static func mode_text(is_free_ride: bool) -> String:
 	return _tr(KEY_MODE_SIM if is_free_ride else KEY_MODE_PLAN)
 
 
-## Цвет метки режима: план — `accent`, свободная езда — `sim` (`ui.md` п. 4, 5).
-static func mode_color(is_free_ride: bool) -> Color:
-	return UiTokens.SIM if is_free_ride else UiTokens.ACCENT
+## Вариация темы метки режима (`ui.md` п. 4, 5, 9.2): план — `OverlineAccent` (цвет `accent`),
+## свободная езда — `OverlineSim` (цвет `sim`); цвет задаёт тема, без `self_modulate`.
+static func mode_variation(is_free_ride: bool) -> StringName:
+	return &"OverlineSim" if is_free_ride else &"OverlineAccent"
 
 
 ## Отметки заезда словами: не завершён / восстановлен / завершён досрочно (пусто — нет).
@@ -189,14 +190,6 @@ static func matches(s: RideSummary, filter: Filter) -> bool:
 		Filter.FREE:
 			return s.is_free_ride()
 	return true
-
-
-## Модуляция, переводящая цвет темы `base` в цвет данных `target` (метка режима, значок):
-## цвет подписи задаёт тема, узлу остаётся `self_modulate` (без локальных переопределений темы).
-static func tint_for(base: Color, target: Color) -> Color:
-	return Color(
-		target.r / maxf(base.r, 0.001), target.g / maxf(base.g, 0.001),
-		target.b / maxf(base.b, 0.001), target.a / maxf(base.a, 0.001))
 
 
 static func _date(unix: int, key: String) -> String:

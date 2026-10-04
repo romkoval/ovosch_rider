@@ -102,7 +102,6 @@ ui.workout.erg_off,ERG выкл,ERG off
 ui.workout.finished,Тренировка завершена,Workout finished
 ui.workout.summary,{name} · {time} · {distance} км · сэмплов {samples} {early},{name} · {time} · {distance} km · samples {samples} {early}
 ui.workout.stopped_early,(завершена досрочно),(ended early)
-ui.workout.home,На главный,Back to home
 ui.devices.ble_unavailable,Bluetooth недоступен: нативный модуль не загружен или адаптер выключен,Bluetooth unavailable: native module not loaded or adapter is off
 ui.workout.summary_paused,Пауз: {paused},Paused: {paused}
 ui.common.ok,ОК,OK

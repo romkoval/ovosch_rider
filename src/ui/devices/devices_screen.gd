@@ -122,6 +122,7 @@ func _ready() -> void:
 		_slots[kind] = slot
 	TouchTarget.attach(_scan_button, TouchTarget.Kind.BUTTON)
 	TouchTarget.attach(_auto_connect_check, TouchTarget.Kind.UI)
+	DialogLayout.attach_all(self)
 	set_process(false)
 	var scale_source := TouchTarget.default_runtime()
 	if scale_source != null:

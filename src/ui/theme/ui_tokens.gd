@@ -62,6 +62,10 @@ const HUD_PAUSE_VEIL: Color = Color(HUD_INK, 0.35)
 const HUD_PAUSE_CARD_ALPHA: float = 0.94
 const HUD_PAUSE_CARD: Color = Color(SURFACE1, HUD_PAUSE_CARD_ALPHA)
 const HUD_PAUSE_CARD_RADIUS: int = 18
+## Карточка итога заезда (`ui.md` п. 8.8, REQ-HUD-14 крит. 7: альфа не ниже 0.96): `surface1` с альфой
+## 0.97 — 0.96 во float32 цвета хранится как 0.95999…, проверка «≥ 0.96» бы не прошла; радиус 18.
+const SUMMARY_CARD_ALPHA: float = 0.97
+const SUMMARY_CARD: Color = Color(SURFACE1, SUMMARY_CARD_ALPHA)
 const HUD_TEXT: Color = Color("#F5F7FA")
 const HUD_TEXT2: Color = Color("#B9C1CD")
 const HUD_POWER_LINE: Color = Color("#F5F7FA")

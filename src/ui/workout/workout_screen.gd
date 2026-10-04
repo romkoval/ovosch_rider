@@ -35,8 +35,12 @@ extends Control
 ## На время экрана включается масштаб HUD (`UiScaleRuntime.set_mode(UiScale.Mode.HUD)`).
 ##
 ## Строки — через ключи `ui.workout.*`, `ui.hud.*` и `ui.hud_controls.*`; значения HUD
-## берутся из `HudModel.state()`. После FINISHED показывается сводка-заглушка с кнопкой
-## «На главный»; сохранение заезда — по сигналу `session_finished(session)`.
+## берутся из `HudModel.state()`. После FINISHED показывается итог (`RideSummaryCard`, общий со
+## свободной ездой; `ui.md` п. 8.8, REQ-HUD-14 крит. 7): карточка на вуали, «Тренировка завершена»,
+## название тренировки, плитки — время, дистанция, ср. мощность, NP, ср. пульс, работа (по сводке
+## LOC-04 потока сессии), паузы — только если были; «Открыть в истории» и «На главный».
+## Сохранение заезда — по сигналу `session_finished(session)`; id сохранённого заезда владелец
+## сообщает `set_saved_ride_id`.
 
 const UNIT_KEY: String = "ui.workout.unit_w"
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
@@ -54,6 +58,20 @@ signal session_created(session: WorkoutSession)
 signal session_finished(session: WorkoutSession)
 ## Профиль изменён экраном (уровень сопротивления) — владелец сохраняет.
 signal profile_updated(profile: Profile)
+## «Открыть в истории» на итоге: `ride_id` сохранённого заезда ("" — неизвестен).
+signal history_requested(ride_id: String)
+
+## Плитки итога (`ui.md` п. 8.8): ключ → ключ подписи. У тренировки по плану набора нет
+## (трасса по умолчанию ровная) — вместо него работа, кДж.
+const SUMMARY_STATS: Array[Dictionary] = [
+	{"key": "time", "caption": "ui.free_ride.summary.time"},
+	{"key": "distance", "caption": "ui.free_ride.summary.distance"},
+	{"key": "avg_power", "caption": "ui.free_ride.summary.avg_power"},
+	{"key": "np", "caption": "ui.free_ride.summary.np"},
+	{"key": "avg_hr", "caption": "ui.free_ride.summary.avg_hr"},
+	{"key": "work", "caption": "ui.summary.work"},
+]
+const SUMMARY_TITLE_KEY: String = "ui.workout.finished"
 
 ## Подставляемые часы тикера (пусто — системные).
 var clock_usec: Callable = Callable()
@@ -70,6 +88,7 @@ var _ticker: SessionTicker
 var _hud: HudModel
 var _keep_awake: KeepAwake
 var _stop_pending: bool = false
+var _ride_id: String = ""
 ## Общая рамка HUD: фишки, слоты, панель инструментов, слот подсказки, Esc на карточке паузы.
 var _frame: HudScreenFrame
 
@@ -78,7 +97,7 @@ var _frame: HudScreenFrame
 @onready var _viewport: SubViewport = %Viewport
 @onready var _pause_overlay: PauseOverlay = %PauseOverlay
 @onready var _hud_root: Control = %HudRoot
-@onready var _summary_root: Control = %SummaryRoot
+@onready var _summary_root: RideSummaryCard = %SummaryRoot
 @onready var _no_session_label: Label = %NoSessionLabel
 @onready var _metric_panel: HudMetricPanel = %MetricPanel
 @onready var _list_slot: Control = %ListSlot
@@ -99,8 +118,6 @@ var _frame: HudScreenFrame
 @onready var _pause_button: Button = %PauseButton
 @onready var _toolbar_slot: Control = %ToolbarSlot
 @onready var _toolbar: HudToolbar = %Toolbar
-@onready var _summary_label: Label = %SummaryLabel
-@onready var _home_button: Button = %HomeButton
 
 
 ## Подготовить тренировку. `connections` — опционально, для `ticks_devices`.
@@ -112,6 +129,7 @@ func setup(workout: Workout, profile: Profile, trainer: TrainerDevice, app_state
 	_trainer = trainer
 	_app_state = app_state
 	_connections = connections
+	_ride_id = ""
 	if is_node_ready():
 		refresh()
 
@@ -143,9 +161,12 @@ func _ready() -> void:
 	visibility_changed.connect(_update_hotkeys)
 	get_viewport().size_changed.connect(_on_resized)
 	_pause_button.pressed.connect(toggle_pause)
-	_home_button.pressed.connect(go_home)
-	# Итог — в масштабе HUD: цель `touch_hud` (на телефоне 72 lp HUD, UIX-05 крит. 1).
-	TouchTarget.attach(_home_button, TouchTarget.Kind.HUD)
+	# Итог: кнопки — цель `touch_hud` (их цепляет `RideSummaryCard`), узлы — `%HomeButton`, `%HistoryButton`.
+	_summary_root.share_unique_names(self)
+	_summary_root.setup_stats(SUMMARY_STATS)
+	_summary_root.set_title(SUMMARY_TITLE_KEY)
+	_summary_root.home_requested.connect(go_home)
+	_summary_root.history_requested.connect(open_history)
 	_frame.install_escape_guard(_on_escape_on_pause_card)
 	_fit_viewport()
 	refresh()
@@ -374,6 +395,22 @@ func adjust_intensity(delta: float) -> void:
 		refresh()
 
 
+## «Открыть в истории» на итоге.
+func open_history() -> void:
+	history_requested.emit(_ride_id)
+
+
+## Владелец сообщает id сохранённого заезда этой сессии: «Открыть в истории» ведёт к нему.
+func set_saved_ride_id(ride_id: String) -> void:
+	_ride_id = ride_id
+	if is_node_ready() and _summary_root.visible:
+		_render_summary()
+
+
+func saved_ride_id() -> String:
+	return _ride_id
+
+
 func go_home() -> void:
 	on_screen_exited()
 	if _app_state != null:
@@ -478,8 +515,31 @@ func cue_text() -> String:
 	return _cue_label.text
 
 
+## Сводка одной строкой (`{name} · {time} · {distance} км · сэмплов N`, паузы) — для проверок и
+## журнала; на экране её нет: итог — карточка `RideSummaryCard` без служебных полей.
 func summary_text() -> String:
-	return _summary_label.text
+	if _session == null or _session.get_state() != WorkoutSession.State.FINISHED:
+		return ""
+	var m := _session.metadata()
+	return tr("ui.workout.summary").format({
+		"name": m["workout_name"],
+		"time": HudModel.format_elapsed(int(m["elapsed_sec"])),
+		"distance": "%.1f" % (float(m["distance_m"]) / 1000.0),
+		"samples": m["sample_count"],
+		"early": tr("ui.workout.stopped_early") if m["stopped_early"] else "",
+	}) + "\n" + tr("ui.workout.summary_paused").format({
+		"paused": HudModel.format_elapsed(int(round(float(m["paused_total_sec"])))),
+	})
+
+
+## Значение плитки итога по ключу (`SUMMARY_STATS`).
+func summary_value_text(stat: String) -> String:
+	return _summary_root.value_text(stat)
+
+
+## Карточка итога (`RideSummaryCard`).
+func summary_card() -> RideSummaryCard:
+	return _summary_root
 
 
 ## Регулятор сопротивления есть на панели инструментов (только при выключенном ERG).
@@ -692,17 +752,32 @@ func _ui_scale() -> UiScale:
 	return get_node_or_null(^"/root/UiScaleRuntime") as UiScale
 
 
+## Итог (`ui.md` п. 8.8): значения — сводка LOC-04 по потоку сессии с зонами профиля (та же, что
+## `RideRecorder` сохраняет в заезд); подзаголовок — название тренировки (и «завершена досрочно»).
 func _render_summary() -> void:
 	var m := _session.metadata()
-	_summary_label.text = tr("ui.workout.summary").format({
-		"name": m["workout_name"],
-		"time": HudModel.format_elapsed(int(m["elapsed_sec"])),
-		"distance": "%.1f" % (float(m["distance_m"]) / 1000.0),
-		"samples": m["sample_count"],
-		"early": tr("ui.workout.stopped_early") if m["stopped_early"] else "",
-	}) + "\n" + tr("ui.workout.summary_paused").format({
-		"paused": HudModel.format_elapsed(int(round(float(m["paused_total_sec"])))),
-	})
+	var zones: PowerZones = _profile.effective_power_zones() if _profile != null else PowerZones.coggan(_session.executor.ftp_w)
+	var hr_zones: HrZones = _profile.effective_hr_zones() if _profile != null else null
+	var summary := RideSummary.compute(_session.samples, _session.executor.ftp_w, zones, hr_zones)
+	var unit_w := tr(UNIT_KEY)
+	var card := _summary_root
+	card.set_value("time", HudModel.format_elapsed(summary.duration_sec))
+	card.set_value("distance", "%.1f %s" % [summary.distance_m / 1000.0, tr("ui.hud.unit.km")])
+	card.set_value("avg_power", _with_unit(summary.avg_power_w, unit_w))
+	card.set_value("np", _with_unit(summary.normalized_power_w, unit_w))
+	card.set_value("avg_hr", _with_unit(summary.avg_hr, tr("ui.hud.unit.bpm")))
+	card.set_value("work", _with_unit(roundi(summary.work_kj) if summary.has_power() else -1, tr("ui.menu.unit.kj")))
+	var subtitle := str(m["workout_name"])
+	if bool(m["stopped_early"]):
+		subtitle += HistoryFormat.DOT + tr("ui.summary.stopped_early")
+	card.set_subtitle(subtitle)
+	card.set_paused_sec(float(m["paused_total_sec"]))
+	card.set_history_enabled(not _ride_id.is_empty())
+	card.fit()
+
+
+static func _with_unit(value: int, unit: String) -> String:
+	return ("%d %s" % [value, unit]) if value >= 0 else HudModel.NO_DATA_TEXT
 
 
 # ---------------------------------------------------------------------------

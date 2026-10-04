@@ -414,14 +414,13 @@ func _make_row(s: RideSummary, parent: Container) -> ListRow:
 	row.row_id = s.ride_id
 	row.set_texts(HistoryFormat.summary_title(s), "", HistoryFormat.row_overline(s))
 	var mode := Label.new()
-	mode.theme_type_variation = &"OverlineLabel"
+	mode.theme_type_variation = HistoryFormat.mode_variation(s.is_free_ride())
 	mode.uppercase = true
 	mode.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	mode.text = HistoryFormat.mode_text(s.is_free_ride())
 	mode.custom_minimum_size.x = MODE_LABEL_WIDTH
 	mode.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_leading(mode)
-	mode.self_modulate = HistoryFormat.tint_for(mode.get_theme_color("font_color"), HistoryFormat.mode_color(s.is_free_ride()))
 	row.set_columns(HistoryFormat.columns(s, _compact), HistoryFormat.column_widths(_compact), &"NumLabel")
 	var icon_spec := HistoryFormat.strava_icon(s.strava_status)
 	var icon := TextureRect.new()

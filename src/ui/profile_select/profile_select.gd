@@ -104,6 +104,7 @@ func _ready() -> void:
 	_delete_dialog.confirmed.connect(_on_delete_confirmed)
 	_delete_dialog.canceled.connect(_on_delete_canceled)
 	_delete_dialog.get_ok_button().theme_type_variation = &"DangerButton"
+	DialogLayout.attach_all(self)
 	_card_menu.id_pressed.connect(_on_card_menu_id)
 	TouchTarget.attach(_create_button, TouchTarget.Kind.UI)
 	for button: Button in [_save_button, _cancel_button]:
@@ -571,8 +572,6 @@ func _update_layout() -> void:
 	_columns = columns_now
 	var logo_variation := &"H1Label" if compact else &"DisplayLabel"
 	_logo_main.theme_type_variation = logo_variation
-	_logo_accent.theme_type_variation = logo_variation
-	_logo_accent.self_modulate = HomeScreen.tint_for(_logo_accent.get_theme_color("font_color"), UiTokens.ACCENT)
-	_who_label.self_modulate = HomeScreen.tint_for(_who_label.get_theme_color("font_color"), UiTokens.TEXT2)
+	_logo_accent.theme_type_variation = &"H1AccentLabel" if compact else &"DisplayAccentLabel"
 	if changed and _repo != null:
 		_layout_grid()

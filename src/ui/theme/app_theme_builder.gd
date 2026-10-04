@@ -82,6 +82,7 @@ const VARIATIONS: Dictionary = {
 	"OverlineLabel": "Label", "StatLabel": "Label", "StatLargeLabel": "Label", "ErrorLabel": "Label",
 	"OverlineAccent": "OverlineLabel", "OverlineSim": "OverlineLabel",
 	"LogoLabel": "Label", "LogoAccentLabel": "LogoLabel",
+	"DisplayAccentLabel": "DisplayLabel", "H1AccentLabel": "H1Label", "H2SecondaryLabel": "H2Label",
 	"PrimaryButton": "Button", "GhostButton": "Button", "DangerButton": "Button",
 	"IconButton": "Button", "ChipButton": "Button", "CardButton": "Button",
 	"ScenarioCard": "CardButton", "ListRowButton": "CardButton",
@@ -94,7 +95,7 @@ const VARIATIONS: Dictionary = {
 	"HudZoneChipLabel": "Label", "HudButton": "Button",
 	"HudHeroUnit": "Label", "HudTargetUnit": "Label", "HudCountdown": "Label", "HudDelta": "Label",
 	"HudGradeValue": "Label", "HudGradeUnit": "Label", "HudModeLabel": "Label", "HudStepLabel": "Label",
-	"HudPauseCard": "PanelContainer", "HudChipLabel": "Label", "HudPauseTitle": "Label",
+	"HudPauseCard": "PanelContainer", "HudSummaryCard": "PanelContainer", "HudChipLabel": "Label", "HudPauseTitle": "Label",
 	"HudChipSeconds": "HudChipLabel", "HudChipLabelCompact": "HudChipLabel",
 	"HudChipSecondsCompact": "HudChipSeconds", "HudHintCompact": "BodyStrongLabel",
 	"HudToolButton": "HudButton",
@@ -399,6 +400,11 @@ static func _label_variations(t: Theme, fonts: Dictionary) -> void:
 	# `inter_num_800_display` (`tnum` на буквы не влияет) — новое начертание не нужно.
 	_label(t, "LogoLabel", fonts["inter_num_800_display"], 28)
 	t.set_color("font_color", "LogoAccentLabel", UiTokens.ACCENT)
+	# Экран выбора профиля (T-103): «·rider» крупного словесного знака цветом `accent` в размерах
+	# Display (regular) и H1 (compact), подпись «Кто едет?» — H2 цветом `text2` (без self_modulate).
+	t.set_color("font_color", "DisplayAccentLabel", UiTokens.ACCENT)
+	t.set_color("font_color", "H1AccentLabel", UiTokens.ACCENT)
+	t.set_color("font_color", "H2SecondaryLabel", UiTokens.TEXT2)
 
 
 static func _button_variations(t: Theme, fonts: Dictionary) -> void:
@@ -524,6 +530,9 @@ static func _hud_variations(t: Theme, fonts: Dictionary) -> void:
 	# Карточка паузы (`hud.md` п. 10.2): `surface1` с альфой 0.94, радиус 18·s; «Пауза» — 30·s / 750.
 	t.set_stylebox("panel", "HudPauseCard", _box(UiTokens.HUD_PAUSE_CARD, UiTokens.HUD_PAUSE_CARD_RADIUS, HUD_PAUSE_CARD_MARGIN))
 	_label(t, "HudPauseTitle", fonts["inter_750"], 30, UiTokens.HUD_TEXT)
+	# Карточка итога заезда (`ui.md` п. 8.8): форма карточки паузы (радиус 18, поля 24/20), но
+	# непрозрачнее — `surface1` с альфой 0.97 (REQ-HUD-14 крит. 7: не ниже 0.96).
+	t.set_stylebox("panel", "HudSummaryCard", _box(UiTokens.SUMMARY_CARD, UiTokens.HUD_PAUSE_CARD_RADIUS, HUD_PAUSE_CARD_MARGIN))
 	# Кнопка HUD 56×56: иконка 24 + поля 16.
 	var hud_margin := Vector2(16, 16)
 	_button_styles(t, "HudButton",

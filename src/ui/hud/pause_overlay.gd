@@ -16,7 +16,11 @@ extends Control
 ## Пробел и Enter на карточке паузы — «Продолжить»; Esc в подтверждении — назад, на
 ## карточке паузы — ничего (не уходит дальше к панели инструментов).
 ##
-## Карточка: 360 lp, фон `surface1` с альфой 0.94, радиус 18 (`hud.md` п. 10.2) — вариация темы
+## Подтверждение завершения — диалог по `ui.md` п. 6 (REQ-UIX-01 крит. 8): карточка 480 lp, текст с
+## переносом, кнопки у правого края по ширине текста — «Отмена» (вторичная) слева, «Завершить»
+## (опасная) справа, фокус при открытии — «Отмена».
+##
+## Карточка паузы: 360 lp, фон `surface1` с альфой 0.94, радиус 18 (`hud.md` п. 10.2) — вариация темы
 ## `HudPauseCard`; «Пауза» — 30 lp / 750, `HudPauseTitle`; «Продолжить» — высота
 ## `max(52, touch_hud)`; текстовые кнопки — `touch_hud`.
 ## `touch_hud` берётся из автозагрузки `UiScaleRuntime` (48 / 52 / 72 lp HUD).
@@ -37,6 +41,8 @@ const FADE_SEC: float = 0.2
 ## узлов задаются в `_ready` и переводятся автоматически (`auto_translate_mode`).
 const KEY: String = "ui.hud_controls."
 const CARD_WIDTH_LP: float = 360.0
+## Ширина карточки подтверждения — ширина диалога (`DialogLayout.WIDTH`, `ui.md` п. 6).
+const CONFIRM_WIDTH_LP: float = 480.0
 const CARD_RADIUS_LP: int = 18
 const CARD_ALPHA: float = 0.94
 const CARD_MARGIN: Vector2 = Vector2(24, 20)
@@ -116,7 +122,9 @@ func show_finish_confirmation() -> void:
 		return
 	_confirm_from_pause = _view == View.PAUSE
 	_set_view(View.CONFIRM)
-	# Enter в подтверждении нажимает «Отмена», а не «Завершить».
+	# Enter в подтверждении нажимает «Отмена», а не «Завершить» (сразу и после кадра).
+	if _cancel_button.is_visible_in_tree():
+		_cancel_button.grab_focus()
 	_cancel_button.grab_focus.call_deferred()
 
 
@@ -226,6 +234,7 @@ func _apply_view() -> void:
 	_confirm_view.visible = _view == View.CONFIRM
 	_skip_button.visible = _mode == HudToolbar.Mode.PLAN
 	_confirm_body.text = KEY + "finish.body_plan" if _mode == HudToolbar.Mode.PLAN else KEY + "finish.body_free_ride"
+	_card.custom_minimum_size.x = CONFIRM_WIDTH_LP if _view == View.CONFIRM else CARD_WIDTH_LP
 	_card.mouse_filter = Control.MOUSE_FILTER_STOP if is_shown() else Control.MOUSE_FILTER_IGNORE
 
 

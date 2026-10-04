@@ -59,13 +59,13 @@ auto_translate_mode = 2
 [node name="LogoAccent" type="Label" parent="Root/Margin/Scroll/Column/Header/Logo"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"DisplayLabel"
+theme_type_variation = &"DisplayAccentLabel"
 auto_translate_mode = 2
 
 [node name="WhoLabel" type="Label" parent="Root/Margin/Scroll/Column/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"H2Label"
+theme_type_variation = &"H2SecondaryLabel"
 auto_translate_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 3

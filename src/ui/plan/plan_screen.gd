@@ -247,6 +247,7 @@ func _ready() -> void:
 	_trainer_dialog.custom_action.connect(_on_trainer_action)
 	_emulator_button = _trainer_dialog.add_button(tr("ui.plan.trainer_choice.emulator"), true, TRAINER_ACTION_EMULATOR)
 	_apply_trainer_choice_texts()
+	DialogLayout.attach_all(self)
 	_zone_bar = ZoneShareBar.new()
 	_zones.add_child(_zone_bar)
 	_zones.move_child(_zone_bar, _zone_captions.get_index())

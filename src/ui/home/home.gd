@@ -37,6 +37,9 @@ signal free_ride_requested(route_id: String)
 
 const CONTENT_MAX_WIDTH: float = 1216.0
 const COMPACT_MAX_WIDTH: float = AppBar.COMPACT_MAX_WIDTH
+## Деление надзаголовка (`split_to_fit`): разделитель и длина «короткого» слова (висячий предлог).
+const SEPARATOR: String = "·"
+const SHORT_WORD_MAX_LETTERS: int = 2
 const BAR_HEIGHT: float = AppBar.HEIGHT
 const BAR_HEIGHT_COMPACT: float = AppBar.HEIGHT_COMPACT
 const TILE_HEIGHT: float = 88.0
@@ -394,6 +397,10 @@ func _refresh_plan() -> void:
 	_start_button.visible = has_plan
 	_import_button.visible = not has_plan
 	_workout_button.text = "ui.home.plan.other" if has_plan else "ui.home.plan.from_library"
+	# Текст и место кнопки рядом с надзаголовком сменились — зазор надзаголовка тоже.
+	if _content_width > 0.0:
+		_apply_card_buttons()
+	_refresh_overlines()
 	if not has_plan:
 		_plan_title.text = ""
 		_plan_source_label.text = ""
@@ -672,9 +679,7 @@ func _update_layout() -> void:
 	_ride_kind.visible = not compact
 	_apply_card_insets()
 	_apply_card_buttons()
-	# На compact рядом с надзаголовком стоит «Другая тренировка»: полный надзаголовок не влезает (U9).
-	_set_overline(_plan_overline, "ui.home.plan.overline_short" if compact else "ui.home.plan.overline", _workout_button)
-	_set_overline(_ride_overline, "ui.home.ride.overline", _route_button)
+	_refresh_overlines()
 	if compact_changed:
 		_refresh_profile_chip()
 		_refresh_devices()
@@ -735,10 +740,24 @@ func _apply_card_buttons() -> void:
 func _set_overline(label: Label, key: String, beside: Button) -> void:
 	var text := tr(key)
 	if _compact and beside.get_parent() == label.get_parent():
-		var avail: float = card_inner_width() - float(label.get_parent().get_theme_constant("separation")) \
-				- beside.get_combined_minimum_size().x
-		text = split_to_fit(label, text, avail)
+		text = split_to_fit(label, text, overline_gap(label, beside))
 	label.text = text
+
+
+## Фактический зазор для надзаголовка до кнопки `beside` в той же строке (`ui.md` п. 8.2):
+## ширина содержимого карточки − зазор ряда − ширина кнопки (по её текущему тексту и цели нажатия).
+func overline_gap(label: Label, beside: Button) -> float:
+	return card_inner_width() - float(label.get_parent().get_theme_constant("separation")) \
+			- beside.get_combined_minimum_size().x
+
+
+## Пересчитать надзаголовки карточек (раскладка, смена текста кнопки рядом).
+func _refresh_overlines() -> void:
+	if not is_node_ready():
+		return
+	# На compact рядом с надзаголовком стоит «Другая тренировка»: полный надзаголовок не влезает (U9).
+	_set_overline(_plan_overline, "ui.home.plan.overline_short" if _compact else "ui.home.plan.overline", _workout_button)
+	_set_overline(_ride_overline, "ui.home.ride.overline", _route_button)
 
 
 ## Ширина содержимого карточки сценария, lp (0 — раскладки ещё не было).
@@ -750,17 +769,41 @@ func card_inner_width() -> float:
 	return card_w - insets.x - insets.z
 
 
-## Текст подписи `label`, который не шире `width`: как есть, если помещается, иначе две
-## строки — первая из стольких слов, сколько помещается.
+## Текст подписи `label`, который не шире `width`: как есть, если помещается, иначе две строки
+## по правилам `ui.md` п. 8.2: первая — столько слов, сколько помещается (вторая тоже не шире
+## `width`); короткое слово (≤ 2 букв: «ПО», «В») не остаётся последним в строке; разделитель
+## « · » на месте переноса не рисуется. Если так не выходит — первая строка, что помещается.
 static func split_to_fit(label: Label, text: String, width: float) -> String:
 	if width <= 0.0 or _text_width(label, text) <= width:
 		return text
-	var words := text.split(" ")
+	var words := text.split(" ", false)
+	var fallback := ""
 	for i in range(words.size() - 1, 0, -1):
-		var first := " ".join(words.slice(0, i))
-		if _text_width(label, first) <= width:
-			return first + "\n" + " ".join(words.slice(i))
-	return text
+		var first := _trim_separators(words.slice(0, i))
+		var second := _trim_separators(words.slice(i))
+		if first.is_empty() or second.is_empty():
+			continue
+		var first_text := " ".join(first)
+		if _text_width(label, first_text) > width:
+			continue
+		var candidate := first_text + "\n" + " ".join(second)
+		if fallback.is_empty():
+			fallback = candidate
+		if (first[first.size() - 1] as String).length() <= SHORT_WORD_MAX_LETTERS:
+			continue
+		if _text_width(label, " ".join(second)) <= width:
+			return candidate
+	return fallback if not fallback.is_empty() else text
+
+
+## Слова без разделителей « · » по краям (перенос на разделителе его не рисует).
+static func _trim_separators(words: PackedStringArray) -> PackedStringArray:
+	var out := words.duplicate()
+	while not out.is_empty() and out[out.size() - 1] == SEPARATOR:
+		out.remove_at(out.size() - 1)
+	while not out.is_empty() and out[0] == SEPARATOR:
+		out.remove_at(0)
+	return out
 
 
 static func _text_width(label: Label, text: String) -> float:
@@ -807,13 +850,6 @@ func _card_insets(card: Button) -> Vector4:
 	if box == null:
 		return Vector4.ZERO
 	return Vector4(box.get_margin(SIDE_LEFT), box.get_margin(SIDE_TOP), box.get_margin(SIDE_RIGHT), box.get_margin(SIDE_BOTTOM))
-
-
-## Модуляция, переводящая цвет `base` в `target` (покомпонентно; каналы > 1 допустимы).
-static func tint_for(base: Color, target: Color) -> Color:
-	return Color(
-		target.r / maxf(base.r, 0.001), target.g / maxf(base.g, 0.001),
-		target.b / maxf(base.b, 0.001), target.a / maxf(base.a, 0.001))
 
 
 func _setup_icons() -> void:

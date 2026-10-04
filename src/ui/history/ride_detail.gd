@@ -160,6 +160,7 @@ func _ready() -> void:
 	_delete_dialog.confirmed.connect(confirm_delete)
 	_delete_dialog.canceled.connect(cancel_delete)
 	_delete_dialog.get_ok_button().theme_type_variation = &"DangerButton"
+	DialogLayout.attach_all(self)
 	_upload_button.pressed.connect(request_upload)
 	resized.connect(_update_content_width)
 	_update_layout()
@@ -567,7 +568,7 @@ func _render() -> void:
 	var free_ride := _ride.is_free_ride()
 	_app_bar.set_title(_display_name(), false)
 	_mode_label.text = HistoryFormat.mode_text(free_ride)
-	_mode_label.self_modulate = HistoryFormat.tint_for(_mode_label.get_theme_color("font_color"), HistoryFormat.mode_color(free_ride))
+	_mode_label.theme_type_variation = HistoryFormat.mode_variation(free_ride)
 	var flags := HistoryFormat.flags_text(_ride.is_in_progress(), _ride.is_recovered(), _ride.stopped_early())
 	var subtitle := HistoryFormat.full_date(_ride.started_at_unix)
 	_subtitle_label.text = subtitle if flags.is_empty() else subtitle + HistoryFormat.DOT + flags

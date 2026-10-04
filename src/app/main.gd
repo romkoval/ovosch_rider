@@ -85,6 +85,7 @@ func _ready() -> void:
 	_recovery_dialog = RecoveryDialog.new()
 	_recovery_dialog.resolved.connect(_on_recovery_resolved)
 	add_child(_recovery_dialog)
+	DialogLayout.attach(_recovery_dialog)
 	_build_free_ride_trainer_dialog()
 	bridge = BleBridge.create_default()
 	connections = ConnectionManager.new(bridge, devices, trainer_kind)
@@ -124,7 +125,8 @@ func _build_screens() -> void:
 	_add_screen(AppState.Screen.HOME, home)
 	var workout: WorkoutScreen = load(WORKOUT_SCENE).instantiate()
 	workout.session_created.connect(_on_session_created)
-	workout.session_finished.connect(func(s: WorkoutSession) -> void: last_finished_session = s)
+	workout.session_finished.connect(_on_workout_finished)
+	workout.history_requested.connect(open_ride_in_history)
 	workout.profile_updated.connect(func(p: Profile) -> void: repo.save(p))
 	_add_screen(AppState.Screen.WORKOUT, workout)
 	var dev: DevScreen = load(DEV_SCENE).instantiate()
@@ -363,6 +365,8 @@ func _build_free_ride_trainer_dialog() -> void:
 	_free_ride_trainer_dialog.name = "FreeRideTrainerDialog"
 	_free_ride_trainer_dialog.title = "ui.free_ride.no_trainer.title"
 	_free_ride_trainer_dialog.dialog_text = "ui.free_ride.no_trainer.text"
+	# 480 lp с переносом и кнопки справа — общий помощник диалогов (`ui.md` п. 6).
+	_free_ride_trainer_dialog.size = Vector2i(DialogLayout.WIDTH, 160)
 	_free_ride_trainer_dialog.dialog_autowrap = true
 	_free_ride_trainer_dialog.ok_button_text = "ui.free_ride.no_trainer.devices"
 	_free_ride_trainer_dialog.cancel_button_text = "ui.common.cancel"
@@ -372,6 +376,7 @@ func _build_free_ride_trainer_dialog() -> void:
 	_free_ride_trainer_dialog.confirmed.connect(_on_free_ride_devices_chosen)
 	_free_ride_trainer_dialog.canceled.connect(_on_free_ride_choice_canceled)
 	add_child(_free_ride_trainer_dialog)
+	DialogLayout.attach(_free_ride_trainer_dialog)
 
 
 ## «Эмулятор» в диалоге (только отладка, FRD-01 крит. 4): ожидающий заезд — на эмуляторе.
@@ -412,7 +417,15 @@ func _on_free_ride_finished(session: FreeRideSession) -> void:
 		free_ride_screen().show_saved_ride(ride_recorder.ride)
 
 
-## Открыть заезд в истории (итог свободной езды): список истории и карточка заезда.
+## Тренировка завершена: заезд уже начат `RideRecorder` (id известен с первой секунды), сводку он
+## пишет следом в том же сигнале. Итог получает id для «Открыть в истории».
+func _on_workout_finished(session: WorkoutSession) -> void:
+	last_finished_session = session
+	if ride_recorder != null and ride_recorder.session == session and ride_recorder.ride != null:
+		workout_screen().set_saved_ride_id(ride_recorder.ride_id())
+
+
+## Открыть заезд в истории (итог заезда): список истории и карточка заезда.
 func open_ride_in_history(ride_id: String) -> void:
 	if not app_state.navigate(AppState.Screen.HISTORY):
 		return
