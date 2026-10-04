@@ -142,11 +142,15 @@ func last_error() -> Error:
 func write(category: String, name: String, data: Dictionary = {}) -> bool:
 	if _file == null:
 		return false
+	# Категория и имя события фильтруются до сборки записи: из них же собирается пометка
+	# обрезанной записи.
+	var safe_category := _filter.redact(category)
+	var safe_name := _filter.redact(name)
 	var record := {
 		"t": _utc_now(),
 		"up_ms": Time.get_ticks_msec(),
-		"cat": category,
-		"ev": name,
+		"cat": safe_category,
+		"ev": safe_name,
 		"data": _filter.redact_value(data),
 	}
 	var line: String = _filter.redact(JSON.stringify(record, "", false))
@@ -157,8 +161,8 @@ func write(category: String, name: String, data: Dictionary = {}) -> bool:
 			return false
 	if bytes > max_file_bytes:
 		# Одна запись больше части — обрезается, чтобы предел объёма соблюдался.
-		line = JSON.stringify({"t": record["t"], "up_ms": record["up_ms"], "cat": category,
-				"ev": name, "truncated_bytes": bytes}, "", false)
+		line = _filter.redact(JSON.stringify({"t": record["t"], "up_ms": record["up_ms"],
+				"cat": safe_category, "ev": safe_name, "truncated_bytes": bytes}, "", false))
 		bytes = line.to_utf8_buffer().size() + 1
 	if not _file.store_line(line):
 		_last_error = _file.get_error()

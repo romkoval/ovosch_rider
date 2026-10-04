@@ -1199,7 +1199,12 @@ func _on_benchmark_requested(route_id: String, duration_sec: float) -> void:
 
 
 ## Нажатие на строку «Версия» (мышь или касание) — счётчик открытия строк разработчика.
+## Эмулированные движком события (щелчок из касания при `emulate_mouse_from_touch`, касание из
+## щелчка при `emulate_touch_from_mouse`) идут вслед за настоящими с `DEVICE_ID_EMULATION` и
+## не считаются: одно касание — одно нажатие.
 func _on_version_row_input(event: InputEvent) -> void:
+	if event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	var press := event as InputEventMouseButton
 	var touch := event as InputEventScreenTouch
 	if (press != null and press.pressed and press.button_index == MOUSE_BUTTON_LEFT) \

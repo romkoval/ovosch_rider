@@ -30,6 +30,8 @@ const DEFAULT_CADENCE_RPM: int = 85
 const DEFAULT_WARMUP_SEC: float = 2.0
 ## Длительности на выбор в настройках, с (20 мин — методика D3D-05 п.1).
 const DURATIONS_SEC: Array[int] = [60, 180, 300, 1200]
+## Отступ полосы прогресса от краёв безопасной зоны, lp.
+const EDGE_MARGIN: float = 16.0
 const RIDE_SCENE: PackedScene = preload("res://src/scene3d/ride_scene.tscn")
 
 var route_id: String = DEFAULT_ROUTE
@@ -44,6 +46,8 @@ var _container: SubViewportContainer
 var _viewport: SubViewport
 var _scene: RideScene = null
 var _probe: FrameStatsProbe
+var _top_bar: HBoxContainer
+var _result_center: CenterContainer
 var _progress_label: Label
 var _cancel_button: Button
 var _result_card: PanelContainer
@@ -66,9 +70,21 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	resized.connect(_fit_viewport)
-	_fit_viewport()
+	resized.connect(_on_resized)
+	var runtime := TouchTarget.default_runtime()
+	if runtime != null:
+		runtime.scale_changed.connect(_on_scale_changed)
+	_on_resized()
 	_render_texts()
+
+
+func _on_resized() -> void:
+	_fit_viewport()
+	_apply_safe_area()
+
+
+func _on_scale_changed(_scale: float) -> void:
+	_apply_safe_area()
 
 
 func _notification(what: int) -> void:
@@ -310,10 +326,8 @@ func _build() -> void:
 	top.name = "TopBar"
 	top.theme_type_variation = &"Row16"
 	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = 16.0
-	top.offset_right = -16.0
-	top.offset_top = 16.0
 	add_child(top)
+	_top_bar = top
 	_progress_label = Label.new()
 	_progress_label.name = "ProgressLabel"
 	_progress_label.theme_type_variation = &"H2Label"
@@ -330,6 +344,7 @@ func _build() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
+	_result_center = center
 	_result_card = PanelContainer.new()
 	_result_card.name = "ResultCard"
 	_result_card.theme_type_variation = &"HudPauseCard"
@@ -362,6 +377,23 @@ func _build() -> void:
 	for b: Button in [_close_button, _repeat_button]:
 		TouchTarget.attach(b, TouchTarget.Kind.BUTTON)
 	set_process(false)
+
+
+## Полоса прогресса и карточка итога — внутри безопасной зоны (`UiScale.safe_margins`,
+## UIX-05 крит. 2), полоса — ещё на `EDGE_MARGIN` от её краёв; 3D-картинка — на всё окно, как
+## на экранах заезда.
+func _apply_safe_area() -> void:
+	var safe := Vector4.ZERO
+	var runtime := TouchTarget.default_runtime()
+	if runtime != null:
+		safe = runtime.safe_margins()
+	_top_bar.offset_left = safe.x + EDGE_MARGIN
+	_top_bar.offset_right = -(safe.z + EDGE_MARGIN)
+	_top_bar.offset_top = safe.y + EDGE_MARGIN
+	_result_center.offset_left = safe.x
+	_result_center.offset_top = safe.y
+	_result_center.offset_right = -safe.z
+	_result_center.offset_bottom = -safe.w
 
 
 ## Вьюпорт 3D — в пикселях окна (как `FreeRideScreen._fit_viewport`): контейнер уменьшен
