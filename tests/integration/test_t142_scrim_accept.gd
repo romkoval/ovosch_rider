@@ -191,8 +191,10 @@ func test_every_menu_dialog_has_full_canvas_scrim_ru_en() -> void:
 
 func test_intervals_key_dialog_first_open_fits_canvas() -> void:
 	var all: Array[String] = []
-	for config in CONFIGS:
-		var started := _start(config, "ru")
+	for run in _key_dialog_runs():
+		var config: Dictionary = run[0]
+		var locale: String = run[1]
+		var started := _start(config, locale)
 		var viewport: SubViewport = started[0]
 		var main: AppMain = started[1]
 		var safe: Vector4 = SAFE_AREA_LP if bool(config.get("safe", false)) else Vector4.ZERO
@@ -205,9 +207,15 @@ func test_intervals_key_dialog_first_open_fits_canvas() -> void:
 		var canvas := Vector2(viewport.size)
 		var bounds := Rect2(Vector2(safe.x, safe.y), canvas - Vector2(safe.x + safe.z, safe.y + safe.w))
 		var rect := Rect2(Vector2(dialog.position), Vector2(dialog.size))
-		gut.p("%s: первое открытие — окно %s, холст %s" % [config["id"], rect, canvas])
+		gut.p("%s %s: первое открытие — окно %s, холст %s" % [config["id"], locale, rect, canvas])
 		if not bounds.grow(0.5).encloses(rect):
-			all.append("%s: форма ключа при первом открытии %s вне окна/безопасной зоны %s" % [config["id"], rect, bounds])
+			all.append("%s %s: форма ключа при первом открытии %s вне окна/безопасной зоны %s" % [config["id"], locale, rect, bounds])
+		# T-144 (повторная приёмка): кнопка подтверждения формы — внутри окна и видна.
+		var ok := (dialog as AcceptDialog).get_ok_button()
+		var ok_rect := Rect2(Vector2(dialog.position) + ok.get_global_rect().position, ok.size)
+		gut.p("%s %s: кнопка OK %s" % [config["id"], locale, ok_rect])
+		if not ok.is_visible_in_tree() or not bounds.grow(0.5).encloses(ok_rect):
+			all.append("%s %s: кнопка OK %s вне окна/безопасной зоны %s" % [config["id"], locale, ok_rect, bounds])
 		dialog.hide()
 		main.queue_free()
 		await wait_process_frames(2)
@@ -218,6 +226,16 @@ func test_intervals_key_dialog_first_open_fits_canvas() -> void:
 	for issue in all:
 		gut.p(issue)
 	assert_eq(all.size(), 0, "нарушений %d (первые: %s)" % [all.size(), ", ".join(all.slice(0, 6))])
+
+
+## Сочетания для первого открытия формы ключа: все размеры на ru и, повторная приёмка T-144,
+## en (другая длина подсказки — другой перенос).
+func _key_dialog_runs() -> Array:
+	var out: Array = []
+	for locale in ["ru", "en"]:
+		for config in CONFIGS:
+			out.append([config, locale])
+	return out
 
 
 # ---------------------------------------------------------------------------
