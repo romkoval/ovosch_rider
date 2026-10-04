@@ -113,6 +113,9 @@ var last_route_id: String = ""
 var last_workout_id: String = ""
 ## Крутизна SIM, % (REQ-FRD-05 крит. 1): доля уклона трассы, уходящая на станок.
 var sim_steepness_pct: int = DEFAULT_SIM_STEEPNESS_PCT
+## Внешность гонщика (REQ-AVT-01, T-108): значения слотов; у профиля без поля — по умолчанию.
+## Не валидируется и не отклоняет профиль: неверные слоты сбрасывает `RiderLook.from_dict`.
+var rider_look: RiderLook = RiderLook.new()
 
 
 ## Новый профиль с именем, свежим id и временем создания.
@@ -326,6 +329,7 @@ func to_dict() -> Dictionary:
 		"last_route_id": last_route_id,
 		"last_workout_id": last_workout_id,
 		"sim_steepness_pct": sim_steepness_pct,
+		"rider_look": rider_look.to_dict() if rider_look != null else RiderLook.new().to_dict(),
 	}
 
 
@@ -365,6 +369,8 @@ static func from_dict(data: Dictionary) -> Profile:
 	var steepness: Variant = data.get("sim_steepness_pct", null)
 	if steepness is int or steepness is float:
 		p.sim_steepness_pct = snap_sim_steepness(float(steepness))
+	# Профиль до T-108 (поля нет) — внешность по умолчанию; неверный слот — по умолчанию только он.
+	p.rider_look = RiderLook.from_dict(data.get("rider_look", null))
 	var pz: Variant = data.get("power_zone_bounds_pct", null)
 	if pz is Array:
 		p.power_zones = PowerZones.custom(p.ftp_w, _array_to_bounds(pz))

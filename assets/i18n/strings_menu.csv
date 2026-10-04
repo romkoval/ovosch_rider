@@ -116,3 +116,9 @@ ui.fps_bench.frames,Кадров: {frames} за {duration} с,Frames: {frames} i
 ui.fps_bench.render,{renderer} · окно {window} · 3D {viewport} · draw calls до {draw_calls},{renderer} · window {window} · 3D {viewport} · up to {draw_calls} draw calls
 ui.fps_bench.repeat,Повторить,Repeat
 ui.fps_bench.close,Закрыть,Close
+ui.menu.rider_look.preset.classic,Классика,Classic
+ui.menu.rider_look.preset.sunrise,Рассвет,Sunrise
+ui.menu.rider_look.preset.alpine,Альпы,Alpine
+ui.menu.rider_look.preset.sprint,Спринт,Sprint
+ui.menu.rider_look.preset.stealth,Стелс,Stealth
+ui.menu.rider_look.preset.volga_union,Волга Юнион,Volga Union
