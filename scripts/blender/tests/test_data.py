@@ -72,8 +72,51 @@ class DataVsSpec(unittest.TestCase):
             self.assertEqual(self.d["proportions"][key]["tol"], float(tol), key)
         self.assertEqual(self.d["proportions"]["torso_tilt_deg"]["range"],
                          [float(x) for x in re.findall(NUM, table_row(self.art, "Наклон корпуса")[1])[:2]])
-        self.assertIn("Рост —\n1.78 м у обеих", self.art)
-        self.assertEqual(self.d["height_m"]["value"], 1.78)
+
+    def test_height_and_head_vs_spec(self):
+        """Рост и голова (art-bible ред. 4.2): рост 1.75 ± 0.01, голова 0.155 × 0.22 × 0.20, центр
+        в rest (0, 1.45, −0.36) Godot ± 0.02, макушка 0.15 ± 0.01 вверх и 0.02–0.04 вперёд, ось
+        head в A-позе 20° ± 2.5°. Спека рабочей копии старше ред. 4.2 (рост 1.78, строк «Голова
+        (ред. 4.2)» нет) — сверка текста пропускается: числа ред. 4.2 сверяются после переноса
+        ветки на рабочую (там спека ред. 4.3)."""
+        row = table_row(self.art, "Голова: центр / размер")[1]
+        nums = [float(x.replace("−", "-")) for x in re.findall(r"[−-]?\d+(?:\.\d+)?", row)]
+        cx, cy, cz, tol, w, h, ln = nums[:7]
+        p = self.d["proportions"]
+        self.assertEqual(p["head_size_m"]["value"], [w, h, ln])
+        self.assertEqual(p["head_center_rest_m"]["value"], [-cx, cz, cy], "центр Godot (x, y, z) → Blender (−x, z, y)")
+        self.assertEqual(p["head_center_rest_m"]["tol"], tol)
+        m = re.search(r"Рост —\s+(\d+\.\d+) м у обеих", self.art)
+        self.assertIsNotNone(m, "строка «Рост — … м у обеих» в спеке")
+        if "| Макушка (ред. 4.2)" not in self.art:
+            self.skipTest("спека рабочей копии до ред. 4.2 (рост %s) — сверка ред. 4.2 после переноса ветки" % m.group(1))
+        self.assertEqual(self.d["height_m"]["value"], float(m.group(1)))
+        crown = norm(table_row(self.art, "Макушка (ред. 4.2)")[1])
+        self.assertIn("0.15 ± 0.01 м выше начала `head` и 0.02–0.04 м впереди", crown)
+        a = self.d["apose"]["crown_in_head_m"]
+        self.assertEqual((a["value"][0], a["tol"], a["forward_range"]), (0.15, 0.01, [0.02, 0.04]))
+        self.assertTrue(a["forward_range"][0] <= a["value"][1] <= a["forward_range"][1])
+        head = norm(table_row(self.art, "Голова (ред. 4.2)")[1])
+        self.assertIn("на 20° ± 2.5° от вертикали", head)
+        self.assertEqual(self.d["apose"]["head_tilt_deg"]["value"], 20.0)
+        self.assertEqual(self.d["apose"]["head_tilt_deg"]["range"], [17.5, 22.5])
+        hr = norm(table_row(self.art, "Рост (ред. 4.2)")[1])
+        self.assertIn("1.75 ± 0.01 м", hr)
+        self.assertEqual(self.d["height_m"]["tol"], 0.01)
+
+    def test_contract_json_apose_and_rest_row_from_pipeline_data(self):
+        """rider_contract.json (scripts/dev/rider_reference_pack.gd): A-поза — из pipeline_data.json
+        (один источник), строка rest таблицы контрольных поз — суставы rest контракта."""
+        ap = self.c.json["apose"]
+        self.assertEqual(ap["params"], {k: v["value"] for k, v in self.d["apose"].items() if isinstance(v, dict)},
+                         "A-поза в контракте ≠ pipeline_data.json: ./scripts/rider_artist_kit.sh")
+        self.assertEqual(ap["height_m"], self.d["height_m"]["value"])
+        rest = [r for r in self.c.json["control_poses_table"] if r.get("name") == "rest"]
+        self.assertEqual(len(rest), 1)
+        r = rest[0]
+        for k, bone in (("cleat", "cleat.R"), ("ankle", "foot.R"), ("knee", "shin.R")):
+            self.assertLess((Vector(r[k]) - self.c.head(bone)).length, 1e-6, k)
+        self.assertEqual((r["knee_deg"], r["foot_deg"]), (111.0, -8.0), "бриф 5.4, строка rest")
 
     def test_region_boundaries_in_spec_text(self):
         r = self.d["regions"]
@@ -156,6 +199,8 @@ class DataVsContract(unittest.TestCase):
         poses = {p["phi_deg"]: p for p in self.c.json["control_poses"]}
         self.assertEqual(sorted(poses), list(range(0, 360, 15)))
         for row in self.c.json["control_poses_table"]:
+            if row["phi_deg"] is None:
+                continue  # строка rest — test_contract_json_apose_and_rest_row_from_pipeline_data
             got = poses[row["phi_deg"]]["R"]
             for k in ("cleat", "ankle", "knee"):
                 self.assertLess((Vector(got[k]) - Vector(row[k])).length, 0.003, "φ %d %s" % (row["phi_deg"], k))

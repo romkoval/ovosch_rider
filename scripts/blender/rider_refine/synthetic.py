@@ -40,10 +40,24 @@ COLORS = {
 LIGHT = Vector((0.3, -0.5, 0.8)).normalized()
 
 
+# Голова — «чужая» по размеру и месту (шаг 3 приводит к спеке): центр эллипсоида в системе
+# головы (в A-позе взгляд горизонтально — это оси мира) на (вверх, вперёд) от начала head и
+# полуоси (вбок, вперёд-назад, вверх) без носа. Спека: центр габарита 0.04 / 0.04, размер
+# 0.155 × 0.22 × 0.20 (art-bible ред. 4.2) — здесь голова ниже, короче и длиннее.
+HEAD_CENTER = (0.03, 0.035)
+HEAD_HALF = (0.074, 0.096, 0.10)
+
+
+def head_center(j):
+    up, ahead = HEAD_CENTER
+    return j["head"][0] + Vector((0.0, -ahead, up))
+
+
 def joints(contract):
+    """Суставы A-позы синтетики и макушка — верхняя точка эллипсоида головы."""
     params = contract.apose_params(**APOSE)
     j = contract.apose_joints(params, SCALES)
-    crown = contract.crown(j, params) + (j["head"][1] - j["head"][0]).normalized() * 0.012
+    crown = head_center(j) + Vector((0.0, 0.0, HEAD_HALF[2]))
     return j, crown
 
 
@@ -113,9 +127,9 @@ def body_parts(bm, j, crown, fused_legs=False):
     add_ellipsoid(bm, hipmid + Vector((0, 0.04, -0.03)), (0.17, 0.12, 0.1))
     # Шея и голова, нос (перед — −Y).
     add_tube(bm, [neck - Vector((0, 0, 0.02)), head + Vector((0, 0, 0.02))], [(0.062, 0.062), (0.06, 0.06)])
-    hc = head.lerp(crown, 0.45) + Vector((0, -0.02, 0))
-    add_ellipsoid(bm, hc, (0.078, 0.1, (crown - head).length * 0.58))
-    add_ellipsoid(bm, hc + Vector((0, -0.1, -0.01)), (0.012, 0.02, 0.022))
+    hc = head_center(j)
+    add_ellipsoid(bm, hc, HEAD_HALF)
+    add_ellipsoid(bm, hc + Vector((0, -HEAD_HALF[1] - 0.005, -0.01)), (0.012, 0.02, 0.022))
     # Руки: плечо (дельта), предплечье, «варежка».
     for s in (".L", ".R"):
         sh, el, wr, grip = H["upperarm" + s], H["forearm" + s], H["hand" + s], H["grip" + s]
@@ -171,7 +185,7 @@ def _part_color(p, n, j, crown):
             if d < best:
                 best, part = d, (a, t)
     torso_d = min((p - H[k]).length for k in ("pelvis", "spine", "chest", "neck"))
-    head_d = (p - H["head"].lerp(crown, 0.45)).length
+    head_d = (p - head_center(j)).length
     if head_d < 0.13 and p.z > H["neck"].z + 0.03:
         back = p.y - H["head"].y
         return COLORS["hair"] if (p.z > H["head"].z + 0.09 or (back > 0.03 and p.z > H["head"].z)) else COLORS["skin"]

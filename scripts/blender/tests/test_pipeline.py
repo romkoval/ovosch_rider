@@ -3,6 +3,7 @@
 сантиметры и испорченные оси, фикстура `tests/fixtures/rider_synthetic/rider_synthetic.glb` для GUT."""
 
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -12,7 +13,7 @@ import bpy
 import numpy as np
 from mathutils import Vector
 
-from rider_refine import common, glbcheck, meshops, synthetic, weights
+from rider_refine import common, glbcheck, meshops, proportions, steps, synthetic, weights
 from rider_refine.contract import Contract
 from rider_refine.steps import Run
 
@@ -83,12 +84,35 @@ class Pipeline(unittest.TestCase):
     def test_step3_proportions(self):
         objs = self.blend(3)
         co = meshops.verts_np(objs["scan"].data)
-        self.assertAlmostEqual(float(co[:, 2].max()), 1.78, delta=0.02, msg="рост контракта")
+        h = float(co[:, 2].max())
+        self.assertTrue(1.74 <= h <= 1.76, "рост (верх сетки головы над z = 0) %.4f — ред. 4.2: 1.74–1.76" % h)
         rep = self.report()["03_proportions"]["metrics"]
         fig = self.c.data["figures"]["m"]
-        for k in ("thigh_at_shorts_d_m", "calf_d_m", "upperarm_d_m", "pelvis_outer_m", "neck_d_m"):
+        for k in ("thigh_at_shorts_d_m", "calf_d_m", "upperarm_d_m", "pelvis_outer_m", "neck_d_m", "shoulders_outer_m",
+                  "waist_width_m"):
             lo, hi = fig[k]
             self.assertTrue(lo - 0.01 <= rep[k] <= hi + 0.01, "%s = %s (таблица m %s)" % (k, rep[k], fig[k]))
+
+    def test_step3_head_rev42(self):
+        """Голова на выходе шага 3 (art-bible «A-поза контрактного скелета», ред. 4.2, [авто]):
+        макушка (верх сетки головы) 0.14–0.16 м над началом head и 0.02–0.04 м впереди; высота
+        «подбородок — макушка» 0.21–0.23; ширина и длина — таблица ± 0.01; голова не по оси кости."""
+        objs = self.blend(3)
+        co = meshops.verts_np(objs["scan"].data)
+        state = json.loads(bpy.context.scene["rr_state"])
+        j = {k: Vector(v) for k, v in state["landmarks"].items()}
+        m = proportions.head_measures(co, j)
+        self.assertTrue(0.14 <= m["crown_up_m"] <= 0.16, "макушка над началом head %.4f" % m["crown_up_m"])
+        self.assertTrue(0.02 <= m["crown_forward_m"] <= 0.04, "макушка впереди начала head %.4f" % m["crown_forward_m"])
+        self.assertTrue(0.21 <= m["head_height_m"] <= 0.23, "высота головы %.4f" % m["head_height_m"])
+        w, _, ln = self.c.data["proportions"]["head_size_m"]["value"]
+        self.assertAlmostEqual(m["head_width_m"], w, delta=0.01)
+        self.assertAlmostEqual(m["head_length_m"], ln, delta=0.01)
+        # Верх сетки головы — вершина сетки над z = 0, а начало head — на 1.596 (длины контракта).
+        self.assertAlmostEqual(j["head"].z, 1.596, delta=0.002)
+        self.assertAlmostEqual(float(co[:, 2].max()) - j["head"].z, m["crown_up_m"], delta=0.005)
+        tilt = math.degrees(math.atan2(-(j["crown"] - j["head"]).y, (j["crown"] - j["head"]).z))
+        self.assertLess(tilt, 17.5, "макушка спеки не на оси кости head (ось — 20° вперёд)")
 
     def test_step4_base_mesh(self):
         objs = self.blend(4)
@@ -113,6 +137,21 @@ class Pipeline(unittest.TestCase):
         self.assertTrue(lo - 1e-4 <= s.z - s_top <= hi, "S над седлом %.4f" % (s.z - s_top))
         self.assertNotIn("scan", objs)
         self.assertNotIn("fit_rig", objs)
+
+    def test_step5_head_in_rest_rev42(self):
+        """Голова на выходе шага 5 (rest; ред. 4.2, [авто]): центр габарита сетки головы без
+        волос (0, 1.45, −0.36) ± 0.02 Godot; ось «вверх» головы наклонена вперёд на 10–15°."""
+        objs = self.blend(5)
+        box = proportions.head_box(steps.head_verts(objs["body_m"]), self.c.rest_head_joints())
+        self.assertIsNotNone(box, "грани головы с меткой звена")
+        hh, q, _ = proportions.head_system(self.c.rest_head_joints())
+        c = Vector(hh + q @ box[0])
+        godot = Vector((-c.x, c.z, c.y))
+        self.assertLess((godot - Vector((0.0, 1.45, -0.36))).length, 0.02, "центр головы в rest (Godot) %s" % godot)
+        tilt = self.c.head_up_rest_tilt_deg()
+        self.assertTrue(10.0 <= tilt <= 15.0, "ось «вверх» головы в rest %.2f°" % tilt)
+        rep = self.report()["05_rest"]["metrics"]
+        self.assertLessEqual(rep["head_center_rest_err_m"], 0.02)
 
     def test_step7_weights(self):
         objs = self.blend(7)
@@ -202,6 +241,58 @@ class Pipeline(unittest.TestCase):
                 run(self.raw[v], os.path.join(self.tmp, v), 1, 1)
             self.assertEqual(ctx.exception.step, 1, v)
             self.assertIn(what, ctx.exception.what, v)
+
+    def _copy_with_landmarks(self, name, text=None, src=None):
+        d = os.path.join(self.tmp, name)
+        os.makedirs(d, exist_ok=True)
+        raw = os.path.join(d, name + ".glb")
+        shutil.copy(src or self.raw["m"], raw)
+        lm = os.path.splitext(self.raw["m"])[0] + ".landmarks.json"
+        if text is None:
+            shutil.copy(lm, os.path.join(d, name + ".landmarks.json"))
+        else:
+            open(os.path.join(d, name + ".landmarks.json"), "w").write(text)
+        return raw
+
+    def test_bad_landmarks_and_multi_object_fail_at_step1(self):
+        """Битый JSON, NaN, перепутанные .L/.R, несколько сеток в файле — StepError шага 1 с
+        понятным текстом (не трейсбек, не разворот на 180°, не «ноги слиплись»)."""
+        lm = common.load_json(os.path.splitext(self.raw["m"])[0] + ".landmarks.json")
+        swapped = {"joints": {n.replace(".L", ".#").replace(".R", ".L").replace(".#", ".R"): v for n, v in lm["joints"].items()}}
+        nan = {"joints": dict(lm["joints"], **{"thigh.L": [float("nan"), 0.0, 1.0]})}
+        cases = [("badjson", "{joints: [oops", None, "JSON"), ("nanlm", json.dumps(nan), None, "thigh.L"),
+                 ("swapped", json.dumps(swapped), None, ".L/.R"), ("multi", None, common.BIKE_GLB, "сеток")]
+        for name, text, src, what in cases:
+            raw = self._copy_with_landmarks(name, text, src)
+            with self.assertRaises(common.StepError) as ctx:
+                run(raw, os.path.join(self.tmp, name + "_w"), 1, 1)
+            self.assertEqual(ctx.exception.step, 1, name)
+            self.assertIn(what, ctx.exception.what, name)
+            self.assertNotIn("ноги слиплись", ctx.exception.what, name)
+
+    def test_single_mesh_under_empty_root_passes_step1(self):
+        """Единственная сетка — ребёнок пустого корня («world», «RootNode»): обычный вход."""
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        bpy.ops.import_scene.gltf(filepath=self.raw["m"])
+        mesh = [o for o in bpy.context.scene.objects if o.type == "MESH"][0]
+        root = bpy.data.objects.new("world", None)
+        bpy.context.scene.collection.objects.link(root)
+        root.location = (0.0, 0.0, 0.0)
+        mesh.parent = root
+        raw = os.path.join(self.tmp, "parented", "parented.glb")
+        os.makedirs(os.path.dirname(raw), exist_ok=True)
+        bpy.ops.export_scene.gltf(filepath=raw, export_format="GLB")
+        shutil.copy(os.path.splitext(self.raw["m"])[0] + ".landmarks.json", os.path.join(os.path.dirname(raw), "parented.landmarks.json"))
+        run(raw, os.path.join(self.tmp, "parented_w"), 1, 1)
+
+    def test_decimate_reaches_rider_glb(self):
+        """Запасной путь шага 4 (`--retopo decimate`) доходит до rider.glb (метки звена для шага 8)."""
+        work = os.path.join(self.tmp, "decimate")
+        r = Run(self.raw["m"], work, retopo="decimate")
+        for n, _, _ in common.STEPS:
+            getattr(r, "step%d" % n)()
+        _, errors = glbcheck.check(os.path.join(work, "rider.glb"), self.c)
+        self.assertEqual(errors, [])
 
     def test_missing_landmarks_fail_at_step3(self):
         raw = os.path.join(self.tmp, "nolm", "scan.glb")

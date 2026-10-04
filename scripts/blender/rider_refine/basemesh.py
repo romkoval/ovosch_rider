@@ -16,11 +16,22 @@ from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
 from . import meshops
-from .proportions import frame, owners, ring, segments, target_joints
+from .proportions import frame, head_system, owners, ring, segments, spec_center_local, target_joints
 
 PROJECT_LIMIT_M = 0.06
-# Базовая сетка до рёбер регионов (≈ 750 треугольников на сечения) — бюджет body_m 8000.
-BASE_BUDGET = 7200
+# Базовая сетка до рёбер регионов (≈ 850 треугольников на сечения, с манжетами перчаток) — бюджет body_m 8000.
+BASE_BUDGET = 7050
+
+
+# Узлы графа головы: ниже и выше центра габарита по оси «вверх» головы, м.
+HEAD_NODE_BELOW_M = 0.07
+HEAD_NODE_ABOVE_M = 0.09
+
+
+def head_axis(T):
+    """Центр габарита головы спеки (мир) и ось «вверх» системы головы по суставам `T`."""
+    h, q, k = head_system(T)
+    return Vector(h + q @ (spec_center_local() * k)), Vector(q[:, 2])
 
 
 def skeleton(T):
@@ -39,8 +50,11 @@ def skeleton(T):
     sp = on("spine", "spine", "chest", 0.0)
     ch = on("chest", "chest", "neck", 0.0)
     sb = on("chest", "chest", "neck", 0.92)
-    hd = on("head", "head", "crown", 0.1)
-    ht = on("head", "head", "crown", 0.9)
+    # Голова — по оси «вверх» через центр габарита спеки (0.04 вверх и вперёд от начала head):
+    # ось «начало head → макушка» идёт по затылку, лицо и подбородок до неё не дотягиваются.
+    hc, up = head_axis(T)
+    hd = add(hc - up * HEAD_NODE_BELOW_M, "head", 0.1)
+    ht = add(hc + up * HEAD_NODE_ABOVE_M, "head", 0.9)
     chain = [p0, sp, ch, sb, hd, ht]
     edges += list(zip(chain[:-1], chain[1:]))
     for s in (".L", ".R"):
@@ -63,7 +77,22 @@ def radii(verts, scan_co, T):
     names = [s[0] for s in segs]
     d, t = owners(scan_co, T, segs)
     out = []
+    hc, _ = head_axis(T)
+    hk = names.index("head")
+    _, hq, _ = head_system(T)
     for p, bone, t0 in verts:
+        if bone == "head":
+            # Сечение головы — в её системе, от оси через центр габарита.
+            loc = (scan_co - np.array(hc)) @ hq
+            pz = float((np.array(p) - np.array(hc)) @ hq[:, 2])
+            sel = (d.argmin(axis=1) == hk) & (np.abs(loc[:, 2] - pz) < 0.015)
+            loc = loc[sel][:, :2]
+            if len(loc) < 6:
+                out.append((0.04, 0.04))
+                continue
+            out.append((max(float(np.percentile(np.abs(loc[:, 0]), 90)), 0.02) * 0.9,
+                        max(float(np.percentile(np.abs(loc[:, 1]), 90)), 0.02) * 0.9))
+            continue
         loc = ring(scan_co, d, t, T, segs, bone, min(max(t0, 0.0), 1.0), slab=0.015)
         if bone in ("pelvis", "spine", "chest", "neck", "head"):
             # Корпус: соседние части (руки) не отсечь по радиусу — берём полосу целиком.
@@ -160,6 +189,7 @@ def cut_planes(contract, T):
         ua = L("upperarm" + s, "forearm" + s)
         sl = sum(r["sleeve_end_t"]["range"]) / 2
         out += [("upperarm" + s, sl, "sleeve_end"), ("upperarm" + s, sl - r["jersey_cuff_m"]["value"] / ua, "jersey_cuff")]
+        out.append(("forearm" + s, r["glove_cuff_t"]["value"], "glove_cuff"))
     ch = L("chest", "neck")
     band = sum(r["jersey_band_m"]["range"]) / 2
     c = r["jersey_band_center_t"]["value"]
@@ -284,8 +314,10 @@ def quality(obj, scan_obj, data):
             "dist_to_scan_mean_mm": round(float(dist.mean()) * 1000, 2), "dist_to_scan_p95_mm": round(float(np.percentile(dist, 95)) * 1000, 2)}, warns
 
 
-def decimate(scan_obj, data):
-    """Запасной путь: децимация скана до 95 % бюджета (кольца сгиба — вручную, T-106b′)."""
+def decimate(scan_obj, contract, data):
+    """Запасной путь: децимация скана до 95 % бюджета (кольца сгиба — вручную, T-106b′); метки
+    звена у граней для шага 8 — как у проекции (рёбер по границам регионов нет: граница идёт
+    по ближайшим рёбрам скана)."""
     budget = data["budgets"]["tris"]["body_m"]
     me = scan_obj.data.copy()
     obj = meshops.mesh_object("body_m", me)
@@ -300,6 +332,7 @@ def decimate(scan_obj, data):
     new.name = "body_m"
     for p in new.polygons:
         p.use_smooth = True
+    tag_faces(obj, target_joints(contract))
     metrics, warns = quality(obj, scan_obj, data)
     warns.append("децимация: колец сгиба нет, деформация хуже (запасной путь)")
     return obj, metrics, warns

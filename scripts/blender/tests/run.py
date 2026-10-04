@@ -30,7 +30,7 @@ def main():
     suite = loader.discover(HERE, pattern="test_*.py", top_level_dir=HERE)
     res = unittest.TextTestRunner(verbosity=2, stream=sys.stdout).run(suite)
     print("ИТОГ: %d тестов, ошибок %d, падений %d, пропущено %d" % (res.testsRun, len(res.errors), len(res.failures), len(res.skipped)))
-    sys.exit(0 if res.wasSuccessful() else 1)
+    return 0 if res.wasSuccessful() else 1
 
 
-main()
+common.run_main(main)

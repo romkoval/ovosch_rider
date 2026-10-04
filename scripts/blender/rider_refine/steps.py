@@ -66,8 +66,10 @@ class Run:
 
     def step2(self):
         self.load(1)
-        obj, _ = scan.import_raw(self.raw, 2)
-        lm, _ = scan.find_landmarks(self.raw, self.landmarks_arg)
+        obj, objects = scan.import_raw(self.raw, 2)
+        if len(objects) > 1:
+            raise common.StepError(2, os.path.basename(self.raw), multi_object_error(objects))
+        lm, _ = scan.find_landmarks(self.raw, self.landmarks_arg, 2)
         warns = []
         me = obj.data
         image = meshops.image_of(obj)
@@ -80,6 +82,10 @@ class Run:
         rot, how, w = scan.orient(co, lm)
         warns += w
         co = co @ np.array(rot).T
+        if lm:
+            err = scan.facing_error(co, {n: rot @ v for n, v in lm.items()})
+            if err:
+                raise common.StepError(2, "landmarks.json", err)
         height = co[:, 2].max() - co[:, 2].min()
         unit, k = scan.units(height, self.data, 2, obj.name)
         xf = Matrix.Diagonal((k, k, k, 1.0)) @ rot.to_4x4()
@@ -157,7 +163,7 @@ class Run:
         metrics, warns, target = proportions.fit(obj, lm, self.c)
         self.set_lm(target, "landmarks")
         self.save(3)
-        self.report.step(3, "OK" if not warns else "WARN", "длины звеньев — контракт, обхваты — таблица m, A-поза контракта (рост 1.78)", metrics, warns)
+        self.report.step(3, "OK" if not warns else "WARN", "длины звеньев — контракт, обхваты — таблица m, голова — размер и центр спеки, A-поза контракта (рост %.2f)" % self.data["height_m"]["value"], metrics, warns)
 
     # --- шаг 4 ---
 
@@ -165,10 +171,17 @@ class Run:
         self.load(3)
         scan_obj = bpy.data.objects["scan"]
         if self.retopo == "decimate":
-            body, metrics, warns = basemesh.decimate(scan_obj, self.data)
+            body, metrics, warns = basemesh.decimate(scan_obj, self.c, self.data)
         else:
             body, metrics, warns = basemesh.project(scan_obj, self.c, self.data)
         basemesh.transfer_hint(scan_obj, body)
+        from .proportions import target_joints
+        metrics.update(regions.cut_hairline(body, self.c, target_joints(self.c)))
+        basemesh.transfer_hint(scan_obj, body)
+        tris = meshops.triangle_count(body.data)
+        metrics["body_tris"] = tris
+        if tris > self.data["budgets"]["tris"]["body_m"]:
+            warns.append("body_m: %d треугольников > бюджета %d (с кольцом линии волос)" % (tris, self.data["budgets"]["tris"]["body_m"]))
         scan_obj.hide_set(True)
         scan_obj.hide_render = True
         self.state["retopo"] = self.retopo
@@ -183,6 +196,9 @@ class Run:
         metrics, warns = weights.repose_to_rest(body, self.c)
         seat = weights.seat_on_saddle(body, self.c)
         metrics.update(seat)
+        hm, hw = rest_head_check(body, self.c)
+        metrics.update(hm)
+        warns += hw
         for name in ("scan", "raw_hair", "raw_shoes"):
             o = bpy.data.objects.get(name)
             if o is not None:
@@ -237,8 +253,14 @@ def check_raw(path, landmarks_override, data):
     """Шаг 1: метрики сырья (`rider-photo-guide.md` §6 п.5). Итог: метрики, предупреждения,
     ошибки (ошибка — сырьё не годится, конвейер стоп)."""
     errors, warns = [], []
-    obj, n_objects = scan.import_raw(path, 1)
-    lm, lm_file = scan.find_landmarks(path, landmarks_override)
+    obj, objects = scan.import_raw(path, 1)
+    n_objects = len(objects)
+    if n_objects > 1:
+        return {"objects": n_objects}, warns, [multi_object_error(objects)]
+    try:
+        lm, lm_file = scan.find_landmarks(path, landmarks_override, 1)
+    except common.StepError as e:
+        return {"objects": n_objects}, warns, [e.what]
     me = obj.data
     co = meshops.verts_np(me)
     tris = meshops.tris_np(me)
@@ -250,6 +272,10 @@ def check_raw(path, landmarks_override, data):
         unit, k = scan.units(height, data, 1, obj.name)
     except common.StepError as e:
         return {"height_file_units": height}, warns, [e.what]
+    if lm:
+        err = scan.facing_error(co, {n: rot @ v for n, v in lm.items()})
+        if err:
+            errors.append(err)
     co = co * k
     if lm:
         lm = {n: (rot @ v) * k for n, v in lm.items()}
@@ -276,10 +302,16 @@ def check_raw(path, landmarks_override, data):
         errors.append("несвязные куски размером с фигуру: %d — в файле не одна фигура" % (kinds.count("figure") + 1))
     if image is None:
         errors.append("нет текстуры цвета — регионы кожи, перчаток, волос не по чему подсказать (скачайте GLB с текстурой)")
-    if legs < 2:
-        errors.append("ноги слиплись: на середине бедра %d контур(а) вместо 2" % legs)
-    if arms < 3:
-        errors.append("руки срослись с корпусом: на уровне локтя %d контур(а) вместо 3" % arms)
+    if kinds.count("figure"):
+        pass  # сечения у двух фигур ни о чём не говорят: ошибка «не одна фигура» выше
+    elif legs == 0 or arms == 0:
+        errors.append("сечение %s не задевает фигуру (0 контуров) — ориентиры не на этой фигуре или не в её единицах"
+                      % ("на середине бедра" if legs == 0 else "на уровне локтя"))
+    else:
+        if legs < 2:
+            errors.append("ноги слиплись: на середине бедра %d контур(а) вместо 2" % legs)
+        if arms < 3:
+            errors.append("руки срослись с корпусом: на уровне локтя %d контур(а) вместо 3" % arms)
     if kinds.count("fragment"):
         warns.append("несвязные мелкие куски: %d (шаг 2 уберёт)" % kinds.count("fragment"))
     if kinds.count("other"):
@@ -294,6 +326,62 @@ def check_raw(path, landmarks_override, data):
     if unit != "m":
         warns.append("единицы файла — %s (шаг 2 переведёт в метры)" % unit)
     return metrics, warns, errors
+
+
+def head_verts(body):
+    """Координаты вершин граней головы (метка звена `seg_bone` шага 4; волос отдельно ещё нет —
+    сетка головы без волос)."""
+    from .proportions import segments
+    me = body.data
+    a = me.attributes.get("seg_bone")
+    co = meshops.verts_np(me)
+    if a is None:
+        return co[:0]
+    sb = np.empty(len(me.polygons), dtype=np.int64)
+    a.data.foreach_get("value", sb)
+    k = [s[0] for s in segments()].index("head")
+    idx = sorted({v for p in me.polygons if sb[p.index] == k for v in p.vertices})
+    return co[idx]
+
+
+def rest_head_check(body, contract):
+    """Голова на выходе шага 5 (art-bible «A-поза контрактного скелета», ред. 4.2, критерии
+    [авто]): центр габарита сетки головы в rest — (0, 1.45, −0.36) ± 0.02 Godot = (0, −0.36,
+    1.45) Blender; ось «вверх» головы наклонена вперёд на 10–15°. Итог: метрики, предупреждения."""
+    from . import proportions
+    p = contract.data["proportions"]
+    joints = contract.rest_head_joints()
+    box = proportions.head_box(head_verts(body), joints)
+    c = None
+    if box is not None:
+        h, q, _ = proportions.head_system(joints)
+        c = h + q @ box[0]
+    tilt = contract.head_up_rest_tilt_deg()
+    metrics = {"head_up_rest_tilt_deg": round(tilt, 2)}
+    warns = []
+    lo, hi = p["head_up_rest_deg"]["range"]
+    if not lo <= tilt <= hi:
+        warns.append("голова в rest: ось «вверх» наклонена на %.1f° (спека %.0f–%.0f°)" % (tilt, lo, hi))
+    if c is None:
+        warns.append("голова в rest: нет граней головы (метки звена шага 4) — центр не измерен")
+        return metrics, warns
+    want = Vector(p["head_center_rest_m"]["value"])
+    err = (Vector(c) - want).length
+    metrics.update({"head_center_rest_m": [round(float(x), 4) for x in c], "head_center_rest_err_m": round(err, 4)})
+    if err > p["head_center_rest_m"]["tol"]:
+        warns.append("голова в rest: центр (%.3f, %.3f, %.3f) — от спеки (0, −0.36, 1.45) на %.3f м (допуск %.2f)"
+                     % (c[0], c[1], c[2], err, p["head_center_rest_m"]["tol"]))
+    return metrics, warns
+
+
+def multi_object_error(names):
+    """Сырьё из нескольких сеток: art-bible «Вариант Г», шаг 0 — вход «всё слито в одну сетку»,
+    шаг 1 — «один исходный файл тела». Части не склеиваются молча: по файлу не понять, части ли
+    это одной фигуры (тело + волосы) или сцена (фигура, подставка, велосипед)."""
+    shown = ", ".join(names[:6]) + (" …" if len(names) > 6 else "")
+    return ("в файле %d сеток (%s), ждём одну сетку фигуры: если это части одной фигуры — объедините их "
+            "в одну сетку (Blender: выделить, Ctrl+J) и экспортируйте заново; лишнее (пол, подставка, "
+            "велосипед) — удалите" % (len(names), shown))
 
 
 def raw_score(metrics, warns, errors):

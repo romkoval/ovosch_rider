@@ -40,4 +40,4 @@ def main():
         print("build_rig: %s" % a.glb)
 
 
-main()
+common.run_main(main)

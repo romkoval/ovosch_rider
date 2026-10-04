@@ -8,12 +8,20 @@ import bpy
 from mathutils import Vector
 
 
-def setup(width=640, height=360, samples=12):
+def setup(width=640, height=360, samples=12, denoise=False):
+    """Cycles на CPU. `denoise` — OpenImageDenoise, если он есть в сборке (иначе шум остаётся:
+    тогда больше сэмплов); кадры для отчёта, детерминизм кадров не требуется."""
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     sc.cycles.device = "CPU"
     sc.cycles.samples = samples
     sc.cycles.use_denoising = False
+    if denoise and _has_oidn():
+        sc.cycles.use_denoising = True
+        sc.cycles.denoiser = "OPENIMAGEDENOISE"
+        sc.cycles.denoising_input_passes = "RGB_ALBEDO_NORMAL"
+    elif denoise:
+        sc.cycles.samples = max(samples, 64)
     sc.render.resolution_x = width
     sc.render.resolution_y = height
     sc.render.resolution_percentage = 100
@@ -29,6 +37,14 @@ def setup(width=640, height=360, samples=12):
         sun.data.energy = 3.0
         sun.rotation_euler = (math.radians(50), math.radians(10), math.radians(-30))
         bpy.context.scene.collection.objects.link(sun)
+
+
+def _has_oidn():
+    try:
+        import _cycles
+        return bool(getattr(_cycles, "with_openimagedenoise", False))
+    except ImportError:
+        return False
 
 
 def camera(name, loc, target, fov_deg):

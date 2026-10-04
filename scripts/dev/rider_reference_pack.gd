@@ -10,6 +10,7 @@ extends RefCounted
 ## - `rider_atlas_preview.png`, `rider_atlas_id.png` — атласы регионов (`RiderRegions`);
 ## - `rider_contract.json` — машиночитаемый контракт для конвейера доводки в Blender (T-143):
 ##   кости (начало, окончание, оси, Deform), контрольные позы ног φ 0…345° шаг 15° (бриф 5.4),
+##   строка rest таблицы контрольных поз, A-поза (из `scripts/blender/pipeline_data.json`),
 ##   покачивание, точки и размеры велосипеда, ракурсы, регионы — в координатах Blender.
 ## Оси: glTF как у экспорта Blender «+Y Up» из координат брифа — модель смотрит в +Z
 ## (`RiderRig.to_gltf`, поворот на 180° вокруг Y); при импорте в Blender (+Y Up → Z вверх)
@@ -42,6 +43,8 @@ const GENERATOR: String = "ovosch-rider scripts/dev/rider_reference_pack.gd (God
 ## Имя объекта арматуры в glTF (бриф раздел 12): корень сцены — узел, к которому экспорт
 ## Godot крепит кости `Skeleton3D`; Blender делает из него объект арматуры.
 const RIG_NAME: String = "rider_rig"
+## Данные конвейера доводки (T-143): A-поза в контракте — из этого файла (один источник).
+const PIPELINE_DATA: String = "res://scripts/blender/pipeline_data.json"
 const JOINT_RADIUS_M: float = 0.012
 const SOCKET_RADIUS_M: float = 0.008
 
@@ -368,6 +371,7 @@ static func contract_json() -> PackedByteArray:
 	for row in RiderRig.CONTROL_POSES:
 		table.append({"phi_deg": row[0], "cleat": _bl(row[1]), "ankle": _bl(row[2]), "knee": _bl(row[3]),
 			"knee_deg": row[4], "foot_deg": row[5]})
+	table.append(rest_pose_row())
 	var poses: Array = []
 	for phi in range(0, 360, POSE_STEP_DEG):
 		poses.append({"phi_deg": phi, "R": leg_pose(float(phi), false), "L": leg_pose(float(phi), true)})
@@ -404,6 +408,7 @@ static func contract_json() -> PackedByteArray:
 		"control_poses_table": table,
 		"control_poses_step_deg": POSE_STEP_DEG,
 		"control_poses": poses,
+		"apose": apose(),
 		"sway": SWAY,
 		"views": views,
 		"regions": {
@@ -414,6 +419,40 @@ static func contract_json() -> PackedByteArray:
 		},
 	}
 	return (JSON.stringify(data, "  ", false) + "\n").to_utf8_buffer()
+
+
+## Строка rest таблицы «Контрольные позы» (арт-библия «Вход конвейера из пакета», бриф 5.4):
+## правая нога в rest контракта — суставы `RiderRig`, шатун на `REST_CRANK_RAD`, угол стопы rest.
+## `phi_deg` = null: rest — отдельная строка, не точка кривой φ (у неё свой угол стопы); углы —
+## до градуса, как в таблице брифа.
+static func rest_pose_row() -> Dictionary:
+	var hip: Vector3 = RiderRig.head("thigh.R")
+	var knee: Vector3 = RiderRig.head("shin.R")
+	var ankle: Vector3 = RiderRig.head("foot.R")
+	return {"name": "rest", "phi_deg": null, "crank_deg": _r(rad_to_deg(RiderRig.REST_CRANK_RAD)),
+		"cleat": _bl(RiderRig.head("cleat.R")), "ankle": _bl(ankle), "knee": _bl(knee),
+		"knee_deg": snappedf(rad_to_deg((hip - knee).angle_to(ankle - knee)), 1.0),
+		"foot_deg": snappedf(rad_to_deg(RiderRig.rest_sole_pitch_rad()), 1.0)}
+
+
+## A-поза контрактного скелета (арт-библия «A-поза контрактного скелета» ред. 4.2) — из того же
+## источника, что у конвейера доводки: раздел «apose» и рост `scripts/blender/pipeline_data.json`
+## (значения без допусков и ссылок; суставы A-позы строит конвейер по этим числам). Нет файла —
+## пустой словарь (сборка пакета покажет расхождение тестом).
+static func apose() -> Dictionary:
+	var f := FileAccess.open(PIPELINE_DATA, FileAccess.READ)
+	if f == null:
+		return {}
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if not (data is Dictionary) or not data.has("apose"):
+		return {}
+	var params: Dictionary = {}
+	var src: Dictionary = data["apose"]
+	for k in src:
+		if src[k] is Dictionary and src[k].has("value"):
+			params[k] = src[k]["value"]
+	return {"source": "scripts/blender/pipeline_data.json «apose», «height_m»", "ref": src.get("ref", ""),
+		"height_m": data["height_m"]["value"], "params": params}
 
 
 ## Положение ноги при угле шатуна правой ноги `phi_deg` (левая — φ + 180°), система гонщика:

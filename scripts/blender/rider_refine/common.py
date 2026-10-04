@@ -38,6 +38,35 @@ class StepError(Exception):
         self.what = what
 
 
+def finish(code):
+    """Выход процесса с кодом `code` после сброса буферов, без штатного завершения Python.
+
+    bpy как модуль Python (облако, /opt/bpy) падает SIGSEGV (код 139) при выходе после экспорта
+    glTF: статические деструкторы Blender (`SpaceType` → `bpy_class_free`) зовут
+    `PyGILState_Ensure`, когда интерпретатор уже завершён. Файлы шагов к этому моменту записаны,
+    поэтому выход — `os._exit` (деструкторы не зовутся); в бинарнике Blender — то же самое."""
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    finally:
+        os._exit(int(code))
+
+
+def run_main(main):
+    """Точка входа скрипта: код выхода `main()` (None — 0; `SystemExit` argparse — его код;
+    необработанное исключение — трейсбек и 1), затем `finish` — честный код без SIGSEGV."""
+    import traceback
+    try:
+        code = main()
+        code = 0 if code is None else code
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+    except BaseException:  # noqa: B902 — трейсбек и код 1, как у обычного Python
+        traceback.print_exc()
+        code = 1
+    finish(code)
+
+
 def script_args():
     """Аргументы скрипта и при `python script.py ...`, и при `blender -b -P script.py -- ...`."""
     if "--" in sys.argv:

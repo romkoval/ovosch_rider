@@ -933,6 +933,28 @@
       ],
       "knee_deg": 96.0,
       "foot_deg": -26.0
+    },
+    {
+      "name": "rest",
+      "phi_deg": null,
+      "crank_deg": 90.0,
+      "cleat": [
+        -0.115,
+        -0.17,
+        0.27
+      ],
+      "ankle": [
+        -0.11,
+        -0.063,
+        0.371
+      ],
+      "knee": [
+        -0.1,
+        -0.17,
+        0.797
+      ],
+      "knee_deg": 111.0,
+      "foot_deg": -8.0
     }
   ],
   "control_poses_step_deg": 15,
@@ -2402,6 +2424,23 @@
       }
     }
   ],
+  "apose": {
+    "source": "scripts/blender/pipeline_data.json «apose», «height_m»",
+    "ref": "T-143 (вердикт game-designer на T-106a1, п. d): A-поза контрактного скелета для подгонки стоячего скана (шаг 3) и генератора синтетики",
+    "height_m": 1.75,
+    "params": {
+      "ankle_x_m": 0.11,
+      "arm_from_vertical_deg": 42.5,
+      "elbow_deg": 165.0,
+      "torso": "vertical",
+      "head_tilt_deg": 20.0,
+      "crown_in_head_m": [
+        0.15,
+        0.03
+      ],
+      "foot": "sole_flat_forward"
+    }
+  },
   "sway": [
     {
       "bones": [

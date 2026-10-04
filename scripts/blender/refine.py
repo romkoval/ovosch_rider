@@ -80,4 +80,4 @@ def main():
     return 0
 
 
-sys.exit(main())
+common.run_main(main)

@@ -1,5 +1,6 @@
 """Сырьё: импорт, ориентиры, оси и единицы, разбор на куски (шаги 1–2)."""
 
+import json
 import math
 import os
 
@@ -33,27 +34,32 @@ def import_raw(path, step):
         raise common.StepError(step, path, "не импортируется: %s" % e)
     if res != {"FINISHED"}:
         raise common.StepError(step, path, "не импортируется")
-    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    meshes = sorted((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: o.name)
     if not meshes:
         raise common.StepError(step, path, "в файле нет сеток")
+    names = [o.name for o in meshes]
+    # Сетки в мировых координатах (родители — пустые корни «world», «RootNode», авто-риг — и
+    # трансформы применены), модификаторы, арматура и shape keys сняты; сцена — заново из них.
+    datas = []
     for o in meshes:
-        for m in list(o.modifiers):
-            o.modifiers.remove(m)
-        o.data = o.data.copy() if o.data.users > 1 else o.data
-        o.data.transform(o.matrix_world)
-        o.parent = None
-        o.matrix_world = Matrix.Identity(4)
-        o.shape_key_clear()
-    for o in list(bpy.context.scene.objects):
-        if o.type != "MESH":
-            bpy.data.objects.remove(o)
-    meshes = sorted(meshes, key=lambda o: o.name)
-    for o in bpy.context.view_layer.objects:
-        o.select_set(o in meshes)
-    bpy.context.view_layer.objects.active = meshes[0]
-    if len(meshes) > 1:
-        bpy.ops.object.join()
-    obj = bpy.context.view_layer.objects.active
+        if o.data.shape_keys is not None:
+            o.shape_key_clear()
+        me = o.data.copy()
+        me.transform(o.matrix_world)
+        if o.matrix_world.determinant() < 0:
+            me.flip_normals()
+        datas.append(me)
+    for o in list(bpy.data.objects):
+        bpy.data.objects.remove(o, do_unlink=True)
+    objs = []
+    for k, me in enumerate(datas):
+        obj = bpy.data.objects.new("scan" if k == 0 else "scan_part%d" % k, me)
+        bpy.context.scene.collection.objects.link(obj)
+        objs.append(obj)
+    obj = objs[0]
+    if len(objs) > 1:
+        with bpy.context.temp_override(active_object=obj, selected_editable_objects=objs, selected_objects=objs):
+            bpy.ops.object.join()
     obj.name = "scan"
     obj.data.name = "scan"
     # Швы UV и нормалей в файле рвут сетку на куски: склеить совпадающие вершины.
@@ -63,19 +69,45 @@ def import_raw(path, step):
     bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-6 * max(ext, 1e-3))
     bm.to_mesh(obj.data)
     bm.free()
-    return obj, len(meshes)
+    return obj, names
 
 
-def find_landmarks(raw_path, override=None):
-    """Ориентиры: `--landmarks`, иначе `<имя>.landmarks.json`, иначе `landmarks.json` рядом."""
+def find_landmarks(raw_path, override=None, step=1):
+    """Ориентиры: `--landmarks`, иначе `<имя>.landmarks.json`, иначе `landmarks.json` рядом.
+    Файл есть, но не читается (не JSON, нет «joints», не три конечных числа у сустава) —
+    `StepError` шага `step`."""
     cands = [override] if override else []
     stem = os.path.splitext(raw_path)[0]
     cands += [stem + ".landmarks.json", os.path.join(os.path.dirname(raw_path), "landmarks.json")]
+    if override and not os.path.isfile(override):
+        raise common.StepError(step, override, "файла ориентиров нет (--landmarks)")
     for c in cands:
         if c and os.path.isfile(c):
-            data = common.load_json(c)
-            return {k: Vector(v) for k, v in data["joints"].items()}, c
+            return parse_landmarks(c, step), c
     return None, None
+
+
+def parse_landmarks(path, step):
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (ValueError, UnicodeDecodeError) as e:
+        raise common.StepError(step, name, "ориентиры не читаются как JSON (%s) — README «Ориентиры суставов»" % e)
+    joints = data.get("joints") if isinstance(data, dict) else None
+    if not isinstance(joints, dict) or not joints:
+        raise common.StepError(step, name, "в ориентирах нет объекта «joints»: {имя кости: [x, y, z]} (README «Ориентиры суставов»)")
+    out, bad = {}, []
+    for k, v in joints.items():
+        ok = isinstance(v, (list, tuple)) and len(v) == 3 and all(
+            isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) for x in v)
+        if ok:
+            out[k] = Vector(v)
+        else:
+            bad.append(k)
+    if bad:
+        raise common.StepError(step, name, "ориентиры %s — не три конечных числа [x, y, z]" % ", ".join(sorted(bad)))
+    return out
 
 
 def _snap(rot):
@@ -142,6 +174,37 @@ def orient(co, lm):
     else:
         warnings.append("оси файла повернуты не на кратный 90° угол (%.1f°): поворот по ориентирам" % ang)
     return rot, how, warnings
+
+
+def facing_error(co, lm):
+    """Оси по ориентирам против формы (координаты уже в осях брифа: Z вверх, лицом −Y): носок
+    впереди пятки (шип `cleat` — на −Y от `heel`), иначе — стопы скана выступают от голеностопа
+    вперёд (−Y). Ориентиры с перепутанными .L/.R разворачивают фигуру на 180° — тогда ошибка
+    (строка), иначе None."""
+    if not lm:
+        return None
+    votes = []
+    for s in (".L", ".R"):
+        if "cleat" + s in lm and "heel" + s in lm:
+            votes.append(lm["heel" + s].y - lm["cleat" + s].y)
+    how = "носок (cleat) позади пятки (heel)"
+    if not votes and all(k in lm for k in ("foot.L", "foot.R")):
+        # Без шипа и пятки: стопа скана ниже голеностопа — вперёд от него длиннее, чем назад.
+        zmin = float(co[:, 2].min())
+        for s in (".L", ".R"):
+            a = lm["foot" + s]
+            hgt = a.z - zmin
+            if hgt <= 0:
+                continue
+            sel = co[(co[:, 2] < a.z - 0.2 * hgt) & (co[:, 2] > zmin + 0.3 * hgt) & (np.abs(co[:, 0] - a.x) < 0.6 * hgt)
+                     & (np.abs(co[:, 1] - a.y) < 3.0 * hgt)]
+            if len(sel) > 8:
+                votes.append((a.y - sel[:, 1].min()) - (sel[:, 1].max() - a.y))
+        how = "стопы скана выступают от голеностопа назад"
+    if votes and sum(1 for v in votes if v < 0) > len(votes) / 2:
+        return ("по ориентирам фигура смотрит назад (+Y): %s — .L/.R перепутаны? «.L» — левая сторона самого "
+                "человека (бриф §4: +X), не левая со стороны зрителя" % how)
+    return None
 
 
 def units(height, data, step, name):

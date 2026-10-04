@@ -25,4 +25,4 @@ def main():
         print("synthetic:", synthetic.build(v, out))
 
 
-main()
+common.run_main(main)

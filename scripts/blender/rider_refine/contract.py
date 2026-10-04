@@ -80,15 +80,19 @@ class Contract:
 
     def apose_rotations(self, params=None):
         """Кость → поворот (кватернион, мировой) из rest контракта в A-позу (`pipeline_data`
-        «apose»): корпус и голова вертикально, ноги прямые с голеностопами на ±ankle_x, подошва
+        «apose»): корпус вертикально, ось head — на head_tilt_deg вперёд от вертикали, ноги прямые с голеностопами на ±ankle_x, подошва
         горизонтальна носком вперёд, руки во фронтальной плоскости под углом к вертикали, сгиб
         локтя вперёд до заданного угла. Дети без своей цели (сокеты, хвост) идут с родителем."""
         p = params or self.apose_params()
         up = Vector((0.0, 0.0, 1.0))
         fwd = Vector((0.0, -1.0, 0.0))
         aims = {}
-        for n in ("pelvis", "spine", "chest", "neck", "head"):
+        for n in ("pelvis", "spine", "chest", "neck"):
             aims[n] = ("bone", up)
+        # Голова (ред. 4.2): ось кости head — на head_tilt_deg вперёд (к −Y) от вертикали, взгляд
+        # горизонтально; тот же угол «ось кости — верх головы», что в rest.
+        tilt = math.radians(p["head_tilt_deg"])
+        aims["head"] = ("bone", Vector((0.0, -math.sin(tilt), math.cos(tilt))))
         a = math.radians(p["arm_from_vertical_deg"])
         bend = math.radians(180.0 - p["elbow_deg"])
         for s, sx in ((".L", 1.0), (".R", -1.0)):
@@ -149,11 +153,45 @@ class Contract:
             out[n] = (h, h + rot[n] @ ((self.tail(n) - self.head(n)) * k.get(base_of(n), 1.0)), rot[n] @ self.axis_z(n))
         return out
 
+    def crown_local(self, params=None):
+        """Макушка в системе кости head (X, Y — вдоль кости, Z; от её начала): в A-позе
+        `crown_in_head_m` = (вверх, вперёд) от начала head при горизонтальном взгляде
+        (art-bible «A-поза контрактного скелета», ред. 4.2: точка сетки, не окончание кости)."""
+        p = params or self.apose_params()
+        up, ahead = p["crown_in_head_m"]
+        h, t, z = self.apose_joints(p)["head"]
+        return bone_matrix(h, t, z).inverted() @ (h + Vector((0.0, -ahead, up)))
+
     def crown(self, joints, params=None):
-        """Макушка: `crown_from_head_m` от начала head по оси кости (данные конвейера, «apose»)."""
-        d = params["crown_from_head_m"] if params else self.data["apose"]["crown_from_head_m"]["value"]
-        h, t, _ = joints["head"]
-        return h + (t - h).normalized() * d
+        """Макушка при положении кости head из `joints` (A-поза, rest или своя поза)."""
+        h, t, z = joints["head"]
+        return bone_matrix(h, t, z) @ self.crown_local(params)
+
+    def head_center_local(self, params=None):
+        """Центр габарита головы в системе кости head: `head_center_in_head_m` = (вверх, вперёд)
+        от начала head при горизонтальном взгляде (art-bible ред. 4.2: 0.04 и 0.04 м — макушка
+        0.15 минус половина высоты головы 0.22; в rest это центр (0, 1.45, −0.36) Godot)."""
+        p = params or self.apose_params()
+        up, ahead = self.data["proportions"]["head_center_in_head_m"]["value"]
+        h, t, z = self.apose_joints(p)["head"]
+        return bone_matrix(h, t, z).inverted() @ (h + Vector((0.0, -ahead, up)))
+
+    def head_up_rest(self, params=None):
+        """Ось «вверх» головы в rest: вертикаль A-позы (взгляд горизонтально), перенесённая
+        поворотом кости head из A-позы в rest (art-bible ред. 4.2: наклон вперёд 10–15°)."""
+        h, t, z = self.apose_joints(params)["head"]
+        a = bone_matrix(h, t, z).to_3x3()
+        r = self.rest_matrix("head").to_3x3()
+        return (r @ a.inverted() @ Vector((0.0, 0.0, 1.0))).normalized()
+
+    def head_up_rest_tilt_deg(self, params=None):
+        """Наклон оси «вверх» головы в rest вперёд (к −Y) от вертикали, градусы."""
+        u = self.head_up_rest(params)
+        return math.degrees(math.atan2(-u.y, u.z))
+
+    def rest_head_joints(self, params=None):
+        """Начало head и макушка спеки в rest (для мер головы в её системе: `proportions.head_measures`)."""
+        return {"head": self.head("head"), "crown": self.crown(self.rest_joints(), params)}
 
     def apose_height(self, joints=None):
         j = joints or self.apose_joints()

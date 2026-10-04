@@ -1,6 +1,7 @@
 """Кадры результата конвейера для отчёта (T-143): `rider.blend`/`NN_*.blend` рабочего каталога с
 велосипедом `bike_reference.glb`, ракурсы контракта (бриф §14; по умолчанию `work`, `side_r`),
-регионы — цветами атласа-превью (только в кадре, файл не меняется). Cycles на CPU, без дисплея.
+регионы — цветами атласа-превью (только в кадре, файл не меняется). Cycles на CPU, без дисплея,
+32 сэмпла и OpenImageDenoise (нет в сборке — 64 сэмпла без денойза).
 
   /opt/bpy/bin/python scripts/blender/render_views.py <файл.blend> <каталог> [ракурс,...] [ширина высота]
 """
@@ -43,10 +44,10 @@ def main():
     for o in bpy.data.objects:
         if o.type == "MESH" and o.name in ("scan", "raw_hair", "raw_shoes"):
             o.hide_render = True
-    render.setup(w, h, samples=16)
+    render.setup(w, h, samples=32, denoise=True)
     views = {v["name"]: v for v in Contract().json["views"]}
     for n in names:
         print("render_views:", render.view_shot(os.path.join(out, "%s.png" % n), views[n]))
 
 
-main()
+common.run_main(main)
