@@ -71,6 +71,11 @@ const RIG_SOURCES: Array = [
 	# выбирает нужную по имени).
 	{"name": "rider.tscn (манекен)", "path": "res://src/scene3d/rider.tscn", "skeleton": "Skeleton",
 		"tol_m": 1e-5, "roll_deg": 0.01, "marker_meshes": []},
+	# T-143: выход конвейера доводки (`scripts/rider_refine.sh`) на синтетическом «сыром» скане —
+	# сквозная проверка: Blender-экспорт по брифу §12 читается движком и сидит на велосипеде.
+	# Пересборка: `scripts/blender/test.sh --update-fixture`.
+	{"name": "rider_synthetic.glb", "path": "res://tests/fixtures/rider_synthetic/rider_synthetic.glb",
+		"tol_m": 0.001, "roll_deg": 0.05, "marker_meshes": []},
 	# T-106b/T-106c: {"name": "rider.glb", "path": "res://assets/rider/rider.glb",
 	#	"tol_m": RiderRig.ARTIST_TOLERANCE_M, "roll_deg": 5.0, "marker_meshes": []},
 ]

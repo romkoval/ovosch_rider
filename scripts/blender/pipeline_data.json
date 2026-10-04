@@ -1,0 +1,120 @@
+{
+  "format": "ovosch-rider rider_refine data 1",
+  "about": "Числа спеки для конвейера доводки (T-143), которых нет в коде (src/scene3d/rider_rig.gd, rider_regions.gd -> assets/rider/reference/rider_contract.json). У каждого числа ref - подраздел спеки. Сверка со спекой и с контрактом - scripts/blender/tests/test_data.py.",
+  "height_m": {"value": 1.78, "tol": 0.01, "ref": "art-bible «Пропорции и посадка»: рост 1.78 м у обеих фигур; бриф §7"},
+  "apose": {
+    "ref": "T-143 (вердикт game-designer на T-106a1, п. d): A-поза контрактного скелета для подгонки стоячего скана (шаг 3) и генератора синтетики",
+    "ankle_x_m": {"value": 0.11, "range": [0.10, 0.12], "ref": "ноги прямые, голеностопы на ±0.10–0.12 м по X"},
+    "arm_from_vertical_deg": {"value": 42.5, "range": [40.0, 45.0], "ref": "руки на 40–45° от вертикали во фронтальной плоскости"},
+    "elbow_deg": {"value": 165.0, "ref": "локоть ≈ 165° (сгиб вперёд, -Y)"},
+    "torso": {"value": "vertical", "ref": "корпус и голова прямо: pelvis, spine, chest, neck, head - вертикально"},
+    "foot": {"value": "sole_flat_forward", "ref": "подошва (пятка -> шип) горизонтальна, носок вперёд (-Y); подошва на земле z = 0"},
+    "crown_from_head_m": {"value": 0.185, "ref": "рост = макушка над линией подошвы; макушка — 0.185 м от начала head по оси кости (наше решение T-143: окончание head в контракте — направление «≈ к макушке», 0.166 м; с ним рост A-позы 1.762 м — вне 1.78 ± 0.01)"}
+  },
+  "proportions": {
+    "ref": "art-bible «Пропорции и посадка», таблица величин; бриф 5.1 «Длины, которые получаются из таблицы»",
+    "thigh_m": {"value": 0.44, "tol": 0.01, "joints": ["thigh", "shin"]},
+    "shin_m": {"value": 0.44, "tol": 0.01, "joints": ["shin", "foot"]},
+    "upperarm_m": {"value": 0.31, "tol": 0.01, "joints": ["upperarm", "forearm"]},
+    "forearm_to_grip_m": {"value": 0.33, "tol": 0.01, "joints": ["forearm", "grip"]},
+    "hip_span_m": {"value": 0.18, "tol": 0.005, "joints": ["thigh.L", "thigh.R"]},
+    "shoulder_span_m": {"value": 0.36, "tol": 0.005, "joints": ["upperarm.L", "upperarm.R"]},
+    "torso_m": {"value": 0.50, "tol": 0.02, "joints": ["thigh", "upperarm"]},
+    "torso_tilt_deg": {"range": [30.0, 40.0]},
+    "saddle_top_m": {"value": 0.965, "tol": 0.01},
+    "shoe_m": {"value": [0.28, 0.10], "ref": "туфля (пятка - носок) / ширина"},
+    "head_size_m": {"value": [0.155, 0.22, 0.20], "ref": "голова: ширина x высота x длина"}
+  },
+  "figures": {
+    "ref": "art-bible «Пропорции и посадка» → «Различия фигур — только объём сетки» (обхваты и ширины, м; диаметры — по наибольшей оси сечения); бриф §7",
+    "m": {
+      "shoulders_outer_m": [0.44, 0.46],
+      "waist_width_m": [0.30, 0.30],
+      "pelvis_outer_m": [0.34, 0.36],
+      "thigh_at_shorts_d_m": [0.17, 0.18],
+      "thigh_at_knee_d_m": [0.11, 0.12],
+      "calf_d_m": [0.115, 0.125],
+      "ankle_d_m": [0.06, 0.065],
+      "upperarm_d_m": [0.09, 0.09],
+      "wrist_d_m": [0.055, 0.055],
+      "neck_d_m": [0.12, 0.12]
+    },
+    "f": {
+      "shoulders_outer_m": [0.40, 0.42],
+      "waist_width_m": [0.27, 0.27],
+      "pelvis_outer_m": [0.35, 0.37],
+      "thigh_at_shorts_d_m": [0.165, 0.175],
+      "thigh_at_knee_d_m": [0.105, 0.115],
+      "calf_d_m": [0.105, 0.115],
+      "ankle_d_m": [0.055, 0.06],
+      "upperarm_d_m": [0.08, 0.08],
+      "wrist_d_m": [0.05, 0.05],
+      "neck_d_m": [0.105, 0.105]
+    }
+  },
+  "girth_stations": {
+    "ref": "где мерить обхват (доля длины кости от начала); art-bible «Анатомия по частям»",
+    "thigh_at_shorts_d_m": {"bone": "thigh", "t": 0.30},
+    "thigh_at_knee_d_m": {"bone": "thigh", "t": 0.88},
+    "calf_d_m": {"bone": "shin", "t": 0.32, "ref": "самое широкое место икры — 65–70 % голени от голеностопа"},
+    "ankle_d_m": {"bone": "shin", "t": 0.92},
+    "upperarm_d_m": {"bone": "upperarm", "t": 0.5},
+    "wrist_d_m": {"bone": "forearm", "t": 0.95},
+    "neck_d_m": {"bone": "neck", "t": 0.5}
+  },
+  "regions": {
+    "ref": "art-bible «Анатомия по частям», «Слоты внешности»; бриф §8, §10",
+    "shorts_leg_end_t": {"range": [0.65, 0.70], "bone": "thigh", "ref": "штанина кончается на 65–70 % длины бедра от сустава"},
+    "shorts_gripper_m": {"value": 0.03, "ref": "резинка шириной 3 см (shorts_gripper)"},
+    "sock_top_above_ankle_m": {"range": [0.20, 0.24], "ref": "верх носка на 0.20–0.24 м выше голеностопа"},
+    "sock_cuff_m": {"value": 0.02, "ref": "манжета носка 2 см (socks_cuff)"},
+    "sleeve_end_t": {"range": [0.45, 0.55], "bone": "upperarm", "ref": "рукав джерси до середины плеча (45–55 %)"},
+    "jersey_cuff_m": {"value": 0.025, "ref": "манжета рукава 2.5 см (jersey_cuff)"},
+    "jersey_bottom_back_m": {"range": [0.20, 0.24], "ref": "низ джерси сзади на 0.20–0.24 м выше верха седла (по спине)"},
+    "jersey_band_m": {"range": [0.08, 0.10], "ref": "полоса через грудь и спину высотой 8–10 см (jersey_band)"},
+    "jersey_band_center_t": {"value": 0.45, "bone": "chest", "ref": "полоса — на уровне груди (наше решение; спека задаёт высоту, не место)"},
+    "jersey_yoke_t": {"value": 0.70, "bone": "chest", "ref": "кокетка: верх плеч и верх спины до лопаток"},
+    "jersey_side_deg": {"value": 50.0, "ref": "боковые панели от подмышки к низу: грань, у которой нормаль отклонена вбок больше чем на угол от вертикали поперечного сечения"},
+    "collar_t": {"value": 0.35, "bone": "neck", "ref": "воротник низкий (jersey_collar)"},
+    "glove_fingertip_t": {"value": 1.6, "bone": "hand", "ref": "перчатка короткопалая: кончики пальцев — кожа (t от запястья к grip)"},
+    "required_body": {"value": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 21, 22], "ref": "бриф §14 Т6: у каждой фигуры есть регионы 0–11 и 21–22"},
+    "default_v": {"value": 0.5, "ref": "бриф §10 п.3: острова на V = 0.5"}
+  },
+  "budgets": {
+    "ref": "бриф §3, art-bible «Состав и бюджет»",
+    "tris": {"body_m": 8000, "body_f": 8000, "hair_short": 300, "hair_tail": 800, "helmet_aero": 1600, "helmet_vented": 1600,
+      "glasses_shield": 400, "glasses_half_frame": 400, "shoe_boa_L": 600, "shoe_boa_R": 600, "shoe_strap_L": 600, "shoe_strap_R": 600},
+    "rider_total_tris": 12000,
+    "file_mb": 4,
+    "max_influences": 4
+  },
+  "segmentation": {
+    "ref": "art-bible «Сегментация и сглаживание»; бриф §11",
+    "limb_around_min": 12,
+    "torso_head_around_min": 16,
+    "thigh_shin_rings_min": 7,
+    "arm_rings_min": 5
+  },
+  "weights": {
+    "ref": "бриф 5.3",
+    "blend_knee_elbow_m": [0.04, 0.06],
+    "blend_hip_m": [0.06, 0.08],
+    "body_excluded_bones": ["hair_tail.1", "hair_tail.2"]
+  },
+  "seat": {
+    "ref": "art-bible «Допуски для [авто]» п.1; «Анатомия по частям» — шорты не глубже 0.5 см в седло",
+    "s_above_saddle_m": [0.0, 0.015],
+    "max_penetration_m": 0.005,
+    "seat_clearance_m": 0.001
+  },
+  "raw_check": {
+    "ref": "rider-photo-guide.md §6 п.5 (проверка сырья), art-bible «Вариант Г» шаг 1",
+    "height_units": {"m": [1.4, 2.2], "cm": [140.0, 220.0], "mm": [1400.0, 2200.0]},
+    "slab_flat_ratio": 0.04,
+    "fragment_max_share": 0.02,
+    "second_figure_min_height": 0.5,
+    "legs_section_t": 0.5,
+    "arms_section_t": 0.5,
+    "arm_from_vertical_deg": [25.0, 60.0]
+  }
+}

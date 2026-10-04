@@ -95,7 +95,7 @@ def check_rig(path):
 
 def check_bike(path):
     import_glb(path)
-    for name in ("bike_frame", "wheel_front", "wheel_rear", "crankset"):
+    for name in ("bike_frame", "saddle", "wheel_front", "wheel_rear", "crankset"):
         obj = bpy.data.objects.get(name)
         check(obj is not None and obj.type == "MESH", "сетка %s" % name)
         if obj is not None:
@@ -109,16 +109,18 @@ def check_bike(path):
     front = bpy.data.objects.get("pt_axle_front")
     check(front is not None and front.matrix_world.translation.y < 0, "велосипед смотрит в -Y (бриф 4)")
     frame = bpy.data.objects.get("bike_frame")
-    if frame is None:
+    seat = bpy.data.objects.get("saddle")
+    if frame is None or seat is None:
         return
     deps = bpy.context.evaluated_depsgraph_get()
     tree = BVHTree.FromObject(frame, deps)
+    seat_tree = BVHTree.FromObject(seat, deps)
 
-    def top(x, y):
-        hit = tree.ray_cast(Vector((x, y, 5.0)), Vector((0.0, 0.0, -1.0)))
+    def top(x, y, t=tree):
+        hit = t.ray_cast(Vector((x, y, 5.0)), Vector((0.0, 0.0, -1.0)))
         return hit[0].z if hit[0] is not None else float("nan")
 
-    saddle = top(0.0, 0.23)
+    saddle = top(0.0, 0.23, seat_tree)
     check(abs(saddle - 0.965) <= 0.002, "верх седла под S: %.4f м (0.965 ± 0.002)" % saddle)
     for x in (0.21, -0.21):
         hood = top(x, -0.62)

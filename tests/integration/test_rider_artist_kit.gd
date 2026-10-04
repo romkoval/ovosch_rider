@@ -1,6 +1,6 @@
 extends GutTest
-## Эталонный пакет `assets/rider/reference/` (T-106a1; REQ-D3D-09 подготовка п.1, 2, 5,
-## инструмент п.11; бриф разделы 4–6, 10, 18; арт-библия
+## Эталонный пакет `assets/rider/reference/` (T-106a1, T-143; подготовка REQ-D3D-09 п.1, 2, 5, 6;
+## бриф разделы 4–6, 10, 18; арт-библия
 ## «Гонщик» → «Слоты внешности», «Вариант Г»): файлы собирает сценарий
 ## (`scripts/rider_artist_kit.sh` → `scripts/dev/rider_reference_pack.gd`) из кода
 ## (`RiderRig`, `RiderModel`, `RiderRegions`, `RiderLook`) воспроизводимо побайтно и не
@@ -225,7 +225,7 @@ func test_bike_reference_points_axes_and_geometry() -> void:
 	var scene := _import("bike_reference.glb")
 	if scene == null:
 		return
-	for part in ["bike_frame", "wheel_front", "wheel_rear", "crankset"]:
+	for part in ["bike_frame", "saddle", "wheel_front", "wheel_rear", "crankset"]:
 		var mi := scene.find_child(part, true, false) as MeshInstance3D
 		assert_not_null(mi, part)
 		if mi == null:
@@ -254,9 +254,11 @@ func test_bike_reference_points_axes_and_geometry() -> void:
 		assert_lt(b.distance_to(want[n]), MM, "Blender: %s %s (бриф %s)" % [n, b, want[n]])
 	# Геометрия после круга экспорт → импорт: верх седла под S и ручки.
 	var frame := scene.find_child("bike_frame", true, false) as MeshInstance3D
+	var saddle := scene.find_child("saddle", true, false) as MeshInstance3D
 	var to_godot: Transform3D = RiderRig.gltf_flip()
 	var s: Vector3 = RiderRig.head("pelvis")
-	assert_almost_eq(RiderContract.top_at(frame.mesh, s.x, s.z, to_godot), 0.965, 0.002, "верх седла под S в файле")
+	assert_almost_eq(RiderContract.top_at(saddle.mesh, s.x, s.z, to_godot), 0.965, 0.002, "верх седла под S в файле")
+	assert_lt(RiderContract.top_at(frame.mesh, s.x, s.z, to_godot), 0.94, "седло вынесено из bike_frame (T-143)")
 	for side in ["grip.L", "grip.R"]:
 		var g: Vector3 = RiderRig.head(side)
 		var hood: float = RiderContract.top_at(frame.mesh, g.x, g.z, to_godot)
@@ -304,3 +306,26 @@ func test_rig_reference_has_armature_rider_rig_and_joint_markers() -> void:
 	assert_eq(String(mi.name), "rig_joints")
 	assert_eq(mi.mesh.get_surface_count(), 2, "метки суставов и сокетов")
 	assert_eq(mi.skin.get_bind_count(), RiderRig.BONE_COUNT, "метка на каждую кость")
+
+
+## T-143: седло — отдельный узел `saddle`, геометрия велосипеда та же, что в игре: рама + седло
+## пакета = `bike_frame` из `RiderModel.reference_kits` (те же треугольники), игра узлы не меняет.
+func test_bike_reference_saddle_split_keeps_geometry() -> void:
+	var kits: Dictionary = RiderModel.reference_kits(RiderRig.REST_CRANK_RAD)
+	var split: Dictionary = Pack.split_saddle(kits)
+	assert_eq(split.keys(), ["bike_frame", "saddle", "wheel_front", "wheel_rear", "crankset"], "состав частей")
+	var src: MeshKit = kits["bike_frame"]
+	var frame: MeshKit = split["bike_frame"]
+	var saddle: MeshKit = split["saddle"]
+	assert_eq(frame.indices.size() + saddle.indices.size(), src.indices.size(), "треугольники рамы и седла — все треугольники рамы игры")
+	assert_eq(frame.vertices.size() + saddle.vertices.size(), src.vertices.size(), "вершины не теряются и не дублируются")
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p in saddle.vertices:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var s: Vector3 = RiderRig.head("pelvis")
+	assert_almost_eq(hi.z - lo.z, RiderRig.SADDLE_LENGTH_M, 0.003, "седло: длина")
+	assert_almost_eq(hi.x - lo.x, RiderRig.SADDLE_REAR_WIDTH_M, 0.003, "седло: ширина сзади")
+	assert_between(hi.y, s.y, s.y + 0.01, "седло: верх у S")
+	assert_gt(lo.y, s.y - 0.05, "в узле только седло (без штыря и рамок)")

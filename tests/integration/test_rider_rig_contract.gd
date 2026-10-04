@@ -135,16 +135,21 @@ func test_rest_pose_sits_on_reference_bike(src = use_parameters(RiderContract.RI
 	if bike == null:
 		return
 	var frame := bike.find_child("bike_frame", true, false) as MeshInstance3D
+	# Седло — отдельный узел пакета (T-143: поверхность для шага 5 конвейера доводки).
+	var saddle := bike.find_child("saddle", true, false) as MeshInstance3D
+	assert_not_null(saddle, "bike_reference.glb: узел saddle")
+	if saddle == null:
+		return
 	var to_godot: Transform3D = RiderRig.gltf_flip()
 	var skel: Skeleton3D = rig["skeleton"]
 	var tol: float = src["tol_m"]
 	var at := func(bone: String) -> Vector3: return RiderContract.bone_rest_godot(rig, skel.find_bone(bone)).origin
 	var s: Vector3 = at.call("pelvis")
-	var top: float = RiderContract.top_at(frame.mesh, s.x, s.z, to_godot)
+	var top: float = RiderContract.top_at(saddle.mesh, s.x, s.z, to_godot)
 	assert_between(s.y - top, -tol, 0.015 + tol, "%s: S над седлом на 0…15 мм (%.4f)" % [src["name"], s.y - top])
 	for side in [".L", ".R"]:
 		var hip: Vector3 = at.call("thigh" + side)
-		var hip_top: float = RiderContract.top_at(frame.mesh, 0.0, hip.z, to_godot)
+		var hip_top: float = RiderContract.top_at(saddle.mesh, 0.0, hip.z, to_godot)
 		assert_between(hip.y - hip_top, 0.075 - tol, 0.095 + tol, "%s: thigh%s над седлом 75–95 мм" % [src["name"], side])
 		var grip: Vector3 = at.call("grip" + side)
 		var hood: float = RiderContract.top_at(frame.mesh, grip.x, grip.z, to_godot)

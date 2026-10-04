@@ -25,3 +25,6 @@ screenshots/
 
 # Видео-референсы владельца (реальные люди) — локально, не в публичный репозиторий
 /reference/
+
+# Python (скрипты Blender, scripts/blender)
+__pycache__/
