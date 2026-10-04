@@ -5,7 +5,8 @@
 # (как на iOS). Forward+ и Mobile требуют GPU (Metal/Vulkan) — на macOS запускаются в своём
 # окне поверх остальных (окно, перекрытое другими, не перерисовывается).
 # Использование:
-#   [RENDERER=forward_plus] ./scripts/screenshot.sh [каталог=screenshots] [скорость_кмч=32] [каденс=90] [дистанции_м=0,400,900,1500] [трасса]
+#   [RENDERER=forward_plus] ./scripts/screenshot.sh [каталог=screenshots] [скорость_кмч=32] [каденс=90] [дистанции_м=0,400,900,1500] [трасса] [вторая_трасса]
+#   вторая_трасса — ещё одна сцена этой трассы в своём SubViewport, построенная после снимаемой (T-112).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 GODOT="${GODOT:-$(command -v godot || echo /opt/godot/godot)}"

@@ -3,11 +3,13 @@ extends GutTest
 ## горах читается (REQ-D3D-08 п.8, решение game-designer 14), бюджет (REQ-D3D-05); T-100 — кэш
 ## `RouteWorld` очищается (REQ-INF-01 п.2, 5).
 ##
-## Пиксели рендера headless не проверить — здесь контракт: материалы мира получают окружающий
-## свет и туман сцены (`RenderLook.apply`), шейдеры выравнивают свет, цвет вершин и небо по
+## Пиксели рендера headless не проверить — здесь контракт: узлы мира получают окружающий
+## свет и туман своей сцены параметрами экземпляра (`RenderLook.apply`, T-112: две сцены разных
+## трасс одновременно, общие материалы не меняются), шейдеры выравнивают свет, цвет вершин и небо по
 ## `CURRENT_RENDERER`, шумы гаснут по размеру пикселя на земле по обеим осям, тень солнца — с
 ## нормальным смещением против «угрей» в Forward+/Mobile. Средние цвета по рендерерам — снимки
-## `docs/game/shots/2026-10-04-t102/` (отчёт T-102).
+## `docs/game/shots/2026-10-04-t102/` (отчёт T-102), сцена после сцены другой трассы —
+## `docs/game/shots/2026-10-04-t112/` (T-112).
 
 const SCENE: String = "res://src/scene3d/ride_scene.tscn"
 const FRAME: float = 1.0 / 60.0
@@ -49,38 +51,81 @@ func _code(path: String) -> String:
 # Свет и цвет под рендерер
 # ---------------------------------------------------------------------------
 
-func _assert_look(m: ShaderMaterial, e: EnvironmentSet, label: String) -> void:
+func _assert_look(gi: GeometryInstance3D, e: EnvironmentSet, label: String) -> void:
+	var a: Variant = gi.get_instance_shader_parameter(RenderLook.AMBIENT_PARAM)
+	var f: Variant = gi.get_instance_shader_parameter(RenderLook.FOG_PARAM)
+	assert_true(a is Vector3 and (a as Vector3).is_equal_approx(RenderLook.ambient_of(e)), "%s %s: окружающий свет %s" % [label, gi.name, a])
+	assert_true(f is Vector4 and (f as Vector4).is_equal_approx(RenderLook.fog_of(e)), "%s %s: туман %s" % [label, gi.name, f])
+
+
+func test_look_values_are_linear_ambient_and_fog_of_environment() -> void:
+	assert_true(RenderLook.uses_instance_look(), "headless-прогон — рендерер проекта (Forward+): параметры вида задаются")
+	var e: EnvironmentSet = (_scenes[RouteCatalog.MOUNTAINS] as RideScene).environment_set
 	var amb: Color = e.ambient_color.srgb_to_linear() * e.ambient_energy
 	var fog: Color = e.fog_color.srgb_to_linear()
-	var a: Vector3 = m.get_shader_parameter("look_ambient")
-	var f: Vector4 = m.get_shader_parameter("look_fog")
-	assert_true(a.is_equal_approx(Vector3(amb.r, amb.g, amb.b)), "%s %s: окружающий свет %s" % [label, m.shader.resource_path, a])
-	assert_true(f.is_equal_approx(Vector4(fog.r, fog.g, fog.b, e.fog_density)), "%s %s: туман %s" % [label, m.shader.resource_path, f])
+	assert_true(RenderLook.ambient_of(e).is_equal_approx(Vector3(amb.r, amb.g, amb.b)), "окружающий свет: линейный цвет × энергия")
+	assert_true(RenderLook.fog_of(e).is_equal_approx(Vector4(fog.r, fog.g, fog.b, e.fog_density)), "туман: линейный цвет и плотность")
 
 
-## Общие материалы (тун, контур, асфальт, велосипедист) — ресурсы на процесс: в них окружение
-## последней построенной сцены (здесь — приморье); материал рельефа — свой у каждого набора.
-func test_world_materials_get_scene_ambient_and_fog() -> void:
-	var last: RideScene = _scenes[RouteCatalog.SEASIDE]
+## T-112: все четыре сцены живут одновременно — у узлов каждой свет и туман своей трассы, а не
+## последней построенной; общие материалы (тун, контур, асфальт, велосипедист) одни на процесс
+## и параметров вида не несут.
+func test_each_scene_gets_own_ambient_and_fog_while_all_alive() -> void:
 	var shaders: Dictionary = {}
-	for m in RenderLook.materials_under(last):
-		shaders[m.shader.resource_path.get_file()] = true
-		_assert_look(m, last.environment_set, RouteCatalog.SEASIDE)
-	for need in ["toon.gdshader", "grass.gdshader", "road.gdshader", "outline.gdshader", "water.gdshader"]:
-		assert_true(shaders.has(need), "%s среди материалов мира с выравниванием" % need)
 	for id in IDS:
 		var s: RideScene = _scenes[id]
-		var terrain_mat: ShaderMaterial = s.environment_set.terrain_material as ShaderMaterial
-		assert_not_null(terrain_mat, "%s: свой материал рельефа" % id)
-		_assert_look(terrain_mat, s.environment_set, id)
+		var look: Array[GeometryInstance3D] = RenderLook.instances_under(s)
+		assert_gt(look.size(), 10, "%s: узлы мира с выравниванием" % id)
+		for gi in look:
+			_assert_look(gi, s.environment_set, id)
+		for m in RenderLook.materials_under(s):
+			shaders[m.shader.resource_path.get_file()] = true
+			assert_null(m.get_shader_parameter(RenderLook.AMBIENT_PARAM), "%s %s: в материале нет окружающего света сцены" % [id, m.shader.resource_path])
+			assert_null(m.get_shader_parameter(RenderLook.FOG_PARAM), "%s %s: в материале нет тумана сцены" % [id, m.shader.resource_path])
+	for need in ["toon.gdshader", "grass.gdshader", "road.gdshader", "outline.gdshader", "water.gdshader"]:
+		assert_true(shaders.has(need), "%s среди материалов мира с выравниванием" % need)
+	var flat_road: Material = (_scenes[RouteCatalog.FLAT] as RideScene).road().material_override
+	var hills_road: Material = (_scenes[RouteCatalog.HILLS] as RideScene).road().material_override
+	if flat_road != null and hills_road != null:
+		assert_same(flat_road, hills_road, "асфальт — общий материал на процесс (копий нет)")
+
+
+## Значения доходят до сервера рендера: параметр экземпляра у RID узла, а не у материала.
+func test_look_values_reach_rendering_server_per_instance() -> void:
+	for id in [RouteCatalog.FLAT, RouteCatalog.MOUNTAINS]:
+		var s: RideScene = _scenes[id]
+		var gi: GeometryInstance3D = s.road()
+		var a: Variant = RenderingServer.instance_geometry_get_shader_parameter(gi.get_instance(), RenderLook.AMBIENT_PARAM)
+		assert_true(a is Vector3 and (a as Vector3).is_equal_approx(RenderLook.ambient_of(s.environment_set)), "%s: окружающий свет у экземпляра дороги в RenderingServer (%s)" % [id, a])
+	assert_ne(RenderLook.ambient_of((_scenes[RouteCatalog.FLAT] as RideScene).environment_set),
+		RenderLook.ambient_of((_scenes[RouteCatalog.MOUNTAINS] as RideScene).environment_set), "предусловие: у равнины и гор разный окружающий свет")
 
 
 func test_rider_materials_are_aligned_too() -> void:
-	var s: RideScene = _scenes[RouteCatalog.FLAT]
-	var rider_mats: Array[ShaderMaterial] = RenderLook.materials_under(s.rider())
-	assert_gt(rider_mats.size(), 0, "у велосипедиста тун-материалы")
-	for m in rider_mats:
-		assert_not_null(m.get_shader_parameter("look_ambient"), m.shader.resource_path)
+	for id in [RouteCatalog.FLAT, RouteCatalog.SEASIDE]:
+		var s: RideScene = _scenes[id]
+		var rider_mats: Array[ShaderMaterial] = RenderLook.materials_under(s.rider())
+		assert_gt(rider_mats.size(), 0, "у велосипедиста тун-материалы")
+		var parts: Array[GeometryInstance3D] = RenderLook.instances_under(s.rider())
+		assert_gt(parts.size(), 0, "части велосипедиста с выравниванием")
+		for gi in parts:
+			_assert_look(gi, s.environment_set, "%s велосипедист" % id)
+
+
+## Параметры экземпляра — в глобальном буфере Forward+/Mobile (4096 узлов на процесс): на сцену
+## не больше `PerfBudget.MAX_LOOK_INSTANCES`, документ бюджета совпадает с константой.
+func test_look_instances_per_scene_in_budget() -> void:
+	var re := RegEx.create_from_string("\\|[^|]*параметрами экземпляра[^|]*\\| *(\\d+) *\\|")
+	var m := re.search(FileAccess.get_file_as_string("res://docs/perf_budget.md"))
+	assert_not_null(m, "строка бюджета узлов с параметрами экземпляра")
+	if m != null:
+		assert_eq(int(m.get_string(1)), PerfBudget.MAX_LOOK_INSTANCES)
+	assert_lte(PerfBudget.MAX_LOOK_INSTANCES * 3, 4096, "два экрана и пересборка одного — в буфере 65536 / 16 слотов")
+	for id in IDS:
+		var n: int = RenderLook.instances_under(_scenes[id]).size()
+		gut.p("%s: узлов с параметрами экземпляра %d" % [id, n])
+		assert_lte(n, PerfBudget.MAX_LOOK_INSTANCES, "%s: узлов с параметрами экземпляра" % id)
+		assert_lte(int(PerfBudget.count(_scenes[id])["materials"]), PerfBudget.MAX_MATERIALS, "%s: уникальных материалов в бюджете" % id)
 
 
 func test_shaders_branch_by_renderer_and_compatibility_stays_reference() -> void:
@@ -88,6 +133,14 @@ func test_shaders_branch_by_renderer_and_compatibility_stays_reference() -> void
 	assert_string_contains(inc, "#if CURRENT_RENDERER == RENDERER_COMPATIBILITY", "ветвление по рендереру")
 	assert_string_contains(inc, "vec3 look_diffuse(", "солнце — как сложение проходов в sRGB")
 	assert_string_contains(inc, "vec3 look_vertex_color(", "цвет вершин — из sRGB")
+	var branch: int = inc.find("#if CURRENT_RENDERER != RENDERER_COMPATIBILITY")
+	var decl: int = inc.find("instance uniform vec3 look_ambient : instance_index(0)")
+	assert_true(branch >= 0 and decl > branch and inc.find("#endif", branch) > decl,
+		"окружающий свет — параметр экземпляра только в Forward+/Mobile (Compatibility его не читает)")
+	assert_string_contains(inc, "instance uniform vec4 look_fog : instance_index(1)", "туман — параметр экземпляра")
+	assert_string_contains(_code("res://src/scene3d/render_look.gd"), "get_current_rendering_method() != \"gl_compatibility\"",
+		"в Compatibility параметры вида не задаются: буфер параметров экземпляра там мал (UBO)")
+	assert_false(inc.contains("\nuniform vec3 look_ambient"), "не параметр материала: общий материал не несёт окружение сцены")
 	var toon_light: String = _code("res://src/scene3d/shaders/toon_light.gdshaderinc")
 	assert_string_contains(toon_light, "look_diffuse(", "тун-свет через выравнивание")
 	for path in ["res://src/scene3d/shaders/toon.gdshader", "res://src/scene3d/shaders/grass.gdshader",

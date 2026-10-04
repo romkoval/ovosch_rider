@@ -21,6 +21,11 @@ const MAX_VISIBLE_MULTIMESH_INSTANCES: int = 2000
 ## плотность объектов урезается под этот потолок).
 const MAX_MULTIMESH_INSTANCES: int = 40000
 const MIN_PHYSICS_TICKS_PER_SECOND: int = 60
+## Узлов геометрии с параметрами экземпляра тун-света (`RenderLook`, T-112) на сцену. Буфер
+## параметров экземпляра Forward+/Mobile (`rendering/limits/global_shader_variables/buffer_size`
+## = 65536 слотов, 16 на узел) — 4096 узлов на процесс: два экрана заезда по 1024 и пересборка
+## одного из них (старые узлы живут до конца кадра) — 3072, запас 1024.
+const MAX_LOOK_INSTANCES: int = 1024
 
 ## Длина куска MultiMesh вдоль трассы, м, и потолок числа кусков на тип объекта (на очень
 ## длинном маршруте кусок удлиняется).
