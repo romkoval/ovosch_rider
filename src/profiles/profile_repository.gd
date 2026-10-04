@@ -189,6 +189,18 @@ func set_sim_steepness_pct(profile_id: String, pct: int) -> Array[String]:
 	return save(profile)
 
 
+## Сохранить внешность гонщика профиля (REQ-AVT-01 п.2, T-108): правка одного поля поверх
+## сохранённого снимка, как `set_last_route_id`. null — внешность по умолчанию. Коды ошибок —
+## как у `save()`, плюс `profile_not_found`; пустой массив — сохранено на диск.
+func set_rider_look(profile_id: String, look: RiderLook) -> Array[String]:
+	var profile := get_by_id(profile_id)
+	if profile == null:
+		last_errors = [ERR_PROFILE_NOT_FOUND]
+		return last_errors.duplicate()
+	profile.rider_look = look.duplicate_look() if look != null else RiderLook.new()
+	return save(profile)
+
+
 ## Удалить профиль. Возвращает "" при успехе или код ошибки
 ## (`profile_not_found`, `last_profile`, `storage_write_failed`). Каскад: хуки, затем
 ## `profile_deleted`. Если файл не записан — профиль остаётся в памяти, активный не меняется,
