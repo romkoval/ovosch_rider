@@ -103,14 +103,20 @@ func arrange() -> void:
 	var row := ok.get_parent() as BoxContainer
 	if row == null:
 		return
-	# Распорки движка (движок держит их видимыми вместе с кнопками): первая растягивается и
-	# прижимает ряд вправо; между соседними кнопками — по одной распорке шириной, дающей зазор
-	# `BUTTON_GAP` (с учётом `separation` ряда); лишние — нулевой ширины слева.
-	var spacers: Array[Control] = []
+	# Распорки движка (движок держит их видимыми вместе с кнопками): первая видимая растягивается
+	# и прижимает ряд вправо; между соседними видимыми кнопками — по одной видимой распорке
+	# шириной, дающей зазор `BUTTON_GAP` (с учётом `separation` ряда); лишние распорки и скрытые
+	# кнопки (например, скрытая «Отмена», T-114) — нулевой ширины слева. Скрытая кнопка прячет
+	# и свою распорку, поэтому видимых распорок хватает на ведущую и зазоры.
+	var visible_spacers: Array[Control] = []
+	var hidden: Array[Control] = []
 	var cancel: Button = (d as ConfirmationDialog).get_cancel_button() if d is ConfirmationDialog else null
 	for child in row.get_children(true):
 		if child is Control and not child is Button:
-			spacers.append(child)
+			if (child as Control).visible:
+				visible_spacers.append(child)
+			else:
+				hidden.append(child)
 	var buttons: Array[Button] = []
 	if cancel != null and cancel.get_parent() == row:
 		buttons.append(cancel)
@@ -118,21 +124,28 @@ func arrange() -> void:
 		if b != cancel and b != ok:
 			buttons.append(b)
 	buttons.append(ok)
+	var shown: Array[Button] = []
+	for b in buttons:
+		if b.visible:
+			shown.append(b)
+		else:
+			hidden.append(b)
 	var separation := float(row.get_theme_constant("separation"))
 	var gap_width := maxf(BUTTON_GAP - 2.0 * separation, 0.0)
 	var order: Array[Control] = []
-	var free_spacers := spacers.duplicate()
+	var free_spacers := visible_spacers.duplicate()
 	var leading: Control = free_spacers.pop_front() if not free_spacers.is_empty() else null
-	for i in buttons.size():
+	for i in shown.size():
 		if i > 0 and not free_spacers.is_empty():
 			var gap: Control = free_spacers.pop_back()
 			gap.size_flags_horizontal = Control.SIZE_FILL
 			gap.custom_minimum_size.x = gap_width
 			order.append(gap)
-		order.append(buttons[i])
-	for rest: Control in free_spacers:
-		rest.size_flags_horizontal = Control.SIZE_FILL
-		rest.custom_minimum_size.x = 0.0
+		order.append(shown[i])
+	for rest: Control in free_spacers + hidden:
+		if not rest is Button:
+			rest.size_flags_horizontal = Control.SIZE_FILL
+			rest.custom_minimum_size.x = 0.0
 		order.push_front(rest)
 	if leading != null:
 		leading.size_flags_horizontal = Control.SIZE_EXPAND_FILL

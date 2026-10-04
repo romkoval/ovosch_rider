@@ -95,7 +95,8 @@ const KIND_DIALOG: String = "dialog"
 ## низ карточки (каденс, зоны, Strava). История (`history_rows`): `rides` — 0 (второй профиль,
 ## без заездов) или сколько заездов показать (недостающие — синтетические, план и свободная
 ## езда вперемешку). Диалоги (`dialog`): `profile_create` — «Новый профиль», `forget_intervals` —
-## подтверждение «Отвязать Intervals.icu».
+## подтверждение «Отвязать Intervals.icu», `recovery` — восстановление незавершённого заезда
+## (T-114; заезд синтетический, в хранилище не пишется).
 const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_0030", "kind": KIND_WORKOUT_AT, "at_sec": 30},
 	{"id": "hud_toolbar_plan", "kind": KIND_WORKOUT_AT, "at_sec": 60, "toolbar": true},
@@ -107,6 +108,7 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "screen", "kind": KIND_APP_SCREENS},
 	{"id": "dialog_profile_create", "kind": KIND_DIALOG, "dialog": "profile_create"},
 	{"id": "dialog_forget_intervals", "kind": KIND_DIALOG, "dialog": "forget_intervals"},
+	{"id": "dialog_recovery", "kind": KIND_DIALOG, "dialog": "recovery"},
 	{"id": "history_ride_detail", "kind": KIND_RIDE_DETAIL},
 	{"id": "history_ride_detail_end", "kind": KIND_RIDE_DETAIL, "scroll_end": true},
 	{"id": "free_start", "kind": KIND_FREE_RIDE_AT, "at_sec": 20, "power_w": 190},
@@ -402,7 +404,8 @@ static func _synthetic_ride(profile: Profile, started: int, index: int) -> Ride:
 	return r
 
 
-## Диалог поверх экрана: «Новый профиль» или подтверждение «Отвязать Intervals.icu».
+## Диалог поверх экрана: «Новый профиль», подтверждение «Отвязать Intervals.icu» или
+## восстановление незавершённого заезда (поверх главного экрана, как при запуске).
 func _shoot_dialog(id: String, dialog: String) -> void:
 	match dialog:
 		"profile_create":
@@ -418,6 +421,19 @@ func _shoot_dialog(id: String, dialog: String) -> void:
 			settings.request_forget_intervals()
 			await _shoot(id)
 			(settings.get_node("%ForgetIntervalsDialog") as Window).hide()
+		"recovery":
+			_main.app_state.navigate(AppState.Screen.HOME)
+			var profile: Profile = _main.repo.get_active()
+			var started: int = int(Time.get_unix_time_from_system()) - 2 * 3600
+			var ride := _synthetic_ride(profile, started, 0)
+			ride.name = "Sweet Spot 3×10"
+			ride.metadata["in_progress"] = true
+			ride.metadata["recovered"] = true
+			var recovery := _main.recovery_dialog()
+			recovery.show_for([ride] as Array[Ride])
+			await _shoot(id)
+			# Решение не принимается: синтетического заезда нет в хранилище.
+			recovery.hide()
 		_:
 			_fail("%s: неизвестный диалог '%s'" % [id, dialog])
 
