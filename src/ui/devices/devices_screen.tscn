@@ -155,3 +155,5 @@ size = Vector2i(440, 200)
 ok_button_text = "ui.common.ok"
 dialog_text = "ui.devices.ble_help_text"
 dialog_autowrap = true
+
+[editable path="Root/AppBar"]
