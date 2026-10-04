@@ -15,7 +15,8 @@ extends RefCounted
 ## `ZwoParser`). Пока блок не начался, он свёрнут в одну строку `kind = repeat`
 ## («3 × 2:00 300 / 1:00 125 Вт», цвет — зона рабочего отрезка); с начала первого шага блока —
 ## строка на каждый шаг. Два соседних `IntervalsT` с одинаковыми параметрами неотличимы
-## от одного и сворачиваются вместе.
+## от одного и сворачиваются вместе. Если парсер сохранил границы повторов в плане
+## (`Workout.repeat_blocks`, Intervals.icu `Nx`), берутся они — блок любой длины периода.
 ##
 ## Окно (HUD-13.3): до `DONE_ROWS` строк перед текущей, текущая и до `NEXT_ROWS` после —
 ## не больше `MAX_ROWS`. До старта окно стоит так, как будто текущая — первая строка.
@@ -299,27 +300,40 @@ static func row_text(row: Dictionary, unit: String, free_text: String) -> String
 # Повторы
 # ---------------------------------------------------------------------------
 
-## Блоки `IntervalsT` в плоском плане: максимальные серии пар `INTERVAL_ON` + `INTERVAL_OFF`
-## с одинаковыми длительностями и целями. `{first, last, period = 2, count}`.
+## Блоки повторов плана `{first, last, period, count}` по `first`: сохранённые парсером
+## (`Workout.valid_repeat_blocks()`), а в остальных шагах — блоки `IntervalsT`: максимальные
+## серии пар `INTERVAL_ON` + `INTERVAL_OFF` с одинаковыми длительностями и целями (`period = 2`).
 static func detect_repeat_blocks(plan: Workout) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if plan == null:
 		return out
+	var explicit: Array[Dictionary] = plan.valid_repeat_blocks()
 	var steps: Array[WorkoutStep] = plan.steps
 	var n: int = steps.size()
+	var taken := PackedByteArray()
+	taken.resize(n)
+	for b in explicit:
+		for k in range(int(b["first"]), int(b["last"]) + 1):
+			taken[k] = 1
 	var i: int = 0
 	while i < n:
-		if not _is_pair_at(steps, i):
+		if not _is_free_pair_at(steps, taken, i):
 			i += 1
 			continue
 		var count: int = 1
 		var j: int = i + 2
-		while _is_pair_at(steps, j) and _same_step(steps[j], steps[i]) and _same_step(steps[j + 1], steps[i + 1]):
+		while _is_free_pair_at(steps, taken, j) and _same_step(steps[j], steps[i]) and _same_step(steps[j + 1], steps[i + 1]):
 			count += 1
 			j += 2
 		out.append({"first": i, "last": j - 1, "period": 2, "count": count})
 		i = j
+	out.append_array(explicit)
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["first"]) < int(b["first"]))
 	return out
+
+
+static func _is_free_pair_at(steps: Array[WorkoutStep], taken: PackedByteArray, i: int) -> bool:
+	return _is_pair_at(steps, i) and taken[i] == 0 and taken[i + 1] == 0
 
 
 static func _is_pair_at(steps: Array[WorkoutStep], i: int) -> bool:

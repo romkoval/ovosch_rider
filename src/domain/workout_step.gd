@@ -141,6 +141,21 @@ func duplicate_step() -> WorkoutStep:
 	return s
 
 
+## Тот же шаг по содержанию: тип, длительность, цель, каденс и подсказки. Так совпадают
+## копии одного шага в развёрнутом повторе (`Workout.expand_repeat`).
+func same_as(other: WorkoutStep) -> bool:
+	if other == null or kind != other.kind or duration_sec != other.duration_sec \
+			or target_kind != other.target_kind or cadence_rpm != other.cadence_rpm \
+			or not is_equal_approx(target_start, other.target_start) \
+			or not is_equal_approx(target_end, other.target_end) \
+			or text_cues.size() != other.text_cues.size():
+		return false
+	for i in text_cues.size():
+		if text_cues[i].at_sec != other.text_cues[i].at_sec or text_cues[i].text != other.text_cues[i].text:
+			return false
+	return true
+
+
 ## Сериализация в словарь (JSON-совместимый): `{duration_sec, target_kind, target_start,
 ## target_end, cadence_rpm, kind, text_cues: [{at_sec, text}]}`; перечисления — строками.
 func to_dict() -> Dictionary:

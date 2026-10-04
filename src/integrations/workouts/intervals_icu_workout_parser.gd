@@ -28,6 +28,10 @@ extends RefCounted
 ##    `press lap` у шага без цели по мощности. Свободные слова (`Keep HR low`) после валидной
 ##    цели — подсказка, не ошибка.
 ##
+## Блоки повторов после разворачивания остаются в `Workout.repeat_blocks` (`{first, last,
+## period, count}`, как у ZWO `IntervalsT`), чтобы список интервалов HUD свернул их
+## (REQ-HUD-13 п.8). У вложенных `reps` в `workout_doc` записывается только внешний блок.
+##
 ## Сумма длительностей сверяется с заявленной (`event.duration`, иначе
 ## `workout_doc.duration`, иначе `event.moving_time`): расхождение > 1 с →
 ## предупреждение (крит. 8). Любая ошибка → `workout == null` (крит. 9).
@@ -80,7 +84,8 @@ static func parse(event: Dictionary) -> ParseResult:
 
 static func _parse_doc(doc: Dictionary) -> ParseResult:
 	var result := ParseResult.new()
-	var steps: Array[WorkoutStep] = _parse_doc_steps(doc["steps"], "steps", 0, result)
+	var blocks: Array[Dictionary] = []
+	var steps: Array[WorkoutStep] = _parse_doc_steps(doc["steps"], "steps", 0, result, blocks)
 	if not result.errors.is_empty():
 		return result
 	if steps.is_empty():
@@ -89,6 +94,7 @@ static func _parse_doc(doc: Dictionary) -> ParseResult:
 	var w := Workout.new()
 	w.source = "intervals_icu"
 	w.steps = steps
+	w.repeat_blocks = blocks
 	w.description = str(doc.get("description", ""))
 	for e in w.validate():
 		result.add_error(e, 0, 0, "workout_doc", "invalid_workout")
@@ -97,7 +103,10 @@ static func _parse_doc(doc: Dictionary) -> ParseResult:
 
 
 ## Рекурсивный разбор массива шагов. `top_line` — номер шага верхнего уровня (0 — мы на верхнем уровне).
-static func _parse_doc_steps(items: Array, path: String, top_line: int, result: ParseResult) -> Array[WorkoutStep]:
+## В `blocks` — блоки повторов этого уровня (индексы в возвращаемом массиве); блоки вложенных
+## уровней не собираются (строки списка не вкладываются друг в друга).
+static func _parse_doc_steps(items: Array, path: String, top_line: int, result: ParseResult,
+		blocks: Array[Dictionary]) -> Array[WorkoutStep]:
 	var out: Array[WorkoutStep] = []
 	for i in items.size():
 		var item: Variant = items[i]
@@ -114,10 +123,13 @@ static func _parse_doc_steps(items: Array, path: String, top_line: int, result: 
 				continue
 			if not result.check_repeat_count(reps, line, 0, step_path + ".reps"):
 				continue
-			var block := _parse_doc_steps(step["steps"], step_path + ".steps", line, result)
+			var inner_blocks: Array[Dictionary] = []
+			var block := _parse_doc_steps(step["steps"], step_path + ".steps", line, result, inner_blocks)
 			# Пределы — до разворачивания (вложенные повторы перемножаются).
 			if not result.check_repeat(reps, block.size(), out.size(), line, 0, step_path + ".reps"):
 				continue
+			if not block.is_empty():
+				blocks.append(Workout.repeat_block(out.size(), block.size(), reps))
 			out.append_array(Workout.expand_repeat(block, reps))
 			continue
 		var s := _parse_doc_step(step, step_path, line, result)
@@ -243,6 +255,7 @@ static func parse_description_text(text: String) -> ParseResult:
 		return result
 	var lines: PackedStringArray = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 	var steps: Array[WorkoutStep] = []
+	var blocks: Array[Dictionary] = []  # метаданные развёрнутых повторов
 	var block: Array[WorkoutStep] = []  # шаги текущего повтора
 	var block_reps: int = 0  # 0 — вне повтора
 	var block_line: int = 0  # строка «Nx» текущего повтора (для ошибки предела)
@@ -255,14 +268,14 @@ static func parse_description_text(text: String) -> ParseResult:
 		var line := raw.strip_edges()
 		if line.is_empty():
 			if block_reps > 0:
-				_flush_block(steps, block, block_reps, result, block_line, block_text)
+				_flush_block(steps, blocks, block, block_reps, result, block_line, block_text)
 				block = []
 				block_reps = 0
 			continue
 		var rm := repeat_re.search(line)
 		if rm != null:
 			if block_reps > 0:
-				_flush_block(steps, block, block_reps, result, block_line, block_text)
+				_flush_block(steps, blocks, block, block_reps, result, block_line, block_text)
 				block = []
 				block_reps = 0
 			var digits := rm.get_string(1)
@@ -282,7 +295,7 @@ static func parse_description_text(text: String) -> ParseResult:
 					col_base += part.length() + 1
 					if s != null:
 						inline_block.append(s)
-				_flush_block(steps, inline_block, reps, result, line_no, line)
+				_flush_block(steps, blocks, inline_block, reps, result, line_no, line)
 				block_reps = 0
 			else:
 				block_reps = reps
@@ -301,7 +314,7 @@ static func parse_description_text(text: String) -> ParseResult:
 			continue
 		pending_cues.append(line)
 	if block_reps > 0:
-		_flush_block(steps, block, block_reps, result, block_line, block_text)
+		_flush_block(steps, blocks, block, block_reps, result, block_line, block_text)
 	if not pending_cues.is_empty():
 		result.add_warning("текст без шага после него не привязан к подсказкам: '%s'" % " / ".join(pending_cues), line_no, 0, "", "dangling_text")
 	if not result.errors.is_empty():
@@ -312,16 +325,20 @@ static func parse_description_text(text: String) -> ParseResult:
 	var w := Workout.new()
 	w.source = "intervals_icu"
 	w.steps = steps
+	w.repeat_blocks = blocks
 	for e in w.validate():
 		result.add_error(e, 0, 0, "description", "invalid_workout")
 	result.set_workout(w)
 	return result
 
 
-## Развернуть блок повтора в `steps`, если не превышены пределы (`ParseResult.check_repeat`).
-static func _flush_block(steps: Array[WorkoutStep], block: Array[WorkoutStep], reps: int, result: ParseResult,
-		line_no: int, element: String) -> void:
+## Развернуть блок повтора в `steps`, если не превышены пределы (`ParseResult.check_repeat`),
+## и записать его границы в `blocks` (`Workout.repeat_block`).
+static func _flush_block(steps: Array[WorkoutStep], blocks: Array[Dictionary], block: Array[WorkoutStep], reps: int,
+		result: ParseResult, line_no: int, element: String) -> void:
 	if result.check_repeat(reps, block.size(), steps.size(), line_no, 1, element):
+		if not block.is_empty():
+			blocks.append(Workout.repeat_block(steps.size(), block.size(), reps))
 		steps.append_array(Workout.expand_repeat(block, reps))
 
 

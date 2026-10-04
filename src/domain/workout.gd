@@ -3,7 +3,8 @@ extends RefCounted
 ## Структурированная тренировка: плоский список шагов (REQ-INT-03, REQ-WRK-01).
 ##
 ## Повторы (`3x ...`) разворачиваются на этапе парсинга через `expand_repeat`;
-## в модели хранится уже плоская последовательность (REQ-INT-03 крит. 5).
+## в модели хранится уже плоская последовательность (REQ-INT-03 крит. 5). След блока
+## повторов — в `repeat_blocks` (только для показа, на исполнение не влияет; REQ-HUD-13 п.8).
 
 ## Допустимые значения `source`.
 const SOURCES: Array[String] = ["intervals_icu", "zwo", "erg", "mrc", "manual"]
@@ -17,6 +18,14 @@ var steps: Array[WorkoutStep] = []
 ## `source_file`, `ftp_header`, `event_id` и т. п. (REQ-IMP-01 крит. 5, REQ-IMP-02 крит. 4).
 ## Только JSON-совместимые значения.
 var metadata: Dictionary = {}
+## Блоки повторов в плоском `steps`: `{first, last, period, count}` — индексы первого и
+## последнего шага блока (`last` включительно), шагов в одном повторе и число повторов;
+## `last = first + period * count - 1`. Тот же вид, что у блоков `IntervalsT`, которые
+## `IntervalListModel.detect_repeat_blocks` находит в плане ZWO. Заполняют парсеры, которые
+## знают границы повтора (Intervals.icu); вложенные повторы — только внешний блок.
+## Метаданные показа: читать через `valid_repeat_blocks()` — она отбрасывает блоки,
+## не совпадающие с текущими шагами.
+var repeat_blocks: Array[Dictionary] = []
 
 ## Версия схемы `to_dict()`.
 const SCHEMA_VERSION: int = 1
@@ -42,15 +51,65 @@ static func expand_repeat(block: Array[WorkoutStep], count: int) -> Array[Workou
 	return out
 
 
+## Метаданные блока повторов (см. `repeat_blocks`) для блока из `period` шагов, повторённого
+## `count` раз, начиная с шага `first`.
+static func repeat_block(first: int, period: int, count: int) -> Dictionary:
+	return {"first": first, "last": first + period * count - 1, "period": period, "count": count}
+
+
+## Блоки `repeat_blocks`, согласованные со `steps`: индексы в пределах плана,
+## `last = first + period * count - 1`, `period ≥ 1`, `count ≥ 1`, каждый повтор совпадает
+## с первым (`WorkoutStep.same_as`), блоки не пересекаются. Порядок — по `first`.
+## Остальные (устаревшие после правки шагов, битые из файла) молча пропускаются.
+func valid_repeat_blocks() -> Array[Dictionary]:
+	var sorted: Array[Dictionary] = repeat_blocks.duplicate(true)
+	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["first"]) < int(b["first"]))
+	var out: Array[Dictionary] = []
+	var next_free: int = 0
+	for b in sorted:
+		if _block_matches_steps(b) and int(b["first"]) >= next_free:
+			out.append(b)
+			next_free = int(b["last"]) + 1
+	return out
+
+
+func _block_matches_steps(b: Dictionary) -> bool:
+	var first: int = int(b["first"])
+	var last: int = int(b["last"])
+	var period: int = int(b["period"])
+	var count: int = int(b["count"])
+	if first < 0 or period < 1 or count < 1 or last >= steps.size() or last != first + period * count - 1:
+		return false
+	for k in range(first + period, last + 1):
+		if not steps[k].same_as(steps[k - period]):
+			return false
+	return true
+
+
+## Блок повторов из словаря (`to_dict`/JSON): четыре целых поля; иначе пустой словарь.
+static func _repeat_block_from(data: Variant) -> Dictionary:
+	if not (data is Dictionary):
+		return {}
+	var d: Dictionary = data
+	var out: Dictionary = {}
+	for key in ["first", "last", "period", "count"]:
+		var v: Variant = d.get(key)
+		if not (v is int or v is float):
+			return {}
+		out[key] = roundi(clampf(float(v), -1.0e9, 1.0e9))
+	return out
+
+
 ## Сериализация в словарь (JSON-совместимый): `{schema, name, description, source,
-## metadata, steps: [WorkoutStep.to_dict()]}`. Числа метаданных отдаются как float
+## metadata, steps: [WorkoutStep.to_dict()]}` и `repeat_blocks: [{first, last, period, count}]`,
+## если блоки повторов есть (без них словарь прежнего вида). Числа метаданных отдаются как float
 ## (как они выглядят после JSON), поэтому `from_dict(to_dict()).to_dict()` и
 ## `from_dict(JSON(to_dict())).to_dict()` совпадают с `to_dict()` без потерь.
 func to_dict() -> Dictionary:
 	var items: Array = []
 	for s in steps:
 		items.append(s.to_dict())
-	return {
+	var out := {
 		"schema": SCHEMA_VERSION,
 		"name": name,
 		"description": description,
@@ -58,10 +117,14 @@ func to_dict() -> Dictionary:
 		"metadata": _json_numbers(metadata.duplicate(true)),
 		"steps": items,
 	}
+	if not repeat_blocks.is_empty():
+		out["repeat_blocks"] = repeat_blocks.duplicate(true)
+	return out
 
 
 ## Восстановление из словаря; null, если нет массива `steps`. Битые шаги
-## пропускаются (их отловит `validate()` по итогу). Не падает на любом входе.
+## пропускаются (их отловит `validate()` по итогу), битые блоки повторов — тоже;
+## словарь без `repeat_blocks` (старый) — план без блоков. Не падает на любом входе.
 static func from_dict(data: Dictionary) -> Workout:
 	if not (data.get("steps") is Array):
 		return null
@@ -77,6 +140,12 @@ static func from_dict(data: Dictionary) -> Workout:
 			var s := WorkoutStep.from_dict(item)
 			if s != null:
 				w.steps.append(s)
+	var blocks: Variant = data.get("repeat_blocks", [])
+	if blocks is Array:
+		for item in blocks:
+			var b := _repeat_block_from(item)
+			if not b.is_empty():
+				w.repeat_blocks.append(b)
 	return w
 
 
