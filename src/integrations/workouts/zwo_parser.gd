@@ -11,6 +11,9 @@ extends RefCounted
 ##   раскрывается в плоский список через `Workout.expand_repeat` (крит. 1); `Repeat` не больше
 ##   `ParseResult.MAX_REPEAT_COUNT`, шагов после разворачивания не больше
 ##   `ParseResult.MAX_TOTAL_STEPS` — иначе ошибка `too_many_repeats`/`too_many_steps`;
+##   границы блока остаются в `Workout.repeat_blocks` (`Workout.repeat_block(first, 2, Repeat)`,
+##   как у Intervals.icu `Nx`; только для показа — REQ-HUD-13 п.8, T-113): список интервалов
+##   HUD сворачивает ровно этот блок, а не соседние пары on/off с теми же параметрами;
 ## - `FreeRide` → шаг без цели (крит. 2); `MaxEffort` → как `FreeRide`, с предупреждением;
 ## - `Cadence`, `CadenceLow`/`CadenceHigh` (середина), `CadenceResting` (крит. 3);
 ## - `textevent` (`timeoffset`, `message`) → `TextCue` шага; `duration` игнорируется
@@ -51,6 +54,7 @@ static func parse(xml_text: String) -> ParseResult:
 	var workout := Workout.new()
 	workout.source = "zwo"
 	var steps: Array[WorkoutStep] = []
+	var blocks: Array[Dictionary] = []  # границы развёрнутых IntervalsT
 	var stack: Array[String] = []  # имена открытых элементов (в нижнем регистре)
 	var saw_root := false
 	var root_closed := false
@@ -108,7 +112,7 @@ static func parse(xml_text: String) -> ParseResult:
 				# Глубже (например, <tags><tag/>) — метаданные, молча пропускаем.
 				if self_closing:
 					if depth == 2 and stack[depth - 1] == WORKOUT_ELEMENT and STEP_ELEMENTS.has(lname):
-						_flush_pending(steps, pending, pending_repeat, pending_is_intervals, result, line, name)
+						_flush_pending(steps, blocks, pending, pending_repeat, pending_is_intervals, result, line, name)
 						pending = []
 					elif depth == 1 and lname != WORKOUT_ELEMENT:
 						_store_meta(workout, result, lname, "")
@@ -130,7 +134,7 @@ static func parse(xml_text: String) -> ParseResult:
 				if depth == 0:
 					root_closed = true
 				if depth == 2 and stack[1] == WORKOUT_ELEMENT and STEP_ELEMENTS.has(lname):
-					_flush_pending(steps, pending, pending_repeat, pending_is_intervals, result, line, parser.get_node_name())
+					_flush_pending(steps, blocks, pending, pending_repeat, pending_is_intervals, result, line, parser.get_node_name())
 					pending = []
 				elif depth == 1 and lname != WORKOUT_ELEMENT:
 					_store_meta(workout, result, lname, meta_text.strip_edges())
@@ -161,6 +165,7 @@ static func parse(xml_text: String) -> ParseResult:
 		result.add_error("тренировка не содержит шагов", 0, 0, "workout", "no_steps")
 		return result
 	workout.steps = steps
+	workout.repeat_blocks = blocks
 	workout.metadata = result.metadata.duplicate(true)
 	for e in workout.validate():
 		result.add_error(e, 0, 0, "", "invalid_workout")
@@ -326,8 +331,9 @@ static func _attach_cue(pending: Array[WorkoutStep], attrs: Dictionary, element:
 
 ## Шаги элемента → в план. Повтор `IntervalsT` разворачивается только после проверки
 ## пределов (`ParseResult.check_repeat`); превышение — ошибка, шаги не добавляются.
-static func _flush_pending(steps: Array[WorkoutStep], pending: Array[WorkoutStep], repeat: int, is_intervals: bool,
-		result: ParseResult, line: int, element: String) -> void:
+## Границы развёрнутого `IntervalsT` записываются в `blocks` (`Workout.repeat_block`).
+static func _flush_pending(steps: Array[WorkoutStep], blocks: Array[Dictionary], pending: Array[WorkoutStep],
+		repeat: int, is_intervals: bool, result: ParseResult, line: int, element: String) -> void:
 	if pending.is_empty():
 		return
 	var reps := repeat if is_intervals else 1
@@ -336,6 +342,7 @@ static func _flush_pending(steps: Array[WorkoutStep], pending: Array[WorkoutStep
 	if not result.check_repeat(reps, pending.size(), steps.size(), line, 0, element):
 		return
 	if is_intervals:
+		blocks.append(Workout.repeat_block(steps.size(), pending.size(), repeat))
 		steps.append_array(Workout.expand_repeat(pending, repeat))
 	else:
 		steps.append_array(pending)

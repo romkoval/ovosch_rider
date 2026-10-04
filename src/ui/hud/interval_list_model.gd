@@ -10,13 +10,15 @@ extends RefCounted
 ## Состояния (как у `PlanChartModel`): `skipped` (по журналу сессии, WRK-06) → `current`
 ## (индекс исполнителя, ровно одна строка) → `done` (шаг левее текущего) → `upcoming`.
 ##
-## Повторы (HUD-13.8). В плоском плане блок `IntervalsT` — подряд идущие пары
-## `INTERVAL_ON` + `INTERVAL_OFF` с одинаковыми длительностями и целями (так их разворачивает
-## `ZwoParser`). Пока блок не начался, он свёрнут в одну строку `kind = repeat`
-## («3 × 2:00 300 / 1:00 125 Вт», цвет — зона рабочего отрезка); с начала первого шага блока —
-## строка на каждый шаг. Два соседних `IntervalsT` с одинаковыми параметрами неотличимы
-## от одного и сворачиваются вместе. Если парсер сохранил границы повторов в плане
-## (`Workout.repeat_blocks`, Intervals.icu `Nx`), берутся они — блок любой длины периода.
+## Повторы (HUD-13.8). Пока блок не начался, он свёрнут в одну строку `kind = repeat`
+## («3 × 2:00 300 / 1:00 125 Вт»); с начала первого шага блока — строка на каждый шаг.
+## Цвет свёрнутой строки — зона рабочего отрезка: шага повтора с наибольшей целью (блок может
+## начинаться с отдыха: «3x (2m 50%, 1m 120%)»; T-113). Границы блоков — сохранённые парсером
+## (`Workout.repeat_blocks`: Intervals.icu `Nx`, ZWO `IntervalsT`), блок любой длины периода.
+## В планах без сохранённых блоков (сохранены до T-099/T-113) — прежняя эвристика: подряд идущие
+## пары `INTERVAL_ON` + `INTERVAL_OFF` с одинаковыми длительностями и целями (так разворачивается
+## `IntervalsT`); два соседних `IntervalsT` с одинаковыми параметрами при этом неотличимы
+## от одного и сворачиваются вместе.
 ##
 ## Окно (HUD-13.3): до `DONE_ROWS` строк перед текущей, текущая и до `NEXT_ROWS` после —
 ## не больше `MAX_ROWS`. До старта окно стоит так, как будто текущая — первая строка.
@@ -432,7 +434,7 @@ func _repeat_row(block: Dictionary) -> Dictionary:
 	var first: int = int(block["first"])
 	var last: int = int(block["last"])
 	var period: int = int(block["period"])
-	var work: Dictionary = _base[first]
+	var work: Dictionary = _base[_work_step(first, period)]
 	var parts: Array = []
 	for k in period:
 		var p: Dictionary = _base[first + k]
@@ -459,6 +461,20 @@ func _repeat_row(block: Dictionary) -> Dictionary:
 		"repeat_count": int(block["count"]),
 		"parts": parts,
 	}
+
+
+## Рабочий отрезок повтора `[first, first + period)`: шаг с наибольшей целью (у рампы —
+## по большему концу), свободные шаги — без цели, ниже любых; при равенстве — первый.
+func _work_step(first: int, period: int) -> int:
+	var best: int = first
+	var best_w: int = -1
+	for k in range(first, first + period):
+		var p: Dictionary = _base[k]
+		var w: int = -1 if p["free"] else maxi(int(p["start_watts"]), int(p["end_watts"]))
+		if w > best_w:
+			best = k
+			best_w = w
+	return best
 
 
 func _status_of(i: int) -> String:

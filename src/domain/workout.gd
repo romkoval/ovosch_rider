@@ -21,8 +21,9 @@ var metadata: Dictionary = {}
 ## Блоки повторов в плоском `steps`: `{first, last, period, count}` — индексы первого и
 ## последнего шага блока (`last` включительно), шагов в одном повторе и число повторов;
 ## `last = first + period * count - 1`. Тот же вид, что у блоков `IntervalsT`, которые
-## `IntervalListModel.detect_repeat_blocks` находит в плане ZWO. Заполняют парсеры, которые
-## знают границы повтора (Intervals.icu); вложенные повторы — только внешний блок.
+## `IntervalListModel.detect_repeat_blocks` находит эвристикой в планах без блоков. Заполняют
+## парсеры, которые знают границы повтора (Intervals.icu `Nx`, ZWO `IntervalsT`); вложенные
+## повторы — только внешний блок.
 ## Метаданные показа: читать через `valid_repeat_blocks()` — она отбрасывает блоки,
 ## не совпадающие с текущими шагами.
 var repeat_blocks: Array[Dictionary] = []
