@@ -26,6 +26,11 @@ const MIN_PHYSICS_TICKS_PER_SECOND: int = 60
 ## = 65536 слотов, 16 на узел) — 4096 узлов на процесс: два экрана заезда по 1024 и пересборка
 ## одного из них (старые узлы живут до конца кадра) — 3072, запас 1024.
 const MAX_LOOK_INSTANCES: int = 1024
+## Хвойные (T-107, REQ-D3D-10; арт-библия «Растительность: хвойные», «Бюджет»): треугольников
+## хвойных в кадре без контура (рабочая камера «Перевала») и слоёв MultiMesh хвойных на трассу.
+## Треугольники экземпляра по уровням детализации — `ConiferKit.tri_budget`.
+const MAX_CONIFER_FRAME_TRIANGLES: int = 260000
+const MAX_CONIFER_LAYERS: int = 6
 
 ## Длина куска MultiMesh вдоль трассы, м, и потолок числа кусков на тип объекта (на очень
 ## длинном маршруте кусок удлиняется).
@@ -155,6 +160,38 @@ static func max_visible_along(nodes: Array, track: Track, step_m: float = CHECK_
 				seen += visible_multimesh_instances(node as Node, sample.position, EYE_SLACK_M)
 		best = maxi(best, seen)
 	return best
+
+
+## Треугольников в кадре по метаданным `triangles` кусков MultiMesh под `root` (хвойные, T-107;
+## без контура и без схлопнутых вершин чужих форм): кусок в дальности видимости (как
+## `visible_multimesh_instances`) и его AABB не целиком снаружи плоскостей камеры `frustum`
+## (`Camera3D.get_frustum`) — так отбирает куски движок.
+static func frame_triangles(root: Node, eye: Vector3, frustum: Array[Plane]) -> int:
+	var total: int = 0
+	if root is MultiMeshInstance3D and root.has_meta(&"triangles"):
+		var mmi := root as MultiMeshInstance3D
+		if mmi.visible and mmi.multimesh != null and mmi.multimesh.instance_count > 0:
+			var xf: Transform3D = mmi.global_transform if mmi.is_inside_tree() else mmi.transform
+			var box: AABB = xf * multimesh_aabb(mmi.multimesh)
+			var in_range: bool = mmi.visibility_range_end <= 0.0 or \
+				eye.distance_to(box.get_center()) <= mmi.visibility_range_end + mmi.visibility_range_end_margin
+			if in_range and _aabb_in_frustum(box, frustum):
+				total += int(mmi.get_meta(&"triangles"))
+	for child in root.get_children():
+		total += frame_triangles(child, eye, frustum)
+	return total
+
+
+static func _aabb_in_frustum(box: AABB, frustum: Array[Plane]) -> bool:
+	for plane in frustum:
+		var outside: bool = true
+		for i in 8:
+			if not plane.is_point_over(box.get_endpoint(i)):
+				outside = false
+				break
+		if outside:
+			return false
+	return true
 
 
 ## AABB мультимеша: заданный при построении `custom_aabb` (позиции экземпляров на

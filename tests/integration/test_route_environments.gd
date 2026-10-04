@@ -9,6 +9,8 @@ extends GutTest
 ## водная поверхность на уровне воды трассы, рельеф уходит под воду, пляж, зонтичные сосны не на
 ## песке, маяк на мысу со светом без источника света, ориентиры seaside (мост — T-090,
 ## `test_seaside_bridge.gd`) — REQ-D3D-08 п.6 (вода, высота горизонта равнина < приморье < холмы), п.8, п.11, п.12.
+## Хвойные (T-107): формы, доли, вариации, уровни детализации и бюджет — REQ-D3D-10 п.1–4, бюджет
+## кадра и маска тени кроны (acne, п.7).
 
 const SCENE: String = "res://src/scene3d/ride_scene.tscn"
 const FRAME: float = 1.0 / 60.0
@@ -465,12 +467,14 @@ func test_mountains_world_has_boulders_conifers_only_and_no_fields_layers() -> v
 	var above: int = 0
 	for layer in layers:
 		counts[layer.name] = layer.xf.size()
-		if layer.name == "Trees" or layer.name == "Conifers":
+		if layer.name.begins_with("Conifers"):
+			counts["conifers"] = int(counts.get("conifers", 0)) + layer.xf.size()
+		if layer.name == "Trees" or layer.name.begins_with("Conifers"):
 			for t in layer.xf:
 				if t.origin.y > s.environment_set.tree_line_m + 1.0:
 					above += 1
 	assert_eq(int(counts.get("Trees", 0)), 0, "лиственных нет: %s" % str(counts))
-	assert_gt(int(counts.get("Conifers", 0)), 500, "ели: %s" % str(counts))
+	assert_gt(int(counts.get("conifers", 0)), 500, "ели (все слои хвойных): %s" % str(counts))
 	assert_gt(int(counts.get("Boulders", 0)), 300, "валуны по всей трассе: %s" % str(counts))
 	assert_eq(above, 0, "выше границы леса деревьев нет")
 
@@ -787,8 +791,8 @@ func test_seaside_vegetation_not_on_beach_or_in_water() -> void:
 	for layer in layers:
 		if layer.name == "Tufts":
 			continue
-		if layer.name == "Conifers":
-			pines = layer.xf.size()
+		if layer.name.begins_with("Conifers"):
+			pines += layer.xf.size()
 		for t in layer.xf:
 			if t.origin.y < tf.water_level + env.shore_clear_m - 0.5:
 				wet += 1
@@ -797,7 +801,12 @@ func test_seaside_vegetation_not_on_beach_or_in_water() -> void:
 	var conifers: Array[Node] = s.world_nodes().filter(func(n: Node) -> bool: return n.name == "Conifers")
 	assert_eq(conifers.size(), 1)
 	var mm: MultiMesh = (conifers[0] as MultiMeshInstance3D).multimesh
-	assert_eq(mm.mesh, SceneryBuilder.umbrella_pine_mesh(mm.mesh.surface_get_material(0)), "хвойные приморья — зонтичная сосна")
+	var forms: Dictionary = conifers[0].get_meta(&"conifer_forms", {})
+	assert_true(forms.has("stone_pine"), "хвойные приморья — зонтичная сосна (пиния): %s" % str(forms))
+	for key in forms:
+		assert_true(ConiferKit.is_pine(ConiferKit.FORM_KEYS.find(String(key))), "на приморье только пинии: %s" % key)
+	assert_eq(mm.mesh, ConiferKit.layer_mesh(ConiferKit.models_for(ConiferKit.mix_forms(ConiferKit.form_mix(s.environment_set)), 0), 0,
+		mm.mesh.surface_get_material(0)), "меш слоя — пинии (T-107)")
 
 
 func test_seaside_lighthouse_on_headland_with_glowing_rotating_lamp() -> void:
@@ -883,3 +892,444 @@ func test_seaside_landmarks_on_shore_and_pier_reaches_water() -> void:
 				assert_gt(over_water, 20, "причал уходит в море")
 				seen.append(pl.type)
 	assert_eq(seen.size(), 3, "причал, пляж и вышка спасателя: %s" % str(seen))
+
+
+# ---------------------------------------------------------------------------
+# Хвойные (T-107, REQ-D3D-10; числа — арт-библия «Растительность: хвойные», `ConiferKit`)
+# ---------------------------------------------------------------------------
+
+## Уникальных материалов сцены до T-107 (a03d1f8): хвойные не добавляют материалов (п.4).
+const MATERIALS_BEFORE_T107: Dictionary = {"flat": 5, "hills": 5, "mountains": 5, "seaside": 6}
+
+var _conifer_place: Dictionary = {}
+
+
+## Расстановка хвойных трассы (все экземпляры до прореживания) — слои `Conifers*`.
+func _conifer_layers(id: String) -> Array[SceneryBuilder.Layer]:
+	if not _conifer_place.has(id):
+		var s := _scene(id)
+		var out: Array[SceneryBuilder.Layer] = []
+		for layer in SceneryBuilder.place(s.track, s.environment_set, s.terrain(), null, PerfBudget.MAX_VISIBLE_MULTIMESH_INSTANCES,
+				PerfBudget.MAX_MULTIMESH_INSTANCES, LandmarkBuilder.keep_out(s.landmarks_placed())):
+			if layer.name.begins_with("Conifers"):
+				out.append(layer)
+		_conifer_place[id] = out
+	return _conifer_place[id]
+
+
+func _conifer_plants(id: String) -> Array[ConiferKit.Plant]:
+	var out: Array[ConiferKit.Plant] = []
+	for layer in _conifer_layers(id):
+		out.append_array(layer.plants)
+	return out
+
+
+## Узлы слоёв хвойных в мире сцены.
+func _conifer_nodes(s: RideScene) -> Array[MultiMeshInstance3D]:
+	var out: Array[MultiMeshInstance3D] = []
+	for n in s.world_nodes():
+		if String(n.name).begins_with("Conifers"):
+			out.append(n as MultiMeshInstance3D)
+	return out
+
+
+## REQ-D3D-10 п.1: в сцене каждой трассы — не меньше трёх форм хвойных, набор — из распределения
+## спеки (приморье — пинии); доли форм — по спеке ±10 п.п.; горы: у границы леса пихта и
+## ветровал ≥ 60 %; приморье: наклонные пинии — у воды (≤ 150 м).
+func test_req_d3d_10_c1_conifer_forms_per_track_follow_spec() -> void:
+	for id in IDS:
+		var s := _scene(id)
+		var mix: Dictionary = ConiferKit.form_mix(s.environment_set)
+		var in_scene: Dictionary = {}
+		for n in _conifer_nodes(s):
+			var forms: Dictionary = n.get_meta(&"conifer_forms", {})
+			for key in forms:
+				in_scene[key] = int(in_scene.get(key, 0)) + int(forms[key])
+		assert_gte(in_scene.size(), 3, "%s: в сцене не меньше трёх форм хвойных: %s" % [id, str(in_scene)])
+		for key in in_scene:
+			assert_true(mix.has(ConiferKit.FORM_KEYS.find(String(key))), "%s: форма %s — из распределения спеки" % [id, key])
+		var plants := _conifer_plants(id)
+		var counts: Dictionary = {}
+		for p in plants:
+			counts[p.form] = int(counts.get(p.form, 0)) + 1
+		for f in mix:
+			var share: float = float(counts.get(f, 0)) / float(maxi(plants.size(), 1))
+			assert_almost_eq(share, float(mix[f]), 0.10, "%s: доля %s" % [id, ConiferKit.FORM_KEYS[f]])
+	assert_true(ConiferKit.form_mix(_scene(RouteCatalog.SEASIDE).environment_set).has(ConiferKit.STONE_PINE), "приморье — пиния")
+	# Горы: полоса 60 м ниже границы леса.
+	var env: EnvironmentSet = _scene(RouteCatalog.MOUNTAINS).environment_set
+	var band: int = 0
+	var high: int = 0
+	for p in _conifer_plants(RouteCatalog.MOUNTAINS):
+		if p.origin.y > env.tree_line_m - env.conifer_tree_line_band_m:
+			band += 1
+			if p.form == ConiferKit.FIR or p.form == ConiferKit.SPRUCE_WIND:
+				high += 1
+	assert_gt(band, 20, "у границы леса есть хвойные")
+	assert_gte(float(high) / float(maxi(band, 1)), 0.6, "у границы леса пихта и ветровал ≥ 60 %% (%d из %d)" % [high, band])
+	# Приморье: наклонные — у воды, наклон к ней.
+	var tf: TerrainField = _scene(RouteCatalog.SEASIDE).terrain()
+	var lean: int = 0
+	var far: int = 0
+	for p in _conifer_plants(RouteCatalog.SEASIDE):
+		if p.form != ConiferKit.STONE_PINE_LEAN:
+			continue
+		lean += 1
+		if p.lean_dir == Vector3.ZERO or not _water_within(tf, p.origin, 150.0):
+			far += 1
+	assert_gt(lean, 20, "наклонные пинии есть")
+	assert_eq(far, 0, "наклонные пинии — в 150 м от воды, наклон к воде")
+
+
+func _water_within(tf: TerrainField, p: Vector3, reach: float) -> bool:
+	for k in 16:
+		var a: float = TAU * float(k) / 16.0
+		var d: float = 10.0
+		while d <= reach:
+			if tf.water_depth_at(p.x + cos(a) * d, p.z + sin(a) * d) > 0.0:
+				return true
+			d += 10.0
+	return false
+
+
+## REQ-D3D-10 п.2: масштаб, растяжение, наклон, поворот и оттенок — в диапазонах спеки; ни один
+## из масштаба, поворота и оттенка не одинаков у всех экземпляров одной формы.
+func test_req_d3d_10_c2_conifer_variations_within_spec_ranges() -> void:
+	for id in IDS:
+		var by_form: Dictionary = {}
+		for p in _conifer_plants(id):
+			var f: int = p.form
+			var pine: bool = ConiferKit.is_pine(f)
+			var tag: String = "%s %s" % [id, ConiferKit.FORM_KEYS[f]]
+			assert_between(p.scale, ConiferKit.SCALE_RANGE[f].x, ConiferKit.SCALE_RANGE[f].y, "%s: масштаб" % tag)
+			var st: Vector2 = ConiferKit.STRETCH_PINE if pine else ConiferKit.STRETCH_SPRUCE
+			assert_between(p.stretch, st.x, st.y, "%s: растяжение по Y" % tag)
+			var tilt_max: float = ConiferKit.TILT_PINE_DEG if pine else ConiferKit.TILT_SPRUCE_SLOPE_DEG
+			if f == ConiferKit.STONE_PINE_LEAN and p.lod > 0:
+				tilt_max += ConiferKit.LEAN_TILT_DEG
+			assert_lte(rad_to_deg(p.tilt), tilt_max + 1e-3, "%s: наклон оси" % tag)
+			var br: Vector2 = ConiferKit.BRIGHT_PINE if pine else ConiferKit.BRIGHT_SPRUCE
+			var rr: Vector2 = ConiferKit.RED_PINE if pine else ConiferKit.RED_SPRUCE
+			var bb: Vector2 = ConiferKit.BLUE_PINE if pine else ConiferKit.BLUE_SPRUCE
+			assert_between(p.tint.x, br.x, br.y, "%s: яркость" % tag)
+			assert_between(p.tint.y, rr.x, rr.y, "%s: множитель R" % tag)
+			assert_between(p.tint.z, bb.x, bb.y, "%s: множитель B" % tag)
+			if not by_form.has(f):
+				by_form[f] = []
+			(by_form[f] as Array).append(Vector3(p.scale, p.yaw, p.tint.x))
+		for f in by_form:
+			var rows: Array = by_form[f]
+			if rows.size() < 2:
+				continue
+			for axis in 3:
+				var lo: float = INF
+				var hi: float = -INF
+				for r in rows:
+					lo = minf(lo, (r as Vector3)[axis])
+					hi = maxf(hi, (r as Vector3)[axis])
+				assert_gt(hi - lo, 1e-3, "%s %s: параметр %d различается у экземпляров" % [id, ConiferKit.FORM_KEYS[f], axis])
+
+
+## REQ-D3D-10 п.3: треугольников экземпляра каждой формы на каждом уровне — не больше спеки
+## (по слоту формы в меше слоя); уровень назначен по удалению от трассы (≤ 60 / ≤ 220 / дальше),
+## экземпляр — в слое своего уровня; дальность видимости кусков — как у деревьев, переключения
+## в кадре нет (без `visibility_range_begin`).
+func test_req_d3d_10_c3_conifer_lod_triangles_and_switch_distances() -> void:
+	for f in ConiferKit.FORM_KEYS.size():
+		for lod in ConiferKit.LOD_COUNT:
+			var tris: int = ConiferKit.triangles(ConiferKit.model_of(f, lod), lod)
+			assert_gt(ConiferKit.tri_budget(f, lod), 0, "%s LOD%d: бюджет из спеки" % [ConiferKit.FORM_KEYS[f], lod])
+			assert_lte(tris, ConiferKit.tri_budget(f, lod), "%s LOD%d: %d треугольников" % [ConiferKit.FORM_KEYS[f], lod, tris])
+	for id in IDS:
+		var s := _scene(id)
+		var forms: PackedInt32Array = ConiferKit.mix_forms(ConiferKit.form_mix(s.environment_set))
+		for lod in ConiferKit.LOD_COUNT:
+			var models: PackedInt32Array = ConiferKit.models_for(forms, lod)
+			var mesh: ArrayMesh = ConiferKit.layer_mesh(models, lod, null)
+			var arrays: Array = mesh.surface_get_arrays(0)
+			var uv2: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+			var per_slot := PackedInt32Array()
+			per_slot.resize(models.size())
+			var mixed: int = 0
+			for t in range(0, idx.size(), 3):
+				var slot: int = maxi(int(round(uv2[idx[t]].x)) - 1, 0)
+				for k in 3:
+					if maxi(int(round(uv2[idx[t + k]].x)) - 1, 0) != slot:
+						mixed += 1
+				per_slot[slot] += 1
+			assert_eq(mixed, 0, "%s LOD%d: каждый треугольник — в одном слоте формы" % [id, lod])
+			for f in forms:
+				var slot: int = models.find(ConiferKit.model_of(f, lod))
+				assert_lte(per_slot[slot], ConiferKit.tri_budget(f, lod), "%s %s LOD%d: треугольников в меше слоя" % [id, ConiferKit.FORM_KEYS[f], lod])
+		var bad: Array[String] = []
+		var axis: PackedVector2Array = _track_points(s.track, 4.0)
+		var k: int = 0
+		for layer in _conifer_layers(id):
+			for p in layer.plants:
+				if layer.name != SceneryBuilder.CONIFER_LAYERS[p.lod] or p.lod != ConiferKit.lod_of(p.road_m):
+					bad.append("s=%.0f: слой %s, LOD%d, %.1f м" % [p.s, layer.name, p.lod, p.road_m])
+					continue
+				# Удаление — не больше расстояния до оси около своей точки выборки.
+				var near_m: float = _track_distance(s.track, p.origin, p.s)
+				if p.road_m > near_m + 1.0:
+					bad.append("s=%.0f: до трассы у своей точки %.1f м < %.1f м" % [p.s, near_m, p.road_m])
+				# Каждое пятое — перебором всей оси (серпантин: соседний виток ближе своей точки).
+				k += 1
+				if k % 5 != 0:
+					continue
+				var true_m: float = _nearest_point(axis, p.origin)
+				if true_m <= ConiferKit.LOD_FAR_M + 10.0 and absf(true_m - p.road_m) > 1.0:
+					bad.append("s=%.0f: до трассы %.1f м, удаление %.1f м" % [p.s, true_m, p.road_m])
+				if p.lod != ConiferKit.lod_of(true_m) and absf(true_m - ConiferKit.LOD_NEAR_M) > 1.0 and absf(true_m - ConiferKit.LOD_FAR_M) > 1.0:
+					bad.append("s=%.0f: LOD%d, а до трассы %.1f м" % [p.s, p.lod, true_m])
+		assert_eq(bad, [] as Array[String], "%s: уровни по удалению от трассы: %s" % [id, str(bad.slice(0, 5))])
+		for n in _conifer_nodes(s):
+			for part: MultiMeshInstance3D in [n] + n.get_children():
+				assert_eq(part.visibility_range_begin, 0.0, "%s: уровни не переключаются в кадре" % id)
+				if part.visibility_range_end > 0.0:
+					assert_almost_eq(part.visibility_range_end, PerfBudget.RANGE_TREES_M, 1e-3, "%s: дальность — как у деревьев" % id)
+
+
+## Точки оси трассы с шагом `step_m` (в плане).
+func _track_points(track: Track, step_m: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var sample := TrackSample.new()
+	var at: float = 0.0
+	while at <= track.length_m():
+		track.sample_into(at, sample)
+		out.append(Vector2(sample.position.x, sample.position.z))
+		at += step_m
+	return out
+
+
+## Расстояние в плане до ближайшей точки `pts` (перебор; шаг точек 4 м — ошибка ≤ 0.05 м на 40 м).
+func _nearest_point(pts: PackedVector2Array, p: Vector3) -> float:
+	var q := Vector2(p.x, p.z)
+	var best: float = INF
+	for a in pts:
+		best = minf(best, q.distance_squared_to(a))
+	return sqrt(best)
+
+
+## Расстояние от точки до оси трассы по выборке с шагом 5 м в окне ±400 м вокруг `s` (верхняя
+## оценка расстояния до ближайшей точки трассы).
+func _track_distance(track: Track, p: Vector3, s: float) -> float:
+	var sample := TrackSample.new()
+	var best: float = INF
+	var d: float = -400.0
+	while d <= 400.0:
+		track.sample_into(fposmod(s + d, track.length_m()) if track.is_loop() else clampf(s + d, 0.0, track.length_m()), sample)
+		best = minf(best, Vector2(sample.position.x - p.x, sample.position.z - p.z).length())
+		d += 5.0
+	return best
+
+
+## REQ-D3D-10 п.4: слоёв MultiMesh хвойных ≤ 6; материалов не больше, чем до T-107, и ≤ 12;
+## экземпляров всего ≤ 40000; строка бюджета хвойных в `docs/perf_budget.md`.
+func test_req_d3d_10_c4_conifer_layers_materials_and_budget_row() -> void:
+	for id in IDS:
+		var s := _scene(id)
+		var layers: Array[MultiMeshInstance3D] = _conifer_nodes(s)
+		assert_between(layers.size(), 1, PerfBudget.MAX_CONIFER_LAYERS, "%s: слоёв хвойных" % id)
+		var c := PerfBudget.count(s)
+		assert_lte(int(c["materials"]), int(MATERIALS_BEFORE_T107[id]), "%s: материалов не больше, чем до T-107" % id)
+		assert_lte(int(c["materials"]), PerfBudget.MAX_MATERIALS)
+		assert_lte(int(c["multimesh_instances"]), PerfBudget.MAX_MULTIMESH_INSTANCES)
+		for n in layers:
+			var tris: int = 0
+			var count: int = 0
+			for part: MultiMeshInstance3D in [n] + n.get_children():
+				tris += int(part.get_meta(&"triangles", 0))
+				count += part.multimesh.instance_count
+			if count > 0:
+				assert_gt(tris, 0, "%s %s: треугольники кусков посчитаны" % [id, n.name])
+	var text := FileAccess.get_file_as_string("res://docs/perf_budget.md")
+	var row := RegEx.create_from_string("\\|[^|]*Хвойные: треугольников в кадре[^|]*\\| *(\\d+) *\\|").search(text)
+	assert_not_null(row, "строка бюджета хвойных в docs/perf_budget.md")
+	if row != null:
+		assert_eq(int(row.get_string(1)), PerfBudget.MAX_CONIFER_FRAME_TRIANGLES)
+	var layers_row := RegEx.create_from_string("\\|[^|]*Слоёв `MultiMesh` хвойных[^|]*\\| *(\\d+) *\\|").search(text)
+	assert_not_null(layers_row, "строка бюджета слоёв хвойных")
+	if layers_row != null:
+		assert_eq(int(layers_row.get_string(1)), PerfBudget.MAX_CONIFER_LAYERS)
+	assert_string_contains(text, "MacBook на базовом M1", "эталон бюджета указан явно")
+
+
+## Бюджет кадра (арт-библия «Бюджет»): треугольников хвойных в кадре рабочей камеры (без контура,
+## куски в дальности видимости и в пирамиде камеры) — не больше 260 тыс. на всех трассах, шаг 100 м.
+func test_conifer_triangles_in_frame_within_budget() -> void:
+	for id in IDS:
+		var s := _scene(id)
+		var nodes: Array[MultiMeshInstance3D] = _conifer_nodes(s)
+		var best: int = 0
+		var at: float = 0.0
+		while at < s.track.length_m():
+			_drive_to(s, at, 32.0, 30)
+			var cam: Camera3D = s.camera()
+			var fr: Array[Plane] = []
+			fr.assign(cam.get_frustum())
+			var t: int = 0
+			for n in nodes:
+				t += PerfBudget.frame_triangles(n, cam.global_position, fr)
+			best = maxi(best, t)
+			at += 100.0
+		gut.p("%s: треугольников хвойных в кадре — до %d" % [id, best])
+		assert_lte(best, PerfBudget.MAX_CONIFER_FRAME_TRIANGLES, "%s: треугольников хвойных в кадре" % id)
+		if id != RouteCatalog.FLAT:
+			assert_gt(best, 0, "%s: хвойные в кадре есть (подсчёт работает)" % id)
+
+
+## Средняя (по площади) яркость HSV V цвета вершин верха кроны модели (грани кроны, смотрящие
+## вверх), sRGB — без света; прокси замера галереи «Тон LOD1» без рендера.
+func _crown_top_v(model: int, lod: int) -> float:
+	var g: ConiferKit.Geo = ConiferKit.geometry(model, lod)
+	var sum: float = 0.0
+	var area: float = 0.0
+	for t in range(0, g.idx.size(), 3):
+		var i: PackedInt32Array = [g.idx[t], g.idx[t + 1], g.idx[t + 2]]
+		if g.f[i[0]].y < 0.99 or g.f[i[1]].y < 0.99 or g.f[i[2]].y < 0.99:
+			continue
+		var fn: Vector3 = (g.v[i[2]] - g.v[i[0]]).cross(g.v[i[1]] - g.v[i[0]])
+		if fn.y <= 0.0:
+			continue
+		var a: float = fn.length() * 0.5
+		for k in i:
+			sum += g.c[k].linear_to_srgb().v * a / 3.0
+		area += a
+	return sum / area
+
+
+## Арт-библия ред. 3 (вердикт game-designer по T-107): калибровка яркости ели — в диапазоне
+## вердикта (1.15–1.25), пиния — 1.15 без изменений; край яруса LOD1 — средний тон
+## (свет + кончики) / 2, тона кончиков на LOD1 нет; средняя яркость верха кроны LOD1 — в пределах
+## 0.04 от LOD0 той же модели; кора ели, пихты и ветровала тёплая (R − B ≥ 0.03, R > G > B) и
+## светлее таблицы (под юбкой в холодном окружающем свете кора по таблице — цвета контура);
+## горы — `conifer_shade` не ниже 0.92. Замеры по кадрам (маска «Как мерить») — в отчёте T-107.
+func test_conifer_tone_calibration_lod1_edge_and_bark_rev3() -> void:
+	assert_between(ConiferKit.TONE_GAIN_SPRUCE, 1.15, 1.25, "калибровка ели — в диапазоне вердикта")
+	assert_almost_eq(ConiferKit.TONE_GAIN_PINE, 1.15, 1e-6, "калибровка пинии не меняется")
+	var env: EnvironmentSet = _scene(RouteCatalog.MOUNTAINS).environment_set
+	assert_between(env.conifer_shade, 0.92, 0.99, "горы: conifer_shade не ниже 0.92 и темнее равнин")
+	for model in [ConiferKit.M_SPRUCE, ConiferKit.M_FIR, ConiferKit.M_PINE]:
+		var tones: PackedColorArray = ConiferKit.tones_of(model)
+		var tag: String = ConiferKit.MODEL_KEYS[model]
+		var edge: Color = ConiferKit.lod1_edge(tones)
+		assert_true(edge.is_equal_approx((tones[0] + tones[2]) * 0.5), "%s: край LOD1 — (свет + кончики) / 2" % tag)
+		var g: ConiferKit.Geo = ConiferKit.geometry(model, 1)
+		var edges: int = 0
+		var tips: int = 0
+		for c in g.c:
+			if c.is_equal_approx(MeshKit.lin(Color(edge.r, edge.g, edge.b, c.a))):
+				edges += 1
+			elif c.is_equal_approx(MeshKit.lin(Color(tones[2].r, tones[2].g, tones[2].b, c.a))):
+				tips += 1
+		assert_gt(edges, 0, "%s LOD1: край средним тоном" % tag)
+		assert_eq(tips, 0, "%s LOD1: отдельного тона кончиков нет" % tag)
+	for model in [ConiferKit.M_SPRUCE, ConiferKit.M_FIR]:
+		var v0: float = _crown_top_v(model, 0)
+		var v1: float = _crown_top_v(model, 1)
+		gut.p("%s: V верха кроны LOD0 %.3f, LOD1 %.3f" % [ConiferKit.MODEL_KEYS[model], v0, v1])
+		assert_almost_eq(v1, v0, 0.04, "%s: тон LOD1 без ступени к LOD0" % ConiferKit.MODEL_KEYS[model])
+	var tables: Array[PackedColorArray] = [ConiferKit.TONES_SPRUCE, ConiferKit.TONES_FIR, ConiferKit.TONES_WIND]
+	for model in [ConiferKit.M_SPRUCE, ConiferKit.M_FIR, ConiferKit.M_WIND]:
+		var bark: Color = ConiferKit.tones_of(model)[3]
+		var tag: String = ConiferKit.MODEL_KEYS[model]
+		assert_gte(bark.r - bark.b, 0.03, "%s: кора тёплая, R − B" % tag)
+		assert_true(bark.r > bark.g and bark.g > bark.b, "%s: кора бурая (R > G > B), не лиловая" % tag)
+		assert_gt(bark.v, tables[model][3].v + 0.05, "%s: кора светлее таблицы (не цвета контура)" % tag)
+
+
+## Арт-библия ред. 4, «Нормали» и «Низ юбки» (повторный вердикт по T-107): низ юбки ели, пихты и
+## ветровала на всех уровнях — нормали подняты (наружу + вверх), тень — вершинным цветом не темнее
+## тона тени таблицы: с нормалью грани вниз тун-свет давал под ярусом чёрную полосу (горы 14500 м —
+## 19 px, V 0.075). Срезы кроны по кадрам (полосы V < 0.18 толще 4 px) — в отчёте T-107.
+func test_conifer_skirt_underside_lit_normals_rev4() -> void:
+	for model in [ConiferKit.M_SPRUCE, ConiferKit.M_FIR, ConiferKit.M_WIND]:
+		var shade_v: float = ConiferKit.tones_of(model)[1].v
+		for lod in ConiferKit.LOD_COUNT:
+			var tag: String = "%s LOD%d" % [ConiferKit.MODEL_KEYS[model], lod]
+			var g: ConiferKit.Geo = ConiferKit.geometry(model, lod)
+			var under: int = 0
+			var low_n: int = 0
+			var dark: int = 0
+			for t in range(0, g.idx.size(), 3):
+				var i: PackedInt32Array = [g.idx[t], g.idx[t + 1], g.idx[t + 2]]
+				if g.f[i[0]].y < 0.99 or g.f[i[1]].y < 0.99 or g.f[i[2]].y < 0.99:
+					continue
+				var fn: Vector3 = (g.v[i[2]] - g.v[i[0]]).cross(g.v[i[1]] - g.v[i[0]])
+				if fn.length_squared() < 1e-12 or fn.normalized().y > -0.3:
+					continue
+				under += 1
+				for k in i:
+					if g.n[k].y < ConiferKit.UNDER_MIN_NORMAL_Y:
+						low_n += 1
+					if g.c[k].linear_to_srgb().v < shade_v - 1e-3:
+						dark += 1
+			assert_gt(under, 0, "%s: грани низа юбки есть" % tag)
+			assert_eq(low_n, 0, "%s: нормали низа юбки подняты (Y ≥ %.2f)" % [tag, ConiferKit.UNDER_MIN_NORMAL_Y])
+			assert_eq(dark, 0, "%s: тон низа юбки не темнее тона тени таблицы" % tag)
+
+
+## Арт-библия ред. 4, «Тон LOD2»: форма на меше другой модели (пихта и ветровал на LOD2 — меш ели)
+## сохраняет свой тон цветом экземпляра (`ConiferKit.model_tint`): средний тон кроны × цвет
+## экземпляра на LOD2 — оттенок в пределах 8° и V в пределах 0.04 от LOD1 (у пихты холодный тон
+## не уходит к оттенку ели: галерея до правки — 157° → 132°). Замер галереи — в отчёте T-107.
+func test_conifer_lod2_keeps_form_tone_rev4() -> void:
+	for f in ConiferKit.FORM_KEYS.size():
+		var tags: Array[Color] = []
+		for lod in [1, 2]:
+			var p := ConiferKit.Plant.new()
+			p.form = f
+			p.lod = lod
+			var inst: Color = p.color(1.0)
+			var tones: PackedColorArray = ConiferKit.tones_of(ConiferKit.model_of(f, lod))
+			var mean := Color(0.0, 0.0, 0.0)
+			for k in 3:
+				mean += tones[k] / 3.0
+			tags.append(Color(mean.r * inst.r, mean.g * inst.g, mean.b * inst.b))
+		var dh: float = absf(tags[1].h - tags[0].h) * 360.0
+		dh = minf(dh, 360.0 - dh)
+		var key: String = ConiferKit.FORM_KEYS[f]
+		assert_lte(dh, 8.0, "%s: оттенок LOD2 − LOD1 %.1f°" % [key, dh])
+		assert_almost_eq(tags[1].v, tags[0].v, 0.04, "%s: V LOD2 − LOD1" % key)
+	var fir := ConiferKit.Plant.new()
+	fir.form = ConiferKit.FIR
+	fir.lod = 2
+	assert_gt(fir.color(1.0).b, fir.color(1.0).r * 1.2, "пихта на LOD2: холодный (голубой) сдвиг цвета экземпляра")
+	assert_true(ConiferKit.model_tint(ConiferKit.SPRUCE, 2).is_equal_approx(Color.WHITE), "своя модель — без поправки")
+
+
+## Acne (п.7, Forward+): крона не принимает тень (UV2.y = 1 → `toon.gdshader`), ствол ели —
+## наполовину (`ConiferKit.TRUNK_SHADOW`: не чёрный под юбкой); форма экземпляра выбирается в шейдере (цвет и контур); у сухих веток ветровала нет
+## контура; тень отбрасывает только LOD0.
+func test_conifer_crowns_skip_shadow_receive_and_forms_select_in_shaders() -> void:
+	var toon: String = FileAccess.get_file_as_string("res://src/scene3d/shaders/toon.gdshader")
+	var outline: String = FileAccess.get_file_as_string("res://src/scene3d/shaders/outline.gdshader")
+	var light: String = FileAccess.get_file_as_string("res://src/scene3d/shaders/toon_light.gdshaderinc")
+	assert_string_contains(toon, "#define TOON_CROWN_MASK")
+	assert_string_contains(toon, "v_receive = 1.0 - UV2.y")
+	assert_string_contains(toon, "conifer_hidden(UV2, INSTANCE_CUSTOM)")
+	assert_string_contains(outline, "conifer_hidden(UV2, INSTANCE_CUSTOM)")
+	assert_string_contains(light, "receive *= v_receive")
+	var g: ConiferKit.Geo = ConiferKit.geometry(ConiferKit.M_SPRUCE, 0)
+	var crown: int = 0
+	var trunk: int = 0
+	for i in g.v.size():
+		if g.f[i].y > 0.99:
+			crown += 1
+		elif g.v[i].y < 1.0 and is_equal_approx(g.f[i].y, ConiferKit.TRUNK_SHADOW):
+			trunk += 1
+	assert_gt(crown, 200, "вершины кроны помечены")
+	assert_gt(trunk, 4, "ствол у земли принимает тень наполовину")
+	assert_between(ConiferKit.TRUNK_SHADOW, 0.01, 0.99, "ствол ели принимает тень частично")
+	var wind: ConiferKit.Geo = ConiferKit.geometry(ConiferKit.M_WIND, 0)
+	var dry: int = 0
+	for i in wind.v.size():
+		if wind.c[i].a < 0.01:
+			dry += 1
+	assert_gt(dry, 0, "сухие ветки ветровала без контура")
+	for id in IDS:
+		for n in _conifer_nodes(_scene(id)):
+			var want: int = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if String(n.name) == "Conifers" else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			assert_eq(n.cast_shadow, want, "%s %s: тень" % [id, n.name])

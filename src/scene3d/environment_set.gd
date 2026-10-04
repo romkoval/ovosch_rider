@@ -121,6 +121,15 @@ extends Resource
 ## Масштаб и тон елей (горы: ели крупнее и темнее).
 @export var conifer_scale: float = 1.0
 @export var conifer_shade: float = 1.0
+## Формы хвойных и их доли (T-107, арт-библия «Растительность: хвойные», «Распределение по
+## трассам»): ключ формы `ConiferKit.FORM_KEYS` → доля. Пусто — по `conifer_kind`.
+@export var conifer_forms: Dictionary = {}
+## Горы: в полосе ниже границы леса (`tree_line_m`) шириной `conifer_tree_line_band_m` пихта и
+## ветровал вместе — не меньше доли `conifer_tree_line_share`.
+@export var conifer_tree_line_band_m: float = 60.0
+@export_range(0.0, 1.0) var conifer_tree_line_share: float = 0.6
+## Приморье: наклонные пинии — не дальше этого от воды, м.
+@export var conifer_lean_shore_m: float = 150.0
 ## Валуны и осыпи (низкополигональный камень с контуром): число на петлю ~2.2 км, как у
 ## деревьев (на длинной трассе — плотность на километр); 0 — нет.
 @export var boulder_count: int = 0
