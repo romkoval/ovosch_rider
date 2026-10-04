@@ -40,6 +40,7 @@ const COMPACT_MAX_WIDTH: float = AppBar.COMPACT_MAX_WIDTH
 ## Деление надзаголовка (`split_to_fit`): разделитель и длина «короткого» слова (висячий предлог).
 const SEPARATOR: String = "·"
 const SHORT_WORD_MAX_LETTERS: int = 2
+const OVERLINE_FIT_MARGIN: float = 2.0
 const BAR_HEIGHT: float = AppBar.HEIGHT
 const BAR_HEIGHT_COMPACT: float = AppBar.HEIGHT_COMPACT
 const TILE_HEIGHT: float = 88.0
@@ -216,6 +217,9 @@ func _ready() -> void:
 	for tile: Button in [_history_button, _devices_button, _settings_button]:
 		TouchTarget.attach(tile, TouchTarget.Kind.UI, Vector2(0, TILE_HEIGHT))
 	resized.connect(_update_layout)
+	# Зазор надзаголовка — по настоящей ширине строки: пересчёт после раскладки карточек.
+	_plan_header.resized.connect(_refresh_overlines)
+	_ride_header.resized.connect(_refresh_overlines)
 	var runtime := TouchTarget.default_runtime()
 	if runtime != null:
 		runtime.scale_changed.connect(_on_scale_changed)
@@ -745,10 +749,14 @@ func _set_overline(label: Label, key: String, beside: Button) -> void:
 
 
 ## Фактический зазор для надзаголовка до кнопки `beside` в той же строке (`ui.md` п. 8.2):
-## ширина содержимого карточки − зазор ряда − ширина кнопки (по её текущему тексту и цели нажатия).
+## ширина строки (после раскладки — её настоящая ширина, до неё — расчётная ширина содержимого
+## карточки) − зазор ряда − ширина кнопки (по её текущему тексту и цели нажатия) − запас
+## `OVERLINE_FIT_MARGIN` (подпись с переносом по словам на самой границе переносится движком).
 func overline_gap(label: Label, beside: Button) -> float:
-	return card_inner_width() - float(label.get_parent().get_theme_constant("separation")) \
-			- beside.get_combined_minimum_size().x
+	var header := label.get_parent() as Control
+	var row_width: float = header.size.x if header.size.x > 0.0 else card_inner_width()
+	return row_width - float(header.get_theme_constant("separation")) \
+			- beside.get_combined_minimum_size().x - OVERLINE_FIT_MARGIN
 
 
 ## Пересчитать надзаголовки карточек (раскладка, смена текста кнопки рядом).

@@ -123,6 +123,9 @@ func _check_dialog(dialog: ConfirmationDialog, viewport: SubViewport, config: Di
 	assert_eq(visible[visible.size() - 1], ok, "%s: основная/опасная — крайняя справа" % where)
 	var row := ok.get_parent() as Control
 	assert_almost_eq(ok.position.x + ok.size.x, row.size.x, 1.0, "%s: ряд прижат к правому краю" % where)
+	for k in range(1, visible.size()):
+		var between := visible[k].position.x - (visible[k - 1].position.x + visible[k - 1].size.x)
+		assert_almost_eq(between, DialogLayout.BUTTON_GAP, 1.0, "%s: зазор между кнопками 12" % where)
 	for b in visible:
 		assert_almost_eq(b.size.x, b.get_combined_minimum_size().x, 1.0, "%s: «%s» по ширине текста" % [where, b.text])
 		assert_gte(b.size.y, 44.0, "%s: высота «%s» ≥ 44" % [where, b.text])

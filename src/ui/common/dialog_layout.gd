@@ -21,6 +21,8 @@ const WIDTH: int = 480
 const NODE_NAME: StringName = &"DialogLayout"
 const DANGER_VARIATION: StringName = &"DangerButton"
 const FORM_VARIATION: StringName = &"FormDialog"
+## Зазор между кнопками ряда, lp (`ui.md` п. 6).
+const BUTTON_GAP: float = 12.0
 
 ## Выставлять ли ширину 480 (у листа лицензий своя раскладка — false).
 var fixed_width: bool = true
@@ -101,22 +103,44 @@ func arrange() -> void:
 	var row := ok.get_parent() as BoxContainer
 	if row == null:
 		return
-	# Распорки движка: первая (слева) растягивается и прижимает ряд вправо, остальные скрыты.
+	# Распорки движка (движок держит их видимыми вместе с кнопками): первая растягивается и
+	# прижимает ряд вправо; между соседними кнопками — по одной распорке шириной, дающей зазор
+	# `BUTTON_GAP` (с учётом `separation` ряда); лишние — нулевой ширины слева.
 	var spacers: Array[Control] = []
 	var cancel: Button = (d as ConfirmationDialog).get_cancel_button() if d is ConfirmationDialog else null
 	for child in row.get_children(true):
 		if child is Control and not child is Button:
 			spacers.append(child)
-	for i in spacers.size():
-		spacers[i].visible = i == 0
-		if i == 0:
-			spacers[i].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.move_child(spacers[i], 0)
-	var index := 1 if not spacers.is_empty() else 0
+	var buttons: Array[Button] = []
 	if cancel != null and cancel.get_parent() == row:
-		row.move_child(cancel, index)
-	row.move_child(ok, row.get_child_count(true) - 1)
+		buttons.append(cancel)
 	for b in row_buttons(d):
+		if b != cancel and b != ok:
+			buttons.append(b)
+	buttons.append(ok)
+	var separation := float(row.get_theme_constant("separation"))
+	var gap_width := maxf(BUTTON_GAP - 2.0 * separation, 0.0)
+	var order: Array[Control] = []
+	var free_spacers := spacers.duplicate()
+	var leading: Control = free_spacers.pop_front() if not free_spacers.is_empty() else null
+	for i in buttons.size():
+		if i > 0 and not free_spacers.is_empty():
+			var gap: Control = free_spacers.pop_back()
+			gap.size_flags_horizontal = Control.SIZE_FILL
+			gap.custom_minimum_size.x = gap_width
+			order.append(gap)
+		order.append(buttons[i])
+	for rest: Control in free_spacers:
+		rest.size_flags_horizontal = Control.SIZE_FILL
+		rest.custom_minimum_size.x = 0.0
+		order.push_front(rest)
+	if leading != null:
+		leading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		leading.custom_minimum_size.x = 0.0
+		order.push_front(leading)
+	for k in order.size():
+		row.move_child(order[k], k)
+	for b in buttons:
 		b.size_flags_horizontal = Control.SIZE_SHRINK_END
 		TouchTarget.attach(b, TouchTarget.Kind.BUTTON)
 
