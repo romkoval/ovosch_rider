@@ -132,12 +132,17 @@ func _free_ride(main: AppMain, started: int, n: int) -> Ride:
 	return r
 
 
+## Вариации надзаголовка (`ui.md` п. 9.2): базовая и цветные — «ТРЕНИРОВКА ПО ПЛАНУ» (`accent`),
+## «СВОБОДНАЯ ЕЗДА» (`sim`); метка режима может стоять на любой из них.
+const OVERLINE_VARIATIONS: Array[StringName] = [&"OverlineLabel", &"OverlineAccent", &"OverlineSim"]
+
+
 ## Метки режима строки (вариация Overline, показываются заглавными).
 static func _mode_labels(row: Node) -> Array[String]:
 	var out: Array[String] = []
 	for n in row.find_children("*", "Label", true, false):
 		var l := n as Label
-		if l.is_visible_in_tree() and l.theme_type_variation == &"OverlineLabel":
+		if l.is_visible_in_tree() and OVERLINE_VARIATIONS.has(l.theme_type_variation):
 			out.append(l.text.to_upper() if l.uppercase else l.text)
 	return out
 

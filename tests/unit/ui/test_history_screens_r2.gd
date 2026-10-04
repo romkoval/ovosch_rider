@@ -349,8 +349,10 @@ func test_req_frd_07_c6_free_ride_card_without_target_with_altitude_profile() ->
 	var d := s.detail()
 	assert_eq(d.mode_text(), "SIM")
 	assert_eq(d.title_text(), "Свободная езда — " + tr("track.flat.name"))
+	# FRD-07 крит. 6: поля цели в сводке — «—».
 	assert_string_contains(d.summary_text(), "Средняя цель плана: — Вт", "поля цели — «—»")
-	assert_string_contains(d.meta_text(), "Средняя цель плана: — Вт")
+	# Решение ред. 2 (`ui.md` п. 8.5): в строке параметров свободной езды средней цели нет.
+	assert_false(d.meta_text().contains("Средняя цель плана"), "строка параметров свободной езды — без средней цели: %s" % d.meta_text())
 	assert_string_contains(d.meta_text(), tr("track.flat.name"), "трасса в параметрах заезда")
 	assert_false(d.series().has_data(RideSeries.TARGET), "серии цели нет")
 	assert_false(d.effort_chart().has_plan(), "общий график — без плана")

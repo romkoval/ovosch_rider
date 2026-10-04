@@ -163,9 +163,24 @@ func test_large_profile_has_10_percent_margins() -> void:
 		var y_max: float = p.y(model.profile.max_height_m())
 		assert_almost_eq(FIELD.end.y - y_min, FIELD.size.y * 0.10, 1e-6, "%s: поле снизу 10 %%" % route_id)
 		assert_true(y_max - FIELD.position.y >= FIELD.size.y * 0.10 - 1e-6, "%s: поле сверху ≥ 10 %%" % route_id)
-		# Размах шкалы — тот же max(перепад, 150 м), что у миниатюры (`tracks.md` п. 7.2).
-		var span: float = maxf(model.profile.max_height_m() - model.profile.min_height_m(), 150.0)
-		assert_almost_eq((p.h_top - p.h_bottom) * 0.8, span, 1e-6, route_id)
+		# Решение ред. 2 (`tracks.md` п. 7.2): размах max(перепад, 40 м) — как у профиля круга
+		# и «впереди 2 км» в HUD (`hud.md` п. 8), а не 150 м миниатюры.
+		var drop: float = model.profile.max_height_m() - model.profile.min_height_m()
+		var span: float = maxf(drop, 40.0)
+		gut.p("%s: перепад %.1f м → размах крупного профиля %.1f м" % [route_id, drop, span])
+		assert_almost_eq((p.h_top - p.h_bottom) * 0.8, span, 1e-6, "%s: размах max(перепад %.1f, 40 м)" % [route_id, drop])
+		if drop >= 40.0:
+			assert_almost_eq(y_max - FIELD.position.y, FIELD.size.y * 0.10, 1e-6, "%s: перепад ≥ 40 м — вершина у верхнего поля" % route_id)
+			assert_almost_eq(model.fill_fraction(RoutePreviewModel.Mode.LARGE), 0.8, 1e-6, "%s: профиль занимает 80 %% поля" % route_id)
+		else:
+			assert_almost_eq(model.fill_fraction(RoutePreviewModel.Mode.LARGE), drop / 40.0 * 0.8, 1e-6, "%s: перепад < 40 м — доля от размаха 40 м" % route_id)
+	# Равнина: перепад меньше 40 м — шкала 40 м, а не 150 м (иначе полоска у дна, T-080).
+	var flat := _model(RouteCatalog.FLAT)
+	var flat_drop: float = flat.profile.max_height_m() - flat.profile.min_height_m()
+	assert_lt(flat_drop, 40.0, "предусловие: перепад равнины < 40 м")
+	var fp := flat.plot(RoutePreviewModel.Mode.LARGE, FIELD)
+	assert_almost_eq(fp.h_top - fp.h_bottom, 40.0 / 0.8, 1e-6, "равнина: размах 40 м + поля 10 %")
+	assert_gt(flat.fill_fraction(RoutePreviewModel.Mode.LARGE), 0.2, "равнина видна, а не полоской у дна")
 	var mountains := _model(RouteCatalog.MOUNTAINS)
 	var mp := mountains.plot(RoutePreviewModel.Mode.LARGE, FIELD)
 	assert_almost_eq(mp.y(mountains.profile.max_height_m()) - FIELD.position.y, FIELD.size.y * 0.10, 1e-6, "горы: вершина у верхнего поля")

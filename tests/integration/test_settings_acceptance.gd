@@ -528,7 +528,24 @@ func test_req_prf_03_c2_unlink_button_removes_only_this_profile_intervals_key() 
 	var s := _screen()
 	var forget := s.get_node("%IntervalsForgetButton") as Button
 	assert_false(forget.disabled, "кнопка «Отвязать» доступна при привязке")
+	# Решение ред. 2 (`ui.md` п. 8.6): кнопка только спрашивает подтверждение.
 	forget.pressed.emit()
+	assert_true(s.is_forget_intervals_pending(), "кнопка открыла диалог подтверждения")
+	assert_eq(_store.get_secret(_api_key_id(_profile.id)), SECRET, "без подтверждения ключ на месте")
+	assert_eq(_store.size(), 5, "без подтверждения ничего не удалено")
+	var dialog := s.get_node("%ForgetIntervalsDialog") as ConfirmationDialog
+	dialog.get_cancel_button().pressed.emit()
+	await wait_process_frames(2)
+	assert_false(s.is_forget_intervals_pending(), "«Отмена» закрыла диалог")
+	assert_eq(_store.get_secret(_api_key_id(_profile.id)), SECRET, "«Отмена» ключ не удаляет")
+	assert_eq(_store.size(), 5)
+	assert_false(forget.disabled, "после «Отмены» привязка осталась")
+	assert_eq(_repo.get_by_id(_profile.id).intervals_athlete_id, ATHLETE_ID, "после «Отмены» атлет привязан")
+	# Подтверждение — удаление.
+	assert_true(s.request_forget_intervals())
+	assert_true(s.is_forget_intervals_pending())
+	s.confirm_forget_intervals()
+	assert_false(s.is_forget_intervals_pending(), "после подтверждения диалог закрыт")
 	assert_false(_store.has_secret(_api_key_id(_profile.id)), "ключ Intervals.icu профиля A удалён")
 	assert_eq(_store.get_secret(a_strava), "a-strava", "Strava профиля A не тронута")
 	assert_eq(_store.get_secret(a_refresh), "a-refresh")
@@ -550,14 +567,169 @@ func test_req_prf_03_c2_unlink_in_app_persists_in_encrypted_store() -> void:
 	store.set_secret(_api_key_id(b.id), "b-intervals")
 	store.set_secret(SecureStore.key_for(_profile.id, SecureStore.SERVICE_STRAVA, SecureStore.ITEM_ACCESS_TOKEN), "a-strava")
 	assert_true(main.app_state.navigate(AppState.Screen.SETTINGS))
-	main.settings_screen().refresh()
-	(main.settings_screen().get_node("%IntervalsForgetButton") as Button).pressed.emit()
+	var settings := main.settings_screen()
+	settings.refresh()
+	(settings.get_node("%IntervalsForgetButton") as Button).pressed.emit()
+	assert_true(settings.is_forget_intervals_pending(), "кнопка открыла подтверждение")
+	assert_true(store.has_secret(_api_key_id(_profile.id)), "без подтверждения ключ A на месте")
+	settings.confirm_forget_intervals()
 	_drop_main(main)
 	var reopened := EncryptedFileSecureStore.new(_dir + "secure/", SecureStore.derive_device_password())
 	assert_true(reopened.loaded_ok())
 	assert_false(reopened.has_secret(_api_key_id(_profile.id)), "после перезапуска ключа A нет")
 	assert_eq(reopened.get_secret(_api_key_id(b.id)), "b-intervals", "ключ B на месте")
 	assert_eq(reopened.get_secret(SecureStore.key_for(_profile.id, SecureStore.SERVICE_STRAVA, SecureStore.ITEM_ACCESS_TOKEN)), "a-strava")
+
+
+func test_req_prf_03_c2_unlink_not_confirmed_survives_restart() -> void:
+	_repo.active_profile_id = _profile.id
+	var main := _main()
+	assert_true(main.app_state.select_profile(_profile.id))
+	var store := main.secure_store
+	_link(store)
+	assert_true(main.app_state.navigate(AppState.Screen.SETTINGS))
+	var settings := main.settings_screen()
+	settings.refresh()
+	(settings.get_node("%IntervalsForgetButton") as Button).pressed.emit()
+	assert_true(settings.is_forget_intervals_pending())
+	_drop_main(main)  # приложение закрыто с открытым диалогом — подтверждения не было
+	var reopened := EncryptedFileSecureStore.new(_dir + "secure/", SecureStore.derive_device_password())
+	assert_true(reopened.loaded_ok())
+	assert_eq(reopened.get_secret(_api_key_id(_profile.id)), SECRET, "без подтверждения ключ сохранился и после перезапуска")
+
+
+## Strava профиля A с токенами; профиль B со своими токенами и ключ Intervals.icu у A.
+func _strava_setup() -> Dictionary:
+	var b := _repo.create("Bob")
+	_repo.active_profile_id = _profile.id
+	var rides := FileRideRepository.new(_dir + "rides/")
+	var service := StravaService.new(_repo.get_active(), _transport, _store, rides,
+		StravaConfig.from_values("4242", "fixture-client-secret-value"), func() -> int: return 1_790_000_000, _dir + "strava/")
+	service.oauth.base_url = "https://mock.strava.test"
+	_store.set_secret(service.oauth.secret_key(SecureStore.ITEM_ACCESS_TOKEN), "a-access")
+	_store.set_secret(service.oauth.secret_key(SecureStore.ITEM_REFRESH_TOKEN), "a-refresh")
+	_store.set_secret(service.oauth.secret_key(SecureStore.ITEM_EXPIRES_AT), str(1_790_000_000 + 99999))
+	_store.set_secret(SecureStore.key_for(b.id, SecureStore.SERVICE_STRAVA, SecureStore.ITEM_ACCESS_TOKEN), "b-access")
+	_store.set_secret(_api_key_id(_profile.id), SECRET)
+	assert_true(service.is_authorized(), "предусловие: Strava профиля A привязана")
+	return {"service": service, "b": b}
+
+
+func _strava_press(s: SettingsScreen) -> void:
+	var sb := s.strava_button()
+	for n in sb.find_children("*", "Button", true, false):
+		var btn := n as Button
+		if btn.is_visible_in_tree() and btn.text == sb.button_text():
+			btn.pressed.emit()
+			return
+	fail_test("кнопка «Отвязать Strava» не найдена")
+
+
+func test_req_prf_03_c2_unlink_strava_asks_and_removes_only_this_profile_strava() -> void:
+	var ctx := _strava_setup()
+	var service: StravaService = ctx["service"]
+	var b: Profile = ctx["b"]
+	var a_access := service.oauth.secret_key(SecureStore.ITEM_ACCESS_TOKEN)
+	var b_access := SecureStore.key_for(b.id, SecureStore.SERVICE_STRAVA, SecureStore.ITEM_ACCESS_TOKEN)
+	var s := _screen()
+	s.set_strava_service(service)
+	await wait_process_frames(1)
+	assert_true(s.strava_button().is_authorized(), "предусловие: кнопка в режиме «Отвязать»")
+	_strava_press(s)
+	assert_true(s.is_disconnect_strava_pending(), "«Отвязать Strava» открывает подтверждение")
+	assert_eq(_store.get_secret(a_access), "a-access", "без подтверждения токены Strava на месте")
+	var dialog := s.get_node("%DisconnectStravaDialog") as ConfirmationDialog
+	dialog.get_cancel_button().pressed.emit()
+	await wait_process_frames(2)
+	assert_false(s.is_disconnect_strava_pending(), "«Отмена» закрыла диалог")
+	assert_eq(_store.get_secret(a_access), "a-access", "«Отмена» токены не удаляет")
+	assert_true(service.is_authorized(), "после «Отмены» Strava привязана")
+	assert_eq(_store.size(), 5)
+	_transport.enqueue_json("POST", "/oauth/deauthorize", 200, {})
+	assert_true(s.request_disconnect_strava())
+	s.confirm_disconnect_strava()
+	for i in 30:
+		if not _store.has_secret(a_access):
+			break
+		await wait_process_frames(1)
+	assert_false(s.is_disconnect_strava_pending())
+	assert_false(_store.has_secret(a_access), "токены Strava профиля A удалены")
+	assert_false(_store.has_secret(service.oauth.secret_key(SecureStore.ITEM_REFRESH_TOKEN)))
+	assert_eq(_store.get_secret(b_access), "b-access", "Strava профиля B не тронута")
+	assert_eq(_store.get_secret(_api_key_id(_profile.id)), SECRET, "Intervals.icu профиля A не тронут")
+	assert_eq(_store.size(), 2)
+	s.set_strava_service(null)
+	service.dispose()
+
+
+## Опасное действие: после открытия диалога (и после кадров) фокус — на «Отмена», чтобы Enter
+## не отвязывал (заявлено T-089, `settings_screen.gd`: «по Enter — «Отмена», а не «Отвязать»»).
+func _assert_cancel_focused(dialog: ConfirmationDialog, what: String) -> void:
+	var owner := dialog.gui_get_focus_owner()
+	gut.p("%s: фокус у %s (%s)" % [what, owner, (owner as Button).text if owner is Button else "—"])
+	assert_true(dialog.get_cancel_button().has_focus(), "%s: фокус на «Отмена»" % what)
+	assert_false(dialog.get_ok_button().has_focus(), "%s: опасная «Отвязать» не в фокусе" % what)
+
+
+func test_unlink_dialogs_focus_cancel_after_open() -> void:
+	var ctx := _strava_setup()
+	var service: StravaService = ctx["service"]
+	_link()
+	var s := _screen()
+	s.set_strava_service(service)
+	s.refresh()
+	await wait_process_frames(1)
+	(s.get_node("%IntervalsForgetButton") as Button).pressed.emit()
+	await wait_process_frames(3)
+	var forget := s.get_node("%ForgetIntervalsDialog") as ConfirmationDialog
+	assert_true(forget.visible)
+	_assert_cancel_focused(forget, "«Отвязать Intervals.icu?»")
+	forget.hide()
+	await wait_process_frames(1)
+	_strava_press(s)
+	await wait_process_frames(3)
+	var strava := s.get_node("%DisconnectStravaDialog") as ConfirmationDialog
+	assert_true(strava.visible)
+	_assert_cancel_focused(strava, "«Отвязать Strava?»")
+	strava.hide()
+	s.set_strava_service(null)
+	service.dispose()
+
+
+## То же в приложении целиком (как в сценарии снимков `dialog_forget_intervals`): главная сцена,
+## переход в настройки, диалог открыт кнопкой; проверка после 0.5 с и кадров.
+func test_unlink_dialog_focus_cancel_in_app() -> void:
+	_repo.active_profile_id = _profile.id
+	var main := _main()
+	assert_true(main.app_state.select_profile(_profile.id))
+	_link(main.secure_store)
+	assert_true(main.app_state.navigate(AppState.Screen.SETTINGS))
+	var settings := main.settings_screen()
+	settings.refresh()
+	await wait_process_frames(2)
+	(settings.get_node("%IntervalsForgetButton") as Button).pressed.emit()
+	await wait_seconds(0.5)
+	await wait_process_frames(6)
+	var forget := settings.get_node("%ForgetIntervalsDialog") as ConfirmationDialog
+	assert_true(forget.visible)
+	_assert_cancel_focused(forget, "приложение, «Отвязать Intervals.icu?»")
+	forget.hide()
+	await wait_process_frames(1)
+	# Повторное открытие — тоже на «Отмена».
+	settings.request_forget_intervals()
+	await wait_process_frames(3)
+	_assert_cancel_focused(forget, "приложение, повторное открытие")
+	forget.hide()
+	# Диалог открыт в том же кадре, что и переход в настройки (сценарий скрипта снимков).
+	assert_true(main.app_state.navigate(AppState.Screen.HOME))
+	await wait_process_frames(2)
+	assert_true(main.app_state.navigate(AppState.Screen.SETTINGS))
+	main.settings_screen().request_forget_intervals()
+	await wait_seconds(0.5)
+	await wait_process_frames(6)
+	_assert_cancel_focused(forget, "приложение, открыт сразу после перехода")
+	forget.hide()
+	_drop_main(main)
 
 
 # ===========================================================================

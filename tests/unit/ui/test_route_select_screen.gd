@@ -214,7 +214,10 @@ func test_detail_follows_selection() -> void:
 	var s := _screen()
 	s.card_for("mountains").pressed.emit()
 	assert_eq(s.detail_name_text(), "Перевал")
-	assert_eq(s.detail_subtitle_text(), "Mountain Pass · горы")
+	# Решение ред. 2 (`ui.md` п. 8.4): вторая строка детали — только тип, без второго названия.
+	assert_eq(s.detail_subtitle_text(), "горы")
+	assert_false(s.detail_subtitle_text().contains("Mountain Pass"), "английское название во второй строке убрано")
+	assert_false(s.detail_subtitle_text().contains("·"), "без разделителя «·»")
 	assert_eq(s.large_preview().mode, RoutePreviewModel.Mode.LARGE)
 	assert_eq(s.large_preview().model.route_id, "mountains")
 	var stats := s.detail_stats()
@@ -224,7 +227,14 @@ func test_detail_follows_selection() -> void:
 	TranslationServer.set_locale("en")
 	await wait_process_frames(1)
 	assert_eq(s.detail_name_text(), "Mountain Pass")
-	assert_eq(s.detail_subtitle_text(), "mountains", "на английском название уже в заголовке")
+	assert_eq(s.detail_subtitle_text(), "mountains", "на английском — тоже только тип")
+	for route_id in RouteCatalog.ids():
+		s.card_for(route_id).pressed.emit()
+		assert_eq(s.detail_subtitle_text(), tr("track.%s.kind" % route_id), "%s: вторая строка — только тип" % route_id)
+	TranslationServer.set_locale("ru")
+	await wait_process_frames(1)
+	s.card_for("flat").pressed.emit()
+	assert_eq(s.detail_subtitle_text(), "равнина")
 
 
 func test_large_preview_takes_about_38_percent_of_detail() -> void:
