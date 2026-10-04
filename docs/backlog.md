@@ -1,6 +1,7 @@
 # ovosch-rider — бэклог MVP
 
-Ведёт: менеджер разработки. Источник критериев — `docs/requirements.md` (74 REQ MVP + 18 REQ ред. 2: HUD-10..14, D3D-08, FRD-01..07, UIX-01..05). Этапы — раздел 7 `docs/tz.md`.
+Ведёт: менеджер разработки. Источник критериев — `docs/requirements.md` (74 REQ MVP + 18 REQ ред. 2: HUD-10..14, D3D-08, FRD-01..07, UIX-01..05). Этапы — раздел 7 `docs/tz.md`. Путь пользователя, срезы релизов (0.1, 0.2.0, 0.3, 0.4, 1.0, 1.1) и приоритеты всего незакрытого (P0–P3) — `docs/story-map.md`.
+Выпущено: 0.1 MVP (этапы 0–7), **0.2.0 — 2026-10-04** (этап 7р2, коммит f1a56e5, тег, CI run 37189696848, GUT 3310/3310). Текущий срез — **0.3 «Качество мира и персонажа»** (раздел 2, T-104..T-115).
 Задача закрывается (`done`) только по отчёту tester с подтверждением всех критериев `[авто]` указанных REQ. Критерии `[ручная проверка]` и `[вне контейнера]` в закрытии задачи не участвуют — они собраны в разделе «Ручные проверки владельца».
 
 Среда: Linux-контейнер, Godot 4.7 headless, без GUI, без macOS/Xcode, без Tacx Neo, без реальных аккаунтов Intervals.icu/Strava. Задачи `[native-ble]` пишутся и проверяются только статически и по контракту моста; сразу после написания кода они переводятся в `blocked: нужен macOS`. Задачи этапов 8–10 — только документы и заготовки конфигурации.
@@ -62,8 +63,8 @@
 | T-018 | `[game]` | 2 | BLE-датчики (`BleHeartRateSensor`, `BleCadenceSensor`, `BlePowerMeter`) и `SensorHub` с приоритетами источников | REQ-DEV-03 (п.2, 3), REQ-DEV-04 (п.3 по Н-4, 4), REQ-DEV-05 (п.2, 3) | T-017 | `done` (коммиты 5c2e62f, 851c724; приёмка 327144b, 38/38) |
 | T-019 | `[game]` | 2 | Сканер и модель списка устройств | REQ-DEV-01 (п.1–4, п.7 — UX-3) | T-015 | `done` (коммиты 851c724, fce771b; приёмка экрана устройств 12/12) |
 | T-020 | `[game]` | 2 | Состояния подключения, заряд, запоминание, автоподключение, «забыть» | REQ-DEV-06 (п.1–4), REQ-DEV-07 (п.1–3) | T-011, T-018, T-019 | `done` (коммиты 851c724, fce771b; приёмка 12/12) |
-| T-021 | `[native-ble]` | 2 | Каркас GDExtension: godot-cpp, сборка, `.gdextension`, класс `OvoschBle` с контрактом, `BleBackend`/`null_backend` | REQ-DEV-01 (п.6), REQ-NFR-06 (п.2) | T-015 | `blocked: нужен macOS` (код 851c724, 1c75404; Linux-сборка в CI зелёная, контракт сверен) |
-| T-022 | `[native-ble]` | 2 | Реализация контракта на CoreBluetooth (Objective-C++) для macOS/iOS | REQ-DEV-01 (п.5, 6), REQ-DEV-02 (п.6, 7) | T-021 | `blocked: нужен macOS` (код fce771b; статическая сверка `test_native_contract.gd`; вопрос Н-10) |
+| T-021 | `[native-ble]` | 2 | Каркас GDExtension: godot-cpp, сборка, `.gdextension`, класс `OvoschBle` с контрактом, `BleBackend`/`null_backend` | REQ-DEV-01 (п.6), REQ-NFR-06 (п.2) | T-015 | `blocked: нужен macOS` (код 851c724, 1c75404; Linux и macOS universal debug/release собираются в CI — run 37189696848, экспорт macOS грузит расширение; осталось: iOS-сборка и проверка на Tacx Neo у владельца — P0 среза 0.4) |
+| T-022 | `[native-ble]` | 2 | Реализация контракта на CoreBluetooth (Objective-C++) для macOS/iOS | REQ-DEV-01 (п.5, 6), REQ-DEV-02 (п.6, 7) | T-021 | `blocked: нужен macOS` (код fce771b; статическая сверка `test_native_contract.gd`; macOS-сборка в CI зелёная; осталось: работа CoreBluetooth с Tacx Neo и датчиками — ручные проверки раздела 4, P0 среза 0.4; вопрос Н-10) |
 | T-023 | `[game]` | 3 | `SampleRecorder`: сэмплы 1 Гц, «последнее за секунду», «нет данных» через 5 с, независимость от кадров | REQ-WRK-08 (п.1–6), REQ-NFR-02 (п.1, 2) | T-007, T-013 | `done` (коммиты bdddd4d, c5d7c59; приёмка 48/48) |
 | T-024 | `[game]` | 2→3 | Переподключение без потери данных сессии | REQ-DEV-08 (п.1–4) | T-017, T-020, T-023 | `done` (коммит c5d7c59; приёмка 30/30 в 65715d4) |
 | T-025 | `[game]` | 3 | `ErgController`: расчёт и отправка цели (% FTP, ватты, рампа, без цели), множитель интенсивности, задержка ≤ 1 с, повтор при ошибке записи | REQ-WRK-02 (п.1–5), REQ-WRK-07 (п.1, 2, 3, 5), REQ-NFR-01 (п.1, 2) | T-007, T-023 | `done` (коммиты bdddd4d, c5d7c59; приёмка 48/48) |
@@ -100,7 +101,7 @@
 | T-054 | `[game]` | 8 | Локализация ru/en: финальная инвентаризация переводов и литералов после всех экранов (выбор языка — в T-057) | REQ-NFR-08 (п.1, 2; п.3, 4 — подтверждение после T-057) | T-040, T-045, T-049, T-057 | `done` (инвентаризация; test_i18n 7/7; п.3, 4 подтверждены приёмкой T-057) |
 | T-055 | `[docs]` | 9–10 | Порты BLE: `docs/ports/{README,android,linux_windows}.md`, `platform/android/AndroidManifest.template.xml`, Data safety Google Play, открытый вопрос о каналах Linux/Windows | REQ-NFR-06 (п.4), REQ-NFR-07 (п.3, 4 — Android) | T-022 | `done` (коммит 7319347; приёмка `test_publishing_docs_acceptance` 11/11) |
 
-Итого 101 задача: MVP — 58 (ниже), доработка ред. 2 (этап 7р2) — 43 (T-059..T-101: `[game]` — 30, `[visual]` — 8, `[integration]` — 4 (T-064, T-069, T-099, T-101), `[design]` — 1 (T-091), `[native-ble]` — 0; волны 1–6, см. «Этап 7р2»; T-091, T-092 добавлены по итогам волны 1, T-093..T-097 — по ходу волн 2–4, T-098..T-101 — хвосты волн 3–4). Статусы 7р2 на 2026-10-04: `done` — 28, `review` — 6 (T-078, T-079, T-083, T-085, T-087, T-095 — см. строки; T-078 и T-085 с дефектами в T-097), `in-progress` — 3 (T-088, T-096, T-097), `todo` — 6 (T-089, T-090, T-098..T-101). MVP: этап 1 — 15 (T-001..T-014, T-056), этап 2 — 8 (+ T-024 выполняется в этапе 3), этап 3 — 9, этап 4 — 9 (+ T-057, экран настроек, сквозная для этапов 4–8), этап 5 — 5, этап 6 — 4, этап 7 — 4, этап 8 — 2, этапы 9–10 — 1. T-056 добавлена после приёмки T-014 (NFR-09 п.2 не покрыт); T-057 выделена из T-049/T-054, когда стало ясно, что экран настроек нужен раньше Strava (язык, синхронизация Intervals.icu, источник мощности по Н-8).
+Итого 115 задач: MVP — 58 (ниже), доработка ред. 2 (этап 7р2, релиз 0.2.0) — 45 (T-059..T-103: `[game]` — 31, `[visual]` — 9, `[integration]` — 4 (T-064, T-069, T-099, T-101), `[design]` — 1 (T-091), `[native-ble]` — 0; волны 1–6, см. «Этап 7р2»; T-091, T-092 добавлены по итогам волны 1, T-093..T-097 — по ходу волн 2–4, T-098..T-101 — хвосты волн 3–4, T-102 и T-103 — волна 6), релиз 0.3 — 12 (T-104..T-115: `[design]` — 3, `[visual]` — 4, `[game]` — 4, `[integration]` — 1; см. «Релиз 0.3»). Статусы 7р2 на 2026-10-04 (релиз 0.2.0): `done` — 45 из 45; из них приняты tester — все, кроме T-098, T-099, T-100, T-102, T-103 (приняты оркестратором по тестам исполнителя, полному прогону 3310/3310 и снимкам; повторная приёмка tester — P1 в срезе 0.3). Релиз 0.3: `todo` — 12. MVP: `done` — 56, `blocked: нужен macOS` — 2 (T-021, T-022). MVP: этап 1 — 15 (T-001..T-014, T-056), этап 2 — 8 (+ T-024 выполняется в этапе 3), этап 3 — 9, этап 4 — 9 (+ T-057, экран настроек, сквозная для этапов 4–8), этап 5 — 5, этап 6 — 4, этап 7 — 4, этап 8 — 2, этапы 9–10 — 1. T-056 добавлена после приёмки T-014 (NFR-09 п.2 не покрыт); T-057 выделена из T-049/T-054, когда стало ясно, что экран настроек нужен раньше Strava (язык, синхронизация Intervals.icu, источник мощности по Н-8).
 
 ### Этап 7р2 — Доработка ред. 2 (ТЗ ред. 2, коммит 4f0aa82; REQ — коммит 5d028e7)
 
@@ -131,32 +132,36 @@
 | T-075 | `[game]` | 2 | Превью трассы: модель серии (s, h), шкалы, палитра уклона, цифры; миниатюра и крупный профиль | FRD-03 (п.1–3), UIX-03 (п.2, 4 — трасса) | T-060, T-062 | `src/ui/tracks/route_preview_model.gd`, `src/ui/tracks/route_preview.gd`, `assets/i18n/strings_tracks.csv` | `done` (коммит 002b3bb; приёмка 6e84ef1) |
 | T-076 | `[game]` | 2 | Общие компоненты меню: AppBar с «назад», Stat, Banner, ListRow, пустое состояние | UIX-01 (п.3 — использование вариаций), UIX-04 (п.1 — компонент) | T-060, T-061 | `src/ui/common/{app_bar,stat_view,banner,list_row,empty_state,touch_target}.*`, `assets/i18n/strings_menu.csv` | `done` (коммит 6391da8; приёмка 6e84ef1) |
 | T-077 | `[game]` | 3 | `FreeRideSession`: сессия без плана — тики, модель скорости с уклоном, позиция, `SimController`, пауза, события, запись, без лимита | FRD-01 (п.1 — сессия, 2, 3), FRD-04 (п.5, 9), FRD-05 (п.5, 6 — события), FRD-07 (п.1–4) | T-064, T-067, T-068 | `src/session/free_ride_session.gd` | `done` (коммит 013a0d8; приёмка d62b281) |
-| T-078 | `[game]` | 3 | Сборка HUD тренировки: график внизу, список слева, «ДАЛЕЕ», пауза, панель инструментов; полоса прогресса снята; трасса `flat` без уклона | HUD-10 (п.7), HUD-11 (п.7), HUD-12 (п.8), HUD-13 (п.2–4, 7), HUD-07 (замена) | T-071, T-072, T-073, T-074 | `src/ui/workout/workout_screen.{tscn,gd}`, `src/ui/workout/workout_progress_bar.gd` (удаление), `assets/i18n/strings_hud.csv` | `review` (коммит b2d48da; приёмка 6e84ef1 — дефекты HUD-13 п.5, 6, 9 на телефоне, исправляет T-097) |
-| T-079 | `[game]` | 3 | Компоненты HUD свободной езды: панель рельефа (круг и «впереди 2 км»), режим панели цифр с карточкой уклона, график истории усилия 30 мин | FRD-06 (п.1–4), FRD-05 (п.6 — отображение) | T-071, T-073, T-075 | `src/ui/hud/relief_panel.gd`, `src/ui/hud/hud_metric_panel.gd`, `src/ui/hud/hud_chart.gd`, `assets/i18n/strings_free_ride.csv` | `review` (коммит 36452a1; отдельного отчёта tester нет — FRD-06 п.1–4 проверялись на экране T-084 в 6e84ef1, подтвердить) |
+| T-078 | `[game]` | 3 | Сборка HUD тренировки: график внизу, список слева, «ДАЛЕЕ», пауза, панель инструментов; полоса прогресса снята; трасса `flat` без уклона | HUD-10 (п.7), HUD-11 (п.7), HUD-12 (п.8), HUD-13 (п.2–4, 7), HUD-07 (замена) | T-071, T-072, T-073, T-074 | `src/ui/workout/workout_screen.{tscn,gd}`, `src/ui/workout/workout_progress_bar.gd` (удаление), `assets/i18n/strings_hud.csv` | `done` (коммит b2d48da; дефекты приёмки 6e84ef1 исправлены в T-097 c432348; повторная приёмка tester — волна 6) |
+| T-079 | `[game]` | 3 | Компоненты HUD свободной езды: панель рельефа (круг и «впереди 2 км»), режим панели цифр с карточкой уклона, график истории усилия 30 мин | FRD-06 (п.1–4), FRD-05 (п.6 — отображение) | T-071, T-073, T-075 | `src/ui/hud/relief_panel.gd`, `src/ui/hud/hud_metric_panel.gd`, `src/ui/hud/hud_chart.gd`, `assets/i18n/strings_free_ride.csv` | `done` (коммит 36452a1; приёмка tester — волна 6) |
 | T-080 | `[game]` | 3 | Экран выбора трассы: четыре карточки, деталь с крупным профилем, слайдер крутизны, запуск | FRD-02 (п.1–3), FRD-03 (п.4), FRD-05 (п.1 — UI), UIX-03 (п.2, 3, 5 — трасса), D3D-08 (п.1 — названия) | T-061, T-075, T-076 | `src/ui/tracks/route_select_screen.{tscn,gd}`, `assets/i18n/strings_tracks.csv` | `done` (коммит c36d3d1; приёмка 6e84ef1) |
 | T-081 | `[game]` | 3 | Главный экран: два сценария, статус устройств, история и настройки, профиль, кнопка разработчика только в отладке | UIX-02 (п.1–5), FRD-01 (п.1 — вход) | T-061, T-076 | `src/ui/home/home.{tscn,gd}`, `src/app/main.gd` (проводка, если нужна), `assets/i18n/strings_menu.csv` | `done` (коммит 9f68583; приёмка 6e84ef1) |
 | T-082 | `[game]` | 3 | Выбор тренировки карточками с превью плана, длительностью и максимальной целью | UIX-03 (п.1, 3, 4, 5 — тренировка), INT-04, INT-05 (регрессия) | T-071, T-076 | `src/ui/plan/plan_screen.{tscn,gd}`, `src/ui/plan/workout_chart.gd` (снятие), `assets/i18n/strings_menu_lists.csv` | `done` (коммит b443372; приёмка 6e84ef1) |
-| T-083 | `[visual]` | 3 | Окружения «равнина» и «холмы»: свои `EnvironmentSet`, поля-лоскуты, тополя, ветряки, ориентиры | D3D-08 (п.6, 8 — `flat`, `hills`) | T-070 | `src/scene3d/environment_set.gd`, `src/scene3d/tracks/env_{flat,hills}.tres`, `src/scene3d/props/**`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd` | `review` (коммит cf6fec6; визуально принято game-designer по снимкам, `[авто]` — тесты исполнителя зелёные; приёмка tester — в цикле T-088/T-089) |
+| T-083 | `[visual]` | 3 | Окружения «равнина» и «холмы»: свои `EnvironmentSet`, поля-лоскуты, тополя, ветряки, ориентиры | D3D-08 (п.6, 8 — `flat`, `hills`) | T-070 | `src/scene3d/environment_set.gd`, `src/scene3d/tracks/env_{flat,hills}.tres`, `src/scene3d/props/**`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd` | `done` (коммит cf6fec6; визуально — game-designer; приёмка tester — волна 6) |
 | T-084 | `[game]` | 4 | Экран свободной езды и запуск из меню: сцена по трассе, сессия, HUD, пауза, стоп, «нет SIM», сохранение и Strava; снимки свободной езды | FRD-01 (п.1, 4), FRD-06 (п.5, 6), FRD-05 (п.6), FRD-07 (п.2, 6, 7 — сквозная), UIX-04 (п.2 — свободная езда; п.1 — Android «назад» на главном закрывает приложение) | T-070, T-074, T-077, T-079, T-080 | `src/ui/free_ride/free_ride_screen.{tscn,gd}`, `src/app/main.gd`, `scripts/dev/ui_screenshot.gd`, `assets/i18n/strings_free_ride.csv` | `done` (коммит 68a89e6; приёмка 6e84ef1) |
-| T-085 | `[game]` | 4 | История и карточка заезда в новой системе; свободная езда — профиль по дистанции, без цели | UIX-04 (п.3–5 — история), FRD-07 (п.6 — UI), LOC-02, LOC-03 (регрессия) | T-064, T-076 | `src/ui/history/**`, `assets/i18n/strings_menu_lists.csv` | `review` (коммит da90ba3; приёмка 6e84ef1 — дефект LOC-03 п.2: в истории сглаженная мощность; исправляет T-097) |
+| T-085 | `[game]` | 4 | История и карточка заезда в новой системе; свободная езда — профиль по дистанции, без цели | UIX-04 (п.3–5 — история), FRD-07 (п.6 — UI), LOC-02, LOC-03 (регрессия) | T-064, T-076 | `src/ui/history/**`, `assets/i18n/strings_menu_lists.csv` | `done` (коммит da90ba3; дефект LOC-03 п.2 исправлен в T-097 c432348; повторная приёмка tester — волна 6) |
 | T-086 | `[game]` | 4 | Настройки (группы), устройства (строки, пустое состояние), выбор профиля, «О программе» (Inter OFL, Lucide ISC) | UIX-04 (п.3–5 — настройки, устройства), PRF-05 (регрессия) | T-076 | `src/ui/settings/**`, `src/ui/devices/**`, `src/ui/profile_select/**`, `assets/i18n/strings_menu.csv` | `done` (коммит 58c7fed; приёмка 6e84ef1) |
-| T-087 | `[visual]` | 4 | Окружение «горы»: камень, снег, высокий горизонт, серпантин, таблички, ориентиры | D3D-08 (п.6, 8 — `mountains`) | T-083 | `src/scene3d/tracks/env_mountains.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/mesh_kit.gd` | `review` (коммит 5576c36; визуально принято game-designer по снимкам, `[авто]` — тесты исполнителя зелёные; приёмка tester — в цикле T-088/T-089) |
-| T-088 | `[visual]` | 5 | Приморье, часть 1: вода (шейдер), берег и пляж, зонтичные сосны, маяк, ориентиры | D3D-08 (п.6 — вода, 8 — `seaside` без моста) | T-087 | `src/scene3d/shaders/water.gdshader`, `src/scene3d/materials/water.tres`, `src/scene3d/tracks/env_seaside.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/terrain_field.gd` | `in-progress` |
-| T-089 | `[game]` | 5 | Финальная проверка UI: адаптивность и цели нажатия, обрезка текста ru/en, статическая проверка `theme_override_*`, инвентаризация переводов, снимки всех экранов | UIX-01 (п.2, 5), UIX-05 (п.1–5), NFR-08 (п.1, 2) | T-078, T-080, T-081, T-082, T-084, T-085, T-086, T-095, T-097 | все `src/ui/**` и `assets/i18n/**` (после T-097 — единственный исполнитель в UI) | `todo` (хвосты волн 3–4 — в карточке) |
-| T-090 | `[visual]` | 6 | Приморье, часть 2: мост над рекой на диапазоне `bridges`, река под мостом, выемка рельефа, перила | D3D-08 (п.3 — мост в сцене, 6, 8 — `seaside`) | T-088 | `src/scene3d/props/bridge_builder.gd`, `src/scene3d/{road_builder,roadside_builder,terrain_field}.gd`, `src/scene3d/tracks/env_seaside.tres` | `todo` |
+| T-087 | `[visual]` | 4 | Окружение «горы»: камень, снег, высокий горизонт, серпантин, таблички, ориентиры | D3D-08 (п.6, 8 — `mountains`) | T-083 | `src/scene3d/tracks/env_mountains.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/mesh_kit.gd` | `done` (коммит 5576c36; визуально — game-designer; приёмка tester — волна 6) |
+| T-088 | `[visual]` | 5 | Приморье, часть 1: вода (шейдер), берег и пляж, зонтичные сосны, маяк, ориентиры | D3D-08 (п.6 — вода, 8 — `seaside` без моста) | T-087 | `src/scene3d/shaders/water.gdshader`, `src/scene3d/materials/water.tres`, `src/scene3d/tracks/env_seaside.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/terrain_field.gd` | `done` (коммит 66758b0; приёмка tester — волна 6) |
+| T-089 | `[game]` | 5 | Финальная проверка UI: адаптивность и цели нажатия, обрезка текста ru/en, статическая проверка `theme_override_*`, инвентаризация переводов, снимки всех экранов | UIX-01 (п.2, 5), UIX-05 (п.1–5), NFR-08 (п.1, 2) | T-078, T-080, T-081, T-082, T-084, T-085, T-086, T-095, T-097 | все `src/ui/**` и `assets/i18n/**` (после T-097 — единственный исполнитель в UI) | `done` (коммит 07ea8f3; приёмка tester 7e5513c — дефект `self_modulate` в `profile_select.gd` исправлен в T-103) |
+| T-090 | `[visual]` | 6 | Приморье, часть 2: мост над рекой на диапазоне `bridges`, река под мостом, выемка рельефа, перила | D3D-08 (п.3 — мост в сцене, 6, 8 — `seaside`) | T-088 | `src/scene3d/props/bridge_builder.gd`, `src/scene3d/{road_builder,roadside_builder,terrain_field}.gd`, `src/scene3d/tracks/env_seaside.tres` | `done` (коммит ae6c394; приёмка tester — волна 6) |
 | T-091 | `[design]` | 2 | Ориентиры трасс не реже 1.5 км в `tracks.md`, уточнение PCHIP (Fritsch–Butland), `assets.md` (Inter и Lucide в проекте), оценка состояний кнопок темы T-060 | D3D-08 (п.12 — данные дизайна), UIX-01 (п.3 — вердикт по вариациям) | T-060, T-062 | `docs/game/tracks.md`, `docs/game/assets.md`, `docs/game/ui.md` (только если нужна правка состояний) | `done` (коммит 44f5ea9) |
 | T-092 | `[game]` | 2–3 | Ориентиры в данных `RouteCatalog` по новой таблице `tracks.md` (разрыв ≤ 1.5 км на всех трассах) | D3D-08 (п.12) | T-091 | `src/domain/route_catalog.gd`, `tests/unit/domain/test_route_catalog.gd` | `done` (коммит 94f8f2c; приёмка d62b281) |
 | T-093 | `[game]` | 2–3 | Доработка темы перед волной 3: `danger_hover`/`danger_pressed`, нажатие `GhostButton`, `NumLabel`, `Stack0`, `Row0/8/12/16/24`, `HudPauseCard`/`HudChipLabel`/`HudPauseTitle`, шрифт цифр `SpinBox`, разрядка `Overline`, иконки баннера info/triangle-alert/circle-alert, помощник `UiIcons` | UIX-01 (п.1, 3), UIX-05, HUD-14 | T-060, T-091 | `src/ui/theme/**` (в т.ч. `ui_icons.gd`), `assets/icons/lucide/**` | `done` (коммит 64d24eb; приёмка 6e84ef1) |
 | T-094 | `[game]` | 3 | `y_max` графика плана с нижней границей 1.1 × FTP (У-2), сдвиг линий факта по журналу пропусков, проверка размера кадра снимков UI, окно поверх всех на macOS | HUD-10 (п.2, 5), HUD-11 (п.1) | T-065, T-059 | `src/ui/hud/plan_chart_model.gd`, `src/ui/hud/effort_series.gd`, `scripts/dev/ui_screenshot.gd`, `scripts/ui_screenshot.sh` | `done` (коммит ad349e9; приёмка d62b281) |
-| T-095 | `[game]` | 4 | `tnum` у подписей HUD с цифрами, недостающие вариации темы (`HudHeroUnit`, `HudTargetUnit`, `HudCountdown`, `HudDelta`, `HudGradeValue`, `HudGradeUnit`, `HudModeLabel`, `HudStepLabel`, `OverlineAccent`, `OverlineSim`, `LogoLabel`, `LogoAccentLabel`, `SheetPanel`), нагрузка Intervals.icu в строке карточки плана, удалены `WorkoutChart` и скрытый `WorkoutList` | HUD-14 (п.2), INT-04 (п.2), UIX-01 (п.3), UIX-03 | T-073, T-082, T-093 | `src/ui/theme/**`, `src/ui/hud/**` (подписи), `src/ui/plan/**` | `review` (коммит c85e98c; приёмка tester — вместе с T-097) |
-| T-096 | `[visual]` | 5 | Пересвет 3D в `SubViewport` экранов заезда (тренировка и свободная езда): экспозиция, тонмаппинг и окружение сцены в `SubViewport` совпадают со снимками `screenshot.sh` | D3D-07 (п.1–5 — регрессия на экранах заезда), HUD-13 (п.10 — 3D под HUD) | T-084 | `src/scene3d/ride_scene.gd`, окружение сцены; в `src/ui/{workout,free_ride}/*_screen.tscn` — только узел `SubViewport` (уточнить в отчёте исполнителя, сцены экранов одновременно правит T-097) | `in-progress` |
-| T-097 | `[game]` | 5 | Дефекты приёмки UI (HUD-13 п.5, 6, 9 на телефоне; LOC-03 п.2 в истории), Esc → подтверждение на обоих экранах заезда, удаление узлов совместимости, кэш подписей `HudChart`, вариации T-095 на панели цифр, подвал панели рельефа на телефоне, «На эмуляторе» на экране плана, ожидание анимаций в `ui_screenshot` | HUD-13 (п.5, 6, 9), LOC-03 (п.2), UIX-04 (п.2), HUD-14 (п.2), FRD-06 (п.1), FRD-01 (п.4) | T-078, T-084, T-085, T-095 | `src/ui/workout/**` (в т.ч. удаление `workout_progress_bar.gd`), `src/ui/free_ride/**`, `src/ui/hud/{hud_layout,hud_metric_panel,hud_chart,relief_panel}.*`, `src/ui/history/**`, `src/ui/profile_select/**`, `src/ui/plan/plan_screen.*`, `scripts/dev/ui_screenshot.gd` | `in-progress` |
-| T-098 | `[game]` | 6 | Последняя выбранная тренировка в профиле: поле `last_workout_id`, предвыбор на экране плана между запусками (по образцу `last_route_id`) | UIX-03 (п.3) — прямого критерия нет, вопрос Н-17 | T-097 | `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, `src/ui/plan/plan_screen.gd` | `todo` |
-| T-099 | `[integration]` | 6 | Свёртка повторов Intervals.icu «3x»: метаданные блоков повторов в `Workout` при разборе (сейчас `expand_repeat` разворачивает блок без следа), список интервалов показывает блок одной строкой, как у ZWO `IntervalsT` | HUD-13 (п.8 — для планов Intervals.icu), INT-03 (регрессия) | T-072 | `src/domain/workout.gd`, `src/domain/workout_step.gd`, `src/integrations/workouts/intervals_icu_workout_parser.gd`, `src/ui/hud/interval_list_model.gd` (только чтение метаданных) | `todo` |
-| T-100 | `[visual]` | 6 | Статический кэш `RouteWorld._tracks`: в одиночном прогоне — «resources still in use at exit»; кэш с очисткой (или не статический) | INF-01 (п.2, 5 — чистый одиночный прогон) | T-088, T-090 (файлы `src/scene3d/` заняты) | `src/scene3d/route_world.gd` | `todo` |
-| T-101 | `[integration]` | 6 | Нестабильные по времени тесты: `test_storage_acceptance::loc_07_c4_tick_budget_50ms`, `test_strava_hardening::idle_connection_5s` — подменяемые часы или устойчивый замер | LOC-07 (п.4), STR-04 (регрессия), INF-01 (п.1) | — | `tests/**/test_storage_acceptance.gd` (правит tester), `tests/**/test_strava_hardening.gd` (developer), при необходимости шов часов в `src/storage/`, `src/integrations/strava/` | `todo` |
+| T-095 | `[game]` | 4 | `tnum` у подписей HUD с цифрами, недостающие вариации темы (`HudHeroUnit`, `HudTargetUnit`, `HudCountdown`, `HudDelta`, `HudGradeValue`, `HudGradeUnit`, `HudModeLabel`, `HudStepLabel`, `OverlineAccent`, `OverlineSim`, `LogoLabel`, `LogoAccentLabel`, `SheetPanel`), нагрузка Intervals.icu в строке карточки плана, удалены `WorkoutChart` и скрытый `WorkoutList` | HUD-14 (п.2), INT-04 (п.2), UIX-01 (п.3), UIX-03 | T-073, T-082, T-093 | `src/ui/theme/**`, `src/ui/hud/**` (подписи), `src/ui/plan/**` | `done` (коммит c85e98c; приёмка tester — вместе с T-097, волна 6) |
+| T-096 | `[visual]` | 5 | Пересвет 3D в `SubViewport` экранов заезда (тренировка и свободная езда): экспозиция, тонмаппинг и окружение сцены в `SubViewport` совпадают со снимками `screenshot.sh` | D3D-07 (п.1–5 — регрессия на экранах заезда), HUD-13 (п.10 — 3D под HUD) | T-084 | `src/scene3d/ride_scene.gd`, окружение сцены; в `src/ui/{workout,free_ride}/*_screen.tscn` — только узел `SubViewport` (уточнить в отчёте исполнителя, сцены экранов одновременно правит T-097) | `done` (коммит ce4d95d; приёмка tester — волна 6; допуск яркости ждёт вердикта game-designer, P2) |
+| T-097 | `[game]` | 5 | Дефекты приёмки UI (HUD-13 п.5, 6, 9 на телефоне; LOC-03 п.2 в истории), Esc → подтверждение на обоих экранах заезда, удаление узлов совместимости, кэш подписей `HudChart`, вариации T-095 на панели цифр, подвал панели рельефа на телефоне, «На эмуляторе» на экране плана, ожидание анимаций в `ui_screenshot` | HUD-13 (п.5, 6, 9), LOC-03 (п.2), UIX-04 (п.2), HUD-14 (п.2), FRD-06 (п.1), FRD-01 (п.4) | T-078, T-084, T-085, T-095 | `src/ui/workout/**` (в т.ч. удаление `workout_progress_bar.gd`), `src/ui/free_ride/**`, `src/ui/hud/{hud_layout,hud_metric_panel,hud_chart,relief_panel}.*`, `src/ui/history/**`, `src/ui/profile_select/**`, `src/ui/plan/plan_screen.*`, `scripts/dev/ui_screenshot.gd` | `done` (коммит c432348; приёмка tester — волна 6, перевод тестов 254936f) |
+| T-098 | `[game]` | 6 | Последняя выбранная тренировка в профиле: поле `last_workout_id`, предвыбор на экране плана между запусками (по образцу `last_route_id`) | UIX-03 (п.3; Н-17 → У-14, 9757dc0) | T-097 | `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, `src/ui/plan/plan_screen.gd` | `done` (коммит 783a3a3; принято оркестратором по тестам, приёмки tester не было — P1 в 0.3) |
+| T-099 | `[integration]` | 6 | Свёртка повторов Intervals.icu «3x»: метаданные блоков повторов в `Workout` при разборе (сейчас `expand_repeat` разворачивает блок без следа), список интервалов показывает блок одной строкой, как у ZWO `IntervalsT` | HUD-13 (п.8 — для планов Intervals.icu), INT-03 (регрессия) | T-072 | `src/domain/workout.gd`, `src/domain/workout_step.gd`, `src/integrations/workouts/intervals_icu_workout_parser.gd`, `src/ui/hud/interval_list_model.gd` (только чтение метаданных) | `done` (коммит 577c42d; принято оркестратором по тестам, приёмки tester не было — P1 в 0.3; хвосты — T-113) |
+| T-100 | `[visual]` | 6 | Статический кэш `RouteWorld._tracks`: в одиночном прогоне — «resources still in use at exit»; кэш с очисткой (или не статический) | INF-01 (п.2, 5 — чистый одиночный прогон) | T-088, T-090 (файлы `src/scene3d/` заняты) | `src/scene3d/route_world.gd` | `done` (коммит dba3dc5 вместе с T-102; принято оркестратором, приёмки tester не было — P1 в 0.3) |
+| T-101 | `[integration]` | 6 | Нестабильные по времени тесты: `test_storage_acceptance::loc_07_c4_tick_budget_50ms`, `test_strava_hardening::idle_connection_5s` — подменяемые часы или устойчивый замер | LOC-07 (п.4), STR-04 (регрессия), INF-01 (п.1) | — | `tests/**/test_storage_acceptance.gd` (правит tester), `tests/**/test_strava_hardening.gd` (developer), при необходимости шов часов в `src/storage/`, `src/integrations/strava/` | `done` (developer 84eba50 — Strava, 20 прогонов под нагрузкой без падений; tester f9fe95f — LOC-07 п.4) |
+| T-102 | `[visual]` | 6 | Одинаковая картинка в Forward+/Mobile и Compatibility (калибровка окружений под Forward+), муар асфальта и обочины, читаемость подъёма в горах (порог T-070 — параметр `EnvironmentSet`, для гор 30 м на 40 м) | D3D-07 (п.1–6 — регрессия в Forward+), D3D-08 (п.8 — подъём на 6000 и 8600 м) | T-088, T-090, T-096 | `src/scene3d/**` (окружения, материалы дороги и травы, `environment_set.gd`), снимки `docs/game/shots/2026-10-04-t102/` | `done` (коммит dba3dc5; принято оркестратором по снимкам и тестам, приёмки tester не было — P1 в 0.3; хвосты — T-106, T-107, T-112) |
+| T-103 | `[game]` | 6 | Хвосты UI после T-089: итог заезда карточкой `RideSummaryCard` (план и свободная езда), `DialogLayout` для всех диалогов (480 lp, кнопки справа, фокус опасного — «Отмена»), лицензии листом на compact, метки режима вариациями `OverlineAccent`/`OverlineSim`, выбор профиля без `self_modulate`, надзаголовок главного на телефоне, сценарии снимков | HUD-14 (п.7, 8), UIX-01 (п.2, 8, 9), UIX-05 (п.3), UIX-04 (п.3), PRF-03 (п.2), STR-01 (п.8) | T-089 | `src/ui/workout/**`, `src/ui/free_ride/**`, `src/ui/hud/ride_summary_card.*`, `src/ui/common/dialog_layout.gd`, `src/ui/settings/**`, `src/ui/history/**`, `src/ui/profile_select/**`, `src/ui/home/**`, `scripts/dev/ui_screenshot.gd` | `done` (коммиты 722b66e, 27c97d7; принято оркестратором по тестам и снимкам, приёмки tester не было — P1 в 0.3) |
 
-Состояние волн (2026-10-04, ветка `claude/quirky-goldberg-m8r1ro`, голова 6e84ef1). Волны 1–4 слиты. Приёмки tester: 83dd2b0 (T-059, T-060, T-061, T-065), f84b12b (T-062, T-063, T-064, T-066; правка edbeef9), d62b281 (T-067, T-068, T-069, T-070, T-077, T-092, T-094), bb178af (T-073), 6e84ef1 (T-071, T-072, T-074, T-075, T-076, T-078, T-080, T-081, T-082, T-084, T-085, T-086, T-093); T-091 — 44f5ea9 (документ). В `review`: T-078 и T-085 — дефекты приёмки, исправляет T-097; T-083 и T-087 — визуально приняты game-designer, приёмка tester в цикле T-088/T-089; T-079 и T-095 — нет отдельного отчёта tester. Инфраструктура вне задач: bb13332, 065d41c, 2a201e8 (проверка ключей UI читает все `strings*.csv`). Последний полный прогон GUT: 3208 тестов, 4 красных — дефекты T-097. Волна 5 в работе: T-088, T-096, T-097; затем T-089 (после T-097), T-090 (после T-088), мелкие T-098..T-101 — волна 6.
+**Этап 7р2 закрыт — релиз 0.2.0** (2026-10-04, ветка `claude/quirky-goldberg-m8r1ro`, голова f1a56e5, тег, CI run 37189696848 зелёный: GUT, BLE linux, BLE macOS debug/release, экспорт macOS; полный прогон GUT 3310/3310). Волны 5–6 слиты: T-096 ce4d95d, T-088 66758b0, T-097 c432348, T-090 ae6c394, T-089 07ea8f3, T-099 577c42d, T-101 84eba50 + f9fe95f, T-102 и T-100 dba3dc5, T-098 783a3a3, T-103 722b66e + 27c97d7. Приёмка tester волны 6: перевод тестов 254936f, приёмка T-089 7e5513c; приняты T-078, T-079, T-083, T-085, T-087, T-088, T-089 (дефект `self_modulate` → T-103), T-090, T-095, T-096, T-097. Без приёмки tester (приняты оркестратором по тестам и снимкам): T-098, T-099, T-100, T-102, T-103 — повторная приёмка в срезе 0.3 (P1). Хвосты релиза разнесены в T-106, T-107, T-112..T-115 (раздел «Релиз 0.3»), реестр — `docs/story-map.md` раздел 6.
+
+История (до релиза). Состояние волн на голове 6e84ef1. Волны 1–4 слиты. Приёмки tester: 83dd2b0 (T-059, T-060, T-061, T-065), f84b12b (T-062, T-063, T-064, T-066; правка edbeef9), d62b281 (T-067, T-068, T-069, T-070, T-077, T-092, T-094), bb178af (T-073), 6e84ef1 (T-071, T-072, T-074, T-075, T-076, T-078, T-080, T-081, T-082, T-084, T-085, T-086, T-093); T-091 — 44f5ea9 (документ). В `review`: T-078 и T-085 — дефекты приёмки, исправляет T-097; T-083 и T-087 — визуально приняты game-designer, приёмка tester в цикле T-088/T-089; T-079 и T-095 — нет отдельного отчёта tester. Инфраструктура вне задач: bb13332, 065d41c, 2a201e8 (проверка ключей UI читает все `strings*.csv`). Последний полный прогон GUT: 3208 тестов, 4 красных — дефекты T-097. Волна 5 в работе: T-088, T-096, T-097; затем T-089 (после T-097), T-090 (после T-088), мелкие T-098..T-101 — волна 6.
 
 #### Параллельная работа в git worktree
 
@@ -208,9 +213,9 @@
 | 3 | T-077, T-078, T-079, T-080, T-081, T-082, T-083 | T-077 ← T-064, T-067, T-068; T-078 ← T-071..T-074; T-079 ← T-071, T-073, T-075; T-080 ← T-061, T-075, T-076; T-081 ← T-061, T-076; T-082 ← T-071, T-076; T-083 ← T-070 |
 | 4 | T-084, T-085, T-086, T-087 | T-084 ← T-070, T-074, T-077, T-079, T-080; T-085 ← T-064, T-076; T-086 ← T-076; T-087 ← T-083 |
 | 5 | T-088, T-096, T-097, затем T-089 | T-088 ← T-087; T-096 ← T-084; T-097 ← T-078, T-084, T-085, T-095; T-089 ← все UI-задачи (T-078, T-080..T-082, T-084..T-086) и T-097 |
-| 6 | T-090, T-098, T-099, T-100, T-101 | T-090 ← T-088; T-098 ← T-097 (экран плана); T-099 ← T-072; T-100 ← T-088, T-090 (`src/scene3d/` занят); T-101 — без зависимостей |
+| 6 | T-090, T-098, T-099, T-100, T-101, T-102, T-103 | T-090 ← T-088; T-098 ← T-097 (экран плана); T-099 ← T-072; T-100 ← T-088, T-090 (`src/scene3d/` занят); T-101 — без зависимостей; T-102 ← T-088, T-090, T-096; T-103 ← T-089 |
 
-Вне исходной нарезки (по ходу волн 2–4): T-093 (тема перед волной 3), T-094 (уточнение У-2 и снимки), T-095 (вариации и `tnum`, волна 4); волна 5 добавила T-096 и T-097 (дефекты приёмки и хвосты). Владение в волне 5: сцены экранов заезда (`src/ui/{workout,free_ride}/**`) — T-097, T-096 трогает в них только узел `SubViewport`; `src/scene3d/**` — T-088 и T-096 (T-096 — только `ride_scene.gd` и окружение сцены; при пересечении — сначала T-096, потом T-088); `scripts/dev/ui_screenshot.gd` — T-097, затем T-089.
+Вне исходной нарезки (по ходу волн 2–4): T-093 (тема перед волной 3), T-094 (уточнение У-2 и снимки), T-095 (вариации и `tnum`, волна 4); волна 5 добавила T-096 и T-097 (дефекты приёмки и хвосты); волна 6 — T-102 (Forward+ после T-096) и T-103 (хвосты UI после T-089, решения У-15, У-16). Владение в волне 5: сцены экранов заезда (`src/ui/{workout,free_ride}/**`) — T-097, T-096 трогает в них только узел `SubViewport`; `src/scene3d/**` — T-088 и T-096 (T-096 — только `ride_scene.gd` и окружение сцены; при пересечении — сначала T-096, потом T-088); `scripts/dev/ui_screenshot.gd` — T-097, затем T-089.
 
 Задача из следующей волны может стартовать раньше, как только слиты её зависимости и её файлы не заняты задачей, которая ещё в работе (например, T-075 — сразу после T-060 и T-062).
 
@@ -223,6 +228,39 @@
 **Этап 2 закрыт в контейнере** (коммит fce771b): T-015..T-020, T-024 — `done`; T-021, T-022 — `blocked: нужен macOS` (код написан, Linux-сборка каркаса в CI зелёная, контракт `OvoschBle` ⇔ `BleBridge` сверен статически; сборка и проверка на Tacx Neo — у владельца, раздел 4).
 
 **Этап 1 завершён** (коммит e0a9ae4, экран разработчика T-013): результат «тренировка проигрывается без железа» подтверждён — план проигрывается на `FakeTrainer` через `SessionTicker` без зависимости от кадров. Открытые хвосты этапа: приёмка T-013/T-014, T-056 (строгая трассируемость), решения Н-1/Н-2.
+
+### Релиз 0.3 — Качество мира и персонажа (с 2026-10-04)
+
+Источник: замечание владельца 2026-10-04 — «ёлки и персонаж угловатые и не проработанные; ёлка — пара треугольников; персонаж угловатый, шлем нереальный, ноги как палки, торчат из-под седла; нужна отдельная задача на проработку персонажа и возможность его докручивать в будущем: велоформа, очки, туфли и т. д.»; хвосты релиза 0.2.0. Путь пользователя и срезы — `docs/story-map.md`.
+Главный риск продукта — качество мира и персонажа. Порядок по правилу «сначала то, что сильнее меняет картинку при малой цене»: хвойные (массовый объект, один меш на MultiMesh) — спека короче, TA начинает раньше; гонщик (центр каждого кадра) — спека дольше, решает «процедурно или glTF» и слоты внешности. Конвейер: game-designer (спека + предлагаемые критерии) → requirements (REQ, вопросы Н-18..Н-21) → TA/developer → tester (+ game-designer для визуальных).
+Условие выпуска 0.3 (P0, не задача): базовый замер FPS на эталонном устройстве (D3D-05 п.1, Forward+ и Mobile после T-102, «Перевал» 5.5 км) и ответ владельца на У-13 / решение 16 — до фиксации бюджета в спеках T-104/T-105 желательно, до выпуска 0.3 обязательно (повторный замер после T-106, T-107).
+
+| ID | Зона | Волна | Задача | REQ-ID | Зависит от | Файлы (владение) | Приоритет | Статус |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-105 | `[design]` | 1 | Арт-спека хвойных: ель/пихта (поля, холмы, горы) и зонтичная сосна (приморье) — ярусы, неровные края, ствол, 3–4 формы, вариации, LOD/импосторы, бюджет | D3D-07 (п.1, 6), D3D-08 (п.6, 8), D3D-05 (п.4); новый REQ — Н-19 | — | `docs/game/art-bible.md` (раздел растительности), `docs/game/assets.md`, `docs/game/shots/2026-10-04-t105/` | P1 | `todo` |
+| T-112 | `[visual]` | 1 | Общие материалы мира получают туман и свет своей `RideScene`, а не последней созданной; запас критерия читаемости подъёма (`min_drop` 16 при пороге 15 м) | D3D-07 (п.1, 4, 6 — регрессия), D3D-08 (п.8), HUD-13 (п.10) | — | `src/scene3d/{ride_scene,route_world,environment_set}.gd`, общие `.tres` материалов мира, `tests/integration/` | P1 | `todo` |
+| T-114 | `[game]` | 1 | Диалог восстановления заезда: «удалить» — опасная кнопка, ряд кнопок через `DialogLayout`, Enter/Esc не удаляют | LOC-07 (п.3), UIX-01 (п.8, 9) | — | `src/ui/history/recovery_dialog.gd`, `src/app/main.gd` (только если нужна проводка), `tests/unit/ui/` | P1 | `todo` |
+| T-113 | `[integration]` | 1 | Свёрнутая строка повторов — цвет зоны рабочего отрезка, а не первого шага блока; парсер ZWO пишет `Workout.repeat_blocks` для `IntervalsT` | HUD-13 (п.8), IMP-01 (регрессия), NFR-09 (п.3) | — | `src/ui/hud/interval_list_model.gd`, `src/integrations/workouts/zwo_parser.gd`, тесты | P2 | `todo` |
+| T-115 | `[game]` | 1 | Изоляция `user://` для параллельных прогонов GUT (каталог данных на прогон) | INF-01 (п.1, 2) | — | `scripts/test.sh`, `.gutconfig.json` или тестовый хелпер в `tests/` | P2 | `todo` |
+| T-104 | `[design]` | 2 | Арт-спека персонажа: анатомия и посадка, шлем, очки, туфли, джерси/шорты, кисти; полигональность в тун-стиле; бюджет; «процедурно vs glTF»; эталонные ракурсы и чек-лист; слоты внешности | D3D-01, D3D-04, D3D-07 (п.2, 4, 6), D3D-05 (п.4); новые REQ — Н-18, Н-20 | T-105 (тот же `art-bible.md`) | `docs/game/art-bible.md` (раздел «Гонщик»), `docs/game/assets.md`, `docs/game/shots/2026-10-04-t104/` | P1 | `todo` |
+| T-107 | `[visual]` | 2 | Хвойные по спеке T-105: новые меши, вариации, LOD/импосторы; acne на кронах в Forward+ | D3D-07 (п.1, 6), D3D-08 (п.6, 8), D3D-05 (п.4); REQ по Н-19 | T-105, T-112 (`src/scene3d/`) | `src/scene3d/scenery_builder.gd`, `src/scene3d/mesh_kit.gd`, `src/scene3d/tracks/env_*.tres` (только параметры растительности), `docs/perf_budget.md`, `tests/integration/` | P1 | `todo` |
+| T-106 | `[visual]` | 3 | Гонщик по спеке T-104: тело, таз на седле, IK ноги (колено, голеностоп), шлем, очки, туфли, кисти; геометрия разбита по слотам внешности; тень гонщика | D3D-01, D3D-04, D3D-07 (п.2–6), D3D-05 (п.4); REQ по Н-18 | T-104, T-107 (`mesh_kit.gd`) | `src/scene3d/{rider_model,rider}.gd`, `src/scene3d/rider.tscn`, `src/scene3d/materials/rider_toon.tres`, `src/scene3d/mesh_kit.gd`, `assets/` (если glTF), `project.godot` (только качество теней), `tests/unit/scene3d/`, `tests/integration/` | P1 | `todo` |
+| T-108 | `[game]` | 3 | `RiderLook` — данные внешности отдельно от геометрии: слоты, пресеты, хранение в профиле (совместимо со старыми профилями) | PRF-01 (регрессия), PRF-04; новый REQ — Н-20 | T-104 (список слотов) | `src/profiles/rider_look.gd` (новый), `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, `tests/unit/profiles/` | P1 | `todo` |
+| T-109 | `[visual]` | 4 | Применение `RiderLook` к модели без пересборки сцены; проводка внешности профиля в сцены заезда | D3D-05 (п.4), D3D-07 (п.2); REQ по Н-20 | T-106, T-108 | `src/scene3d/{rider_model,rider,ride_scene}.gd`, в `src/ui/{workout,free_ride}/*_screen.gd` — только передача внешности, `tests/` | P2 | `todo` |
+| T-110 | `[design]` | позже | Макет экрана «Гардероб»: вход, превью гонщика, слоты, пресеты, сброс | UIX-01, UIX-05; REQ по Н-21 | T-104, T-108 | `docs/game/ui.md` (новый раздел), `docs/game/shots/…-ui-mockups/` | P3 | `todo` |
+| T-111 | `[game]` | позже | Экран «Гардероб» по макету T-110 | UIX-01, UIX-04, UIX-05; REQ по Н-21 | T-109, T-110 | `src/ui/wardrobe/**` (новый), `src/app/app_state.gd` (экран), `assets/i18n/strings_menu.csv` | P3 | `todo` |
+
+Волны 0.3 (исполнители: game-designer, technical-artist, developer, tester — по одному на дорожку):
+
+| Волна | game-designer | technical-artist | developer | tester |
+| --- | --- | --- | --- | --- |
+| 1 | T-105 | T-112 | T-114, T-113, T-115 | повторная приёмка T-098, T-099, T-100, T-102, T-103 |
+| 2 | T-104 | T-107 | — (резерв: дефекты приёмки) | приёмка T-112..T-115 |
+| 3 | вердикт по T-107 | T-106 | T-108 | приёмка T-107 |
+| 4 | вердикт по T-106 | T-109 | — | приёмка T-106, T-108, T-109 |
+| позже | T-110 | — | T-111 | — |
+
+Владение общими файлами: `docs/game/art-bible.md` — T-105, затем T-104 (последовательно); `src/scene3d/mesh_kit.gd` — T-107, затем T-106; `src/scene3d/ride_scene.gd` — T-112, затем T-109; `src/profiles/profile.gd` — T-108; `src/scene3d/rider_model.gd` — T-106, затем T-109; `docs/perf_budget.md` — T-107, затем T-106 (каждый дописывает свою строку бюджета). T-114 и T-113 не пересекаются по файлам и идут параллельно.
 
 ## 3. Карточки задач
 
@@ -534,60 +572,60 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Исходный план. `src/integrations/import/workout_importer.gd`: `import_file(path) -> Result` — выбор парсера по расширению без учёта регистра, иное → ошибка; `src/integrations/import/import_error.gd` — `{file_name, kind, element, line, message_key}` и `to_user_message(tr)` без стека и внутренних имён классов; ошибки не вызывают ошибок движка. `src/profiles/workout_library.gd`: записи `{id, name, duration_s, source_file, imported_at, workout}` в данных профиля; библиотека A не видна в B; повторный импорт — отдельная запись; удаление не трогает заезды; запуск из библиотеки создаёт тот же `WorkoutSession`.
 Закрывает: REQ-IMP-03 п.1; REQ-IMP-05 п.1–4; REQ-IMP-04 п.1–5. Критерии авто: все. Ручные: REQ-IMP-03 п.2 (диалог — вызывается из T-040). Вне контейнера: REQ-IMP-03 п.3, 4.
 
-#### T-040 — Экран выбора тренировки и предпросмотра `[game]` — `in-progress`
+#### T-040 — Экран выбора тренировки и предпросмотра `[game]` — `done`
 Статус. У developer B (после T-051/T-052). Источники: `IntervalsPlanService` (план на сегодня / кэш с пометкой, T-034/T-036), `WorkoutLibrary` (T-039); график — `Workout.power_points()` + `ZonePalette`; импорт файла — `FileDialog` с фильтром `*.zwo, *.erg, *.mrc` (REQ-IMP-03 п.2); запуск → `WorkoutScreen` (T-031). Размещать в `src/ui/workout_picker/`, навигация через `AppState`.
 Что сделать. `src/ui/workout_picker.tscn/.gd`: источники — план на сегодня (Intervals или кэш с пометкой) и библиотека (пометка источника); одна тренировка → сразу карточка без списка; две и более → список (название, длительность `мм:сс`/`ч:мм:сс`, нагрузка если есть); кнопка «Импортировать файл» → `FileDialog` с фильтром `*.zwo, *.erg, *.mrc`. `src/ui/workout_preview.tscn/.gd`: график по `WorkoutProfile.points` с окраской сегментов по зонам, ось времени в минутах, кнопка «Старт». Модель списка (`src/ui/workout_picker_model.gd`) проверяется headless.
 Закрывает: REQ-INT-04 п.1–3; REQ-INT-05 п.1–3 (отображение). Критерии авто: модель списка/выбора. Ручные: REQ-INT-04 п.4, REQ-INT-05 п.4, REQ-IMP-03 п.2.
 
 ### Этап 5 — Хранилище. Результат: заезды сохраняются и экспортируются
 
-Состояние: T-041, T-042, T-044 — сданы в 59f1fe1, в `review`; T-043 (серии графиков) и T-045 (экраны) — `in-progress` у developer D. `RideSummary` реализован в T-041 — REQ-LOC-04 принимается там.
+Состояние на момент этапа (история; сейчас все задачи этапа `done`): T-041, T-042, T-044 — сданы в 59f1fe1, в `review`; T-043 (серии графиков) и T-045 (экраны) — `in-progress` у developer D. `RideSummary` реализован в T-041 — REQ-LOC-04 принимается там.
 
-#### T-041 — `RideRepository` `[integration]` — `review`
+#### T-041 — `RideRepository` `[integration]` — `done`
 Статус. Сдано developer D в коммите 59f1fe1 (одним заходом с T-042, T-044), ждёт приёмки tester по REQ-LOC-01 п.1–4, REQ-PRF-04 п.1 и REQ-LOC-04 п.1–6 (`RideSummary` сделан здесь, а не в T-043). Факт: `src/storage/ride.gd` (`Ride` — метаданные, сэмплы, события, `paused_total_sec`, `speed_source`, поля Strava), `src/storage/ride_summary.gd` (`RideSummary` — средняя, NP, работа, средние пульс/каденс, время в зонах), `src/storage/ride_repository.gd` (интерфейс), `src/storage/file_ride_repository.gd` (В-3: `user://rides/<profile>/<id>/meta.json` + `samples.bin`, индекс `index.json`). Замер: `list()` для 500 заездов — 26 мс (REQ-LOC-02 п.2 с запасом). План в заезде — через `Workout.to_dict()` (Н-6). Хук `session_finished` экрана тренировки (T-031) — точка входа сохранения.
 Что сделать. `src/storage/ride.gd` — `Ride {id, profile_id, started_at, workout_name, workout_source, ftp, weight_kg, intensity_pct, ended_early, samples: Array[Sample], events, strava_status, strava_activity_id, strava_error}`. `src/storage/ride_repository.gd` — интерфейс `save(ride)`, `get_ride(id)`, `list(profile_id) -> Array[RideSummary]` (по дате убыв.), `delete(id)`, `list` для 500 заездов ≤ 1 с. Реализация `src/storage/file_ride_repository.gd` (решение В-3): каталог заезда `user://profiles/<id>/rides/<ride_id>/` с `meta.json` (метаданные, включая `speed_source` по В-8) и бинарными потоками (`samples.bin`, `events.json`), плюс индекс `rides_index.json` для быстрого списка. SQLite — допустимая замена реализации того же интерфейса позже. Хук удаления профиля — удалить его заезды.
 Закрывает: REQ-LOC-01 п.1–4; REQ-PRF-04 п.1. Критерии авто: все. Ручных нет.
 
-#### T-042 — Потоковая запись и восстановление `[integration]` — `review`
+#### T-042 — Потоковая запись и восстановление `[integration]` — `done`
 Статус. Сдано developer D в коммите 59f1fe1 (вместе с T-041, T-044), ждёт приёмки tester по REQ-LOC-07 п.1–4. Факт: `src/storage/ride_recorder.gd` (`RideRecorder` — подписан на `SampleStream`, сброс порциями не реже 10 с, маркер незавершённого заезда, восстановление). Замеры: тик со сбросом — 1 мс, финализация заезда на 3600 сэмплов — ≤ 16 мс (REQ-LOC-07 п.4 ≤ 50 мс с запасом).
 Что сделать. `src/storage/ride_writer.gd`: подписан на `SampleRecorder`; сброс накопленных сэмплов в файл заезда не реже чем раз в 10 с сессионного времени, дозапись (append) без перезаписи; тик ≤ 50 мс при 600 сэмплах (запись маленьких порций, без сериализации всего заезда); маркер `in_progress`. `RideRepository.find_unfinished(profile_id)` — при старте приложения предлагается «сохранить как завершённый досрочно» или «удалить» (модель решения в `src/ui/recovery_prompt_model.gd`, диалог — минимальный). Тест сбоя: прервать сессию, создать новый экземпляр репозитория, проверить потерю ≤ 10 с.
 Закрывает: REQ-LOC-07 п.1–4. Критерии авто: все. Ручные: REQ-LOC-07 п.5.
 
-#### T-043 — Серии для графиков `[game]` — `in-progress`
+#### T-043 — Серии для графиков `[game]` — `done`
 Статус. У developer D (вместе с T-045). Сводка (`RideSummary`) уже реализована в T-041 (`src/storage/ride_summary.gd`) и принимается там по REQ-LOC-04; здесь остаётся `RideSeries` (REQ-LOC-03 п.1–3): серии (t, значение) без «нет данных», прореживание до ≤ 3600 точек с сохранением min/max, серия целевой мощности плана. Размещение — рядом с `RideSummary` в `src/storage/` или в `src/domain/` (чистые функции над сэмплами — предпочтительно домен).
 Исходный план. `src/domain/ride_summary.gd`: средняя мощность (нули учитываются, `NO_DATA` — нет), NP (скользящее 30 с → ^4 → среднее → корень 4-й степени; 200 Вт 10 мин → 200; NP ≥ средней), работа кДж (200 Вт × 3600 с → 720), средний пульс/каденс, время в 7 зонах мощности и 5 зонах пульса по зонам на момент заезда (сумма = число сэмплов с данными), «—» без пульса. `src/domain/ride_series.gd`: серии (t, значение) без `NO_DATA`; прореживание до ≤ 3600 точек с сохранением min/max (LTTB или min-max по корзинам); серия целевой мощности плана.
 Закрывает: REQ-LOC-03 п.1–3 (REQ-LOC-04 п.1–6 — в T-041). Критерии авто: все. Ручные: REQ-LOC-03 п.4.
 
-#### T-044 — Кодировщик FIT `[integration]` — `review`
+#### T-044 — Кодировщик FIT `[integration]` — `done`
 Статус. Сдано developer D в коммите 59f1fe1 (вместе с T-041, T-042), ждёт приёмки tester по REQ-LOC-05 п.1–4, REQ-STR-02 п.2, REQ-NFR-09 п.1. Факт: `src/integrations/fit/` — `fit_crc.gd` (`FitCrc`), `fit_definitions.gd` (`FitDefinitions` — номера сообщений/полей, invalid-значения), `fit_encoder.gd` (`FitEncoder` — `file_id`, `record`, `event` start/stop и паузы, `lap` на шаг, `session` с `sport=2`/`sub_sport=58`/`total_timer_time` без пауз по `paused_total_sec`/`avg_power`/`normalized_power`/`total_work` из `RideSummary`, `activity`), `fit_decoder.gd` (`FitDecoder` — для проверок; tester может использовать его в приёмочных тестах вместо собственного). Сигнатура для T-047 — `FitEncoder.encode(ride, summary) -> PackedByteArray`.
 Что сделать. `src/integrations/fit/fit_encoder.gd` (+ `fit_crc.gd`, `fit_definitions.gd`): заголовок 14 байт с сигнатурой `.FIT` и CRC заголовка; сообщения `file_id` (type=activity), `record` на каждый сэмпл (`timestamp`, `power`, `heart_rate`, `cadence`, `speed`, `distance`), `event` start/stop (в т.ч. паузы), `lap` на каждый шаг, `session` (`sport=2`, `sub_sport=58`, `total_elapsed_time`, `total_timer_time` без пауз, `avg_power`, `normalized_power`, `total_work`), `activity`; отсутствующие значения — invalid по спецификации (0xFF/0xFFFF/…), не 0; CRC-16 файла. `encode(ride, summary) -> PackedByteArray`. Декодер для проверок пишет tester в `tests/`.
 Закрывает: REQ-LOC-05 п.1–4; REQ-STR-02 п.2; REQ-NFR-09 п.1 (FIT). Критерии авто: все. Ручные: REQ-LOC-05 п.5.
 
-#### T-045 — Экраны истории `[game]` — `in-progress`
+#### T-045 — Экраны истории `[game]` — `done`
 Статус. У developer D (вместе с T-043). Данные — `RideRepository`/`RideSummary` (T-041), серии — T-043, экспорт — `FitEncoder` (T-044); статус Strava в списке/карточке — поля `Ride` + `UploadStatusStore` (T-048); действия Strava в карточке — T-049 (developer C), согласовать точку расширения карточки. Размещать в `src/ui/history/`, навигация через `AppState`.
 Что сделать. `src/ui/history_list.tscn/.gd` (дата, название, длительность, средняя мощность, статус Strava), `src/ui/ride_detail.tscn/.gd` (графики мощности с целью, пульса, каденса по сериям T-043; сводка; кнопки «Экспорт FIT» → `FileDialog` сохранения с именем `<дата>_<название>.fit`, «Удалить» с подтверждением, «Выгрузить в Strava» — активируется в T-049). Удаление: заезд и сэмплы отсутствуют в репозитории, элемент очереди Strava удаляется (хук для T-048), запросов на удаление активности нет.
 Закрывает: REQ-LOC-02 п.1, 2; REQ-LOC-06 п.1, 2; REQ-LOC-05 п.6 (вызов диалога). Критерии авто: модель списка, удаление. Ручные: REQ-LOC-02 п.3, REQ-LOC-06 п.4, REQ-LOC-05 п.6.
 
 ### Этап 6 — Strava. Результат: цикл замкнут
 
-Состояние: T-046, T-048 — сданы в ce85da4, в `review`; T-047 — `review` каркаса (без FIT до приёмки T-044); T-049 — `in-progress` у developer C. Решение по секретам: переменные окружения читаются через `SecureStore.read_env()` в `src/storage/` — единственная точка доступа к окружению за секретами (NFR-05 п.1), `StravaConfig` обращается к ней, а не к `OS.get_environment()` напрямую.
+Состояние на момент этапа (история; сейчас все задачи этапа `done`): T-046, T-048 — сданы в ce85da4, в `review`; T-047 — `review` каркаса (без FIT до приёмки T-044); T-049 — `in-progress` у developer C. Решение по секретам: переменные окружения читаются через `SecureStore.read_env()` в `src/storage/` — единственная точка доступа к окружению за секретами (NFR-05 п.1), `StravaConfig` обращается к ней, а не к `OS.get_environment()` напрямую.
 
-#### T-046 — Strava OAuth 2.0 `[integration]` — `review`
+#### T-046 — Strava OAuth 2.0 `[integration]` — `done`
 Статус. Сдано developer C в коммите ce85da4 (одним заходом с T-048 и каркасом T-047), ждёт приёмки tester по REQ-STR-01 п.1–6, REQ-PRF-03 п.1–3, REQ-NFR-05 п.1, 2. Факт: `src/integrations/strava/strava_config.gd` (`StravaConfig` — `client_id`/`client_secret` из `user://secrets.cfg` или окружения через `SecureStore.read_env()`; в репозитории — `secrets.example.cfg.txt` с плейсхолдерами), `strava_oauth.gd` (`StravaOAuth` — URL авторизации с `activity:write`, обмен кода, обновление за 60 с до `expires_at`, один повтор при 401, отвязка; redirect — loopback `TCPServer` на `127.0.0.1:<port>/callback`, В-6), `strava_branding.gd` (`StravaBranding` — размеры/цвета кнопки и логотипа по брендбуку для T-049). Фикстуры `tests/fixtures/strava/` (tester).
 Что сделать. `src/integrations/strava/strava_auth.gd`: `authorization_url(client_id, redirect_uri)` с `response_type=code`, `scope=activity:write,read`; `exchange_code(code)` — POST `grant_type=authorization_code`, сохранение `access_token`, `refresh_token`, `expires_at` в `SecureStore` профиля; `ensure_fresh_token()` — если до `expires_at` < 60 с → `grant_type=refresh_token`; 401 на API → одно обновление и повтор, повторный 401 → `REAUTH_REQUIRED`; `disconnect()` → удаление токенов; `client_id`/`client_secret` — по решению В-6: в dev-сборках из `user://secrets.cfg` или переменных окружения, в репозитории только `secrets.example.cfg` с плейсхолдерами; секрет не логируется. Приём redirect (В-6): на macOS/Linux/Windows — временный HTTP-сервер на `http://127.0.0.1:<port>/callback` (`TCPServer`), на iOS/Android — схема `ovoschrider://strava` (регистрация схемы — T-053).
 Закрывает: REQ-STR-01 п.1–6; REQ-PRF-03 п.1–3 и REQ-NFR-05 п.1, 2 (окончательно). Критерии авто: все. Ручные: REQ-STR-01 п.8. Вне контейнера: REQ-STR-01 п.7, REQ-PRF-03 п.4.
 
-#### T-047 — Выгрузка в Strava `[integration]` — `review` (каркас)
+#### T-047 — Выгрузка в Strava `[integration]` — `done`
 Статус. Каркас сдан developer C в коммите ce85da4: `src/integrations/strava/strava_uploader.gd` (`StravaUploader` — multipart с `file`/`data_type=fit`/`external_id`/`name`/`description`/`trainer=1`, опрос статуса), `upload_result.gd` (`UploadResult` — `PROCESSING/UPLOADED(activity_id)/FAILED(text)/DUPLICATE`), правила названия/описания по умолчанию. Тело FIT — через `FitEncoder.encode(ride, summary)` из T-044 (в `review`); tester принимает REQ-STR-02 п.3, 4 и REQ-STR-03 п.1–3 сейчас, REQ-STR-02 п.1 (реальный FIT в поле `file`) — после приёмки T-044 и подключения кодировщика (одна правка в `StravaService`, T-049). Полное `done` — вместе с T-049.
 Что сделать. `src/integrations/strava/strava_uploader.gd`: `upload(ride) -> UploadResult` — multipart с `file` (FIT из T-044), `data_type=fit`, `external_id=<ride_id>`, `name`, `description`, `trainer=1`; 201 с `id` → `PROCESSING`; `poll_status(upload_id)` до `activity_id` → `UPLOADED` или `error` → `FAILED(text)`; ошибка с «duplicate» → `DUPLICATE` без повторов. Название: план или «Тренировка <дата>» (ключ перевода); описание: описание плана + строка с названием приложения; пользовательские правки `name/description` до выгрузки — параметры `upload`.
 Закрывает: REQ-STR-02 п.1, 3, 4; REQ-STR-03 п.1–3. Критерии авто: все. Ручные: REQ-STR-02 п.5, REQ-STR-03 п.4.
 
-#### T-048 — Очередь выгрузки и статусы `[integration]` — `review`
+#### T-048 — Очередь выгрузки и статусы `[integration]` — `done`
 Статус. Сдано developer C в коммите ce85da4, ждёт приёмки tester по REQ-STR-04 п.1–6, REQ-STR-05 п.1–3, REQ-LOC-06 п.3, REQ-NFR-03 п.3. Факт: `src/integrations/strava/upload_queue.gd` (`UploadQueue` — `user://upload_queue_<profile>.json`, повторы 1/5/15/60 мин, далее ежечасно, `Retry-After`, одна выгрузка одновременно, порядок по дате заезда, пауза во время активной сессии), `upload_status_store.gd` + `memory_upload_status_store.gd` (`UploadStatusStore`/`MemoryUploadStatusStore` — интерфейс статусов и реализация для тестов; адаптер к `RideRepository` — в T-049). Открытые вопросы от приёмки: Н-11 (`Retry-After` в формате HTTP-даты), Н-12 (предел ежечасных повторов).
 Что сделать. `src/integrations/strava/upload_queue.gd`: элемент очереди создаётся по завершении заезда в профиле с привязкой; хранится в `user://profiles/<id>/strava_queue.json`; повторы при сетевой ошибке/5xx через 1, 5, 15, 60 мин, далее каждые 60 мин (подменяемые часы); 429 → не раньше `Retry-After`; не более одной выгрузки одновременно, порядок по дате заезда; `enqueue_now(ride_id)` для ручной выгрузки; очередь не работает во время активной сессии. Статусы заезда `NOT_UPLOADED | QUEUED | PROCESSING | UPLOADED(activity_id) | FAILED(text) | DUPLICATE` пишутся в `RideRepository`; ссылка `https://www.strava.com/activities/<id>`. Удаление заезда удаляет элемент очереди.
 Закрывает: REQ-STR-04 п.1–6; REQ-STR-05 п.1–3; REQ-LOC-06 п.3; REQ-NFR-03 п.3. Критерии авто: все. Ручные: REQ-STR-05 п.4.
 
-#### T-049 — `StravaService`, привязка Strava на экране настроек и действия Strava в истории `[game]` — `in-progress`
+#### T-049 — `StravaService`, привязка Strava на экране настроек и действия Strava в истории `[game]` — `done`
 Статус. У developer C. Состав по факту: `StravaService` (связка `StravaOAuth` + `UploadQueue` + `StravaUploader` + `FitEncoder`; адаптер `UploadStatusStore` → `RideRepository`; автопостановка заезда в очередь при сохранении, если профиль привязан и включён `Profile.strava_auto_upload` — REQ-STR-04 п.1), `StravaConnectButton` (по `StravaBranding`), раздел Strava на экране настроек T-057 (вместо заглушки), действия в карточке заезда T-045. Точки согласования: с developer D — хук сохранения заезда (`RideRepository.save` → `StravaService.on_ride_saved`) и слот действий в карточке; с developer A — слот раздела на экране настроек.
 Пересечение с T-057. Экран настроек, привязка Intervals.icu, источник FTP/зон и настройки устройств (Н-8) ушли в T-057; здесь остаётся только Strava: раздел «Strava» на экране настроек (вместо заглушки из T-057 — кнопка «Connect with Strava» по брендбуку, статус привязки, «Отвязать») и действия в карточке заезда (`ride_detail`, T-045): «Выгрузить в Strava», правка названия/описания, статус и ссылка на активность.
 Что сделать. `src/ui/accounts_screen.tscn/.gd`: ввод Athlete ID и API-ключа Intervals.icu с проверкой (T-033), отображение имени атлета, источник FTP («из Intervals.icu (дата)» / «локально») и переключатель «переопределить локально»; кнопка «Connect with Strava» (ассет и размеры по брендбуку, логотип «Powered by Strava»), статус привязки, «Отвязать». В `ride_detail`: «Выгрузить в Strava» для заездов не в статусе «выгружено», редактирование названия/описания перед выгрузкой, статус и ссылка на активность.
@@ -602,12 +640,12 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Исходный план. `src/domain/speed_model.gd`: `steady_speed_kmh(power_w, rider_kg)` — ровная дорога, CdA 0.32, Crr 0.004, велосипед 8 кг, ρ 1.225 (200 Вт/75 кг → 34 ± 3; 100 Вт → 26 ± 3; 300 Вт → 40 ± 3; 95 кг — меньше); `step(current_kmh, power_w, rider_kg, dt_s)` — инерционное приближение к установившейся: при 0 Вт с 30 км/ч до 0 за ≤ 30 с, изменение за сэмпл ≤ 5 км/ч при скачке 0 → 400 Вт. По решению В-8 — источник скорости в потоке WRK-08, когда станок не даёт `has_speed`; `SampleRecorder` (T-023) переключается на модель автоматически.
 Закрывает: REQ-D3D-02 п.1–4; REQ-WRK-08 п.5 (расчётная ветка). Критерии авто: все. Ручные: REQ-D3D-02 п.5.
 
-#### T-051 — Интерфейс трассы и зацикленная трасса `[game]` — `review`
+#### T-051 — Интерфейс трассы и зацикленная трасса `[game]` — `done`
 Статус. Сдано developer B в коммите 65715d4 (вместе с T-052). Приёмка tester по REQ-D3D-03, D3D-06: один дефект **D-8** — `RideScene.set_track()` до `_ready()` не строит дорогу (трасса, заданная до входа в дерево, игнорируется `RoadBuilder`; ломает подмену трассы в тесте D3D-06 п.2). У developer B; после фикса → `done` вместе с T-052. Факт: `src/scene3d/track.gd` (`Track` — интерфейс), `track_sample.gd` (`TrackSample` — позиция/направление/нормаль в точке `s`), `loop_track.gd` (`LoopTrack` — замкнутая петля, ограниченное число активных секций), `environment_set.gd` (`EnvironmentSet` — ресурс окружения: материалы, параметры дороги/неба) + `default_environment.tres`, `road_builder.gd` (`RoadBuilder` — геометрия дороги по `Track`); `docs/scene3d.md` — абзац и схема интерфейсов. Подмена трассы/окружения — через ресурс и интерфейс, игровой цикл (`Rider`/`RideScene`) на конкретную сцену не ссылается.
 Что сделать. `src/scene3d/track.gd` — интерфейс `Track`: `transform_at(s_m: float) -> Transform3D`, `length_m()`, `wrap(s_m)`; `src/scene3d/loop_track.gd` — замкнутая петля из сегментов с ограниченным числом активных секций (`MAX_ACTIVE_SEGMENTS`), 80 км непрерывного движения без «конца»; `src/scene3d/environment_loop.tscn` — простое окружение; `src/scene3d/rider_mover.gd` — переводит скорость (км/ч) в `s_m` и ставит велосипедиста по `Track.transform_at`, не зная конкретной сцены. `tests/` получат `TestTrack` (прямая) от tester. `docs/scene3d.md` — абзац и схема интерфейсов `Track` / `RiderMover` / телеметрия.
 Закрывает: REQ-D3D-03 п.1, 2; REQ-D3D-06 п.1–3. Критерии авто: все. Ручные: REQ-D3D-03 п.3.
 
-#### T-052 — Велосипедист, камера, педалирование, бюджет производительности `[game]` — `review`
+#### T-052 — Велосипедист, камера, педалирование, бюджет производительности `[game]` — `done`
 Статус. Сдано developer B в коммите 65715d4 (вместе с T-051). Приёмка по REQ-D3D-01 п.1–2, D3D-04 п.1–3, D3D-05 п.2 пройдена; `done` вместе с фиксом D-8 (T-051). Факт: `src/scene3d/rider.gd` (`Rider` — движение по `Track`, анимация шатунов по каденсу), `ride_scene.tscn/.gd` (`RideScene` — велосипедист, дорога, камера от третьего лица), `perf_budget.gd` (`PerfBudget` — подсчёт узлов/материалов сцены против бюджета, проверка per-frame кода); `WorkoutScreen` (T-031) хостит `RideScene` в `SubViewport` — 3D идёт фоном под HUD; `project.godot`: `application/run/max_fps = 0`, `physics/common/physics_ticks_per_second = 60`; `docs/perf_budget.md` — бюджет и методика ручного замера. REQ-D3D-05 п.1 и п.3 (FPS и draw calls на устройстве) — ручной замер владельца по `docs/perf_budget.md`.
 Что сделать. `src/scene3d/ride_scene.tscn` с узлами `Rider` (простая модель/капсула + шатуны), `Road`, `FollowCamera` (постоянное расстояние и высота ±0.1 м, велосипедист в frustum при 0–60 км/ч); `src/scene3d/pedal_animator.gd` — скорость анимации = каденс/60 об/с (90 → 1.5; 60 → 1.0), 0/`NO_DATA` → остановка, применение не позже следующего сэмпла. `project.godot`: `physics/common/physics_ticks_per_second` ≥ 60, `application/run/max_fps` = 0 или ≥ 60. `docs/perf_budget.md` — по решению В-7: бюджет узлов/материалов сцены (проверяется headless подсчётом `MeshInstance3D`/материалов), статическая проверка отсутствия аллокаций в per-frame коде (`_process`/`_physics_process` без `new()`/создания массивов), бюджет draw calls — для ручного замера на устройстве.
 Закрывает: REQ-D3D-01 п.1, 2; REQ-D3D-04 п.1–3; REQ-D3D-05 п.2, 3 (в редакции В-7). Критерии авто: все перечисленные. Ручные: REQ-D3D-01 п.3, REQ-D3D-04 п.4, REQ-D3D-05 п.1 и замер draw calls.
@@ -759,16 +797,16 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-FRD-01 п.1 (сессия без исполнителя), п.2, п.3; REQ-FRD-04 п.5 (старт, пауза, переподключение), п.9; REQ-FRD-05 п.5, п.6 (события); REQ-FRD-07 п.1, п.2 (пауза и сохранение после stop), п.3, п.4.
 Критерии авто: ускоренная симуляция 4 ч при 250 Вт на `flat` не завершается сама, дистанция > 10 L, стык без скачка высоты > 0.1 м; в журнале `FakeTrainer` нет `CMD_TARGET_POWER`; с мок-транспортом «нет сети» сессия стартует; смена режима и крутизны не меняет таймер, запись и позицию; набор N кругов = N × набор трассы ± 5 %. Ручных нет.
 
-#### T-078 — Сборка HUD тренировки `[game]` — `review` (b2d48da; приёмка 6e84ef1 с дефектами → T-097)
-Итог приёмки (6e84ef1). На телефоне (s = 1.2) не выполнены HUD-13 п.5 (центральная зона), п.6 (пересечения, зазор список — панель), п.9 (слот подсказки у низа над графиком). Исправляет T-097; `done` — по повторной приёмке tester после T-097. Полоса прогресса пока скрытым узлом — удаляет T-097.
+#### T-078 — Сборка HUD тренировки `[game]` — `done` (b2d48da; дефекты исправлены в T-097; приёмка tester — волна 6)
+Итог приёмки (6e84ef1). На телефоне (s = 1.2) не выполнены HUD-13 п.5 (центральная зона), п.6 (пересечения, зазор список — панель), п.9 (слот подсказки у низа над графиком). Исправлено в T-097 (c432348), повторная приёмка tester в волне 6 — `done`. Полоса прогресса удалена в T-097.
 Волна 3. Зависит: T-071, T-072, T-073, T-074. Размер M.
 Что сделать. В `WorkoutScreen` встроить `HudChart` (слот снизу во всю ширину, 12–22 % высоты, градиент над графиком), `IntervalList` (левый слот), `NextChip` (слот подсказки, за 5 с до смены), `PauseOverlay` (между 3D и HUD) и `HudToolbar` (режим «план»), привязать к сессии; удалить `WorkoutProgressBar` (HUD-07 по смыслу заменён HUD-10). Тренировка по плану — трасса `flat` (умолчание `RideScene` из T-070), станку уклон не уходит, скорость — по D3D-02. Компоненты T-071..T-074 не менять: нужная правка → в отчёт.
 Файлы: `src/ui/workout/workout_screen.{tscn,gd}`, удаление `src/ui/workout/workout_progress_bar.gd` (+ `.uid`), `assets/i18n/strings_hud.csv`, `tests/unit/ui/test_workout_screen_layout.gd`.
 Закрывает: REQ-HUD-10 п.7; REQ-HUD-11 п.7; REQ-HUD-12 п.8; REQ-HUD-13 п.2, 3 (на экране), п.4, п.7; REQ-HUD-07 (замена полосы, тесты HUD-07 переносятся на модель графика — согласовать с tester).
 Критерии авто: график прижат к низу, ширина окна, 12–22 % высоты; список в левых 25 %; центральная зона свободна, пересечений нет на всех разрешениях; при паузе курсор стоит; в тренировке по плану в журнале нет `CMD_SIM`. Визуально (T-059, `acc_full.zwo`): чек-лист `hud.md` п. 14 H1–H12 на моментах начало / 17:00 / −5 с / пауза / последний шаг на 1280×720, 4:3 и телефоне, сверка с `zwift_hud_workout.png`. Ручные: REQ-HUD-10 п.8 (1.5 м).
 
-#### T-079 — Компоненты HUD свободной езды `[game]` — `review` (36452a1)
-Итог. Отдельного отчёта tester по T-079 нет: FRD-06 и FRD-05 п.6 проверялись на экране T-084 (6e84ef1). Нужно подтверждение tester, что FRD-06 п.1–4 и FRD-05 п.6 закрыты, — тогда `done`. Подвал панели рельефа на телефоне — в T-097.
+#### T-079 — Компоненты HUD свободной езды `[game]` — `done` (36452a1; приёмка tester — волна 6)
+Итог. FRD-06 п.1–4 и FRD-05 п.6 подтверждены tester в волне 6. Подвал панели рельефа на телефоне — исправлен в T-097.
 Волна 3. Зависит: T-071, T-073, T-075. Размер M.
 Что сделать. По `hud.md` п. 8. `ReliefPanel` (левый слот): шапка с трассой и кругом, профиль круга целиком с пройденной частью и точкой позиции, строка «дистанция / длина круга · набор», профиль «впереди 2 км» (s − 200 … s + 2000 м, минимальный размах 40 м, подпись самого крутого места), подвал «до вершины … / подъём через …». Модель — на `RoutePreviewModel` (одна серия с превью). `HudMetricPanel` — режим «свободная езда»: время, дистанция (км, 2 знака, накопленная), скорость, набор; полоса прогресса круга; карточка «УКЛОН» (g(s) трассы, знак всегда, 1 знак, клин цвета уклона, строка `SIM 50 %` / `СОПР. 40 %`); герой — факт мощности без отклонения; пульс, каденс; цели, отсчёта и списка нет. `HudChart` — режим «история усилия»: окно из T-065, мощность площадью по зонам + белая линия, пульс красной линией, FTP пунктиром.
 Файлы: `src/ui/hud/relief_panel.gd`, `src/ui/hud/hud_metric_panel.gd`, `src/ui/hud/hud_chart.gd`, `assets/i18n/strings_free_ride.csv`, `tests/unit/ui/test_relief_panel.gd`, `tests/unit/ui/test_free_ride_metric_panel.gd`.
@@ -797,8 +835,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-UIX-03 п.1, 3, 4, 5 (тренировка); регрессия REQ-INT-04, INT-05, IMP-03 п.2.
 Критерии авто: цифры карточки по плану из фикстуры; сегменты превью = модель HUD-10.1; ровно одна «выбрано»; запуск выбранной; приёмка T-040 зелёная (тесты, завязанные на `workout_chart.gd`, — согласовать с tester). Визуально: три тренировки разной структуры различимы.
 
-#### T-083 — Окружения «равнина» и «холмы» `[visual]` — `review` (cf6fec6)
-Итог. Визуально принято game-designer по снимкам; `[авто]` — тесты исполнителя зелёные. Приёмка tester (D3D-08 п.6, 8, 12 на `flat`, `hills`; бюджет D3D-05 п.4) — в цикле T-088/T-089, затем `done`.
+#### T-083 — Окружения «равнина» и «холмы» `[visual]` — `done` (cf6fec6; приёмка tester — волна 6)
+Итог. Визуально принято game-designer по снимкам; приёмка tester (D3D-08 п.6, 8, 12 на `flat`, `hills`; бюджет D3D-05 п.4) — волна 6.
 Волна 3. Зависит: T-070. Размер M.
 Что сделать. По `tracks.md` п. 4.1, 4.2, 6. Свои `EnvironmentSet` для `flat` и `hills` (новые поля `environment_set.gd` — с запасом под горы и приморье), поля-лоскуты, пашня, тополя, ветряки, деревни с крышами; ориентиры из списков трасс (не реже 1.5 км, в кадре одновременно не больше 2–3); `hills_height_m`: равнина < холмы. Новые меши — в `src/scene3d/props/` и `MeshKit`, контур и тун-палитра по арт-библии; источники ассетов — в отчёт для `docs/game/assets.md` (документ ведёт game-designer).
 Файлы: `src/scene3d/environment_set.gd`, `src/scene3d/tracks/env_flat.tres`, `src/scene3d/tracks/env_hills.tres`, `src/scene3d/props/**`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd`, `src/scene3d/scenery_builder.gd`, `tests/integration/test_route_environments.gd`.
@@ -813,8 +851,8 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-FRD-01 п.1 (сквозной путь), п.4; REQ-FRD-06 п.5, п.6; REQ-FRD-05 п.6 (на экране); REQ-FRD-07 п.2 (подтверждение), п.6, п.7 (сквозная проверка); REQ-UIX-04 п.2 (свободная езда), п.1 (Android «назад» на главном — по новой редакции); REQ-FRD-04 п.6 (сообщение пользователю).
 Критерии авто: HOME → ROUTE_SELECT → «Старт» → FREE_RIDE с выбранной трассой (профиль сессии и окружение совпадают); без станка — как у плана; `set_simulation_supported(false)` → фиксированное сопротивление и сообщение; «Завершить» с подтверждением → заезд в истории и в очереди Strava с названием «Свободная езда — <трасса>»; раскладка HUD-13.1, 13.4–13.6. Визуально (T-059): чек-лист `hud.md` п. 14 на «ровно / подъём / спуск», FRD-06 п.6. Ручные: REQ-FRD-01 п.5, FRD-04 п.10, FRD-05 п.7.
 
-#### T-085 — История и карточка заезда `[game]` — `review` (da90ba3; приёмка 6e84ef1 с дефектом → T-097)
-Итог приёмки (6e84ef1). LOC-03 п.2: в истории показана сглаженная мощность — экстремумы исходной серии (`RideSeries`, В-18) должны быть среди точек графика. Исправляет T-097; `done` — по повторной приёмке.
+#### T-085 — История и карточка заезда `[game]` — `done` (da90ba3; дефект исправлен в T-097; приёмка tester — волна 6)
+Итог приёмки (6e84ef1). LOC-03 п.2: в истории показана сглаженная мощность — экстремумы исходной серии (`RideSeries`, В-18) должны быть среди точек графика. Исправлено в T-097 (c432348), повторная приёмка — волна 6.
 Волна 4. Зависит: T-064, T-076. Размер M.
 Что сделать. По `ui.md` п. 8.5: `AppBar`, список заездов строками `ListRow` (дата, название, длительность, средняя мощность, статус Strava; у свободной езды — трасса и дистанция), пустое состояние; карточка заезда — `StatView`, графики в языке HUD (`HudChart` в режиме истории или `ride_chart.gd` на тех же токенах), у свободной езды — профиль высоты по дистанции (круги подряд, граница — пунктир, `tracks.md` п. 7.3), без серии цели. Снять `theme_override_*`.
 По итогам волны 1 (T-061, T-064). «Назад» экранов истории и карточки → `app_state.go_back()` (через `AppBar`), а не `navigate(HOME)`. Данные из T-064: `RideSummary.ride_type`, `route_id`, `ascent_m`, `avg_target_w` (значение `NO_DATA` → «—»), профиль высоты — `RideSeries.altitude_by_distance()`. Цели нажатия — хелпером `touch_target.gd` (T-076).
@@ -830,22 +868,23 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-UIX-04 п.3, 4, 5 (настройки, устройства); регрессия REQ-PRF-05, DEV-01 п.7, NFR-08 п.3, T-057.
 Критерии авто: группы с подзаголовками; строки устройств — вариация строки списка; 0 устройств — поясняющий текст; лицензии в «О программе»; приёмки T-019/T-057 зелёные. Визуально: настройки, устройства (0 и 3), выбор профиля.
 
-#### T-087 — Окружение «горы» `[visual]` — `review` (5576c36)
-Итог. Визуально принято game-designer по снимкам; `[авто]` — тесты исполнителя зелёные. Приёмка tester (D3D-08 п.6, 8, 10, 12 на `mountains`; D3D-05 п.4) — в цикле T-088/T-089, затем `done`.
+#### T-087 — Окружение «горы» `[visual]` — `done` (5576c36; приёмка tester — волна 6)
+Итог. Визуально принято game-designer по снимкам; приёмка tester (D3D-08 п.6, 8, 10, 12 на `mountains`; D3D-05 п.4) — волна 6. Читаемость подъёма на 6000/8600 м доработана в T-102.
 Волна 4. Зависит: T-083. Размер M.
 Что сделать. По `tracks.md` п. 4.3: `EnvironmentSet` гор — камень, альпийский луг, снег на вершинах, высокие склоны и горизонт выше, чем на равнине, серпантин на подъёме, таблички с высотой, ориентиры; петля (подъём по одному склону, спуск по другому).
 Файлы: `src/scene3d/tracks/env_mountains.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/mesh_kit.gd`, `src/scene3d/route_world.gd`, `tests/integration/test_route_environments.gd` (дополнение).
 Закрывает: REQ-D3D-08 п.6 (`mountains`: горизонт выше равнины, `hills_height_m` горы > холмы), п.8 (`mountains`).
 Критерии авто: свой набор окружения; бюджет; ориентиры. Визуально: снимки 1000 / 6000 / 8600 / 10400 / 14500 м — чек-лист ≥ 10/12, подъём и спуск читаются.
 
-#### T-088 — Приморье, часть 1: вода, берег, маяк `[visual]` — `in-progress`
+#### T-088 — Приморье, часть 1: вода, берег, маяк `[visual]` — `done` (66758b0; приёмка tester — волна 6)
 Волна 5. Зависит: T-087. Размер M.
 Что сделать. По `tracks.md` п. 4.4: шейдер воды в тун-стиле (глубокая, мелкая, пена у берега, без отражений в реальном времени), море и река как поверхности на `water_level_m`, рельеф берега и пляж, дюнная трава, зонтичные сосны, маяк, ориентиры. Мост — в T-090: пока на его участке дорога идёт по насыпи.
 Файлы: `src/scene3d/shaders/water.gdshader`, `src/scene3d/materials/water.tres`, `src/scene3d/tracks/env_seaside.tres`, `src/scene3d/props/**`, `src/scene3d/environment_set.gd`, `src/scene3d/terrain_field.gd`, `tests/integration/test_route_environments.gd` (дополнение).
 Закрывает: REQ-D3D-08 п.6 (вода на приморье), п.8 (`seaside`, кадры 1800 и 8600 м).
 Критерии авто: в составе мира приморья есть водная поверхность; бюджет. Визуально: чек-лист ≥ 10/12, вода в кадре.
 
-#### T-089 — Финальная проверка UI: адаптивность, тема, переводы `[game]` — `todo`
+#### T-089 — Финальная проверка UI: адаптивность, тема, переводы `[game]` — `done` (07ea8f3; приёмка tester 7e5513c)
+Итог. Приёмка tester (7e5513c) нашла дефект: подкраска подписей выбора профиля через `self_modulate` мимо темы (`profile_select.gd:575–576`) — исправлен в T-103. Матрица `test_ui_matrix` не содержит TABLET 1024×768 и 2556×1179 с безопасной зоной — покрыто приёмочным `test_ui_final_acceptance`, отдельной задачи не нужно.
 Волна 5. Зависит: T-078, T-080, T-081, T-082, T-084, T-085, T-086. Размер M (если дефектов больше, чем на заход, — менеджер режет по экранам).
 Что сделать. Матричные тесты по всем экранам × разрешения UIX (390×844, 844×390, 1024×1366, 1366×1024, 1280×720, 1920×1080) × ru/en: цели нажатия ≥ 44 lp, ничего не выходит за окно, нет пересечений интерактивных элементов, нет обрезанного текста (кроме пользовательских данных с «…»), одна колонка на портретном телефоне, без горизонтальной прокрутки; статическая проверка `.tscn`/`.gd` в `src/ui/` на `theme_override_colors`/`fonts` и `add_theme_*_override` (исключения — данные: зона, статус, графики); инвентаризация переводов (ключи из всех `strings*.csv` используются, ru и en непустые, нет кириллицы в литералах); полный набор снимков `ui_screenshot.sh` на трёх разрешениях и двух языках. Исправления — точечно в `src/ui/**` (единственная UI-задача волны).
 Хвосты T-060 (не сделаны в волне 1): letter-spacing оверлайна +6 % (`ui.md` п. 9; в `FontVariation` Godot трекинг задаётся через `spacing_glyph`, проверить на Inter) и шрифт `SpinBox` (поле ввода не наследует вариацию темы). Если game-designer в T-091 изменит состояния кнопок (hover/pressed `OptionButton`, `DangerButton`, `HudButton`, padding `GhostButton`) — правка `src/ui/theme/**` тоже здесь, если раньше её не взяла экранная задача.
@@ -862,7 +901,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-UIX-01 п.2, п.5; REQ-UIX-05 п.1–5; REQ-NFR-08 п.1, 2 (на итоговом наборе экранов).
 Критерии авто: все `[авто]` перечисленных пунктов. Визуально: чек-лист `ui.md` п. 11 и `hud.md` п. 14 по полному набору снимков. Ручные: REQ-UIX-05 п.6 (iPhone/iPad), NFR-08 п.5.
 
-#### T-090 — Приморье, часть 2: мост над рекой `[visual]` — `todo`
+#### T-090 — Приморье, часть 2: мост над рекой `[visual]` — `done` (ae6c394; приёмка tester — волна 6)
 Волна 6. Зависит: T-088. Размер M.
 Что сделать. Мост на диапазоне `bridges` (5820–6330 м): полотно на h(s) ≥ `water_level_m` + 10 м, опоры, перила (палитра `tracks.md` п. 6), река под мостом, выемка рельефа под руслом; дорога, кромка и отбойник на мосту без щелей и травы; камера и гонщик на мосту по D3D-07.5.
 Файлы: `src/scene3d/props/bridge_builder.gd`, `src/scene3d/road_builder.gd`, `src/scene3d/roadside_builder.gd`, `src/scene3d/terrain_field.gd`, `src/scene3d/tracks/env_seaside.tres`, `tests/integration/test_seaside_bridge.gd`.
@@ -893,13 +932,14 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Что сделано. `y_max` графика плана с нижней границей 1.1 × FTP (уточнение У-2); линии факта сдвигаются по журналу пропусков шагов; `ui_screenshot` проверяет размер кадра и держит окно поверх всех на macOS.
 Закрывает: REQ-HUD-10 п.2, 5; REQ-HUD-11 п.1.
 
-#### T-095 — `tnum` у меток HUD, вариации темы, нагрузка на карточке Intervals.icu `[game]` — `review` (c85e98c)
+#### T-095 — `tnum` у меток HUD, вариации темы, нагрузка на карточке Intervals.icu `[game]` — `done` (c85e98c; приёмка tester — волна 6)
 Волна 4 (вне исходной нарезки). Зависит: T-073, T-082, T-093. Размер S–M.
 Что сделано. `tnum` у подписей HUD с цифрами (фишки зон, подписи, номер шага); вариации `HudHeroUnit`, `HudTargetUnit`, `HudCountdown`, `HudDelta`, `HudGradeValue`, `HudGradeUnit`, `HudModeLabel`, `HudStepLabel`, `OverlineAccent`, `OverlineSim`, `LogoLabel`, `LogoAccentLabel`, `SheetPanel`; нагрузка Intervals.icu в строке карточки плана; удалены `WorkoutChart` и скрытый `WorkoutList`.
 Закрывает: REQ-HUD-14 п.2; REQ-INT-04 п.2; REQ-UIX-01 п.3; REQ-UIX-03 (карточка плана).
 Итог. Отдельного отчёта tester нет; приёмка — вместе с T-097. Применение вариаций на узлах: панель цифр — T-097, остальные экраны — T-089.
 
-#### T-096 — Пересвет 3D в `SubViewport` экранов заезда `[visual]` — `in-progress`
+#### T-096 — Пересвет 3D в `SubViewport` экранов заезда `[visual]` — `done` (ce4d95d; приёмка tester — волна 6)
+Итог. Причина — общий `World3D`: вторая `RideScene` добавляла второе солнце и `WorldEnvironment`; у `SubViewport` экранов заезда теперь `own_world_3d = true`. Снимки до/после — `docs/game/shots/2026-10-04-t096/`. Открыто: допуск яркости в тесте ждёт вердикта game-designer (P2). Общие материалы мира по-прежнему берут туман и свет от последней сцены — T-112.
 Волна 5. Зависит: T-084. Исполнитель — technical-artist. Размер S–M.
 Почему. Оркестратор по снимкам T-084 (`ui_screenshot`) нашёл, что 3D-сцена в `SubViewport` экранов тренировки и свободной езды пересвечена; эталон — снимки `screenshot.sh` той же трассы и дистанции.
 Что сделать. Найти причину (окружение и тонмаппинг сцены внутри `SubViewport`, `own_world_3d`, прозрачный фон, HDR/цветовое пространство вьюпорта) и привести кадр экрана заезда к кадру `screenshot.sh` на тех же трассе, дистанции и разрешении. Сцены экранов одновременно правит T-097: в `src/ui/{workout,free_ride}/*_screen.tscn` T-096 трогает только узел `SubViewport` (иначе — в отчёт).
@@ -907,7 +947,7 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: регрессия REQ-D3D-07 п.1–5 на экранах заезда; REQ-HUD-13 п.10 (3D под HUD).
 Критерии авто: средняя яркость и гистограмма кадра 3D экрана заезда совпадают с кадром `screenshot.sh` на той же точке (допуск — исполнитель предлагает, game-designer подтверждает); размер изображения сцены = размер окна ±1 px (HUD-13 п.10 не регрессирует). Визуально: снимки «до/после» `ui_screenshot` и `screenshot.sh` рядом, вердикт game-designer.
 
-#### T-097 — Дефекты приёмки UI и хвосты экранов заезда `[game]` — `in-progress`
+#### T-097 — Дефекты приёмки UI и хвосты экранов заезда `[game]` — `done` (c432348; приёмка tester — волна 6, перевод тестов 254936f)
 Волна 5. Зависит: T-078, T-084, T-085, T-095. Исполнитель — developer. Размер M (если не помещается — режется по экранам: HUD тренировки, свободная езда, история).
 Что сделать.
 1. Дефекты приёмки 6e84ef1: HUD-13 п.5, 6, 9 на телефоне (s = 1.2) — центральная зона, пересечения и зазор список — панель, слот подсказки у низа над графиком (T-078); LOC-03 п.2 — график мощности в карточке заезда по серии `RideSeries` с экстремумами, а не по сглаженной мощности (T-085). Сейчас 4 красных теста полного прогона — это они.
@@ -922,42 +962,168 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Закрывает: REQ-HUD-13 п.5, 6, 9 (телефон) — для `done` T-078; REQ-LOC-03 п.2 — для `done` T-085; REQ-UIX-04 п.2 (Esc); REQ-HUD-14 п.2 (вариации на узлах); REQ-FRD-06 п.1 (подвал на телефоне); REQ-FRD-01 п.4 (эмулятор в отладке — на экране плана по тому же правилу).
 Критерии авто: полный прогон GUT без красных; HUD-13 п.5, 6, 9 на 390×844 и 844×390 (s = 1.2); серия графика карточки содержит min/max исходной мощности (LOC-03 п.2); Esc на обоих экранах заезда открывает подтверждение, экран не меняется; в сценах нет `LegacyControls`, `WorkoutProgressBar`, `%PowerChart`, `%HrChart`, `%ProfileList`; «На эмуляторе» видна только в отладочной сборке. Визуально: снимки HUD тренировки и свободной езды на телефоне «до/после».
 
-#### T-098 — Последняя выбранная тренировка в профиле `[game]` — `todo`
+#### T-098 — Последняя выбранная тренировка в профиле `[game]` — `done` (783a3a3; принято оркестратором, приёмки tester не было — P1 в 0.3)
+Итог. Н-17 решено (requirements 9757dc0, У-14: критерий UIX-03 п.3). Открыт вопрос владельцу У-14 — расхождение главного экрана (план на сегодня) и экрана выбора (последний выбор).
 Волна 6. Зависит: T-097 (экран плана). Размер S.
 Что сделать. Поле профиля `last_workout_id` (совместимо со старыми профилями, по образцу `last_route_id`), запись при выборе карточки на экране плана, предвыбор при следующем открытии и после перезапуска; если тренировки нет (удалена, план сменился) — предвыбор по прежнему правилу.
 Файлы: `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, `src/ui/plan/plan_screen.gd`, юнит-тесты.
 Закрывает: REQ-UIX-03 п.3 (состояние «выбрано») — прямого критерия «запоминать между запусками» нет, вопрос Н-17 к requirements.
 Критерии авто: выбор → перезапуск (новый `ProfileRepository` на том же каталоге) → выбрана та же карточка; профиль без поля читается; несуществующий id не ломает экран.
 
-#### T-099 — Свёртка повторов Intervals.icu «3x» `[integration]` — `todo`
+#### T-099 — Свёртка повторов Intervals.icu «3x» `[integration]` — `done` (577c42d; принято оркестратором, приёмки tester не было — P1 в 0.3)
+Итог. `Workout.repeat_blocks` заполняет парсер Intervals.icu. Хвосты — T-113: цвет свёрнутой строки по первому шагу блока (блок с отдыха в начале красится зоной отдыха), ZWO не пишет `repeat_blocks`.
 Волна 6. Зависит: T-072. Размер S–M.
 Что сделать. Сейчас `Workout.expand_repeat` разворачивает блок `3x …` при разборе Intervals.icu без следа, поэтому список интервалов не может свернуть его, как ZWO `IntervalsT` (HUD-13 п.8). Сохранить метаданные блока повторов в `Workout`/`WorkoutStep` в том же виде, что у ZWO, и проверить, что `IntervalListModel` сворачивает блок без правок логики (правка модели — только чтение метаданных).
 Файлы: `src/domain/workout.gd`, `src/domain/workout_step.gd`, `src/integrations/workouts/intervals_icu_workout_parser.gd`, `src/ui/hud/interval_list_model.gd` (если нужно), тесты.
 Закрывает: REQ-HUD-13 п.8 (для планов Intervals.icu); регрессия REQ-INT-03, REQ-NFR-09 п.3.
 Критерии авто: план Intervals.icu «2 шага разминки + 4x (15 с, 45 с)» до начала блока — 3 строки, после — 2 + 8; сериализация `Workout.to_dict()/from_dict()` сохраняет метаданные; приёмка T-035 зелёная.
 
-#### T-100 — Статический кэш `RouteWorld._tracks` `[visual]` — `todo`
+#### T-100 — Статический кэш `RouteWorld._tracks` `[visual]` — `done` (dba3dc5 вместе с T-102; принято оркестратором, приёмки tester не было — P1 в 0.3)
 Волна 6. Зависит: T-088, T-090 (`src/scene3d/` занят до их слияния). Размер S.
 Что сделать. Одиночный прогон (`-gselect`) тестов сцены заканчивается сообщением «resources still in use at exit» из-за статического кэша `RouteWorld._tracks`. Кэш — с явной очисткой (например, при выходе/в `after_all`) или не статический.
 Файлы: `src/scene3d/route_world.gd`, тест.
 Закрывает: REQ-INF-01 п.2, 5 (одиночный прогон без предупреждений об утечках).
 Критерии авто: `./scripts/test.sh -gselect=test_route_environments` без «resources still in use at exit»; время построения мира при смене трасс не выросло заметно (замер в отчёте).
 
-#### T-101 — Нестабильные по времени тесты `[integration]` — `todo`
+#### T-101 — Нестабильные по времени тесты `[integration]` — `done` (developer 84eba50, tester f9fe95f)
 Волна 6. Зависит: —. Размер S.
 Что сделать. `test_storage_acceptance::loc_07_c4_tick_budget_50ms` (бюджет тика 50 мс, LOC-07 п.4) и `test_strava_hardening::idle_connection_5s` периодически падают под нагрузкой. Перевести на подменяемые часы или устойчивый замер (медиана нескольких прогонов). Приёмочный тест — зона tester; developer правит `test_strava_hardening` и, если нужно, добавляет шов часов в `src/storage/` / `src/integrations/strava/`.
 Файлы: `tests/**/test_storage_acceptance.gd` (tester), `tests/**/test_strava_hardening.gd`, при необходимости шов часов.
 Закрывает: REQ-LOC-07 п.4; регрессия REQ-STR-04; REQ-INF-01 п.1 (стабильный прогон).
 Критерии авто: 20 полных прогонов подряд без падений этих тестов.
 
+#### T-102 — Forward+/Mobile как Compatibility, муар, подъём в горах `[visual]` — `done` (dba3dc5; принято оркестратором, приёмки tester не было — P1 в 0.3)
+Волна 6 (после T-088, T-090, T-096). Исполнитель — technical-artist. Размер M.
+Почему. После T-096 выяснилось: рендерер приложения на macOS — Forward+, а снимки `screenshot.sh` — `gl_compatibility`; в Forward+ кадр заметно темнее (трава 94,132,67 против 126,182,89), на асфальте и обочине муар; на «Перевале» подъём читался плохо.
+Что сделано. Калибровка окружений под Forward+/Mobile (картинка совпадает с Compatibility), мипмапы/анизотропия текстур дороги и травы против муара, порог читаемости подъёма T-070 — параметр `EnvironmentSet` (для гор 30 м на 40 м); T-100 — очистка кэша `RouteWorld._tracks` в том же коммите. Снимки до/после (Forward+, Compatibility, Mobile «до») — `docs/game/shots/2026-10-04-t102/`.
+Закрывает: регрессия REQ-D3D-07 п.1–6 в Forward+; REQ-D3D-08 п.8 (подъём на 6000 и 8600 м — земля/дорога выше гонщика ≥ 15 % кадра).
+Хвосты (→ релиз 0.3): общие материалы берут ambient/fog от последней `RideScene` — T-112; ступенчатая тень гонщика (`soft_shadow_filter_quality = 0` в `project.godot`) — T-106; лёгкий acne на кронах в Forward+ — T-107; запас `min_drop` 16 м при пороге 15 м — T-112; FPS на Mobile/iOS с более тяжёлым `light()` — ручная проверка (P0 среза 0.3); ревью гор 6000/8600 м в Forward+ — game-designer (P2).
+
+#### T-103 — Хвосты UI после T-089: итог карточкой, диалоги, лицензии, метки режима `[game]` — `done` (722b66e, 27c97d7; принято оркестратором, приёмки tester не было — P1 в 0.3)
+Волна 6 (после T-089). Исполнитель — developer. Размер M.
+Что сделано. Итог заезда одной карточкой `RideSummaryCard` для плана и свободной езды (вуаль `scrim`, `HudSummaryCard` `surface1` 0.97, плитки 3×2: у плана шестая — работа кДж, у езды — набор; паузы только при `paused_total_sec` > 0; «Открыть в истории» и «На главный» с целями `touch_hud`; без сэмплов, графика и Strava); `WorkoutScreen.history_requested`/`set_saved_ride_id`. Общий помощник `DialogLayout` для всех `AcceptDialog`/`ConfirmationDialog`: 480 lp на всех устройствах, перенос текста, ряд кнопок прижат вправо с зазором 12 lp, «Отмена» слева, фокус опасного диалога — «Отмена». Лицензии — 560×360 по центру, на compact — лист снизу во всю ширину в пределах безопасной зоны. Метки режима истории и карточки заезда — вариации `OverlineAccent`/`OverlineSim`; выбор профиля — `DisplayAccentLabel`/`H1AccentLabel`/`H2SecondaryLabel` вместо `self_modulate` (дефект приёмки T-089). Надзаголовок главного на телефоне — деление по фактической ширине строки. `ui_screenshot`: `hud_toolbar_plan`, `hud_toolbar_free`, `hud_summary_paused`. Тесты: `test_ride_summary_card`, `test_confirm_dialogs`, `test_home_overline_split`.
+Закрывает: REQ-HUD-14 п.7, 8 (У-15); REQ-UIX-01 п.2, 8, 9 (У-16); REQ-UIX-05 п.3; REQ-UIX-04 п.3; REQ-PRF-03 п.2; REQ-STR-01 п.8.
+Открыто: вопросы владельцу У-15 (кнопка Strava на итоге) и У-16 (Enter в опасном диалоге = отмена); диалог восстановления заезда не переведён на `DialogLayout` — T-114.
+
+### Релиз 0.3 — Качество мира и персонажа
+
+Общие правила среза. Любая визуальная правка сдаётся со снимками «до/после» по скиллу `ride-visual-review` на четырёх трассах (дистанции REQ-D3D-08 п.8) в двух рендерерах — Forward+ (рендерер приложения на macOS) и `gl_compatibility` (`screenshot.sh`); `done` визуальной задачи — по вердиктам tester (`[авто]`) и game-designer (`[визуальная проверка]`). Бюджет — `docs/perf_budget.md` (сцена ≤ 60 `MeshInstance3D`, ≤ 12 материалов, MultiMesh ≤ 2000 видимых и ≤ 40000 всего, без новых источников света). Новые REQ по персонажу, хвойным и внешности — вопросы Н-18..Н-21 (раздел 5); до их внесения tester принимает по критериям карточек и предложенным критериям спек game-designer.
+
+#### T-105 — Арт-спека хвойных `[design]` — `todo` — P1
+Волна 1. Исполнитель — game-designer, без кода. Размер S.
+Почему. Замечание владельца: «ёлка — пара треугольников». Сейчас `SceneryBuilder.conifer_mesh` — ствол и три конуса (`art-bible.md`: «ели (3 конуса)»); зонтичная сосна приморья (`umbrella_pine_mesh`) — проверить тоже.
+Что сделать.
+1. Снимки «до»: хвойные крупно и в рабочей камере на `flat`, `hills`, `mountains`, `seaside` (можно взять `docs/game/shots/2026-10-04-t102/after/`, крупные — `./scripts/screenshot.sh`).
+2. Силуэт: ель — многоярусная (сколько ярусов), неровный край яруса (зубцы, опущенные лапы), сужение к верхушке, ствол виден у основания; пихта — плотнее и ровнее; зонтичная сосна — плоская крона на изогнутом стволе (правки к текущей).
+3. Вариации: 3–4 формы (молодая, взрослая, высокая узкая, асимметричная), разброс масштаба, поворота и оттенка; какие формы на какой трассе (горы — больше ели, приморье — сосна).
+4. Тун-стиль: два тона яруса (тень снизу, свет сверху) вершинным цветом, нормали под мягкий тун-свет, контур; без acne в Forward+ (наблюдение T-102).
+5. LOD и импосторы: ближний меш, упрощённый дальний, дальний план (импостор-карточка или упрощённый конус) с дистанциями переключения в рамках `visibility_range` кусков T-066.
+6. Бюджет: треугольников на экземпляр по уровням LOD; MultiMesh ≤ 2000 видимых, ≤ 40000 всего на трассе; материалов не больше, чем сейчас.
+7. Предлагаемые критерии `[авто]` и `[визуальная проверка]` (чек-лист кадра растительности) — для requirements (Н-19).
+Файлы: `docs/game/art-bible.md` (раздел о растительности), `docs/game/assets.md`, `docs/game/shots/2026-10-04-t105/`.
+Закрывает: данные дизайна для REQ по Н-19 (уточнение D3D-07 п.1, 6 и D3D-08 п.6, 8 для растительности).
+Критерии. В `art-bible.md` есть пункты 2–7; бюджет — числами; снимки «до» в каталоге; предложение критериев — в отчёте.
+
+#### T-112 — Общие материалы: туман и свет своей сцены, запас критерия подъёма `[visual]` — `todo` — P1
+Волна 1. Исполнитель — technical-artist. Размер S.
+Почему. Хвост T-102: общие (кэшированные) материалы мира берут ambient/fog от последней созданной `RideScene`. Свободная езда живёт в `main.tscn` после первого заезда, поэтому тренировка после свободной езды может получить туман и свет чужой трассы. Критерий читаемости подъёма T-102 держится с запасом 1 м (`min_drop` 16 м при пороге 15 м).
+Что сделать. Параметры тумана и окружающего света — на уровне своей сцены (параметры экземпляра, свои копии материалов в пределах бюджета или иной способ — на выбор исполнителя, обоснование в отчёте); запас критерия подъёма — не меньше 3 м или обоснование, почему порог 15 м правильный.
+Файлы: `src/scene3d/{ride_scene,route_world,environment_set}.gd`, общие материалы мира (`.tres`), `tests/integration/`.
+Закрывает: регрессия REQ-D3D-07 п.1, 4, 6 и REQ-HUD-13 п.10 при двух сценах; REQ-D3D-08 п.8 (запас).
+Критерии авто: две `RideScene` (`mountains` и `flat`) живут одновременно в разных `SubViewport` — у каждой значения тумана и окружающего света своей трассы (проверка параметров материалов/шейдера); число уникальных материалов в каждой сцене — в бюджете; тест T-096 зелёный. Визуально: кадр тренировки на `flat` после свободной езды на `mountains` совпадает с кадром `flat` без предыдущей езды (снимки рядом).
+
+#### T-114 — Диалог восстановления: «удалить» — опасная кнопка `[game]` — `todo` — P1
+Волна 1. Исполнитель — developer. Размер S.
+Почему. `RecoveryDialog` (`src/ui/history/recovery_dialog.gd`) — единственный диалог, не переведённый на `DialogLayout` в T-103: «удалить» — обычная дополнительная кнопка, хотя удаляет восстановленный заезд без возврата. Риск потери данных.
+Что сделать. Перевести диалог на `DialogLayout` (480 lp, перенос, ряд справа); «удалить» — вариация опасной кнопки (`DangerButton`); Enter и Esc при открытом диалоге — «сохранить» (заезд не удаляется); фокус по умолчанию — не на «удалить». Порядок трёх кнопок и нужно ли второе подтверждение удаления — по `ui.md` (если там нет — вопрос game-designer в отчёт, до ответа — без второго подтверждения).
+Файлы: `src/ui/history/recovery_dialog.gd`, `src/app/main.gd` (только проводка, если нужна), тест в `tests/unit/ui/`.
+Закрывает: REQ-UIX-01 п.8, 9 (диалог восстановления); регрессия REQ-LOC-07 п.3.
+Критерии авто: кнопка «удалить» — вариация опасной кнопки; ширина диалога 480 lp, кнопки у правого края; Enter и Esc сразу после открытия → заезд сохранён, сигнал `resolved(id, "keep")`; удаление — только нажатием «удалить»; приёмка T-042 (LOC-07 п.3) зелёная.
+
+#### T-113 — Повторы: цвет свёрнутой строки, `repeat_blocks` у ZWO `[integration]` — `todo` — P2
+Волна 1. Исполнитель — developer. Размер S.
+Почему. Хвосты T-099: свёрнутая строка блока окрашивается по первому шагу блока — если блок начинается с отдыха, строка получает зону отдыха, а HUD-13 п.8 требует цвет зоны рабочего отрезка; ZWO `IntervalsT` не пишет `Workout.repeat_blocks`, список сворачивает его эвристикой ON/OFF.
+Что сделать. Цвет свёрнутой строки — зона рабочего отрезка (шаг блока с наибольшей целью); `ZwoParser` заполняет `repeat_blocks` для `IntervalsT` в том же виде, что парсер Intervals.icu; `IntervalListModel` берёт сохранённые блоки, эвристика остаётся для прочих шагов.
+Файлы: `src/ui/hud/interval_list_model.gd`, `src/integrations/workouts/zwo_parser.gd`, тесты.
+Закрывает: REQ-HUD-13 п.8 (цвет, ZWO); регрессия REQ-IMP-01, REQ-NFR-09 п.3.
+Критерии авто: блок 4 × (1:00 125 Вт / 2:00 300 Вт) до начала — одна строка цвета зоны 300 Вт; ZWO с `IntervalsT` — `repeat_blocks` заполнены, после `to_dict()/from_dict()` сохраняются; пример HUD-13 п.8 (2 + 4 × (15 с, 45 с)) — 3 строки до блока, 2 + 8 после, для ZWO и Intervals.icu; приёмки T-037 и T-099 зелёные.
+
+#### T-115 — Изоляция `user://` для параллельных прогонов тестов `[game]` — `todo` — P2
+Волна 1. Исполнитель — developer. Размер S.
+Почему. Хвост волны 6: прогоны GUT из разных worktree пишут в один и тот же `user://` и мешают друг другу (ложные падения). На продукт не влияет.
+Что сделать. Каждый прогон `./scripts/test.sh` получает свой каталог данных (способ — на выбор исполнителя: свой каталог пользователя на прогон или корень хранилищ в тестах через параметр); после прогона общий `user://` не засоряется.
+Файлы: `scripts/test.sh`, при необходимости `.gutconfig.json` и тестовые хелперы в `tests/`.
+Закрывает: REQ-INF-01 п.1, 2 (стабильный и повторяемый прогон).
+Критерии авто: два полных прогона параллельно (из двух worktree) — оба зелёные, общих файлов в каталогах данных нет; одиночный прогон `-gselect` проходит; CI не меняет поведение.
+
+#### T-104 — Арт-спека персонажа `[design]` — `todo` — P1
+Волна 2 (после T-105 — тот же `art-bible.md`). Исполнитель — game-designer, без кода. Размер M.
+Почему. Замечание владельца: «персонаж угловатый, шлем нереальный, ноги как палки, торчат из-под седла/таза; нужна возможность докручивать: велоформа, очки, туфли». Сейчас гонщик процедурный: `src/scene3d/rider_model.gd` (примитивы `MeshKit`, палитра — константы `C_JERSEY`/`C_HELMET`/…, один тун-материал по цвету вершин `materials/rider_toon.tres`, 11 частей), ноги — бедро/голень/туфля отдельными мешами, двухзвенная IK от `HIP` к педали в `src/scene3d/rider.gd`.
+Что сделать.
+1. Снимки «до»: рабочая камера на четырёх трассах (`docs/game/shots/2026-10-04-t102/after/`) и крупные ракурсы гонщика (сбоку, 3/4 сзади, спереди) — `./scripts/screenshot.sh`; если нужных ракурсов скрипт не даёт — перечислить их в спеке, TA добавляет в T-106.
+2. Анатомия и посадка: таз сидит на седле (седалищные кости на седле, точка `HIP` относительно седла), бёдра выходят из таза, а не из-под седла; объём бедра, колена, икры, сужение к лодыжке; торс, плечи, шея; руки — плечо, предплечье, кисти обхватывают тормозные ручки; пропорции (рост, длины звеньев) — числами.
+3. Шлем: шоссейный обтекаемый, вентиляционные прорези, ремешок, затылочный фиксатор. Очки: спортивные, линза, дужки. Туфли: шоссейные, жёсткая подошва, шип/платформа на педали, застёжки; носки.
+4. Одежда: джерси в обтяжку (рукав, молния, кромки), шорты до середины бедра с лямками, перчатки (опционально).
+5. Тун-стиль: уровень полигональности и сглаживания (силуэт не угловат в рабочей камере), сегменты трубок, нормали, контур, `toon_rim`; качество тени гонщика (сейчас ступенчатая, `soft_shadow_filter_quality = 0`) — решение с учётом FPS.
+6. Бюджет: треугольников на гонщика с велосипедом (строки в `perf_budget.md` пока нет — предложить), `MeshInstance3D` гонщика (сейчас 11; сцена ≤ 60), материалов (сейчас 1 на гонщика; не больше 2), без новых источников света; IK и анимация без аллокаций в кадре.
+7. Решение «процедурно доработать (`MeshKit`) vs модель glTF (Blender) с лицензией CC0/своя» — плюсы и минусы: IK (отдельные меши vs `Skeleton3D`), слоты внешности, конвейер (кто и чем делает модель, есть ли Blender в среде агентов), размер, лицензия (`docs/publishing/licenses.md`, `assets.md`).
+8. Эталонные ракурсы и чек-лист кадра гонщика (пункты, порог прохождения); предлагаемые критерии `[авто]` (таз на седле, бедро от таза, колено не выворачивается, длины звеньев, стопа на педали) и `[визуальная проверка]` — для requirements (Н-18).
+9. Слоты внешности (задел кастомизации, Н-20): велоформа — джерси, шорты, носки (цвета, узор: однотон, полосы, лампасы); шлем (модель + цвет); очки (модель, линза, «нет»); туфли (модель + цвет); перчатки; велосипед — рама, ободья; кожа и волосы — решить. Для каждого слота — тип значения, допустимые значения, какие части геометрии он меняет (без пересборки сцены); 3–5 пресетов по умолчанию.
+Файлы: `docs/game/art-bible.md` (раздел «Гонщик»), `docs/game/assets.md`, `docs/game/shots/2026-10-04-t104/`.
+Закрывает: данные дизайна для REQ по Н-18 (персонаж) и Н-20 (внешность); вход для T-106, T-108, T-109.
+Критерии. В `art-bible.md` есть пункты 2–9; бюджет — числами; решение процедурно/glTF с обоснованием; таблица слотов с типами и пресетами; чек-лист ракурсов; снимки «до» в каталоге; предложение критериев — в отчёте.
+
+#### T-107 — Хвойные по спеке `[visual]` — `todo` — P1
+Волна 2. Зависит: T-105, T-112 (`src/scene3d/` занят). Исполнитель — technical-artist. Размер S–M.
+Что сделать. По спеке T-105: новые меши ели/пихты и правка зонтичной сосны, 3–4 формы с вариациями масштаба, поворота и оттенка, распределение по трассам, LOD/импосторы; проверить и убрать acne на кронах в Forward+ (хвост T-102); строка бюджета растительности в `docs/perf_budget.md`.
+Файлы: `src/scene3d/scenery_builder.gd`, `src/scene3d/mesh_kit.gd`, `src/scene3d/tracks/env_*.tres` (только параметры растительности), `docs/perf_budget.md`, `tests/integration/test_route_environments.gd` (дополнение).
+Закрывает: REQ-D3D-07 п.1, 6; REQ-D3D-08 п.6, 8 (растительность на всех трассах); REQ-D3D-05 п.4 (бюджет); REQ по Н-19 после внесения.
+Критерии авто: на каждой трассе хвойные не меньше трёх форм (разные меши или вариации по спеке); MultiMesh ≤ 2000 видимых из любой точки и ≤ 40000 всего на каждой трассе; уникальных материалов не больше, чем до задачи; треугольники экземпляра по уровням LOD ≤ спеки; тесты T-066, T-083, T-087, T-088, T-090 зелёные. Визуально: снимки до/после на четырёх трассах в Forward+ и Compatibility, чек-лист `ride-visual-review` ≥ 10/12 без блокирующих и чек-лист растительности спеки; acne на кронах нет; вердикт game-designer. Ручные: FPS на устройстве (P0 среза 0.3).
+
+#### T-106 — Гонщик по спеке `[visual]` — `todo` — P1
+Волна 3. Зависит: T-104, T-107 (`mesh_kit.gd`). Исполнитель — technical-artist. Размер M–L.
+Правило нарезки. Если спека выберет glTF или работа не помещается в один заход — менеджер режет: T-106a — тело, таз, ноги, IK (колено, голеностоп); T-106b — шлем, очки, туфли, кисти, одежда.
+Что сделать. По спеке T-104: модель гонщика (анатомия, таз на седле, бёдра от таза, объёмные ноги, руки и кисти на тормозных ручках), IK ног с коленом и голеностопом, шоссейный шлем, очки, туфли; геометрия разбита по слотам внешности спеки (каждый слот меняется без пересборки — задел для T-109); качество тени гонщика по решению спеки (хвост T-102: ступенчатая тень); без роста бюджета сверх спеки; эталонные ракурсы спеки — в `screenshot.sh`, если их там нет.
+Файлы: `src/scene3d/{rider_model,rider}.gd`, `src/scene3d/rider.tscn`, `src/scene3d/materials/rider_toon.tres`, `src/scene3d/mesh_kit.gd`, `assets/` и `docs/publishing/licenses.md` (только если glTF), `project.godot` (только качество теней), `scripts/screenshot.sh` (ракурсы), `docs/perf_budget.md` (строка гонщика), тесты `tests/unit/scene3d/`, `tests/integration/`.
+Закрывает: REQ-D3D-01 п.1, 2 и REQ-D3D-04 п.1–3 (регрессия); REQ-D3D-07 п.2–5 (регрессия и новая модель), п.6; REQ-D3D-05 п.4; REQ по Н-18 после внесения.
+Критерии авто: при любом угле шатуна стопа на педали (±1 см), длины бедра и голени постоянны (±1 мм) (D3D-07 п.2); таз на седле — точка таза над поверхностью седла в допуске спеки; основание бедра совпадает с точкой таза (±1 см); колено всегда впереди линии таз — педаль (не выворачивается); угол стопы в диапазоне спеки; каденс 0 → анимация стоит (D3D-04 п.2); `MeshInstance3D` сцены ≤ 60, материалов ≤ бюджета, треугольников гонщика ≤ спеки; статическая проверка D3D-05 п.4 без аллокаций в кадре; тесты D3D-07 п.3, 5 на четырёх трассах (D3D-08 п.7). Визуально: снимки до/после по `ride-visual-review` на четырёх трассах в Forward+ и Compatibility плюс эталонные ракурсы спеки; чек-лист гонщика спеки — не ниже порога; вердикт game-designer. Ручные: REQ-D3D-07 п.7 (тени без артефактов, 60 FPS) — P0 среза 0.3.
+
+#### T-108 — `RiderLook`: данные внешности в профиле `[game]` — `todo` — P1
+Волна 3. Зависит: T-104 (таблица слотов). Исполнитель — developer. Размер S–M.
+Почему. Владелец хочет «докручивать» персонажа (велоформа, очки, туфли). Данные внешности должны жить отдельно от геометрии и храниться в профиле (у каждого профиля свой гонщик — PRF-04), формат слотов фиксируется сейчас, пока T-106 строит модель.
+Что сделать. `RiderLook` (`RefCounted`, без `Node`, в `src/profiles/`): слоты по таблице T-104 (велоформа — джерси/шорты/носки: цвета, узор; шлем — модель + цвет; очки — модель/линза/нет; туфли — модель + цвет; перчатки; велосипед — рама, ободья; кожа/волосы — если спека решит); `to_dict()/from_dict()`, проверка значений по слоту; пресеты по умолчанию (названия — ключи переводов); поле профиля `rider_look`, сохранение через `ProfileRepository` (атомарная запись как у прочих полей). UI нет (T-111).
+Файлы: `src/profiles/rider_look.gd` (новый, + `.uid`), `src/profiles/profile.gd`, `src/profiles/profile_repository.gd`, `assets/i18n/strings_menu.csv` (только названия пресетов), `tests/unit/profiles/test_rider_look.gd`.
+Закрывает: REQ по Н-20 после внесения; регрессия REQ-PRF-01, PRF-04.
+Критерии авто: профиль без поля `rider_look` читается с внешностью по умолчанию; round-trip `to_dict()/from_dict()` и через `ProfileRepository` (новый репозиторий на том же каталоге); неверное значение одного слота → значение по умолчанию только в этом слоте, остальные сохраняются; у двух профилей внешность независима; пресеты валидны; `src/profiles/` не зависит от `src/scene3d/` (тест архитектуры).
+
+#### T-109 — Применение внешности без пересборки сцены `[visual]` — `todo` — P2
+Волна 4. Зависит: T-106, T-108. Исполнитель — technical-artist. Размер S–M.
+Что сделать. `RiderModel.apply_look(look: RiderLook)` меняет только части своего слота (цвета вершин, параметры материала, видимость вариантов модели — по спеке) без пересоздания узлов; `RideScene.set_rider_look`; экраны заезда передают внешность выбранного профиля (в `src/ui/{workout,free_ride}/*_screen.gd` — только передача).
+Файлы: `src/scene3d/{rider_model,rider,ride_scene}.gd`, `src/ui/workout/workout_screen.gd`, `src/ui/free_ride/free_ride_screen.gd` (только передача), тесты.
+Закрывает: REQ по Н-20 после внесения; регрессия REQ-D3D-05 п.4, D3D-07 п.2.
+Критерии авто: смена одного слота меняет только части этого слота (цвета и видимость остальных частей до и после совпадают); после 20 смен пресетов те же узлы (`instance_id`), число `MeshInstance3D` и материалов не выросло; профиль без поля → в сцене внешность по умолчанию; без аллокаций в кадре. Визуально: снимки трёх пресетов в рабочей камере и эталонном ракурсе, вердикт game-designer.
+
+#### T-110 — Макет экрана «Гардероб» `[design]` — `todo` — P3
+Позже (после T-104, T-108). Исполнитель — game-designer. Размер S.
+Что сделать. Макет экрана в системе `ui.md`: вход (из настроек профиля или с главного), превью гонщика (3D в `SubViewport` или снимок), слоты и значения, пресеты, сброс к пресету, адаптивность телефон/планшет/компьютер; предлагаемые критерии для requirements (Н-21).
+Файлы: `docs/game/ui.md` (новый раздел), макеты в `docs/game/shots/`.
+Закрывает: данные дизайна для REQ по Н-21.
+
+#### T-111 — Экран «Гардероб» `[game]` — `todo` — P3
+Позже. Зависит: T-109, T-110. Исполнитель — developer. Размер M.
+Что сделать. Экран по макету T-110: выбор пресета и значений слотов, превью, сохранение в профиль через `RiderLook`, навигация через `AppState`, переводы ru/en; цели нажатия и адаптивность по UIX-05.
+Файлы: `src/ui/wardrobe/**` (новый), `src/app/app_state.gd` (новый экран), `assets/i18n/strings_menu.csv`, тесты.
+Закрывает: REQ по Н-21 после внесения; REQ-UIX-01, UIX-04, UIX-05 на новом экране.
+Критерии авто: выбор значения слота сохраняется в профиле и виден в сцене следующего заезда; матрица UIX-05 на новом экране; «назад» через `go_back()`.
+
 ### Этап 8 — Публикация iOS и macOS (в контейнере — документы и заготовки)
 
-#### T-053 — Пакет публикации iOS/macOS `[docs]` — `in-progress`
+#### T-053 — Пакет публикации iOS/macOS `[docs]` — `done`
 Статус. У отдельного docs-агента (вместе с T-055). Учесть: Н-10 (фоновый режим `bluetooth-central` для iOS — пока не решён владельцем, в пресете заложить как переключаемый пункт с пояснением), UX-3 (сборки без нативного BLE-модуля не публикуются), схема `ovoschrider://strava` для iOS (В-6), `secrets.example.cfg.txt` и `SecureStore.read_env()` — описать в `secure_store.md` как dev-путь, не для магазинных сборок.
 Что сделать. `docs/publishing/privacy_policy.md` (какие данные: пульс как данные о здоровье, мощность, каденс; где хранятся; куда передаются — Intervals.icu, Strava; как удалить); `docs/publishing/app_store_checklist.md` (Privacy Nutrition Labels, данные о здоровье, лицензии: Godot MIT, GUT MIT, godot-cpp MIT, прочие); `docs/ports/android.md` (Data Safety — заготовка, дополняется в T-055); `docs/publishing/app_store_checklist.md` и заготовка `export_presets.cfg` для macOS и iOS с `NSBluetoothAlwaysUsageDescription` (ru и en, непустые), типами документов `.zwo`, `.erg`, `.mrc`; `docs/publishing/intervals_icu_oauth.md` (шаги согласования, redirect URI, scope); `docs/publishing/strava_api_checklist.md` (брендбук кнопки/логотипа, заявка на ревью, лимит одного атлета до ревью); `docs/secure_store.md` (Keychain, Android Keystore, libsecret/Credential Manager — границы платформенной части).
 Закрывает: REQ-NFR-07 п.1, 2, 4; REQ-IMP-03 п.3; REQ-INT-01 п.5; REQ-STR-01 п.7; REQ-NFR-05 п.3 — наличие файлов и разделов `[авто]`, остальное `[вне контейнера]`. Критерии авто: существование файлов/разделов, непустые строки описания BLE в пресете.
 
-#### T-057 — Экран настроек `[game]` — `in-progress`
+#### T-057 — Экран настроек `[game]` — `done`
 Статус. У developer A. Выделена из T-049/T-054: экран настроек нужен раньше Strava — для языка, синхронизации Intervals.icu и источника мощности. Замечания tester по WIP переданы developer: соблюдать Н-5 (экран зависит от `AppState`, не от `main.gd`/`locale.gd` напрямую — язык через модель настроек), NFR-05 (API-ключ Intervals.icu — только через `SecureStore`, не в `user://settings.json`), i18n (все строки через `tr()`, ключи в `strings.csv`). Раздел Strava — слот для `StravaConnectButton` из T-049 (developer C).
 Что сделать. `src/ui/settings/settings_screen.tscn/.gd` (+ модель `settings_model.gd`, проверяемая headless), вход с Home, навигация через `AppState`. Разделы:
 - **Язык** — ru/en через `Locale` (`src/app/locale.gd`): по умолчанию системный, если ru/en, иначе en; выбор сохраняется (`user://settings.json`) и применяется без перезапуска (REQ-NFR-08 п.3); форматы чисел/времени одинаковы в обоих языках (п.4 — на моделях T-029).
@@ -969,13 +1135,13 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 Все строки — через `tr()`, ключи в `assets/i18n/strings.csv`.
 Закрывает: REQ-NFR-08 п.3, 4; REQ-INT-06 п.5, 6 (авто), п.7 (ручная); REQ-PRF-03 п.2; REQ-DEV-05 п.2 (хранение); REQ-PRF-02 п.1 (UI). Критерии авто: модель настроек headless, сохранение/восстановление, изоляция удаления привязки. Ручные: REQ-INT-01 п.4 (имя атлета на реальном аккаунте), REQ-INT-06 п.7, REQ-NFR-08 п.5.
 
-#### T-054 — Локализация ru/en: финальная инвентаризация `[game]`
+#### T-054 — Локализация ru/en: финальная инвентаризация `[game]` — `done`
 Что сделать (после всех экранов: T-040, T-045, T-049, T-057). Выбор языка и его сохранение уже закрыты T-057; здесь — финальный проход: каждый ключ в `assets/i18n/strings.csv` имеет непустые `ru` и `en` (REQ-NFR-08 п.2); аудит `src/ui/` и `src/scene3d/` на кириллицу в литералах (`scripts/check_i18n.sh` или проверка в `test_architecture.gd`, REQ-NFR-08 п.1); подтверждение п.3, 4 на финальном наборе экранов; снятие неиспользуемых ключей.
 Закрывает: REQ-NFR-08 п.1, 2 (п.3, 4 — подтверждение). Критерии авто: все. Ручные: REQ-NFR-08 п.5.
 
 ### Этапы 9–10 — Android, Linux и Windows (в контейнере — документы и заготовки)
 
-#### T-055 — Порты BLE и Android-заготовки `[docs]` — `in-progress`
+#### T-055 — Порты BLE и Android-заготовки `[docs]` — `done`
 Статус. У отдельного docs-агента (вместе с T-053). Опираться на фактический контракт `BleBridge`/`BleBackend` (`native/ble/src/ble_backend.h`) и на `apple_backend.mm` как образец реализации бэкенда.
 Что сделать. `docs/ports/README.md`: для Android (JNI, `BluetoothLeScanner`, `BluetoothGatt`), Linux (BlueZ D-Bus: `org.bluez.Adapter1`, `Device1`, `GattCharacteristic1`), Windows (WinRT `BluetoothLEAdvertisementWatcher`, `GattCharacteristic`) — точки реализации каждого метода и события контракта `BleBridge`, маршалинг событий в главный поток, различия в разрешениях; `native/ble/platform/android/AndroidManifest.xml.template` с `BLUETOOTH_SCAN` (`android:usesPermissionFlags="neverForLocation"`), `BLUETOOTH_CONNECT`, legacy `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION` с `maxSdkVersion="30"`; дополнение `docs/ports/android.md` (Data Safety, данные о здоровье); раздел «Каналы распространения Linux/Windows — открытый вопрос» с вариантами (Steam, Flathub, Microsoft Store, прямая загрузка) и критериями выбора.
 Закрывает: REQ-NFR-06 п.4; REQ-NFR-07 п.3, 4 (Android). Критерии авто: наличие файлов и разрешений. Вне контейнера: порты, ревью Google Play.
@@ -1093,6 +1259,15 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - REQ-WRK-05 п.6 — на паузе (тренировка и свободная езда) нагрузка Neo не меняется, после возобновления — по цели интервала / по уклону.
 - REQ-FRD-01 п.5 — реальный запуск свободной езды на Tacx Neo с главного экрана («Поехать» и «Сменить трассу» → «Поехать»).
 
+### После релиза 0.2.0 (волны 5–6: T-096, T-102, T-103) — с приоритетами
+Приоритеты и срезы всех ручных проверок — `docs/story-map.md` раздел 6. Кратко:
+- **P0, срез 0.3.** 60 FPS на устройстве в Forward+ (macOS) и Mobile (iOS) после T-102 — у материалов более тяжёлый `light()`; отдельно «Перевал» с дальностью 5.5 км (D3D-05 п.1, 3; D3D-07 п.7; D3D-08 п.9; У-13 и решение 16 — какие устройства эталонные). Замер до T-106/T-107 (база) и после (выпуск 0.3).
+- **P0, срез 0.4.** SIM на Tacx Neo («Перевал», крутизна 50 % и 100 %, SIM ↔ сопротивление; FRD-04 п.10, FRD-05 п.7); чтение `0x2ACC` бит 13 и `0x2AD5`; ERG, переподключение, восстановление после принудительного завершения на macOS (WRK-02 п.6, NFR-01 п.3, DEV-08 п.5, 6, LOC-07 п.5).
+- **P1, срез 0.4.** Strava для свободной езды — дистанция, высота, набор ±1 % (FRD-07 п.8); HUD с 1.5 м (HUD-01 п.4–5, HUD-14 п.6); iPad и Retina — 3D не мыльное (HUD-13 п.10), касания без промахов (UIX-05 п.6); итог заезда карточкой и диалоги 480 lp на iPhone (T-103).
+- **P2, срез 1.1.** Android: системный «назад» на главном (UIX-04 п.1).
+- **P3.** `ui_screenshot.sh` на Retina-маке — точные размеры кадров.
+- Не владельцу, а game-designer (P2): допуск яркости теста T-096; ревью гор 6000/8600 м в Forward+ (T-102).
+
 ## 5. Блокеры и вопросы к requirements
 
 Блокеры среды (не требуют решения, фиксируются):
@@ -1100,8 +1275,11 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - Б-2. REQ-DEV-08 (этап 2) зависит от `SampleRecorder` (REQ-WRK-08, этап 3), поэтому T-024 выполняется после T-023; этап 2 формально закрывается только вместе с T-024.
 - Б-3. Фикстуры Intervals.icu (открытое решение 19) — до получения реальных ответов с аккаунта владельца тесты INT идут на синтетических данных по публичной документации API; при получении реальных фикстур задачи T-033..T-035 возвращаются в `review`.
 
-Открытые вопросы агенту requirements (Н-1..Н-6, Н-8, Н-9 решены — см. «Решено»):
-- Н-17 (от оркестратора, хвост волн 3–4; T-098). Запоминать ли выбранную тренировку между запусками (поле профиля `last_workout_id`, по образцу FRD-02 п.3 для трассы)? Если да — нужен `[авто]`-критерий (например, в UIX-03 п.3 или INT-04): «после перезапуска выбрана последняя выбранная тренировка, если она есть в списке; иначе — правило INT-04 п.1».
+Открытые вопросы агенту requirements (Н-1..Н-6, Н-8, Н-9, Н-17 решены — см. «Решено»):
+- Н-18 (релиз 0.3; T-104, T-106). Новый REQ «Проработанный гонщик» (предложение — REQ-D3D-09) или новые пункты D3D-07: таз на седле (точка таза над седлом в допуске), бёдра выходят из таза, колено не выворачивается, голеностоп в диапазоне, шлем/очки/туфли присутствуют как отдельные части, бюджет треугольников гонщика с велосипедом (строки в `perf_budget.md` пока нет), чек-лист эталонных ракурсов `[визуальная проверка]`. Числа и критерии — из спеки game-designer T-104; до внесения tester принимает T-106 по критериям карточки.
+- Н-19 (релиз 0.3; T-105, T-107). Критерии растительности: сейчас D3D-07 п.1 требует «не меньше трёх типов растительности», о форме и вариациях хвойных ничего нет. Предложение — пункт D3D-07 или D3D-08: хвойные не меньше трёх форм на трассе, треугольники экземпляра по LOD, чек-лист растительности; бюджет MultiMesh — без изменений (У-5). Числа — из спеки T-105.
+- Н-20 (релиз 0.3; T-104, T-108, T-109). Внешность гонщика (кастомизация, задел). ТЗ (п. 2) и requirements («Вне MVP») относят «кастомизацию аватара» к вне MVP; владелец 2026-10-04 попросил «возможность докручивать персонажа в будущем: велоформа, очки, туфли и т. д.». Нужен REQ (предложение — новая группа, например REQ-AVT-01 «Внешность гонщика в профиле»): слоты по спеке T-104, хранение в профиле, профиль без поля → внешность по умолчанию, смена слота меняет только свою часть модели, бюджет сцены не растёт, пресеты по умолчанию. Отразить отступление от «вне MVP» как решение владельца.
+- Н-21 (позже; T-110, T-111). Экран «Гардероб» — REQ после макета T-110; приоритет P3 (P2, если владелец захочет персонализацию до 1.0) — вопрос владельцу.
 - Н-11 (владельцу/requirements; от developer C, T-048). `Retry-After` поддерживается только в секундах; формат HTTP-даты (`Retry-After: Wed, 21 Oct 2026 07:28:00 GMT`) не разбирается — Strava и Intervals.icu отдают секунды. Предложение: подтвердить, что поддержка HTTP-даты не нужна в MVP (при неразобранном заголовке — откат на 60 с), и зафиксировать в REQ-INT-02 п.5 / REQ-STR-04 п.3.
 - Н-12 (владельцу/requirements; от developer C, T-048). REQ-STR-04 п.2: «далее каждые 60 мин до успеха или ручной отмены» — очередь повторяет бесконечно, пока пользователь не отменит. Нужен ли предел (предложение менеджера: 7 суток, после — статус «ошибка: превышено число попыток» с возможностью ручной постановки заново из карточки заезда, STR-04 п.5)? Влияет на критерий п.2 и перечень статусов STR-05 п.1.
 - Н-7 (от tester, T-056). Инвентаризация NFR-09 п.2 проверяет вызов метода по имени, без учёта класса-владельца — общие имена могут давать ложное покрытие. Предложить владельцу: ужесточить критерий до «каждый публичный метод каждого класса `src/domain/` вызывается в тесте именно на экземпляре/классе-владельце» (проверка через рефлексию скрипта) или оставить текущий способ как достаточный для MVP.
@@ -1136,18 +1314,19 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 - D-6 (REQ-WRK-05 п.2, T-027) — событие паузы хранит `at_sec` (сессионное время начала) и `duration_sec` по реальному времени; в метаданных сессии/заезда — `paused_total_sec`. Требует правки формулировки критерия — Н-9.
 - Н-1..Н-5 — закрыты агентом requirements (см. «Статус внесения» в requirements.md): Н-1 — `-gselect` в REQ-INF-01 п.2 и CLAUDE.md; Н-2 и Н-5 — слои `src/session/` и `src/app/` (`AppState` — контракт навигации для `src/ui/`; оболочка `main.*`/`locale.gd` — ни от кого не зависима) в REQ-NFR-06 п.3 и CLAUDE.md; Н-3 — контракт моста в документе приведён к именам кода (`connect_peripheral`, `notification`, `write_done`, `read_characteristic`/`characteristic_read`, `discover_services`/`services_discovered`); Н-4 — DEV-04 п.3: «обороты стоят» → 0, «пакеты пропали 3 с» → «нет данных» (реализовано в 851c724).
 - Уточнение DEV-08 п.3 (наблюдение tester, приоритет В-4) — при обрыве и восстановлении на паузе цель уходит при `resume`, а не ≤ 1 с после `connected`; после `connected` на паузе — только Request Control. Учтено в T-017, T-024.
+- Н-17 (T-098) — решено оркестратором и внесено requirements (9757dc0) как У-14: выбор тренировки запоминается в профиле (`last_workout_id`), критерий в UIX-03 п.3. Вопрос владельцу о расхождении с главным экраном — У-14 в requirements.md (P2, `docs/story-map.md`).
 
 ## 6. Трассируемость REQ → задачи
 
 | REQ | Задачи |
 | --- | --- |
-| INF-01, INF-02 | T-001; ред. 2 — T-100 (INF-01 п.2, 5 — одиночный прогон без утечек), T-101 (INF-01 п.1 — стабильность) |
+| INF-01, INF-02 | T-001; ред. 2 — T-100 (INF-01 п.2, 5 — одиночный прогон без утечек), T-101 (INF-01 п.1 — стабильность); 0.3 — T-115 (п.1, 2 — изоляция `user://`) |
 | INF-03 | T-014 |
 | INF-04 | T-014 (п.1 мягко, п.3), T-056 (п.1, 2 строго) |
-| PRF-01 | T-009, T-011 |
+| PRF-01 | T-009, T-011; регрессия — T-108 (поле `rider_look`) |
 | PRF-02 | T-008, T-009 |
-| PRF-03 | T-010, T-046, T-057 (п.2 — UI отвязки Intervals.icu) |
-| PRF-04 | T-011, T-041 |
+| PRF-03 | T-010, T-046, T-057 (п.2 — UI отвязки Intervals.icu), T-089 и T-103 (п.2 — отвязка через подтверждение) |
+| PRF-04 | T-011, T-041; 0.3 — T-108 (своя внешность у профиля) |
 | PRF-05 | T-012 |
 | INT-01 | T-033 (ключ), T-053 (OAuth-документ) |
 | INT-02 | T-034 |
@@ -1156,11 +1335,11 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | INT-05 | T-005 (`Workout.power_points` — фикс D-1), T-030, T-040 |
 | INT-06 | T-033 (п.1–4, 8 по В-13), T-057 (п.5–7) |
 | INT-07 | T-036 |
-| IMP-01 | T-037 |
+| IMP-01 | T-037; регрессия — T-113 (`repeat_blocks` у ZWO) |
 | IMP-02 | T-038 |
 | IMP-03 | T-039 (п.1), T-040 (п.2), T-053 (п.3) |
 | IMP-04, IMP-05 | T-039 |
-| STR-01 | T-046, T-053 |
+| STR-01 | T-046, T-053; ред. 2 — T-103 (п.8 — отвязка через подтверждение) |
 | STR-02 | T-044 (п.2), T-047 (п.1, 3, 4; п.1 — после подключения `FitEncoder` в T-049) |
 | STR-03 | T-047, T-049 |
 | STR-04 | T-048 (п.2–4, 6), T-049 (п.1 — автопостановка в `StravaService`, п.5 — UI) |
@@ -1188,14 +1367,17 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | HUD-10 | T-065 (п.1–5), T-071 (п.6), T-078 (п.7), T-094 (п.2, 5 — `y_max` ≥ 1.1 × FTP, сдвиг после пропуска); п.8 — ручная |
 | HUD-11 | T-065 (п.1–5), T-071 (п.6), T-078 (п.7), T-094 (п.1) |
 | HUD-12 | T-059 (синтетический пульс для приёмки), T-065 (п.1, 2, 5–7), T-071 (п.3, 4), T-078 (п.8) |
-| HUD-13 | T-073 (п.1, 5, 6, 10), T-072 (п.2, 3, 8 — компонент), T-078 (п.2–4, 7, 9), T-084 (п.1, 4–6 — свободная езда), T-097 (п.5, 6, 9 — телефон, дефекты T-078), T-096 (п.10 — 3D в `SubViewport`), T-099 (п.8 — повторы Intervals.icu) |
-| HUD-14 | T-060 (п.1, 2), T-073 (п.3–5), T-093 (вариации HUD), T-095 (п.2 — `tnum` у меток), T-097 (п.2 — вариации на панели цифр); п.6 — ручная |
+| HUD-13 | T-073 (п.1, 5, 6, 10), T-072 (п.2, 3, 8 — компонент), T-078 (п.2–4, 7, 9), T-084 (п.1, 4–6 — свободная езда), T-097 (п.5, 6, 9 — телефон, дефекты T-078), T-096 (п.10 — 3D в `SubViewport`), T-099 (п.8 — повторы Intervals.icu); 0.3 — T-112 (п.10 — регрессия при двух сценах), T-113 (п.8 — цвет свёрнутой строки, ZWO) |
+| HUD-14 | T-060 (п.1, 2), T-073 (п.3–5), T-093 (вариации HUD), T-095 (п.2 — `tnum` у меток), T-097 (п.2 — вариации на панели цифр), T-103 (п.7, 8 — итог заезда карточкой); п.6 — ручная |
 | HUD-06 (п.2 — фишка «ДАЛЕЕ»), WRK-05 (UI паузы) | T-074, T-078 |
-| D3D-01, D3D-04, D3D-05 | T-052; ред. 2 — T-066 (D3D-05 п.2, 4 на длинных трассах) |
+| D3D-01, D3D-04, D3D-05 | T-052; ред. 2 — T-066 (D3D-05 п.2, 4 на длинных трассах); 0.3 — T-104 (дизайн гонщика), T-106 (D3D-01, D3D-04 — регрессия на новой модели; D3D-05 п.4 — бюджет гонщика), T-107 (D3D-05 п.4 — бюджет хвойных), T-109 (D3D-05 п.4 — без роста при смене внешности); D3D-05 п.1, 3 — ручная (P0 среза 0.3) |
 | D3D-02 | T-050; регрессия — T-067 |
 | D3D-03, D3D-06 | T-051; ред. 2 — T-070 (D3D-03 п.1, 2 на новых трассах) |
-| D3D-07 | T-058; регрессия — T-066, T-070, T-083, T-087, T-096 (экраны заезда) |
-| D3D-08 | T-062 (п.1–3), T-066 (п.6 — бюджет), T-070 (п.2, 4, 5, 7), T-080 (п.1 — названия), T-083 (п.6, 8, 12 — `flat`, `hills`), T-087 (п.6, 8, 10, 12 — `mountains`), T-088 (п.6, 8 — вода), T-090 (п.3, 6, 8 — мост), T-091 (п.12 — дизайн ориентиров), T-092 (п.12 — данные); п.9 — ручная |
+| D3D-07 | T-058; регрессия — T-066, T-070, T-083, T-087, T-096 (экраны заезда), T-102 (п.1–6 в Forward+); 0.3 — T-105 и T-107 (п.1, 6 — хвойные), T-104 и T-106 (п.2–6 — гонщик), T-112 (п.1, 4, 6 — туман и свет своей сцены); п.7 — ручная |
+| D3D-08 | T-062 (п.1–3), T-066 (п.6 — бюджет), T-070 (п.2, 4, 5, 7), T-080 (п.1 — названия), T-083 (п.6, 8, 12 — `flat`, `hills`), T-087 (п.6, 8, 10, 12 — `mountains`), T-088 (п.6, 8 — вода), T-090 (п.3, 6, 8 — мост), T-091 (п.12 — дизайн ориентиров), T-092 (п.12 — данные), T-102 (п.8 — подъём на «Перевале»); 0.3 — T-107 (п.6, 8 — растительность), T-112 (п.8 — запас критерия подъёма); п.9 — ручная |
+| Персонаж — новый REQ (Н-18) | T-104 (спека), T-106 (реализация) |
+| Растительность — новый REQ или пункт D3D-07/08 (Н-19) | T-105 (спека), T-107 (реализация) |
+| Внешность гонщика — новый REQ (Н-20); «Гардероб» (Н-21) | T-104 (слоты), T-108 (данные), T-109 (применение); T-110, T-111 (экран, позже) |
 | FRD-01 | T-061 (навигация), T-068 (п.2), T-077 (п.1–3), T-081 (п.1 — вход), T-084 (п.1, 4), T-097 (п.4 — «На эмуляторе» на экране плана по тому же правилу); п.5 — ручная |
 | FRD-02 | T-061 (п.3 — хранение), T-080 (п.1–3); п.4 — ручная |
 | FRD-03 | T-062 (функции характеристик), T-075 (п.1–3), T-080 (п.4) |
@@ -1203,18 +1385,18 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | FRD-05 | T-061 (п.1 — хранение), T-068 (п.1–4), T-074 (п.4, 6 — органы управления), T-077 (п.5, 6 — события), T-079 (п.6 — HUD), T-080 (п.1 — UI); п.7 — ручная |
 | FRD-06 | T-065 (п.4 — модель), T-079 (п.1–4), T-084 (п.5–7), T-097 (п.1 — подвал панели рельефа на телефоне) |
 | FRD-07 | T-064 (п.3, 4, 6, 7), T-067 (п.1 — модель), T-069 (п.5), T-077 (п.1–4), T-084 (п.2, 6, 7 — сквозная), T-085 (п.6 — UI); п.8 — ручная |
-| UIX-01 | T-060 (п.1, 3, 4), T-076 (п.3 — компоненты), T-086 (п.2), T-089 (п.2, 5; хвосты волн 3–4), T-091 (п.3 — вердикт по состояниям кнопок), T-093 (п.1, 3), T-095 (п.3) |
+| UIX-01 | T-060 (п.1, 3, 4), T-076 (п.3 — компоненты), T-086 (п.2), T-089 (п.2, 5; хвосты волн 3–4), T-091 (п.3 — вердикт по состояниям кнопок), T-093 (п.1, 3), T-095 (п.3), T-103 (п.2, 8, 9 — диалоги, без `self_modulate`); 0.3 — T-114 (п.8, 9 — диалог восстановления); позже — T-111 |
 | UIX-02 | T-061 (п.3 — навигация), T-081 (п.1–5) |
-| UIX-03 | T-071 (п.4 — план), T-075 (п.2, 4 — трасса), T-080 (п.2, 3, 5 — трасса), T-082 (п.1, 3, 4, 5 — тренировка), T-095 (карточка плана), T-098 (п.3 — запоминание выбора, после Н-17) |
-| UIX-04 | T-061 (п.1, 2 — навигация), T-076 (п.1 — AppBar), T-084 (п.2 — свободная езда; п.1 — Android «назад» на главном), T-082/T-085/T-086 (п.1 — «назад» через `go_back()`), T-085 (п.3–5 — история), T-086 (п.3–5 — настройки, устройства), T-097 (п.2 — Esc → подтверждение на обоих экранах заезда) |
-| UIX-05 | T-076 (п.1 — хелпер целей), T-080, T-082, T-086 (п.1, 4), T-093 (основа), T-089 (п.1–5 — матрица); п.6 — ручная |
+| UIX-03 | T-071 (п.4 — план), T-075 (п.2, 4 — трасса), T-080 (п.2, 3, 5 — трасса), T-082 (п.1, 3, 4, 5 — тренировка), T-095 (карточка плана), T-098 (п.3 — запоминание выбора, У-14) |
+| UIX-04 | T-061 (п.1, 2 — навигация), T-076 (п.1 — AppBar), T-084 (п.2 — свободная езда; п.1 — Android «назад» на главном), T-082/T-085/T-086 (п.1 — «назад» через `go_back()`), T-085 (п.3–5 — история), T-086 (п.3–5 — настройки, устройства), T-097 (п.2 — Esc → подтверждение на обоих экранах заезда), T-103 (п.3 — метки режима, лицензии на compact) |
+| UIX-05 | T-076 (п.1 — хелпер целей), T-080, T-082, T-086 (п.1, 4), T-093 (основа), T-089 (п.1–5 — матрица), T-103 (п.3 — надзаголовок главного на телефоне); п.6 — ручная |
 | LOC-01 | T-041 |
 | LOC-02 | T-045 |
 | LOC-03 | T-043 (`RideSeries`); ред. 2 — T-085 (регрессия UI), T-097 (п.2 — дефект: сглаженная мощность в истории) |
 | LOC-04 | T-041 (`RideSummary`) |
 | LOC-05 | T-044, T-045 |
 | LOC-06 | T-045, T-048 |
-| LOC-07 | T-042; T-101 (п.4 — стабильность теста) |
+| LOC-07 | T-042; T-101 (п.4 — стабильность теста); 0.3 — T-114 (п.3 — «удалить» в диалоге восстановления); п.5 — ручная (P0 среза 0.4) |
 | NFR-01 | T-025 |
 | NFR-02 | T-006, T-013, T-023 |
 | NFR-03 | T-032, T-036, T-048 |
@@ -1223,4 +1405,4 @@ Tester подтвердил: REQ-DEV-09 п.1; устройство-часть RE
 | NFR-06 | T-002, T-014, T-015, T-021, T-055 |
 | NFR-07 | T-053, T-055 |
 | NFR-08 | T-012 (заделка), T-057 (п.3, 4), T-054 (п.1, 2 — финальная инвентаризация); ред. 2 — T-060 (п.2 — файлы по областям), 2a201e8 (п.1 — проверка всех `strings*.csv`), T-089 (п.1, 2 — итоговый набор, неиспользуемые ключи `strings.csv`, тексты `SettingsSections`) |
-| NFR-09 | T-005, T-006, T-014 (п.4), T-056 (п.2), T-035, T-037, T-038, T-044 |
+| NFR-09 | T-005, T-006, T-014 (п.4), T-056 (п.2), T-035, T-037, T-038, T-044; регрессия п.3 — T-099, T-113 |
