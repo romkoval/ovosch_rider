@@ -15,7 +15,9 @@
 | godot-cpp | ветка 4.5 (см. `native/ble/README.md`) | MIT | `native/ble/godot-cpp` (клон, не в репозитории) → `libovosch_ble.*` | да |
 | GUT (Godot Unit Test) | 9.7.1 | MIT | `addons/gut/` | **нет** — исключить из экспорта фильтром пресета; уведомление всё равно оставляем на случай попадания |
 | Ассеты брендбука Strava | — | Strava Brand Guidelines (не свободная лицензия, условия использования) | `assets/branding/strava/` (после загрузки владельцем) | да — только по правилам `strava_api_checklist.md` |
-| Шрифты, 3D-модели, текстуры | — | уточнить при добавлении (OFL для шрифтов, CC0/CC-BY для моделей) | `assets/` | да — дополнять таблицу при каждом добавлении |
+| Шрифт Inter | 4.1 (вариативный, оси `wght`, `opsz`) | SIL Open Font License 1.1 | `assets/fonts/inter/Inter-Variable.ttf` (+ рабочая копия `Inter-Variable.res`) и `assets/fonts/inter/OFL.txt` | да |
+| Иконки Lucide | 1.51.0 (SVG, 37 шт.) | ISC; иконки, унаследованные из Feather, — MIT | `assets/icons/lucide/*.svg`, `assets/icons/lucide/LICENSE` (оба текста) | да |
+| 3D-модели, текстуры | — | уточнить при добавлении (CC0/CC-BY) | `assets/` | сейчас внешних нет: мир процедурный (`docs/game/assets.md`); дополнять таблицу при каждом добавлении |
 
 Правило: любой новый сторонний файл в `assets/` или новая зависимость в `native/` — строка в этой таблице в том же коммите.
 
@@ -91,6 +93,28 @@ associated documentation files (the "Software"), to deal in the Software without
 [полный текст MIT — как выше]
 ```
 
+### Inter (SIL OFL 1.1) и Lucide (ISC)
+
+Строки в листе лицензий «О программе» (T-086; ключи `ui.settings.license_inter`,
+`ui.settings.license_lucide` в `assets/i18n/strings_menu.csv`):
+
+```
+Шрифт Inter 4.1 — SIL Open Font License 1.1 (© The Inter Project Authors)
+Иконки Lucide 1.51 — ISC (© Lucide Icons and Contributors; часть иконок — Feather, MIT)
+```
+
+```
+Inter 4.1 font — SIL Open Font License 1.1 (© The Inter Project Authors)
+Lucide 1.51 icons — ISC (© Lucide Icons and Contributors; some icons from Feather, MIT)
+```
+
+OFL 1.1 разрешает встраивать шрифт в приложение и продавать его, но запрещает продавать
+сам шрифт отдельно. Текст `OFL.txt` поставляется вместе со шрифтом. Шрифт не
+переименовывается и не изменяется: вариации `FontVariation` только выбирают оси, файл
+остаётся прежним. ISC и MIT требуют сохранить уведомление об авторских правах, оно
+лежит в `assets/icons/lucide/LICENSE`. Изменение SVG (`currentColor` → `#ffffff`)
+лицензией разрешено.
+
 ### Strava
 
 ```
@@ -114,6 +138,7 @@ endorsed by Strava. "Powered by Strava" assets are used under the Strava Brand G
 ## 4. Чеклист
 
 - [ ] Экран «О программе» показывает версию, разделы «Godot Engine», «Third-party components» (из `Engine.get_copyright_info()`), «godot-cpp», «Strava».
-- [ ] `addons/gut`, `tests/`, `docs/`, `platform/` исключены из экспортных пресетов.
+- [x] Inter 4.1 (OFL 1.1) и Lucide 1.51 (ISC) — в таблице раздела 1 и в листе лицензий «О программе» (T-086).
+- [ ] `addons/gut`, `tests/`, `docs/`, `platform/` исключены из экспортных пресетов; `OFL.txt` и `LICENSE` Lucide в экспорт попадают.
 - [ ] При добавлении шрифтов/моделей — лицензия проверена и внесена в таблицу раздела 1.
 - [ ] Текст MIT в разделе 2 сверен с `LICENSE.txt` Godot 4.7 и `LICENSE.md` godot-cpp актуальной ветки.
