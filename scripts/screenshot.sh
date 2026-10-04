@@ -7,6 +7,9 @@
 # Использование:
 #   [RENDERER=forward_plus] ./scripts/screenshot.sh [каталог=screenshots] [скорость_кмч=32] [каденс=90] [дистанции_м=0,400,900,1500] [трасса] [вторая_трасса]
 #   вторая_трасса — ещё одна сцена этой трассы в своём SubViewport, построенная после снимаемой (T-112).
+#   Ключи в любом месте после каталога (T-106a1): --views=all|work,side_r,… — эталонные ракурсы гонщика
+#   (RiderRig.VIEWS, файлы rider_<view>_<φ>.png; дистанция — первая из списка), --crank=0,90,… — углы
+#   шатуна вместо углов ракурса, --bike-only — без гонщика (bike_<view>_<φ>.png). Обёртка — rider_views.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 GODOT="${GODOT:-$(command -v godot || echo /opt/godot/godot)}"

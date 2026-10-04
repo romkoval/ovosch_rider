@@ -72,7 +72,19 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
   (`MultiMeshInstance3D` на тип), урезается под остаток бюджета MultiMesh; сигнальные столбики —
   `RideScene.props()`.
 - `MeshKit` — процедурные меши с цветом вершин (альфа — вес контура); `RiderModel` — меши и
-  геометрия велосипедиста (IK ног `two_bone_joint`, `bone_transform`).
+  геометрия велосипедиста (IK ног `two_bone_joint`, `bone_transform`); велосипед подогнан под
+  контракт скелета (T-106a1): седло, тормозные ручки, контактные педали — шатуны одним мешем со
+  скиннингом на 3 кости (`CrankRig`), педали держат угол стопы θ(φ).
+- `RiderRig` — контракт скелета модели гонщика (25 костей, rest, окончания и оси костей,
+  точки велосипеда, перевод осей Godot ↔ Blender ↔ glTF, эталонные ракурсы `VIEWS`,
+  контрольные позы); `RiderRegions` — регионы цвета (UV-код), связь «регион → слот
+  `RiderLook`», палитра внешности, атласы. Эталонный пакет для подготовки `rider.glb`
+  (конвейер доводки в Blender, бриф художнику) — `assets/rider/reference/`
+  (`./scripts/rider_artist_kit.sh` → `scripts/dev/rider_reference_pack.gd`, побайтно
+  воспроизводим, в сборку не входит; проверка в Blender —
+  `scripts/dev/check_rider_pack_blender.py`), ракурсы — `./scripts/rider_views.sh`. Тесты
+  контракта скелета параметризованы источником модели
+  (`tests/fixtures/scene3d/rider_contract.gd`, `RIG_SOURCES`).
 - Материалы — `src/scene3d/materials/`, шейдеры — `src/scene3d/shaders/` (общий тун-свет
   `toon_light.gdshaderinc`; контур — `next_pass`). Пустой материал в `EnvironmentSet` заменяется
   материалом по умолчанию.
