@@ -21,17 +21,12 @@ extends Control
 ## Ошибка выгрузки — переведённая причина по коду (`Ride.upload.last_error_code`), ответ
 ## Strava — деталью после неё.
 ##
-## Совместимость с приёмкой T-043/T-045 (до решения tester): серии мощности (с целью плана)
-## и пульса дополнительно лежат в скрытых `%PowerChart` и `%HrChart` (`RideChart`) — тесты
-## читают из них число точек, цель и максимум; на экране их показывает общий график.
 ## Сводка текстом — `summary_text()` (прежние строки `ui.history.detail.*`), на экране — плитки.
 ## Строки — ключи `ui.history.*`.
 
 const EXPORT_FILTERS: PackedStringArray = ["*.fit ; FIT"]
 const STRAVA_ACTIVITY_URL: String = "https://www.strava.com/activities/{id}"
-## Серии скрытых графиков совместимости и каденса (цвета — токены `hud.md` п. 11 и `ui.md` п. 4).
-const POWER_COLOR := UiTokens.HUD_POWER_LINE
-const HR_COLOR := UiTokens.HUD_HR_LINE
+## Серия графика каденса (цвет — токен `ui.md` п. 4).
 const CADENCE_COLOR := UiTokens.TEXT2
 ## Причина ошибки выгрузки по коду (`UploadResult.code` → `Ride.upload.last_error_code`).
 const STRAVA_ERROR_KEYS: Dictionary = {
@@ -123,8 +118,6 @@ var _more_button: Button = null
 @onready var _hr_zone_bar: ZoneBar = %HrZoneBar
 @onready var _hr_zones_label: Label = %HrZonesLabel
 @onready var _hr_zone_captions: HFlowContainer = %HrZoneCaptions
-@onready var _power_chart: RideChart = %PowerChart
-@onready var _hr_chart: RideChart = %HrChart
 @onready var _cadence_chart: RideChart = %CadenceChart
 @onready var _menu_layer: Control = %MenuLayer
 @onready var _menu_panel: PanelContainer = %MenuPanel
@@ -562,8 +555,6 @@ func _render() -> void:
 		_effort_chart.set_ride(null)
 		_altitude_chart.clear()
 		_altitude_section.visible = false
-		_power_chart.clear()
-		_hr_chart.clear()
 		_cadence_chart.clear()
 		_render_upload_fields()
 		_render_buttons()
@@ -587,9 +578,6 @@ func _render() -> void:
 	else:
 		_altitude_chart.clear()
 	var duration := float(maxi(_series.duration_sec, 1))
-	_power_chart.set_series(_series.time_sec, _series.values(RideSeries.POWER), POWER_COLOR, duration,
-		_series.values(RideSeries.TARGET) if _series.has_target else PackedFloat32Array())
-	_hr_chart.set_series(_series.time_sec, _series.values(RideSeries.HEART_RATE), HR_COLOR, duration)
 	_cadence_chart.set_series(_series.time_sec, _series.values(RideSeries.CADENCE), CADENCE_COLOR, duration)
 	_render_upload_fields()
 	_render_buttons()

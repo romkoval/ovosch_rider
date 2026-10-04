@@ -217,6 +217,14 @@ theme_type_variation = &"PrimaryButton"
 disabled = true
 text = "ui.plan.start"
 
+[node name="EmulatorStartButton" type="Button" parent="Layout/Body/Columns/PreviewSlot/Preview"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"GhostButton"
+disabled = true
+text = "ui.plan.start_emulator"
+
 [node name="Sheet" type="Control" parent="."]
 unique_name_in_owner = true
 visible = false

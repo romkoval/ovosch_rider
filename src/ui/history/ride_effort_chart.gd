@@ -9,6 +9,8 @@ extends HudChart
 ##   линия пульса (без заливки) со своей шкалой справа; пунктир FTP и шкала времени.
 ## - Свободная езда (или заезд без сохранённого плана): серии на всю длительность заезда
 ##   (`EffortSeries` в режиме окна, окно = длительность), без цели плана (REQ-FRD-07 крит. 6).
+## Мощность — сырые сэмплы без сглаживания 3 с (оно только для HUD, HUD-09 крит. 4; LOC-03
+## крит. 2): прореживание по корзинам min/max сохраняет пики (спринт 1 с виден целиком).
 ## Фон — `inset` со скруглением; курсора нет. Легенда «мощность / пульс» — над полем справа.
 
 ## Место над полем под легенду, lp.
@@ -51,12 +53,14 @@ func set_ride(ride: Ride) -> void:
 		model.set_skip_log(ride.events)
 		model.set_progress(float(model.total_sec()), -1, PlanChartModel.skipped_indices(ride.events))
 		var series := EffortSeries.new(EffortSeries.MODE_PLAN, ftp, ride.max_hr())
+		series.set_smoothing(1)
 		series.sync_from_plan(ride.samples, model)
 		_has_plan = true
 		set_plan(model, series)
 		return
 	var window: int = maxi(ride.samples.size(), MIN_WINDOW_SEC)
 	var free := EffortSeries.sliding_window(ftp, ride.max_hr(), window)
+	free.set_smoothing(1)
 	free.sync_from_stream(ride.samples)
 	set_window(free, ftp)
 

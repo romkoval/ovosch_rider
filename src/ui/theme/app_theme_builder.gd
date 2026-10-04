@@ -65,6 +65,10 @@ const FIELD_MARGIN: Vector2 = Vector2(14, 12)
 const FOCUS_RING: int = 2
 ## Поля карточки паузы — как у `PauseOverlay.CARD_MARGIN` (T-074).
 const HUD_PAUSE_CARD_MARGIN: Vector2 = Vector2(24, 20)
+## Поля кнопки панели инструментов HUD: иконка 24 и подпись 11 (строка `Button` — 28) — 56 по высоте.
+const HUD_TOOL_BUTTON_MARGIN: Vector2 = Vector2(8, 2)
+## Кегль текста слота подсказки на телефоне, lp HUD (17 lp базы / s 1.2).
+const HUD_HINT_COMPACT_FONT_SIZE: int = 14
 
 ## Вариации типов (`ui.md` п. 9.2): имя → базовый тип.
 const VARIATIONS: Dictionary = {
@@ -86,6 +90,9 @@ const VARIATIONS: Dictionary = {
 	"HudHeroUnit": "Label", "HudTargetUnit": "Label", "HudCountdown": "Label", "HudDelta": "Label",
 	"HudGradeValue": "Label", "HudGradeUnit": "Label", "HudModeLabel": "Label", "HudStepLabel": "Label",
 	"HudPauseCard": "PanelContainer", "HudChipLabel": "Label", "HudPauseTitle": "Label",
+	"HudChipSeconds": "HudChipLabel", "HudChipLabelCompact": "HudChipLabel",
+	"HudChipSecondsCompact": "HudChipSeconds", "HudHintCompact": "BodyStrongLabel",
+	"HudToolButton": "HudButton",
 	"NumLabel": "Label", SPINBOX_FIELD: "LineEdit",
 	"Stack0": "VBoxContainer", "Stack8": "VBoxContainer", "Stack12": "VBoxContainer", "Stack16": "VBoxContainer", "Stack24": "VBoxContainer",
 	"Row0": "HBoxContainer", "Row8": "HBoxContainer", "Row12": "HBoxContainer", "Row16": "HBoxContainer", "Row24": "HBoxContainer",
@@ -480,6 +487,12 @@ static func _hud_variations(t: Theme, fonts: Dictionary) -> void:
 	# Фишка «ДАЛЕЕ» (`hud.md` п. 10.1): строка и секунды 18·s / 750 `tnum`; цвет секунд
 	# (`hud.warn`) — состояние, задаётся в компоненте.
 	_label(t, "HudChipLabel", fonts["inter_num_750"], 18, UiTokens.HUD_TEXT)
+	_label(t, "HudChipSeconds", fonts["inter_num_750"], 18, UiTokens.HUD_WARN)
+	# Слот подсказки телефона (`hud.md` п. 4.1): 40 lp базы при тексте 17 lp базы — на холсте HUD
+	# (s = 1.2) это 33 lp и 14 lp: фишка «ДАЛЕЕ» и подсказка (Body Strong) на телефоне — кеглем 14.
+	_label(t, "HudChipLabelCompact", fonts["inter_num_750"], HUD_HINT_COMPACT_FONT_SIZE, UiTokens.HUD_TEXT)
+	_label(t, "HudChipSecondsCompact", fonts["inter_num_750"], HUD_HINT_COMPACT_FONT_SIZE, UiTokens.HUD_WARN)
+	_label(t, "HudHintCompact", fonts["inter_600"], HUD_HINT_COMPACT_FONT_SIZE)
 	# Карточка паузы (`hud.md` п. 10.2): `surface1` с альфой 0.94, радиус 18·s; «Пауза» — 30·s / 750.
 	t.set_stylebox("panel", "HudPauseCard", _box(UiTokens.HUD_PAUSE_CARD, UiTokens.HUD_PAUSE_CARD_RADIUS, HUD_PAUSE_CARD_MARGIN))
 	_label(t, "HudPauseTitle", fonts["inter_750"], 30, UiTokens.HUD_TEXT)
@@ -495,6 +508,15 @@ static func _hud_variations(t: Theme, fonts: Dictionary) -> void:
 	t.set_font("font", "HudButton", fonts["inter_600"])
 	t.set_font_size("font_size", "HudButton", 11)
 	t.set_constant("icon_max_width", "HudButton", 24)
+	# Кнопка панели инструментов (`hud.md` п. 10.3): сторона `max(56, touch_hud)·s`, иконка 24 и
+	# подпись 11 снизу внутри стороны 56 — поля по вертикали меньше, чем у кнопки паузы.
+	var tool_margin := HUD_TOOL_BUTTON_MARGIN
+	_button_styles(t, "HudToolButton",
+		_box(UiTokens.HUD_PLATE, RADIUS_CONTROL, tool_margin),
+		_box(Color(UiTokens.SURFACE2, UiTokens.HUD_PLATE_ALPHA), RADIUS_CONTROL, tool_margin),
+		_box(Color(UiTokens.SURFACE3, UiTokens.HUD_PLATE_ALPHA), RADIUS_CONTROL, tool_margin),
+		null,
+		_box(UiTokens.HUD_PLATE, RADIUS_CONTROL, tool_margin))
 
 
 static func _container_variations(t: Theme) -> void:

@@ -12,10 +12,8 @@ extends Control
 ## карточке — «Удалить профиль» с подтверждением (опасная кнопка). Создание — диалог с
 ## подписями над полями. Стрелки ходят по сетке, Enter — выбрать.
 ##
-## Выбор хранится в скрытом `ItemList` `%ProfileList` (модель выбора: индекс ↔ id профиля;
-## на экране не показывается — видимы только карточки); скрытые `%SelectButton` и
-## `%DeleteButton` отражают доступность выбора и удаления. Они оставлены для совместимости
-## с контрактом экрана (тесты T-002/T-030).
+## Выбор — индекс выделенного профиля в порядке репозитория (индекс ↔ id профиля); на экране
+## его показывает выделенная карточка.
 ##
 ## Экран не знает, какой экран следующий: по выбору вызывает `AppState.select_profile`
 ## и испускает `profile_chosen`. Зависимости передаются через `setup()`.
@@ -49,6 +47,8 @@ signal profile_deleted(id: String)
 var _repo: ProfileRepository
 var _app_state: AppState
 var _ids: Array[String] = []
+## Индекс выделенного профиля в `_ids` (−1 — ничего не выделено).
+var _selected: int = -1
 var _pending_delete_id: String = ""
 var _menu_profile_id: String = ""
 var _cards: Array[ProfileCard] = []
@@ -63,10 +63,7 @@ var _laid_out_compact: bool = false
 @onready var _logo_accent: Label = %LogoAccent
 @onready var _who_label: Label = %WhoLabel
 @onready var _grid: VBoxContainer = %Grid
-@onready var _list: ItemList = %ProfileList
-@onready var _select_button: Button = %SelectButton
 @onready var _create_button: Button = %CreateButton
-@onready var _delete_button: Button = %DeleteButton
 @onready var _empty_hint: Label = %EmptyHint
 @onready var _screen_error_label: Label = %ScreenErrorLabel
 @onready var _create_dialog: AcceptDialog = %CreateDialog
@@ -96,16 +93,12 @@ func _ready() -> void:
 	_logo_main.text = LOGO_MAIN
 	_logo_accent.text = LOGO_ACCENT
 	_create_button.draw.connect(_draw_create_card)
-	_select_button.pressed.connect(select_current)
 	_create_button.pressed.connect(open_create_form)
-	_delete_button.pressed.connect(request_delete)
 	_save_button.pressed.connect(_on_save_pressed)
 	_cancel_button.pressed.connect(close_create_form)
 	_name_edit.text_submitted.connect(_on_name_submitted)
 	_create_dialog.get_ok_button().visible = false
 	_create_dialog.canceled.connect(close_create_form)
-	_list.item_selected.connect(_on_list_item_selected)
-	_list.item_activated.connect(_on_list_item_activated)
 	_delete_dialog.confirmed.connect(_on_delete_confirmed)
 	_delete_dialog.canceled.connect(_on_delete_canceled)
 	_delete_dialog.get_ok_button().theme_type_variation = &"DangerButton"
@@ -153,14 +146,13 @@ func _notification(what: int) -> void:
 
 ## Перечитать список профилей из репозитория.
 func refresh() -> void:
-	_list.clear()
 	_ids = []
+	_selected = -1
 	var active_id: String = _repo.active_profile_id
 	for p in _repo.list():
-		_ids.append(p.id)
-		var index: int = _list.add_item("%s — %s" % [p.name, tr("ui.profile_select.item_ftp").format({"ftp": p.ftp_w})])
 		if p.id == active_id:
-			_list.select(index)
+			_selected = _ids.size()
+		_ids.append(p.id)
 	var empty: bool = _ids.is_empty()
 	_empty_hint.visible = empty
 	_who_label.visible = not empty
@@ -172,26 +164,23 @@ func refresh() -> void:
 	# Автовыбор единственного профиля при старте не удался (например, сбой записи) — показать причину.
 	if _app_state != null and not _app_state.last_select_error().is_empty():
 		_show_error([_app_state.last_select_error()])
-	_update_buttons()
 
 
 func profile_count() -> int:
 	return _ids.size()
 
 
-## Выбрать строку списка по индексу (для тестов и клавиатуры).
+## Выделить профиль по индексу (для тестов и клавиатуры); индекс вне списка выделение не меняет.
 func select_index(index: int) -> void:
 	if index >= 0 and index < _ids.size():
-		_list.select(index)
-	_update_buttons()
+		_selected = index
 
 
 ## id выделенного профиля или "".
 func selected_profile_id() -> String:
-	var selected := _list.get_selected_items()
-	if selected.is_empty():
+	if _selected < 0 or _selected >= _ids.size():
 		return ""
-	return _ids[selected[0]]
+	return _ids[_selected]
 
 
 ## Подтвердить выбор выделенного профиля. false — ничего не выделено или выбор не удался
@@ -382,12 +371,6 @@ func _show_error(codes: Array[String], in_form: bool = false) -> void:
 	_screen_error_label.visible = not form and not lines.is_empty()
 
 
-func _update_buttons() -> void:
-	var has_selection: bool = not selected_profile_id().is_empty()
-	_select_button.disabled = not has_selection
-	_delete_button.disabled = not has_selection or _ids.size() <= 1
-
-
 ## Высота прокрутки полей формы: всё содержимое, но не выше холста за вычетом заголовка окна,
 ## кнопок и полей диалога (телефон — холст ≈ 400 lp: поля прокручиваются, кнопки видны).
 func _fit_create_form() -> void:
@@ -529,15 +512,6 @@ func _on_save_pressed() -> void:
 
 func _on_name_submitted(_text: String) -> void:
 	submit_create()
-
-
-func _on_list_item_selected(_index: int) -> void:
-	_update_buttons()
-	_sync_card_selection()
-
-
-func _on_list_item_activated(_index: int) -> void:
-	select_current()
 
 
 func _on_delete_confirmed() -> void:

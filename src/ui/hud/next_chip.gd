@@ -9,9 +9,12 @@ extends Control
 ## на 8 lp вниз за 200 мс, исчезание — прозрачность 1 → 0 за 200 мс.
 ##
 ## Вид: подложка `HudPlate`, слева полоса 6 lp цветом зоны следующего шага, подпись «ДАЛЕЕ»
-## (`HudCaptionLabel`), строка «длительность · цель» и секунды справа — 18 lp, вес 750, `tnum`
-## (`HudTargetLabel` с размером из `hud.md`), секунды цветом `hud.warn`. Размеры в lp HUD:
-## множитель телефона `s` применяет окно (`UiScale`, `content_scale_factor`).
+## (`HudCaptionLabel`), строка «длительность · цель» (`HudChipLabel`: 18 lp, вес 750, `tnum`) и
+## секунды справа (`HudChipSeconds` — то же цветом `hud.warn`); стили только из темы, без
+## `add_theme_*_override`. Размеры в lp HUD: множитель телефона `s` применяет окно (`UiScale`,
+## `content_scale_factor`). На телефоне (`set_compact(true)`) слот подсказки — 40 lp базового
+## холста при тексте 17 lp (`hud.md` п. 4.1), то есть ≈ 33 и 14 lp HUD: строка и секунды —
+## `HudChipLabelCompact` / `HudChipSecondsCompact`, высота фишки — по содержимому (≤ 34 lp).
 
 ## Появление и исчезание, с.
 const FADE_SEC: float = 0.2
@@ -19,10 +22,10 @@ const FADE_SEC: float = 0.2
 const SLIDE_LP: float = 8.0
 ## Ширина полосы цвета зоны, lp.
 const STRIP_WIDTH_LP: float = 6.0
-## Размер строки и секунд (`hud.md` п. 10.1: 18·s / 750 `tnum`), lp.
-const TEXT_FONT_SIZE: int = 18
 ## Высота фишки (слот подсказки — не выше 40·s), lp.
 const HEIGHT_LP: float = 40.0
+## Минимальная ширина компактной фишки (телефон), lp HUD.
+const MIN_WIDTH_COMPACT_LP: float = 240.0
 ## Минимальная ширина фишки (секунды прижаты вправо, как в макете `plan_next_1280.png`), lp.
 const MIN_WIDTH_LP: float = 280.0
 ## Префикс ключей перевода компонента (`assets/i18n/strings_hud_controls.csv`).
@@ -39,6 +42,7 @@ var _shown: bool = false
 var _slide: float = 0.0
 var _tween: Tween
 var _zone_color: Color = UiTokens.HUD_FREE
+var _compact: bool = false
 
 
 func _init() -> void:
@@ -78,6 +82,19 @@ func hide_chip() -> void:
 		return
 	_shown = false
 	_animate(0.0, 0.0)
+
+
+## Компактный вид (телефон): кегль 14 вместо 18, высота по содержимому — фишка помещается в
+## слот подсказки телефона (≈ 34 lp HUD) между центральной зоной и графиком.
+func set_compact(compact: bool) -> void:
+	if _compact == compact:
+		return
+	_compact = compact
+	_apply_variations()
+
+
+func is_compact() -> bool:
+	return _compact
 
 
 ## Фишка на экране (или появляется).
@@ -125,12 +142,11 @@ func _build() -> void:
 	_plate = PanelContainer.new()
 	_plate.name = "Plate"
 	_plate.theme_type_variation = &"HudPlate"
-	_plate.custom_minimum_size = Vector2(MIN_WIDTH_LP, HEIGHT_LP)
 	_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_plate)
 	var row := HBoxContainer.new()
 	row.name = "Row"
-	row.add_theme_constant_override("separation", 12)
+	row.theme_type_variation = &"Row12"
 	_plate.add_child(row)
 	_strip = ColorRect.new()
 	_strip.name = "ZoneStrip"
@@ -140,18 +156,26 @@ func _build() -> void:
 	_caption = _label("Caption", &"HudCaptionLabel")
 	_caption.text = KEY + "next.caption"
 	row.add_child(_caption)
-	_line = _label("Line", &"HudTargetLabel")
-	_line.add_theme_font_size_override("font_size", TEXT_FONT_SIZE)
+	_line = _label("Line", &"HudChipLabel")
 	_line.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_line)
-	_seconds = _label("Seconds", &"HudTargetLabel")
-	_seconds.add_theme_font_size_override("font_size", TEXT_FONT_SIZE)
-	_seconds.add_theme_color_override("font_color", UiTokens.HUD_WARN)
+	_seconds = _label("Seconds", &"HudChipSeconds")
 	_seconds.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_seconds.text = "%d" % MAX_SECONDS
 	row.add_child(_seconds)
+	_apply_variations()
 	_plate.minimum_size_changed.connect(update_minimum_size)
+
+
+## Вариации строки и секунд и минимальный размер подложки по виду (обычный / компактный).
+func _apply_variations() -> void:
+	_line.theme_type_variation = &"HudChipLabelCompact" if _compact else &"HudChipLabel"
+	_seconds.theme_type_variation = &"HudChipSecondsCompact" if _compact else &"HudChipSeconds"
+	# Обычная фишка — ровно 40 lp (по содержимому меньше); компактная — по содержимому.
+	_plate.custom_minimum_size = Vector2(MIN_WIDTH_COMPACT_LP, 0.0) if _compact else Vector2(MIN_WIDTH_LP, HEIGHT_LP)
+	update_minimum_size()
+	_layout_plate()
 
 
 func _label(node_name: String, variation: StringName) -> Label:

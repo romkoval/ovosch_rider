@@ -1,7 +1,6 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://src/ui/workout/workout_screen.gd" id="1_script"]
-[ext_resource type="Script" path="res://src/ui/workout/workout_progress_bar.gd" id="2_bar"]
 [ext_resource type="PackedScene" path="res://src/scene3d/ride_scene.tscn" id="3_ride"]
 [ext_resource type="PackedScene" path="res://src/ui/hud/hud_metric_panel.tscn" id="4_panel"]
 [ext_resource type="Texture2D" path="res://assets/icons/lucide/pause.svg" id="5_pause"]
@@ -192,70 +191,6 @@ offset_left = 0.0
 offset_right = 0.0
 grow_horizontal = 1
 grow_vertical = 1
-
-[node name="LegacyControls" type="Control" parent="."]
-unique_name_in_owner = true
-visible = false
-layout_mode = 0
-mouse_filter = 2
-
-[node name="ProgressBar" type="Control" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-mouse_filter = 2
-script = ExtResource("2_bar")
-
-[node name="SkipButton" type="Button" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.skip"
-
-[node name="StopButton" type="Button" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.stop"
-
-[node name="ErgButton" type="Button" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.erg_on"
-
-[node name="ResistanceMinus" type="Button" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.minus_5"
-
-[node name="ResistanceLabel" type="Label" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.resistance"
-
-[node name="ResistancePlus" type="Button" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.plus_5"
-
-[node name="IntensityMinus" type="Button" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.minus_5pct"
-
-[node name="IntensityLabel" type="Label" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.intensity"
-
-[node name="IntensityPlus" type="Button" parent="LegacyControls"]
-unique_name_in_owner = true
-layout_mode = 0
-text = "ui.workout.plus_5pct"
-
-[node name="StopDialog" type="ConfirmationDialog" parent="LegacyControls"]
-unique_name_in_owner = true
-title = "ui.workout.stop"
-dialog_text = "ui.workout.stop_confirm"
-ok_button_text = "ui.workout.stop"
-cancel_button_text = "ui.common.cancel"
 
 [node name="SummaryRoot" type="CenterContainer" parent="."]
 unique_name_in_owner = true

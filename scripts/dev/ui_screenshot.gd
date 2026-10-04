@@ -17,7 +17,10 @@ extends SceneTree
 ##
 ## Что делает: поднимает `main.tscn` с временным `data_dir`, `trainer_kind = "fake"`,
 ## `env_reader = Callable()`, заводит два профиля, импортирует `acc_full.zwo` и проходит
-## таблицу `SCENARIOS`. Экран снимается после 6 кадров и `frame_post_draw`. HUD тренировки
+## таблицу `SCENARIOS`. Экран снимается не раньше чем через `SETTLE_SEC` (0.5 с) реального
+## времени и `SETTLE_FRAMES` кадров, после `frame_post_draw`: анимации UI (появление карточки
+## паузы, вуали, листов, панели инструментов) идут 200–300 мс по реальному времени, а
+## виртуальные часы сессий за это время стоят — снимок остаётся детерминированным. HUD тренировки
 ## идёт на эмуляторе (`start_workout_on_emulator`) с подменёнными часами
 ## `WorkoutScreen.clock_usec`: каждый кадр часы уходят вперёд на `TIME_SCALE × FRAME_DT`
 ## (×30), поэтому снимок детерминирован и не зависит от скорости машины.
@@ -37,6 +40,8 @@ const PROFILE_NAMES: Array[String] = ["Даша", "Роман"]
 const ACTIVE_MAX_HR: int = 185
 ## Кадров после перехода до снимка.
 const SETTLE_FRAMES: int = 6
+## Реального времени после перехода до снимка, с: дольше анимаций UI (200–300 мс).
+const SETTLE_SEC: float = 0.5
 const FRAME_DT: float = 1.0 / 60.0
 ## Ускорение часов тренировки: сессионных секунд на секунду кадров.
 const TIME_SCALE: float = 30.0
@@ -463,8 +468,9 @@ func _shoot(id: String) -> void:
 	print("ui_screenshot: %s (%s)" % [path, _size_text(saved.get_size())])
 
 
-## Кадр окна после `SETTLE_FRAMES` кадров и `frame_post_draw`.
+## Кадр окна не раньше чем через `SETTLE_SEC` и `SETTLE_FRAMES` кадров, после `frame_post_draw`.
 func _capture() -> Image:
+	await create_timer(SETTLE_SEC).timeout
 	for i in SETTLE_FRAMES:
 		await process_frame
 	await RenderingServer.frame_post_draw

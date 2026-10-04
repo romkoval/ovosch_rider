@@ -16,9 +16,11 @@ extends PanelContainer
 ##   сопротивление −5 / +5 (только при ERG выкл); «Пропустить шаг»; «Завершить»;
 ## - режим «свободная езда»: SIM ↔ сопротивление; крутизна SIM −10 / +10 % или
 ##   сопротивление −5 / +5 (по режиму); «Завершить»;
-## - компактная раскладка (телефон, `set_compact(true)`): кнопки по две в ряд, не больше трёх
-##   рядов (сетка 2 × 3); значение регулятора — строкой над парой кнопок. Чтобы уложиться в
-##   три ряда, в плане при ERG выкл пара «интенсивность» уступает место «сопротивлению»;
+## - колонка (компьютер, планшет): ряд на кнопку, регулятор — ряд [−] [подпись/значение] [+];
+## - компактная раскладка (телефон, `set_compact(true)`; колонка не помещается в слот):
+##   сетка в три колонки — ряд кнопок-действий (ERG или SIM ↔ сопротивление, «Пропустить шаг»,
+##   «Завершить») и под ним регулятор [−] [подпись/значение] [+]; два ряда, без прокрутки.
+##   Регулятор один: в плане при ERG выкл «интенсивность» уступает место «сопротивлению»;
 ## - горячие клавиши (`hud.md` п. 10.2–10.3): Esc — пауза; E — ERG (план) или SIM ↔
 ##   сопротивление (свободная езда); `+`/`−` — интенсивность (план), крутизна или
 ##   сопротивление (свободная езда); N — пропустить шаг (план). Буквы — по физической
@@ -26,11 +28,12 @@ extends PanelContainer
 ## - `set_paused(true)` (экран на паузе): панель убрана, ввод её не показывает, горячие
 ##   клавиши молчат — паузой управляет `PauseOverlay`.
 ##
-## Кнопки — вариация `HudButton` (иконка Lucide 24 и подпись 11 lp снизу), сторона
-## `max(56, touch_hud)` lp HUD; `touch_hud` — из автозагрузки `UiScaleRuntime`. Кнопки не
-## берут фокус: Пробел и Enter не должны повторно нажимать последнюю нажатую кнопку.
+## Кнопки — вариация `HudToolButton` (иконка Lucide 24 и подпись 11 lp снизу внутри стороны
+## 56), сторона `max(56, touch_hud)` lp HUD; `touch_hud` — из автозагрузки `UiScaleRuntime`.
+## Кнопки не берут фокус: Пробел и Enter не должны повторно нажимать последнюю нажатую кнопку.
 
-## Esc: поставить на паузу.
+## Esc. Компонент называет его паузой (`hud.md` п. 10.2), экраны заезда трактуют Esc как
+## системное «назад» — подтверждение досрочного завершения (REQ-UIX-04 крит. 2).
 signal pause_requested
 ## E или кнопка ERG (план): переключить ERG.
 signal erg_toggle_requested
@@ -74,8 +77,8 @@ const ICON_SKIP: Texture2D = preload("res://assets/icons/lucide/skip-forward.svg
 const ICON_FINISH: Texture2D = preload("res://assets/icons/lucide/square.svg")
 ## Префикс ключей перевода компонента (`assets/i18n/strings_hud_controls.csv`).
 const KEY: String = "ui.hud_controls."
-## Колонок в компактной раскладке (сетка 2 × 3 на телефоне).
-const COMPACT_COLUMNS: int = 2
+## Колонок в компактной раскладке (сетка в три колонки: ряд действий и ряд регулятора).
+const COMPACT_COLUMNS: int = 3
 
 var hotkeys_enabled: bool = true
 
@@ -184,12 +187,20 @@ func set_erg_enabled(enabled: bool) -> void:
 	_relayout()
 
 
+func is_erg_enabled() -> bool:
+	return _erg_enabled
+
+
 ## SIM включён (свободная езда): крутизна или сопротивление.
 func set_sim_enabled(enabled: bool) -> void:
 	if _sim_enabled == enabled:
 		return
 	_sim_enabled = enabled
 	_relayout()
+
+
+func is_sim_enabled() -> bool:
+	return _sim_enabled
 
 
 func set_intensity_pct(pct: int) -> void:
@@ -419,7 +430,7 @@ func _build() -> void:
 func _make_button(node_name: String, icon: Texture2D) -> Button:
 	var b := Button.new()
 	b.name = node_name
-	b.theme_type_variation = &"HudButton"
+	b.theme_type_variation = &"HudToolButton"
 	b.icon = icon
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
@@ -473,9 +484,8 @@ func _relayout() -> void:
 	var stepper := _active_stepper()
 	if _mode == Mode.PLAN:
 		if _compact:
-			_add_row([_erg_button, _skip_button])
+			_add_row([_erg_button, _skip_button, _finish_button])
 			_add_stepper(stepper)
-			_add_row([_finish_button])
 		else:
 			_add_row([_erg_button])
 			_add_stepper(&"intensity")
@@ -513,23 +523,13 @@ func _add_row(controls: Array) -> void:
 		row.add_child(c)
 
 
-## Регулятор: на компьютере — ряд [−] [подпись/значение] [+], на телефоне — строка
-## «подпись значение» над парой кнопок [−] [+].
+## Регулятор — ряд [−] [подпись/значение] [+] (и в колонке, и в сетке).
 func _add_stepper(id: StringName) -> void:
 	var parts := _stepper_parts(id)
 	var down: Button = parts[0]
 	var up: Button = parts[1]
 	var caption: Label = parts[2]
 	var value: Label = parts[3]
-	if _compact:
-		var line := HBoxContainer.new()
-		line.alignment = BoxContainer.ALIGNMENT_CENTER
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_rows.add_child(line)
-		line.add_child(caption)
-		line.add_child(value)
-		_add_row([down, up])
-		return
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE

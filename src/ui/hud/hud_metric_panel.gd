@@ -35,7 +35,8 @@ extends PanelContainer
 ##
 ## Вход данных — `set_state(state)`: словарь `HudModel.state()` (или такой же словарь экрана
 ## свободной езды) плюс поля экрана (см. `set_state`); поля свободной езды из сессии —
-## `free_ride_fields(session)`.
+## `free_ride_fields(session)`. Пауза — `set_dimmed(true)`: значения получают альфу 0.6
+## (`hud.md` п. 10.2), подложка остаётся.
 
 enum Mode { PLAN, FREE_RIDE }
 
@@ -92,6 +93,8 @@ const HERO_BASELINE: float = 70.0
 const ZONE_ROW_Y: float = 80.0
 const ZONE_BAR_HEIGHT: float = 5.0
 const DELTA_AREA_WIDTH: float = 76.0
+## Разница отклонения — вариация темы `HudDelta` (15 / 700 `tnum`); кегль — для справки и тестов.
+const DELTA_VARIATION: StringName = &"HudDelta"
 const DELTA_FONT_SIZE: int = 15
 const GLYPH_SIZE: float = 12.0
 const VITALS_RECT: Rect2 = Rect2(462, ROW_C_Y, 150, 100)
@@ -108,6 +111,8 @@ const LAP_BAR_COLOR: Color = Color(UiTokens.HUD_TEXT, 0.85)
 const WEDGE_SIZE: Vector2 = Vector2(32, 14)
 const WEDGE_FULL_GRADE_PCT: float = 8.0
 const WEDGE_MIN_HEIGHT: float = 2.0
+## Альфа значений на паузе (`hud.md` п. 10.2).
+const DIMMED_ALPHA: float = 0.6
 
 var _mode: Mode = Mode.PLAN
 var _state: Dictionary = {}
@@ -418,6 +423,15 @@ func value_nodes() -> Dictionary:
 	}
 
 
+## Пауза: значения панели приглушены (альфа `DIMMED_ALPHA`), подложка остаётся (`hud.md` п. 10.2).
+func set_dimmed(dimmed: bool) -> void:
+	_content.modulate.a = DIMMED_ALPHA if dimmed else 1.0
+
+
+func is_dimmed() -> bool:
+	return _content.modulate.a < 1.0
+
+
 ## Карточка цели — контейнер, в котором лежат цель и отсчёт (REQ-HUD-01 крит. 4).
 func target_card() -> Control:
 	return _target_card
@@ -725,12 +739,13 @@ func _draw_zone_row() -> void:
 	if _deviation == HudModel.DEVIATION_HIDDEN:
 		return
 	var color := deviation_color()
-	var font := _countdown_label.get_theme_font(&"font")
-	var delta_w := font.get_string_size(_delta_text, HORIZONTAL_ALIGNMENT_LEFT, -1, DELTA_FONT_SIZE).x
+	var font := get_theme_font(&"font", DELTA_VARIATION)
+	var font_size := get_theme_font_size(&"font_size", DELTA_VARIATION)
+	var delta_w := font.get_string_size(_delta_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var right := _zone_row.size.x
 	# Базовая линия — так, чтобы прописные цифры (≈ 0.727 em) стояли по центру строки.
-	var baseline := (h + 0.727 * DELTA_FONT_SIZE) * 0.5
-	_zone_row.draw_string(font, Vector2(right - delta_w, baseline), _delta_text, HORIZONTAL_ALIGNMENT_LEFT, -1, DELTA_FONT_SIZE, color)
+	var baseline := (h + 0.727 * font_size) * 0.5
+	_zone_row.draw_string(font, Vector2(right - delta_w, baseline), _delta_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 	var g := GLYPH_SIZE
 	var gx := right - delta_w - ICON_GAP - g
 	var gy := (h - g) * 0.5

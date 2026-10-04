@@ -28,11 +28,15 @@ extends Control
 ## (смена скорости) гасится плавно (`POSITION_BLEND_SEC`). Собственный `_process` сцены
 ## выключен — её `advance` вызывает экран после установки позиции.
 ##
-## «Назад» (Esc на компьютере — через панель инструментов это пауза; системный «назад» —
-## `handle_back`): идёт сессия — подтверждение завершения (как WRK-05 крит. 4), без
-## подтверждения сессия не завершается. После «Завершить» сессия останавливается, запись
-## заезда сохраняет `RideRecorder` владельца (по `session_created`), экран показывает итог
-## (`ui.md` п. 8.8) с «Открыть в истории» и «На главный».
+## «Назад» (Esc — через панель инструментов, на карточке паузы или без панели; системный
+## «назад» — `handle_back`): идёт сессия или пауза — подтверждение завершения (REQ-UIX-04
+## крит. 2, как WRK-05 крит. 4; решение по Esc одно для обоих экранов заезда), без
+## подтверждения сессия не завершается; пауза — кнопкой паузы. После «Завершить» сессия
+## останавливается, запись заезда сохраняет `RideRecorder` владельца (по `session_created`),
+## экран показывает итог (`ui.md` п. 8.8) с «Открыть в истории» и «На главный».
+##
+## Общая с экраном тренировки часть — фишки статусов, расстановка слотов, панель инструментов,
+## плашка слота подсказки и Esc на карточке паузы — в `HudScreenFrame`.
 
 ## Сессия создана и сейчас стартует — владелец подключает запись заезда (`RideRecorder`).
 signal session_created(session: FreeRideSession)
@@ -52,15 +56,6 @@ const POSITION_SNAP_M: float = 50.0
 const RIDE_SCENE: PackedScene = preload("res://src/scene3d/ride_scene.tscn")
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
 const ICON_PLAY: Texture2D = preload("res://assets/icons/lucide/play.svg")
-## Фишка статуса (`hud.md` п. 10.3): высота 24, радиус 12, точка 8, текст 12 / 650.
-const CHIP_HEIGHT: float = HudLayout.STATUS_CHIP_HEIGHT
-const CHIP_RADIUS: int = 12
-const CHIP_DOT_RADIUS: float = 4.0
-const CHIP_PAD_LEFT: float = 22.0
-const CHIP_PAD_RIGHT: float = 10.0
-const CHIP_GAP: float = 6.0
-## Альфа значений HUD на паузе (`hud.md` п. 10.2).
-const PAUSED_ALPHA: float = 0.6
 ## Итог: ширина карточки (`ui.md` п. 8.8), поля экрана на узком холсте.
 const SUMMARY_WIDTH: float = 720.0
 const SUMMARY_MARGIN: float = 16.0
@@ -82,7 +77,8 @@ var _session: FreeRideSession
 var _ticker: SessionTicker
 var _hud: FreeRideHudModel
 var _ride_scene: RideScene
-var _layout: HudLayout
+## Общая рамка HUD: фишки, слоты, панель инструментов, слот подсказки, Esc на карточке паузы.
+var _frame: HudScreenFrame
 var _keep_on: bool = false
 var _notice_left_sec: float = 0.0
 var _ride_id: String = ""
@@ -93,12 +89,7 @@ var _base_speed_mps: float = 0.0
 var _base_sec: int = -1
 var _blend_offset_m: float = 0.0
 var _last_session_time: float = 0.0
-## Цвета точек фишек статусов: фишка → цвет.
-var _chip_dots: Dictionary = {}
-var _status_chip_box: StyleBoxFlat
 var _stat_values: Dictionary = {}
-## Окно графика уже скользит (после первых 30 мин) — подписи шкалы перерисованы.
-var _chart_window_sliding: bool = false
 
 @onready var _viewport_container: SubViewportContainer = %ViewportContainer
 @onready var _viewport: SubViewport = %Viewport
@@ -150,16 +141,12 @@ func setup(app_state: AppState, profile: Profile = null, trainer: TrainerDevice 
 
 
 func _ready() -> void:
-	_status_chip_box = StyleBoxFlat.new()
-	_status_chip_box.bg_color = UiTokens.HUD_PLATE
-	_status_chip_box.set_corner_radius_all(CHIP_RADIUS)
-	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip]:
-		chip.draw.connect(_draw_status_chip.bind(chip))
+	var chips: Array[Control] = [_trainer_chip, _hr_chip, _mode_chip]
+	_frame = HudScreenFrame.new(self, chips)
 	_scrim.color = UiTokens.SCRIM
 	_metric_panel.set_mode(HudMetricPanel.Mode.FREE_RIDE)
 	_toolbar.set_mode(HudToolbar.Mode.FREE_RIDE)
 	_pause_overlay.set_mode(HudToolbar.Mode.FREE_RIDE)
-	_chart.fade_height = HudLayout.CHART_GRADIENT_HEIGHT
 	_build_summary_stats()
 	resized.connect(_on_resized)
 	get_viewport().size_changed.connect(_on_resized)
@@ -167,7 +154,7 @@ func _ready() -> void:
 	_back_button.pressed.connect(back)
 	_home_button.pressed.connect(go_home)
 	_history_button.pressed.connect(open_history)
-	_toolbar.pause_requested.connect(pause)
+	_toolbar.pause_requested.connect(_on_toolbar_escape)
 	_toolbar.sim_toggle_requested.connect(toggle_mode)
 	_toolbar.steepness_step_requested.connect(adjust_steepness)
 	_toolbar.resistance_step_requested.connect(adjust_resistance)
@@ -177,6 +164,7 @@ func _ready() -> void:
 	for b: Button in [_back_button, _home_button, _history_button]:
 		TouchTarget.attach(b, TouchTarget.Kind.BUTTON)
 	TouchTarget.attach(_pause_button, TouchTarget.Kind.HUD)
+	_frame.install_escape_guard(_on_escape_on_pause_card)
 	set_process(false)
 	_fit_viewport()
 	refresh()
@@ -226,7 +214,6 @@ func start() -> bool:
 	if _connections != null:
 		_connections.ticks_devices = false
 	_notice_left_sec = 0.0
-	_chart_window_sliding = false
 	_reset_rider_tracking()
 	session_created.emit(_session)
 	_session.start()
@@ -281,9 +268,9 @@ func pause_overlay() -> PauseOverlay:
 
 ## Текущая геометрия HUD (пересчитывается при смене размера и на каждой отрисовке).
 func hud_layout() -> HudLayout:
-	if _layout == null:
+	if _frame.current_layout() == null:
 		_layout_hud()
-	return _layout
+	return _frame.current_layout()
 
 
 func list_slot() -> Control:
@@ -335,8 +322,7 @@ func toggle_pause() -> void:
 			resume()
 
 
-## Пауза (кнопка, Esc через панель инструментов): на станок ничего не уходит, время и
-## дистанция стоят (FRD-07 крит. 2).
+## Пауза (кнопка паузы): на станок ничего не уходит, время и дистанция стоят (FRD-07 крит. 2).
 func pause() -> void:
 	if _session != null and _session.get_state() == WorkoutSession.State.RUNNING:
 		_session.pause()
@@ -402,6 +388,21 @@ func handle_back() -> bool:
 	if is_finish_confirmation_pending():
 		cancel_finish()
 		return true
+	return request_finish()
+
+
+## Esc панели инструментов (`pause_requested`): как системное «назад» — идёт заезд —
+## подтверждение завершения (REQ-UIX-04 крит. 2); пауза — кнопкой паузы.
+func _on_toolbar_escape() -> void:
+	if _session != null and _session.get_state() == WorkoutSession.State.RUNNING:
+		request_finish()
+
+
+## Esc на карточке паузы — подтверждение завершения, как системное «назад». `PauseOverlay` на
+## карточке паузы клавишу поглощает, поэтому её раньше перехватывает `HudScreenFrame.EscapeGuard`.
+func _on_escape_on_pause_card() -> bool:
+	if not is_visible_in_tree() or _pause_overlay.view() != PauseOverlay.View.PAUSE:
+		return false
 	return request_finish()
 
 
@@ -495,8 +496,7 @@ func _render() -> void:
 	var s := _hud.state()
 	_metric_panel.set_state(s)
 	var paused: bool = int(s["session_state"]) == WorkoutSession.State.PAUSED
-	for node: CanvasItem in [_metric_panel, _list_slot, _chart_slot]:
-		node.modulate.a = PAUSED_ALPHA if paused else 1.0
+	_metric_panel.set_dimmed(paused)
 	_pause_button.icon = ICON_PLAY if paused else ICON_PAUSE
 	_pause_button.tooltip_text = tr("ui.workout.resume") if paused else tr("ui.workout.pause")
 	_toolbar.set_paused(paused)
@@ -512,30 +512,19 @@ func _render() -> void:
 ## Фишки статусов: станок, пульс, режим нагрузки (SIM / СОПР.).
 func _render_status(s: Dictionary) -> void:
 	_trainer_chip.tooltip_text = tr(s["connection_key"])
-	_chip_dots[_trainer_chip] = _connection_dot(int(s["connection_state"]))
+	_frame.set_dot(_trainer_chip, HudScreenFrame.connection_dot(int(s["connection_state"])))
 	var has_hr: bool = int(s["hr_bpm"]) >= 0
 	_hr_chip.tooltip_text = tr("ui.hud.status.hr_ok") if has_hr else tr("ui.hud.status.hr_missing")
-	_chip_dots[_hr_chip] = UiTokens.HUD_OK if has_hr else UiTokens.HUD_ERR
+	_frame.set_dot(_hr_chip, UiTokens.HUD_OK if has_hr else UiTokens.HUD_ERR)
 	var sim: bool = int(s[HudMetricPanel.KEY_LOAD_MODE]) == SimController.Mode.SIM
 	_mode_label.text = tr("ui.free_ride.status.sim") if sim else tr("ui.free_ride.status.fixed")
 	if sim:
 		_mode_chip.tooltip_text = tr("ui.free_ride.status.sim_hint").format({"value": int(s[HudMetricPanel.KEY_STEEPNESS_PCT])})
-		_chip_dots[_mode_chip] = UiTokens.HUD_OK
+		_frame.set_dot(_mode_chip, UiTokens.HUD_OK)
 	else:
 		_mode_chip.tooltip_text = tr("ui.free_ride.status.fixed_hint").format({"value": int(s[HudMetricPanel.KEY_RESISTANCE_PCT])})
-		_chip_dots[_mode_chip] = UiTokens.HUD_WARN if bool(s.get("sim_unavailable", false)) else UiTokens.HUD_TEXT2
-	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip]:
-		chip.queue_redraw()
-
-
-static func _connection_dot(state: int) -> Color:
-	match state:
-		TrainerDevice.ConnectionState.CONNECTED:
-			return UiTokens.HUD_OK
-		TrainerDevice.ConnectionState.SCANNING, TrainerDevice.ConnectionState.CONNECTING, TrainerDevice.ConnectionState.RECONNECTING:
-			return UiTokens.HUD_WARN
-		_:
-			return UiTokens.HUD_ERR
+		_frame.set_dot(_mode_chip, UiTokens.HUD_WARN if bool(s.get("sim_unavailable", false)) else UiTokens.HUD_TEXT2)
+	_frame.redraw_chips()
 
 
 func _build_summary_stats() -> void:
@@ -619,105 +608,22 @@ func _px_per_lp() -> Vector2:
 	return Vector2(window.size) / visible_lp
 
 
-## Расставить слоты HUD по `HudLayout`; рельеф — 0.40·H в левом слоте, график — градиент и поле.
+## Расставить слоты HUD по `HudLayout` (общая часть — `HudScreenFrame`): рельеф — 0.40·H в
+## левом слоте, сообщение «нет SIM» — в слоте подсказки.
 func _layout_hud() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
-	var ui := _ui_scale()
-	var s := ui.current_scale() if ui != null and ui.mode == UiScale.Mode.HUD else 1.0
-	var touch := ui.touch_hud() if ui != null else UiScale.TOUCH_HUD_DESKTOP
-	var phone := ui != null and ui.device == UiScale.Device.PHONE
-	var safe := ui.safe_margins() if ui != null else Vector4.ZERO
-	var chips := _status_chips()
-	_size_chips(chips)
-	var row_w := CHIP_GAP * maxf(chips.size() - 1, 0)
-	for chip in chips:
-		row_w += chip.size.x
-	_layout = HudLayout.compute(size, safe, s, touch, phone, _pause_button.get_combined_minimum_size(), row_w)
-	_set_rect(_metric_panel, _layout.panel)
-	_set_rect(_pause_button, _layout.pause_button)
-	_set_rect(_list_slot, _layout.list_slot)
-	_relief.position = Vector2.ZERO
-	_relief.panel_width = _layout.list_slot.size.x
-	_relief.panel_height = ReliefPanel.preferred_height(size.y, _layout.list_slot.size.y)
-	var chart_rect := _layout.chart_gradient.merge(_layout.chart)
-	_set_rect(_chart_slot, chart_rect)
-	_chart.position = Vector2.ZERO
-	_chart.size = chart_rect.size
-	_set_rect(_hint_slot, _layout.hint_slot)
-	_layout_notice()
-	_set_rect(_status_slot, _layout.status_slot)
-	_layout_chips(chips)
-	_set_rect(_toolbar_slot, _layout.toolbar_slot)
-	_toolbar.set_compact(phone)
-	_toolbar.set_touch_target(touch)
-	var tools := _toolbar.get_combined_minimum_size()
-	_toolbar.size = tools
-	var tool_y := 0.0 if phone else maxf((_layout.toolbar_slot.size.y - tools.y) * 0.5, 0.0)
-	_toolbar.position = Vector2(_layout.toolbar_slot.size.x - tools.x, tool_y)
-
-
-## Плашка сообщения: по ширине текста (не шире слота); вверху слота на компьютере и
-## планшете, внизу — на телефоне (слот у низа кадра).
-func _layout_notice() -> void:
-	if not _notice_plate.visible:
+	var layout := _frame.layout()
+	if layout == null:
 		return
-	var slot := _layout.hint_slot.size
-	var box := _notice_plate.get_theme_stylebox(&"panel")
-	var pad := box.get_minimum_size() if box != null else Vector2.ZERO
-	var font := _notice_label.get_theme_font(&"font")
-	var text_w := font.get_string_size(_notice_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _notice_label.get_theme_font_size(&"font_size")).x
-	var width := minf(ceilf(text_w) + pad.x + 1.0, slot.x)
-	_notice_label.custom_minimum_size = Vector2(width - pad.x, 0)
-	_notice_plate.size = Vector2(width, 0)
-	_notice_plate.size = _notice_plate.get_combined_minimum_size()
-	var y := slot.y - _notice_plate.size.y if _layout.phone else 0.0
-	_notice_plate.position = Vector2((slot.x - _notice_plate.size.x) * 0.5, y)
-
-
-func _status_chips() -> Array[Control]:
-	var out: Array[Control] = [_trainer_chip, _hr_chip, _mode_chip]
-	return out
-
-
-func _size_chips(chips: Array[Control]) -> void:
-	for chip in chips:
-		var label := chip.get_child(0) as Label
-		var label_size := label.get_combined_minimum_size()
-		label.position = Vector2(CHIP_PAD_LEFT, (CHIP_HEIGHT - label_size.y) * 0.5)
-		label.size = label_size
-		chip.size = Vector2(CHIP_PAD_LEFT + label_size.x + CHIP_PAD_RIGHT, CHIP_HEIGHT)
-
-
-## Строкой — вправо к кнопке паузы; столбиком — под кнопкой, по правому краю.
-func _layout_chips(chips: Array[Control]) -> void:
-	var slot := _layout.status_slot.size
-	if _layout.status_vertical:
-		var y := 0.0
-		for chip in chips:
-			chip.position = Vector2(slot.x - chip.size.x, y)
-			y += CHIP_HEIGHT + HudLayout.STATUS_GAP
-	else:
-		var x := slot.x
-		for i in range(chips.size() - 1, -1, -1):
-			x -= chips[i].size.x
-			chips[i].position = Vector2(x, 0)
-			x -= CHIP_GAP
-
-
-static func _set_rect(node: Control, rect: Rect2) -> void:
-	node.position = rect.position
-	node.size = rect.size
+	_relief.position = Vector2.ZERO
+	_relief.panel_width = layout.list_slot.size.x
+	_relief.panel_height = ReliefPanel.preferred_height(size.y, layout.list_slot.size.y)
+	_frame.place_hint_plate(_notice_plate, _notice_label)
 
 
 func _ui_scale() -> UiScale:
 	return get_node_or_null(^"/root/UiScaleRuntime") as UiScale
-
-
-## Фишка статуса: подложка `hud.plate` (r 12) и точка состояния.
-func _draw_status_chip(chip: Control) -> void:
-	chip.draw_style_box(_status_chip_box, Rect2(Vector2.ZERO, chip.size))
-	chip.draw_circle(Vector2(CHIP_PAD_LEFT * 0.5 + 1.0, CHIP_HEIGHT * 0.5), CHIP_DOT_RADIUS, _chip_dots.get(chip, UiTokens.HUD_TEXT2))
 
 
 # ---------------------------------------------------------------------------
@@ -806,16 +712,9 @@ func _on_ticked(delta_sec: float) -> void:
 			_render()
 
 
-func _on_second_elapsed(elapsed_sec: int) -> void:
+func _on_second_elapsed(_elapsed_sec: int) -> void:
 	_relief.sync(_session)
 	_chart.sync_free_ride(_session)
-	# Подписи времени графика лежат в кэшированном слое `HudChart`, который перерисовывается
-	# только при смене шкалы мощности или размера: на переходе к скользящему окну (0…30 →
-	# −30…сейчас) кэш сбрасывается явно, дальше подписи относительные и не меняются.
-	var series := _chart.effort_series()
-	if not _chart_window_sliding and series != null and elapsed_sec > series.window_sec:
-		_chart_window_sliding = true
-		_chart.show_time_axis = _chart.show_time_axis
 	if _ride_scene != null and _ride_scene.is_node_ready():
 		var row: Dictionary = _session.samples.last_row()
 		var cadence: int = int(row["cadence_rpm"]) if row.get("has_cadence", false) else 0

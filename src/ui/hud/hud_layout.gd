@@ -8,7 +8,7 @@ extends RefCounted
 ## Единицы — lp текущего холста HUD. На экране заезда `Window.content_scale_factor = s`
 ## (`UiScale.Mode.HUD`), поэтому всё, что в `hud.md` задано как «X·s», здесь — просто X;
 ## то, что `hud.md` оставляет без множителя (отступ телефона 12 lp, нижняя граница высоты
-## графика 112 lp, слот подсказки телефона 40 lp), делится на `s`.
+## графика 112 lp), делится на `s`.
 ##
 ## Слоты:
 ## - `panel` — панель цифр 640×166, верх-центр безопасной зоны, `y = T + M`;
@@ -22,7 +22,10 @@ extends RefCounted
 ##   статусов: строкой слева от кнопки, если справа от панели свободно ≥ 260 lp и строка
 ##   фишек (`status_row_width`) помещается, иначе столбиком под кнопкой (`status_vertical`);
 ## - `hint_slot` — подсказка и фишка «ДАЛЕЕ»: на компьютере и планшете под панелью (+8),
-##   на телефоне у низа кадра, низ слота = верх графика − 3; ширина 0.5·W, высота 40;
+##   высота 40; на телефоне у низа кадра между центральной зоной и графиком (`hud.md` п. 4.1):
+##   низ слота = верх графика − 3, верх — не выше низа центральной зоны (75 % H), высота не
+##   больше 40 (≈ 34 lp HUD на 19.5:9 — содержимое слота на телефоне компактное, кегль 14);
+##   ширина 0.5·W;
 ## - `toolbar_slot` — колонка панели инструментов у правого края, правее центральной зоны,
 ##   между статусами и градиентом графика.
 ##
@@ -48,8 +51,7 @@ const CHART_MAX_WIDTH: float = 1600.0
 const CHART_GRADIENT_HEIGHT: float = 28.0
 const HINT_PANEL_GAP: float = 8.0
 const HINT_HEIGHT: float = 40.0
-## Слот подсказки телефона — 40 lp базового холста, низ — на 3 lp выше графика.
-const HINT_HEIGHT_PHONE_BASE: float = 40.0
+## Слот подсказки телефона: низ — на 3 lp выше графика, высота — зазор до центральной зоны.
 const HINT_CHART_GAP_PHONE: float = 3.0
 const HINT_WIDTH_FRACTION: float = 0.5
 const STATUS_CHIP_HEIGHT: float = 24.0
@@ -172,8 +174,11 @@ func _build(pause_size: Vector2, status_row_width: float) -> void:
 	# Слот подсказки.
 	var hint_w := HINT_WIDTH_FRACTION * w
 	if phone:
-		var hint_h := HINT_HEIGHT_PHONE_BASE / hud_scale
+		# Между центральной зоной и верхом графика: слот не заходит в центр (REQ-HUD-13 крит. 9),
+		# поэтому его высота — весь зазор, но не больше 40.
 		var hint_bottom := chart.position.y - HINT_CHART_GAP_PHONE
+		var center_bottom := center_zone(canvas_size).end.y
+		var hint_h := clampf(hint_bottom - center_bottom, 0.0, HINT_HEIGHT)
 		hint_slot = Rect2(Vector2(chart.get_center().x - hint_w * 0.5, hint_bottom - hint_h), Vector2(hint_w, hint_h))
 	else:
 		hint_slot = Rect2(Vector2(panel.get_center().x - hint_w * 0.5, panel.end.y + HINT_PANEL_GAP), Vector2(hint_w, HINT_HEIGHT))

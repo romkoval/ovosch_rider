@@ -83,3 +83,4 @@ ui.history.detail.target,Средняя цель плана: {target} Вт,Avera
 ui.history.detail.track,Трасса «{track}» · крутизна SIM {pct} %,Track “{track}” · SIM steepness {pct}%
 ui.history.menu.more,Действия с заездом,Ride actions
 ui.plan.card.load,нагрузка {load},load {load}
+ui.plan.start_emulator,На эмуляторе,On emulator

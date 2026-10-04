@@ -12,7 +12,8 @@ extends Control
 ## «Библиотека» (пусто — пустое состояние с импортом). Справа (60 %) — предпросмотр выбранной:
 ## название, описание (3 строки и «Ещё»), крупное превью (`PlanPreview` с `detailed = true`:
 ## шкала времени, пунктир FTP), длительность, шагов, макс. цель, время в зонах
-## и «Начать». Ровно одна карточка «выбрано» (или ни одной, пока выбора нет).
+## и «Начать»; в отладочной сборке (`dev_tools_enabled`, как на главном) под ней — «На эмуляторе»
+## (`emulator_workout_requested`). Ровно одна карточка «выбрано» (или ни одной, пока выбора нет).
 ## Compact (холст уже 1100 lp, телефон): список во всю ширину, предпросмотр — лист снизу по
 ## нажатию на карточку (Esc или нажатие вне листа закрывают его). Контент — не шире 1216 lp,
 ## отступы безопасной зоны — по `UiScale.safe_margins()`.
@@ -83,6 +84,8 @@ const ZONE_CAPTION_GAP: float = 8.0
 
 ## Пользователь выбрал тренировку и нажал «Начать».
 signal workout_chosen(workout: Workout, source: String)
+## «На эмуляторе» (только `dev_tools_enabled`): выбранная тренировка — сразу на эмуляторе станка.
+signal emulator_workout_requested(workout: Workout)
 ## Выбор при отсутствии станка (см. `show_trainer_choice`).
 signal emulator_chosen()
 signal devices_chosen()
@@ -149,6 +152,13 @@ var _description_expanded: bool = false
 var _emulator_button: Button = null
 var _zone_bar: ZoneShareBar = null
 
+## Инструменты разработчика (кнопка «На эмуляторе»): оболочка включает их в отладочной сборке.
+var dev_tools_enabled: bool = false:
+	set(value):
+		dev_tools_enabled = value
+		if is_node_ready():
+			_emulator_start_button.visible = value
+
 @onready var _layout: VBoxContainer = %Layout
 @onready var _app_bar: AppBar = %AppBar
 @onready var _body: MarginContainer = %Body
@@ -180,6 +190,7 @@ var _zone_bar: ZoneShareBar = null
 @onready var _zones_title: Label = %ZonesTitle
 @onready var _zone_captions: HFlowContainer = %ZoneCaptions
 @onready var _start_button: Button = %StartButton
+@onready var _emulator_start_button: Button = %EmulatorStartButton
 @onready var _sheet: Control = %Sheet
 @onready var _scrim: ColorRect = %Scrim
 @onready var _sheet_panel: PanelContainer = %SheetPanel
@@ -221,6 +232,9 @@ func _ready() -> void:
 	_more_button.pressed.connect(_on_more_pressed)
 	_start_button.pressed.connect(start_selected)
 	TouchTarget.attach(_start_button, TouchTarget.Kind.BUTTON)
+	_emulator_start_button.pressed.connect(start_selected_on_emulator)
+	_emulator_start_button.visible = dev_tools_enabled
+	TouchTarget.attach(_emulator_start_button, TouchTarget.Kind.BUTTON)
 	TouchTarget.attach(_more_button, TouchTarget.Kind.UI)
 	_sheet_close.icon = UiIcons.icon("x")
 	_sheet_close.pressed.connect(close_preview_sheet)
@@ -549,6 +563,21 @@ func start_selected() -> bool:
 		return false
 	workout_chosen.emit(w, str(_items[_selected]["source"]))
 	return true
+
+
+## «На эмуляторе» (отладка): выбранная тренировка — на эмулятор станка. false — ничего не
+## выбрано или инструменты разработчика выключены.
+func start_selected_on_emulator() -> bool:
+	var w := selected_workout()
+	if w == null or not dev_tools_enabled:
+		return false
+	emulator_workout_requested.emit(w)
+	return true
+
+
+## Кнопка «На эмуляторе» (видна только в отладочной сборке).
+func emulator_start_button() -> Button:
+	return _emulator_start_button
 
 
 ## Раскладка compact (телефон): предпросмотр — листом снизу.
@@ -1031,6 +1060,7 @@ func _render_preview() -> void:
 		_stats.visible = false
 		_zones.visible = false
 		_start_button.disabled = true
+		_emulator_start_button.disabled = true
 		_update_description()
 		close_preview_sheet()
 		return
@@ -1048,6 +1078,7 @@ func _render_preview() -> void:
 	_stat_max.value = str(top) if top > 0 else "—"
 	_render_zone_shares(zone_shares(model))
 	_start_button.disabled = false
+	_emulator_start_button.disabled = false
 	_update_description()
 
 
@@ -1130,13 +1161,17 @@ func _update_layout() -> void:
 			_preview.reparent(_sheet_scroll, false)
 			_start_button.reparent(_sheet_footer, false)
 			_sheet_footer.move_child(_start_button, 0)
+			_emulator_start_button.reparent(_sheet_footer, false)
+			_sheet_footer.move_child(_emulator_start_button, 1)
 		else:
 			_sheet.visible = false
 			_preview.reparent(_preview_slot, false)
 			_start_button.reparent(_preview, false)
+			_emulator_start_button.reparent(_preview, false)
 	_preview_slot.visible = not compact
 	_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_emulator_start_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fit_chart()
 
 

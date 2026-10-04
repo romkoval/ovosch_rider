@@ -139,6 +139,8 @@ func _build_screens() -> void:
 	plan.emulator_chosen.connect(func() -> void:
 		if _pending_workout != null:
 			start_workout_on_emulator(_pending_workout))
+	plan.dev_tools_enabled = is_debug_build()
+	plan.emulator_workout_requested.connect(_on_plan_emulator_workout)
 	plan.profile_updated.connect(func(p: Profile) -> void: repo.save(p))
 	_add_screen(AppState.Screen.PLAN, plan)
 	var settings: SettingsScreen = load(SETTINGS_SCENE).instantiate()
@@ -232,6 +234,11 @@ func _on_home_free_ride(route_id: String) -> void:
 ## Кнопка Home «Тренировка на эмуляторе» (временно): тестовый план на эмуляторе.
 func start_emulator_workout() -> void:
 	start_workout_on_emulator(DevScreen.test_workout())
+
+
+## «На эмуляторе» на экране выбора тренировки (отладочная сборка): выбранный план — на эмуляторе.
+func _on_plan_emulator_workout(workout: Workout) -> void:
+	start_workout_on_emulator(workout)
 
 
 ## Запуск выбранного плана на эмуляторе станка (`TrainerFactory.create("fake")`).

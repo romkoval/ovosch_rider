@@ -252,20 +252,6 @@ theme_type_variation = &"PrimaryButton"
 disabled = true
 text = "ui.history.upload"
 
-[node name="PowerChart" type="Control" parent="."]
-unique_name_in_owner = true
-visible = false
-layout_mode = 0
-mouse_filter = 2
-script = ExtResource("2_chart")
-
-[node name="HrChart" type="Control" parent="."]
-unique_name_in_owner = true
-visible = false
-layout_mode = 0
-mouse_filter = 2
-script = ExtResource("2_chart")
-
 [node name="MenuLayer" type="Control" parent="."]
 unique_name_in_owner = true
 visible = false

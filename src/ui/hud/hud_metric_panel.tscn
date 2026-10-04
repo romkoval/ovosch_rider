@@ -138,7 +138,7 @@ text = "—"
 unique_name_in_owner = true
 layout_mode = 0
 mouse_filter = 2
-theme_type_variation = &"HudUnitLabel"
+theme_type_variation = &"HudTargetUnit"
 text = "ui.workout.unit_w"
 
 [node name="CountdownPrefix" type="Label" parent="Content/TargetCard"]
@@ -152,7 +152,7 @@ text = "ui.hud.target.remaining"
 unique_name_in_owner = true
 layout_mode = 0
 mouse_filter = 2
-theme_type_variation = &"HudStripLabel"
+theme_type_variation = &"HudCountdown"
 text = "—"
 
 [node name="GradeCard" type="Control" parent="Content"]
@@ -178,21 +178,21 @@ mouse_filter = 2
 unique_name_in_owner = true
 layout_mode = 0
 mouse_filter = 2
-theme_type_variation = &"HudTargetLabel"
+theme_type_variation = &"HudGradeValue"
 text = "—"
 
 [node name="GradeUnit" type="Label" parent="Content/GradeCard"]
 unique_name_in_owner = true
 layout_mode = 0
 mouse_filter = 2
-theme_type_variation = &"HudUnitLabel"
+theme_type_variation = &"HudGradeUnit"
 text = "ui.free_ride.unit.pct"
 
 [node name="GradeModeLabel" type="Label" parent="Content/GradeCard"]
 unique_name_in_owner = true
 layout_mode = 0
 mouse_filter = 2
-theme_type_variation = &"HudUnitLabel"
+theme_type_variation = &"HudModeLabel"
 text = "—"
 
 [node name="Hero" type="Control" parent="Content"]
@@ -211,7 +211,7 @@ text = "—"
 unique_name_in_owner = true
 layout_mode = 0
 mouse_filter = 2
-theme_type_variation = &"HudUnitLabel"
+theme_type_variation = &"HudHeroUnit"
 text = "ui.workout.unit_w"
 
 [node name="ZoneRow" type="Control" parent="Content/Hero"]

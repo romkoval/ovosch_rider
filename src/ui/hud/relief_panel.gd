@@ -15,6 +15,8 @@ extends Control
 ##    (размах ≥ 40 м), та же точка позиции; над самым крутым местом подъёма впереди — «7.1 %»
 ##    (13 / 700);
 ## 5. подвал (13 / 550 `hud.text2`): «до вершины 4.2 км · +262 м» / «подъём через 1.3 км» / пусто.
+##    Не помещается в ширину (телефон: слот ≈ 220 lp) — переносится по « · » на вторую строку
+##    («до вершины 3.7 км» / «+239 м»), окно «впереди» уменьшается на строку; только потом «…».
 ##
 ## Данные — `ReliefPanelModel` (на `RoutePreviewModel` той же трассы); здесь только раскладка
 ## и рисование. Компонент самостоятельный: экран вызывает `setup(session)` при старте и
@@ -37,6 +39,8 @@ const ROW_GAP: float = 6.0
 const CAPTION_GAP: float = 12.0
 const AHEAD_GAP: float = 6.0
 const FOOTER_GAP: float = 8.0
+## Разделитель частей подвала, по которому он переносится на вторую строку.
+const FOOTER_SEPARATOR: String = " · "
 ## Нижняя граница высоты профиля «впереди», lp (на телефоне слот низкий).
 const AHEAD_MIN_HEIGHT: float = 32.0
 const TEXT_GAP: float = 8.0
@@ -167,15 +171,35 @@ func caption_baseline() -> float:
 	return row_baseline() + CAPTION_GAP + _font(FONT_CAPTION).get_ascent(FONT_CAPTION[1])
 
 
-## Базовая линия подвала.
+## Базовая линия подвала (последней строки, если он перенесён).
 func footer_baseline() -> float:
 	return size.y - PAD_BOTTOM - _font(FONT_FOOTER).get_descent(FONT_FOOTER[1])
 
 
-## Поле профиля «впереди 2 км»: от подписи до подвала.
+## Строки подвала под ширину панели: одна, если помещается; иначе перенос по « · » (каждая
+## часть — своей строкой, с «…» только если не помещается и она).
+func footer_lines() -> PackedStringArray:
+	var out := PackedStringArray()
+	var text: String = str(model.footer()["text"]) if model != null else ""
+	if text.is_empty():
+		return out
+	var font: Font = _font(FONT_FOOTER)
+	var inner: float = _inner_width()
+	if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_FOOTER[1]).x <= inner:
+		out.append(text)
+		return out
+	for part in text.split(FOOTER_SEPARATOR, false):
+		out.append(_fit(part.strip_edges(), font, FONT_FOOTER[1], inner))
+	return out
+
+
+## Поле профиля «впереди 2 км»: от подписи до подвала (над всеми его строками).
 func ahead_field_rect() -> Rect2:
 	var top: float = caption_baseline() + AHEAD_GAP
-	var footer_top: float = footer_baseline() - _font(FONT_FOOTER).get_ascent(FONT_FOOTER[1]) - FOOTER_GAP
+	var font: Font = _font(FONT_FOOTER)
+	var extra_lines: int = maxi(footer_lines().size() - 1, 0)
+	var footer_top: float = footer_baseline() - font.get_ascent(FONT_FOOTER[1]) - FOOTER_GAP \
+			- extra_lines * font.get_height(FONT_FOOTER[1])
 	return Rect2(PAD_X, top, _inner_width(), maxf(footer_top - top, AHEAD_MIN_HEIGHT))
 
 
@@ -281,12 +305,13 @@ func _paint(p: HudChart.Painter) -> void:
 	p.polyline(TAG_AHEAD_OUTLINE, model.preview.outline(ahead_plot), OUTLINE_COLOR, OUTLINE_WIDTH)
 	_paint_grade_label(p, ahead_plot)
 	_paint_marker(p, ahead_field, model.ahead_marker(ahead_field))
-	# 5. Подвал.
-	var footer: String = str(model.footer()["text"])
-	if not footer.is_empty():
-		var foot_font: Font = _font(FONT_FOOTER)
-		p.text(TAG_FOOTER, foot_font, Vector2(PAD_X, footer_baseline()),
-				_fit(footer, foot_font, FONT_FOOTER[1], inner), HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+	# 5. Подвал (одна или две строки, последняя — на `footer_baseline()`).
+	var lines := footer_lines()
+	var foot_font: Font = _font(FONT_FOOTER)
+	var line_h: float = foot_font.get_height(FONT_FOOTER[1])
+	for i in lines.size():
+		var baseline: float = footer_baseline() - (lines.size() - 1 - i) * line_h
+		p.text(TAG_FOOTER, foot_font, Vector2(PAD_X, baseline), lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 				FONT_FOOTER[1], UiTokens.HUD_TEXT2)
 
 

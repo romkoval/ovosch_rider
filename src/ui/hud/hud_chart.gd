@@ -174,10 +174,12 @@ var _window_ftp_w: int = 0
 var _window_zones: PowerZones = null
 ## Куски плана текущего сэмпла (`PlanChartModel.pieces()`), один вызов на `refresh()`.
 var _pieces: Array[Dictionary] = []
-## Ключ кэша слоя плана: версия модели, размер, потолок шкалы окна.
+## Ключ кэша слоя плана: версия модели, размер, потолок шкалы окна и фаза окна (подписи
+## времени «0…30» до конца первого окна, «−30…сейчас» — после).
 var _plan_revision: int = -1
 var _plan_size: Vector2 = Vector2(-1.0, -1.0)
 var _plan_y_max: float = -1.0
+var _plan_sliding: bool = false
 var _plan_redraws: int = 0
 var _fact_redraws: int = 0
 
@@ -267,15 +269,20 @@ func sync_free_ride(session: FreeRideSession) -> void:
 
 
 ## Перерисовка после изменения моделей (раз в сэмпл). Слой плана — только если сменились
-## `revision()` модели, размер или потолок шкалы окна; слой факта — всегда.
+## `revision()` модели, размер, потолок шкалы окна или фаза окна (переход к скользящему окну
+## меняет подписи времени); слой факта — всегда.
 func refresh() -> void:
 	_pieces = _model.pieces() if _model != null else ([] as Array[Dictionary])
-	var y_max: float = _series.power_y_max() if mode == Mode.WINDOW and _series != null else 0.0
+	var window: bool = mode == Mode.WINDOW and _series != null
+	var y_max: float = _series.power_y_max() if window else 0.0
+	var sliding: bool = window and _series.last_time_sec() > _series.window_sec
 	var revision: int = _model.revision() if _model != null else 0
-	if revision != _plan_revision or size != _plan_size or not is_equal_approx(y_max, _plan_y_max):
+	if revision != _plan_revision or size != _plan_size or not is_equal_approx(y_max, _plan_y_max) \
+			or sliding != _plan_sliding:
 		_plan_revision = revision
 		_plan_size = size
 		_plan_y_max = y_max
+		_plan_sliding = sliding
 		_plan_redraws += 1
 		_plan_layer.queue_redraw()
 	_fact_redraws += 1

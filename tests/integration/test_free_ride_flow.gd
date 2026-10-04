@@ -338,16 +338,33 @@ func test_req_uix_04_c1_hidden_free_ride_screen_does_not_swallow_esc() -> void:
 	assert_eq(main.app_state.current_screen, AppState.Screen.HOME, "Esc в настройках — назад на главный")
 
 
-func test_req_uix_04_c2_esc_on_running_ride_pauses_not_finishes() -> void:
-	var main := _main()
-	main.launch_free_ride(_fake(), RouteCatalog.FLAT, 50)
-	var screen := main.free_ride_screen()
+## Решение по Esc (T-097): на обоих экранах заезда Esc и системный «назад» открывают
+## подтверждение завершения (REQ-UIX-04 крит. 2), пауза — кнопкой паузы.
+func _esc() -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_ESCAPE
 	ev.physical_keycode = KEY_ESCAPE
 	ev.pressed = true
 	get_tree().root.push_input(ev)
-	assert_eq(screen.session().get_state(), WorkoutSession.State.PAUSED, "Esc — пауза (hud.md п. 10.2)")
+
+
+func test_req_uix_04_c2_esc_on_running_ride_asks_to_finish_not_finishes() -> void:
+	var main := _main()
+	main.launch_free_ride(_fake(), RouteCatalog.FLAT, 50)
+	var screen := main.free_ride_screen()
+	_esc()
+	assert_eq(screen.session().get_state(), WorkoutSession.State.RUNNING, "Esc не ставит паузу и не завершает")
+	assert_eq(screen.pause_overlay().view(), PauseOverlay.View.CONFIRM, "Esc — подтверждение завершения")
+	assert_eq(main.app_state.current_screen, AppState.Screen.FREE_RIDE)
+	_esc()
+	assert_eq(screen.pause_overlay().view(), PauseOverlay.View.HIDDEN, "повторный Esc — отмена подтверждения")
+	assert_eq(screen.session().get_state(), WorkoutSession.State.RUNNING, "заезд продолжается")
+	# Пауза — кнопкой; Esc на карточке паузы — тоже подтверждение (без «Пропустить шаг»).
+	screen.toggle_pause()
+	assert_eq(screen.session().get_state(), WorkoutSession.State.PAUSED)
 	assert_eq(screen.pause_overlay().view(), PauseOverlay.View.PAUSE, "карточка паузы")
 	assert_false(screen.pause_overlay().skip_button().visible, "без «Пропустить шаг»")
+	_esc()
+	assert_eq(screen.pause_overlay().view(), PauseOverlay.View.CONFIRM, "Esc на карточке паузы — подтверждение")
+	assert_eq(screen.session().get_state(), WorkoutSession.State.PAUSED, "без подтверждения заезд не завершён")
 	assert_eq(main.app_state.current_screen, AppState.Screen.FREE_RIDE)

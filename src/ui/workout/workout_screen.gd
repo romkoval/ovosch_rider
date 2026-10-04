@@ -18,15 +18,15 @@ extends Control
 ## подтверждением досрочного завершения (WRK-05) — лежит между 3D и HUD.
 ## График и список синхронизируются с сессией на каждом пересчёте `HudModel` (сэмпл, смена
 ## шага, пропуск, множитель, пауза); на паузе исполнитель стоит — курсор и линии тоже.
+## Общая с экраном свободной езды часть — фишки статусов, расстановка слотов, панель
+## инструментов, плашки слота подсказки и Esc на карточке паузы — в `HudScreenFrame`.
+##
+## «Назад» (Esc — через панель инструментов или на карточке паузы; системный «назад» —
+## оболочка): подтверждение досрочного завершения (REQ-UIX-04 крит. 2, WRK-05 крит. 4); пауза —
+## кнопкой паузы.
 ##
 ## Тренировка по плану идёт на трассе `RideScene` по умолчанию (`flat`); уклон на станок
 ## не уходит (только ERG/сопротивление сессии), скорость — по D3D-02 в `RideScene`.
-##
-## Совместимость с приёмочными тестами (до их переноса на `toolbar()`/`pause_overlay()`):
-## скрытый узел `LegacyControls` держит прежние узлы с уникальными именами `%ErgButton`,
-## `%SkipButton`, `%StopButton`, `%IntensityMinus|Plus|Label`, `%ResistanceMinus|Plus|Label`,
-## `%StopDialog` и полосу `%ProgressBar` (`progress_bar()`, модель HUD-07). Они не
-## показываются и ведут в те же обработчики, что и панель инструментов и карточка паузы.
 ##
 ## 3D-фон — `RideScene` в `SubViewport` (REQ-D3D-01) в физическом разрешении окна
 ## (REQ-HUD-13 крит. 10, `hud.md` п. 3): размер вьюпорта = размер экрана в пикселях окна,
@@ -39,25 +39,14 @@ extends Control
 ## «На главный»; сохранение заезда — по сигналу `session_finished(session)`.
 
 const UNIT_KEY: String = "ui.workout.unit_w"
-const RESISTANCE_STEP: int = 5
-const INTENSITY_STEP: float = 0.05
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
 const ICON_PLAY: Texture2D = preload("res://assets/icons/lucide/play.svg")
-## Фишка статуса (`hud.md` п. 10.3): высота 24, радиус 12, точка 8, текст 12 / 650.
-const CHIP_HEIGHT: float = HudLayout.STATUS_CHIP_HEIGHT
-const CHIP_RADIUS: int = 12
-const CHIP_DOT_RADIUS: float = 4.0
-const CHIP_PAD_LEFT: float = 22.0
-const CHIP_PAD_RIGHT: float = 10.0
-const CHIP_GAP: float = 6.0
 ## Ключи текстов списка интервалов и легенды графика (`strings_hud.csv`).
 const LIST_FREE_KEY: String = "ui.hud.interval_list.free"
 const LIST_REMAINING_KEY: String = "ui.hud.interval_list.remaining"
 const LIST_STEP_OF_KEY: String = "ui.hud.interval_list.step_of"
 const CHART_LEGEND_POWER_KEY: String = "ui.hud.chart.legend_power"
 const CHART_LEGEND_HR_KEY: String = "ui.hud.chart.legend_hr"
-## На паузе значения панели цифр приглушаются (`hud.md` п. 10.2).
-const PAUSED_VALUES_ALPHA: float = 0.6
 
 ## Сессия создана и сейчас стартует — владелец подключает запись заезда (`RideRecorder`, REQ-LOC-07).
 signal session_created(session: WorkoutSession)
@@ -81,17 +70,8 @@ var _ticker: SessionTicker
 var _hud: HudModel
 var _keep_awake: KeepAwake
 var _stop_pending: bool = false
-var _layout: HudLayout
-## Цель нажатия HUD, переданная компонентам (−1 — ещё не передавалась).
-var _touch_applied: float = -1.0
-## Условия, при которых выбрана раскладка панели инструментов (колонка или сетка).
-var _toolbar_fit_key: String = ""
-var _placing_toolbar: bool = false
-## Цвета точек фишек статусов: фишка → цвет.
-var _chip_dots: Dictionary = {}
-var _status_chip_box: StyleBoxFlat
-## Что приглушается на паузе: содержимое панели цифр без подложки.
-var _panel_values: CanvasItem
+## Общая рамка HUD: фишки, слоты, панель инструментов, слот подсказки, Esc на карточке паузы.
+var _frame: HudScreenFrame
 
 @onready var _ride_scene: RideScene = %RideScene
 @onready var _viewport_container: SubViewportContainer = %ViewportContainer
@@ -121,18 +101,6 @@ var _panel_values: CanvasItem
 @onready var _toolbar: HudToolbar = %Toolbar
 @onready var _summary_label: Label = %SummaryLabel
 @onready var _home_button: Button = %HomeButton
-# Скрытые узлы совместимости (см. описание класса).
-@onready var _progress_bar: WorkoutProgressBar = %ProgressBar
-@onready var _legacy_skip: Button = %SkipButton
-@onready var _legacy_stop: Button = %StopButton
-@onready var _legacy_erg: Button = %ErgButton
-@onready var _legacy_resistance_minus: Button = %ResistanceMinus
-@onready var _legacy_resistance_plus: Button = %ResistancePlus
-@onready var _legacy_resistance_label: Label = %ResistanceLabel
-@onready var _legacy_intensity_minus: Button = %IntensityMinus
-@onready var _legacy_intensity_plus: Button = %IntensityPlus
-@onready var _legacy_intensity_label: Label = %IntensityLabel
-@onready var _stop_dialog: ConfirmationDialog = %StopDialog
 
 
 ## Подготовить тренировку. `connections` — опционально, для `ticks_devices`.
@@ -151,22 +119,14 @@ func setup(workout: Workout, profile: Profile, trainer: TrainerDevice, app_state
 func _ready() -> void:
 	# Узлы-значения панели доступны по уникальным именам и от экрана (`%TargetLabel` и др.).
 	_metric_panel.share_unique_names(self)
-	# Содержимое панели (без подложки) — его приглушаем на паузе; нет узла — вся панель.
-	var content := _metric_panel.get_node_or_null(^"%Content") as CanvasItem
-	_panel_values = content if content != null else _metric_panel
-	_status_chip_box = StyleBoxFlat.new()
-	_status_chip_box.bg_color = UiTokens.HUD_PLATE
-	_status_chip_box.set_corner_radius_all(CHIP_RADIUS)
-	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip, _intensity_chip]:
-		chip.draw.connect(_draw_status_chip.bind(chip))
-	_chart.fade_height = HudLayout.CHART_GRADIENT_HEIGHT
+	var chips: Array[Control] = [_trainer_chip, _hr_chip, _mode_chip, _intensity_chip]
+	_frame = HudScreenFrame.new(self, chips)
 	_chart.legend_power_key = CHART_LEGEND_POWER_KEY
 	_chart.legend_hr_key = CHART_LEGEND_HR_KEY
 	_interval_list.free_text_key = LIST_FREE_KEY
 	_interval_list.remaining_key = LIST_REMAINING_KEY
 	_interval_list.step_counter_key = LIST_STEP_OF_KEY
 	_toolbar.set_mode(HudToolbar.Mode.PLAN)
-	_toolbar.minimum_size_changed.connect(_place_toolbar)
 	_toolbar.pause_requested.connect(_on_toolbar_escape)
 	_toolbar.erg_toggle_requested.connect(toggle_erg)
 	_toolbar.intensity_step_requested.connect(_on_intensity_step)
@@ -184,26 +144,9 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	_pause_button.pressed.connect(toggle_pause)
 	_home_button.pressed.connect(go_home)
-	_connect_legacy_controls()
-	var guard := _EscapeGuard.new()
-	guard.name = "EscapeGuard"
-	guard.handler = _on_escape_on_pause_card
-	add_child(guard)
+	_frame.install_escape_guard(_on_escape_on_pause_card)
 	_fit_viewport()
 	refresh()
-
-
-## Скрытые узлы совместимости ведут в те же обработчики, что и `HudToolbar`/`PauseOverlay`.
-func _connect_legacy_controls() -> void:
-	_legacy_skip.pressed.connect(skip_step)
-	_legacy_stop.pressed.connect(_on_finish_requested)
-	_legacy_erg.pressed.connect(toggle_erg)
-	_legacy_resistance_minus.pressed.connect(adjust_resistance.bind(-RESISTANCE_STEP))
-	_legacy_resistance_plus.pressed.connect(adjust_resistance.bind(RESISTANCE_STEP))
-	_legacy_intensity_minus.pressed.connect(adjust_intensity.bind(-INTENSITY_STEP))
-	_legacy_intensity_plus.pressed.connect(adjust_intensity.bind(INTENSITY_STEP))
-	_stop_dialog.confirmed.connect(confirm_stop)
-	_stop_dialog.canceled.connect(cancel_stop)
 
 
 # ---------------------------------------------------------------------------
@@ -272,11 +215,6 @@ func keep_awake() -> KeepAwake:
 	return _keep_awake
 
 
-## Полоса HUD-07 (скрыта, на экране её роль у графика HUD-10): та же модель сегментов.
-func progress_bar() -> WorkoutProgressBar:
-	return _progress_bar
-
-
 ## 3D-фон под HUD.
 func ride_scene() -> RideScene:
 	return _ride_scene
@@ -319,9 +257,9 @@ func toolbar() -> HudToolbar:
 
 ## Текущая геометрия HUD (пересчитывается при смене размера и на каждой отрисовке).
 func hud_layout() -> HudLayout:
-	if _layout == null:
+	if _frame.current_layout() == null:
 		_layout_hud()
-	return _layout
+	return _frame.current_layout()
 
 
 ## Левый слот (список интервалов). Содержимое ставится от его левого верхнего угла.
@@ -405,7 +343,6 @@ func confirm_stop() -> void:
 
 func cancel_stop() -> void:
 	_stop_pending = false
-	_stop_dialog.hide()
 	# Карточка сама вернётся к паузе или уберёт вуаль и испустит `finish_cancelled`.
 	_pause_overlay.cancel_finish()
 
@@ -447,9 +384,9 @@ func _is_live() -> bool:
 
 
 ## Esc панели инструментов (`pause_requested`) — как системное «назад» на этом экране:
-## подтверждение досрочного завершения (REQ-UIX-04 крит. 2). `hud.md` п. 10.3 называет Esc
-## паузой, но панель ловит клавишу раньше `AppMain._unhandled_input`, и без этого Esc
-## ставил бы паузу вместо подтверждения; приоритет у требования.
+## подтверждение досрочного завершения (REQ-UIX-04 крит. 2; решение по Esc одно для обоих
+## экранов заезда). `hud.md` п. 10.3 называет Esc паузой, но панель ловит клавишу раньше
+## `AppMain._unhandled_input`, и без этого Esc ставил бы паузу вместо подтверждения.
 func _on_toolbar_escape() -> void:
 	if _session != null and _session.get_state() == WorkoutSession.State.RUNNING:
 		request_stop()
@@ -593,7 +530,7 @@ func _render() -> void:
 	var s := _hud.state()
 	var paused: bool = s["session_state"] == WorkoutSession.State.PAUSED
 	_metric_panel.set_state(_panel_state(s))
-	_set_panel_dimmed(paused)
+	_metric_panel.set_dimmed(paused)
 	_render_status(s)
 	# График и список — на каждом пересчёте: сэмпл, смена шага, пропуск, множитель, пауза.
 	_chart.sync(_session)
@@ -604,7 +541,6 @@ func _render() -> void:
 	_pause_button.icon = ICON_PLAY if paused else ICON_PAUSE
 	_render_toolbar(s, paused)
 	_render_pause(paused)
-	_render_legacy(s, segments)
 	_layout_hud()
 
 
@@ -623,11 +559,6 @@ func _panel_state(s: Dictionary) -> Dictionary:
 	s["target_cadence_rpm"] = step.cadence_rpm if step != null else 0
 	s["resistance_pct"] = _session.resistance_level
 	return s
-
-
-## Пауза: значения панели приглушены (`hud.md` п. 10.2), подложка остаётся.
-func _set_panel_dimmed(dimmed: bool) -> void:
-	_panel_values.modulate.a = PAUSED_VALUES_ALPHA if dimmed else 1.0
 
 
 ## Слот подсказки: за 5 с до смены шага — фишка «ДАЛЕЕ» со следующим шагом и секундами
@@ -675,14 +606,6 @@ func _render_pause(paused: bool) -> void:
 		_pause_overlay.hide_overlay()
 
 
-## Скрытые узлы совместимости: тексты и полоса HUD-07 (та же модель, что у графика).
-func _render_legacy(s: Dictionary, segments: Array[Dictionary]) -> void:
-	_legacy_erg.text = tr("ui.workout.erg_on") if s["erg_enabled"] else tr("ui.workout.erg_off")
-	_legacy_resistance_label.text = tr("ui.workout.resistance").format({"value": _session.resistance_level})
-	_legacy_intensity_label.text = tr("ui.workout.intensity").format({"value": s["intensity_pct"]})
-	_progress_bar.set_segments(segments, _hud.cursor())
-
-
 ## Горячие клавиши панели — только пока экран виден и сессия идёт.
 func _update_hotkeys() -> void:
 	if _toolbar != null:
@@ -692,33 +615,22 @@ func _update_hotkeys() -> void:
 ## Фишки статусов (`hud.md` п. 10.3): станок, пульс, ERG, интенсивность ≠ 100 %.
 func _render_status(s: Dictionary) -> void:
 	_trainer_chip.tooltip_text = tr(s["connection_key"])
-	_chip_dots[_trainer_chip] = _connection_dot(int(s["connection_state"]))
+	_frame.set_dot(_trainer_chip, HudScreenFrame.connection_dot(int(s["connection_state"])))
 	var has_hr: bool = int(s["hr_bpm"]) >= 0
 	_hr_chip.tooltip_text = tr("ui.hud.status.hr_ok") if has_hr else tr("ui.hud.status.hr_missing")
-	_chip_dots[_hr_chip] = UiTokens.HUD_OK if has_hr else UiTokens.HUD_ERR
+	_frame.set_dot(_hr_chip, UiTokens.HUD_OK if has_hr else UiTokens.HUD_ERR)
 	var erg_on: bool = s["erg_enabled"]
 	_mode_chip.tooltip_text = tr("ui.workout.erg_on") if erg_on else tr("ui.workout.erg_off")
 	if not erg_on:
-		_chip_dots[_mode_chip] = UiTokens.HUD_TEXT2
+		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
 	else:
-		_chip_dots[_mode_chip] = UiTokens.HUD_OK if s["erg_active_on_trainer"] else UiTokens.HUD_WARN
+		_frame.set_dot(_mode_chip, UiTokens.HUD_OK if s["erg_active_on_trainer"] else UiTokens.HUD_WARN)
 	var pct: int = int(s["intensity_pct"])
 	_intensity_chip.visible = pct != 100
 	_intensity_status_label.text = tr("ui.hud.status.intensity").format({"value": pct})
 	_intensity_chip.tooltip_text = tr("ui.hud.status.intensity_hint").format({"value": pct})
-	_chip_dots[_intensity_chip] = UiTokens.HUD_WARN
-	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip, _intensity_chip]:
-		chip.queue_redraw()
-
-
-static func _connection_dot(state: int) -> Color:
-	match state:
-		TrainerDevice.ConnectionState.CONNECTED:
-			return UiTokens.HUD_OK
-		TrainerDevice.ConnectionState.SCANNING, TrainerDevice.ConnectionState.CONNECTING, TrainerDevice.ConnectionState.RECONNECTING:
-			return UiTokens.HUD_WARN
-		_:
-			return UiTokens.HUD_ERR
+	_frame.set_dot(_intensity_chip, UiTokens.HUD_WARN)
+	_frame.redraw_chips()
 
 
 # ---------------------------------------------------------------------------
@@ -754,151 +666,28 @@ func _px_per_lp() -> Vector2:
 	return Vector2(window.size) / visible_lp
 
 
-## Расставить слоты HUD по `HudLayout` и компоненты в слотах.
+## Расставить слоты HUD по `HudLayout` (общая часть — `HudScreenFrame`) и компоненты в слотах:
+## список интервалов в левом слоте, подсказку и фишку «ДАЛЕЕ» в слоте подсказки.
 func _layout_hud() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
-	var ui := _ui_scale()
-	var s := ui.current_scale() if ui != null and ui.mode == UiScale.Mode.HUD else 1.0
-	var touch := ui.touch_hud() if ui != null else UiScale.TOUCH_HUD_DESKTOP
-	var phone := ui != null and ui.device == UiScale.Device.PHONE
-	var safe := ui.safe_margins() if ui != null else Vector4.ZERO
-	_apply_touch_target(touch)
-	var chips := _visible_chips()
-	_size_chips(chips)
-	var row_w := CHIP_GAP * maxf(chips.size() - 1, 0)
-	for chip in chips:
-		row_w += chip.size.x
-	_layout = HudLayout.compute(size, safe, s, touch, phone, _pause_button.get_combined_minimum_size(), row_w)
-	_set_rect(_metric_panel, _layout.panel)
-	_set_rect(_pause_button, _layout.pause_button)
+	var layout := _frame.layout()
+	if layout == null:
+		return
 	# Список интервалов: ширина `w_l`, высота по содержимому, не выше слота.
-	_set_rect(_list_slot, _layout.list_slot)
 	_interval_list.position = Vector2.ZERO
-	_interval_list.list_width = _layout.list_slot.size.x
-	_interval_list.max_height = _layout.list_slot.size.y
-	# График: градиент над подложкой и поле — во всю ширину слота.
-	var chart_rect := _layout.chart_gradient.merge(_layout.chart)
-	_set_rect(_chart_slot, chart_rect)
-	_chart.fade_height = _layout.chart_gradient.size.y
-	_set_rect(_chart, Rect2(Vector2.ZERO, chart_rect.size))
-	_set_rect(_hint_slot, _layout.hint_slot)
-	_layout_cue()
+	_interval_list.list_width = layout.list_slot.size.x
+	_interval_list.max_height = layout.list_slot.size.y
+	_frame.place_hint_plate(_cue_plate, _cue_label)
 	_place_next_chip()
-	_set_rect(_status_slot, _layout.status_slot)
-	_layout_chips(chips)
-	_set_rect(_toolbar_slot, _layout.toolbar_slot)
-	_place_toolbar()
 
 
-## Цель нажатия `touch_hud` — панели инструментов и карточке паузы.
-func _apply_touch_target(touch: float) -> void:
-	if is_equal_approx(touch, _touch_applied):
-		return
-	_touch_applied = touch
-	_toolbar.set_touch_target(touch)
-	_pause_overlay.set_touch_target(touch)
-
-
-## Панель инструментов — у правого края колонки, по центру её высоты, не выходя из слота.
-## Раскладка: на телефоне — сетка 2 × 3 (`hud.md` п. 10.3); на компьютере и планшете —
-## колонка, а если колонка выше слота (16:9, ERG выкл) — та же сетка, чтобы панель не
-## заходила ни на фишки статусов, ни на график (REQ-HUD-13 крит. 5, 6).
-func _place_toolbar() -> void:
-	if _layout == null or _placing_toolbar:
-		return
-	_placing_toolbar = true
-	var slot := _layout.toolbar_slot.size
-	var erg_on: bool = _session.erg_enabled if _session != null else true
-	var key := "%s|%d|%d|%s" % [_layout.phone, roundi(slot.y), roundi(_touch_applied), erg_on]
-	if key != _toolbar_fit_key:
-		_toolbar_fit_key = key
-		if _layout.phone:
-			_toolbar.set_compact(true)
-		else:
-			_toolbar.set_compact(false)
-			_toolbar.set_compact(_toolbar.get_combined_minimum_size().y > slot.y)
-	var tools := _toolbar.get_combined_minimum_size()
-	_toolbar.size = tools
-	_toolbar.position = Vector2(slot.x - tools.x, maxf((slot.y - tools.y) * 0.5, 0.0))
-	_placing_toolbar = false
-
-
-## Фишка «ДАЛЕЕ» — во всю ширину слота (плашка по центру); на компьютере и планшете — у верха
-## слота под панелью, на телефоне — низом к низу слота (над графиком).
 func _place_next_chip() -> void:
-	if _layout == null:
-		return
-	var slot := _layout.hint_slot.size
-	var h := _next_chip.get_combined_minimum_size().y
-	var y := slot.y - h if _layout.phone else 0.0
-	_set_rect(_next_chip, Rect2(0.0, y, slot.x, h))
-
-
-## Плашка подсказки: по ширине текста (не шире слота); вверху слота на компьютере и
-## планшете, внизу — на телефоне (слот у низа кадра).
-func _layout_cue() -> void:
-	if not _cue_plate.visible:
-		return
-	var slot := _layout.hint_slot.size
-	var box := _cue_plate.get_theme_stylebox(&"panel")
-	var pad := box.get_minimum_size() if box != null else Vector2.ZERO
-	var font := _cue_label.get_theme_font(&"font")
-	var text_w := font.get_string_size(_cue_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _cue_label.get_theme_font_size(&"font_size")).x
-	var width := minf(ceilf(text_w) + pad.x + 1.0, slot.x)
-	_cue_label.custom_minimum_size = Vector2(width - pad.x, 0)
-	_cue_plate.size = Vector2(width, 0)
-	_cue_plate.size = _cue_plate.get_combined_minimum_size()
-	var y := slot.y - _cue_plate.size.y if _layout.phone else 0.0
-	_cue_plate.position = Vector2((slot.x - _cue_plate.size.x) * 0.5, y)
-
-
-func _visible_chips() -> Array[Control]:
-	var out: Array[Control] = []
-	for chip: Control in [_trainer_chip, _hr_chip, _mode_chip, _intensity_chip]:
-		if chip.visible:
-			out.append(chip)
-	return out
-
-
-func _size_chips(chips: Array[Control]) -> void:
-	for chip in chips:
-		var label := chip.get_child(0) as Label
-		var label_size := label.get_combined_minimum_size()
-		label.position = Vector2(CHIP_PAD_LEFT, (CHIP_HEIGHT - label_size.y) * 0.5)
-		label.size = label_size
-		chip.size = Vector2(CHIP_PAD_LEFT + label_size.x + CHIP_PAD_RIGHT, CHIP_HEIGHT)
-
-
-## Строкой — вправо к кнопке паузы; столбиком — под кнопкой, по правому краю.
-func _layout_chips(chips: Array[Control]) -> void:
-	var slot := _layout.status_slot.size
-	if _layout.status_vertical:
-		var y := 0.0
-		for chip in chips:
-			chip.position = Vector2(slot.x - chip.size.x, y)
-			y += CHIP_HEIGHT + HudLayout.STATUS_GAP
-	else:
-		var x := slot.x
-		for i in range(chips.size() - 1, -1, -1):
-			x -= chips[i].size.x
-			chips[i].position = Vector2(x, 0)
-			x -= CHIP_GAP
-
-
-static func _set_rect(node: Control, rect: Rect2) -> void:
-	node.position = rect.position
-	node.size = rect.size
+	_frame.place_next_chip(_next_chip)
 
 
 func _ui_scale() -> UiScale:
 	return get_node_or_null(^"/root/UiScaleRuntime") as UiScale
-
-
-## Фишка статуса: подложка `hud.plate` (r 12) и точка состояния.
-func _draw_status_chip(chip: Control) -> void:
-	chip.draw_style_box(_status_chip_box, Rect2(Vector2.ZERO, chip.size))
-	chip.draw_circle(Vector2(CHIP_PAD_LEFT * 0.5 + 1.0, CHIP_HEIGHT * 0.5), CHIP_DOT_RADIUS, _chip_dots.get(chip, UiTokens.HUD_TEXT2))
 
 
 func _render_summary() -> void:
@@ -963,18 +752,3 @@ func _teardown() -> void:
 
 func _exit_tree() -> void:
 	on_screen_exited()
-
-
-## Перехват Esc раньше `PauseOverlay._input`: последний ребёнок экрана получает `_input`
-## раньше вуали (обход в обратном порядке дерева). `handler` вернул true — событие поглощено.
-class _EscapeGuard extends Node:
-	var handler: Callable = Callable()
-
-	func _input(event: InputEvent) -> void:
-		var key := event as InputEventKey
-		if key == null or not key.pressed or key.echo or not handler.is_valid():
-			return
-		if key.keycode != KEY_ESCAPE and key.physical_keycode != KEY_ESCAPE:
-			return
-		if handler.call():
-			get_viewport().set_input_as_handled()
