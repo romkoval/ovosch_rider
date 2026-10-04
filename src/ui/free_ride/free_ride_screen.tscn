@@ -27,6 +27,7 @@ stretch = true
 
 [node name="Viewport" type="SubViewport" parent="ViewportContainer"]
 unique_name_in_owner = true
+own_world_3d = true
 handle_input_locally = false
 msaa_3d = 2
 size = Vector2i(1280, 720)
