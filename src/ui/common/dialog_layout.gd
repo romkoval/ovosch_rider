@@ -9,7 +9,11 @@ extends Node
 ## - фокус при открытии: в диалоге с опасной кнопкой (`DangerButton`) — «Отмена» (Enter сразу
 ##   после открытия закрывает без действия), в остальных — основная кнопка (поведение движка);
 ##   в диалоге-форме (`FormDialog`) фокус ставит сама форма;
-## - Esc, «назад» и «×» — «Отмена» (`dialog_close_on_escape` движка → `canceled`).
+## - Esc, «назад» и «×» — «Отмена» (`dialog_close_on_escape` движка → `canceled`);
+## - под видимым диалогом — вуаль `scrim` (`UiTokens.SCRIM`, `ui.md` п. 6; REQ-UIX-01 п.9, T-142)
+##   на весь вьюпорт, в котором диалог встроен: слой `CanvasLayer` с `custom_viewport` =
+##   вьюпорт родителя диалога, ниже встроенных окон (они рисуются над всеми слоями холста),
+##   выше экранов. Нажатия не перехватывает (диалоги модальные и так).
 ##
 ## Помощник — внутренний дочерний узел диалога (как `TouchTarget`): `DialogLayout.attach(dialog)`
 ## или `attach_all(root)` для всех диалогов поддерева экрана. Ряд кнопок раскладывается заново
@@ -23,9 +27,16 @@ const DANGER_VARIATION: StringName = &"DangerButton"
 const FORM_VARIATION: StringName = &"FormDialog"
 ## Зазор между кнопками ряда, lp (`ui.md` п. 6).
 const BUTTON_GAP: float = 12.0
+## Слой вуали: над экранами и HUD, под встроенными окнами (слой окон движка — 1024).
+const SCRIM_LAYER: int = 1000
+const SCRIM_NAME: StringName = &"DialogScrim"
 
 ## Выставлять ли ширину 480 (у листа лицензий своя раскладка — false).
 var fixed_width: bool = true
+
+var _scrim_layer: CanvasLayer = null
+var _scrim: ColorRect = null
+var _scrim_viewport: Viewport = null
 
 
 ## Прикрепить помощника к диалогу (повторный вызов возвращает уже прикреплённый).
@@ -158,12 +169,83 @@ func arrange() -> void:
 		TouchTarget.attach(b, TouchTarget.Kind.BUTTON)
 
 
+## Вуаль под диалогом (null — не создана: диалог ещё не показывался).
+func scrim() -> ColorRect:
+	return _scrim
+
+
+## Вуаль видна (диалог на экране).
+func is_scrim_visible() -> bool:
+	return _scrim_layer != null and _scrim_layer.visible
+
+
 func _on_visibility_changed() -> void:
 	var d := dialog()
-	if d == null or not d.visible or is_form(d) or not is_danger(d) or not d is ConfirmationDialog:
+	if d == null:
+		return
+	_sync_scrim(d.visible)
+	if not d.visible or is_form(d) or not is_danger(d) or not d is ConfirmationDialog:
 		return
 	var cancel := (d as ConfirmationDialog).get_cancel_button()
 	# Движок при показе ставит фокус на основную кнопку; опасному диалогу — «Отмена» (сразу и
 	# после кадра: показ встроенного окна мог ещё не закончиться).
 	cancel.grab_focus()
 	cancel.grab_focus.call_deferred()
+
+
+## Показать или убрать вуаль под диалогом. Вуаль — во вьюпорте родителя диалога (встроенное окно
+## рисуется в нём), размер — видимая область этого вьюпорта, следит за её изменением.
+func _sync_scrim(shown: bool) -> void:
+	if not shown:
+		if _scrim_layer != null:
+			_scrim_layer.visible = false
+		_watch_viewport(null)
+		return
+	var d := dialog()
+	var host: Node = d.get_parent() if d != null else null
+	var viewport: Viewport = host.get_viewport() if host != null and host.is_inside_tree() else null
+	if viewport == null:
+		return
+	# `custom_viewport` задаётся до входа слоя в дерево: смена на ходу ломает отписку движка
+	# от `child_order_changed` при выходе. Другой вьюпорт — слой создаётся заново.
+	if _scrim_layer != null and _scrim_layer.custom_viewport != viewport:
+		_scrim_layer.queue_free()
+		_scrim_layer = null
+		_scrim = null
+	if _scrim_layer == null:
+		_scrim_layer = CanvasLayer.new()
+		_scrim_layer.name = SCRIM_NAME
+		_scrim_layer.layer = SCRIM_LAYER
+		_scrim_layer.custom_viewport = viewport
+		_scrim = ColorRect.new()
+		_scrim.name = &"Scrim"
+		_scrim.color = UiTokens.SCRIM
+		_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_scrim_layer.add_child(_scrim)
+		add_child(_scrim_layer)
+	_watch_viewport(viewport)
+	_fit_scrim()
+	_scrim_layer.visible = true
+
+
+func _watch_viewport(viewport: Viewport) -> void:
+	if _scrim_viewport == viewport:
+		return
+	if _scrim_viewport != null and is_instance_valid(_scrim_viewport) \
+			and _scrim_viewport.size_changed.is_connected(_fit_scrim):
+		_scrim_viewport.size_changed.disconnect(_fit_scrim)
+	_scrim_viewport = viewport
+	if viewport != null and not viewport.size_changed.is_connected(_fit_scrim):
+		viewport.size_changed.connect(_fit_scrim)
+
+
+func _fit_scrim() -> void:
+	if _scrim == null or _scrim_viewport == null or not is_instance_valid(_scrim_viewport):
+		return
+	var rect := _scrim_viewport.get_visible_rect()
+	_scrim.position = rect.position
+	_scrim.size = rect.size
+
+
+func _exit_tree() -> void:
+	_watch_viewport(null)

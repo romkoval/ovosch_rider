@@ -96,7 +96,8 @@ const KIND_DIALOG: String = "dialog"
 ## без заездов) или сколько заездов показать (недостающие — синтетические, план и свободная
 ## езда вперемешку). Диалоги (`dialog`): `profile_create` — «Новый профиль», `forget_intervals` —
 ## подтверждение «Отвязать Intervals.icu», `recovery` — восстановление незавершённого заезда
-## (T-114; заезд синтетический, в хранилище не пишется).
+## (T-114; заезд синтетический, в хранилище не пишется), `delete_ride` — подтверждение удаления
+## заезда из карточки истории (T-142, REQ-UIX-01 п.9; удаление не подтверждается).
 const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_0030", "kind": KIND_WORKOUT_AT, "at_sec": 30},
 	{"id": "hud_toolbar_plan", "kind": KIND_WORKOUT_AT, "at_sec": 60, "toolbar": true},
@@ -111,6 +112,7 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "dialog_recovery", "kind": KIND_DIALOG, "dialog": "recovery"},
 	{"id": "history_ride_detail", "kind": KIND_RIDE_DETAIL},
 	{"id": "history_ride_detail_end", "kind": KIND_RIDE_DETAIL, "scroll_end": true},
+	{"id": "dialog_delete_ride", "kind": KIND_DIALOG, "dialog": "delete_ride"},
 	{"id": "free_start", "kind": KIND_FREE_RIDE_AT, "at_sec": 20, "power_w": 190},
 	{"id": "free_flat", "kind": KIND_FREE_RIDE_AT, "s_m": 1600.0, "power_w": 200},
 	{"id": "hud_toolbar_free", "kind": KIND_FREE_RIDE_AT, "s_m": 1700.0, "power_w": 200, "toolbar": true},
@@ -434,6 +436,19 @@ func _shoot_dialog(id: String, dialog: String) -> void:
 			await _shoot(id)
 			# Решение не принимается: синтетического заезда нет в хранилище.
 			recovery.hide()
+		"delete_ride":
+			_main.app_state.navigate(AppState.Screen.HISTORY)
+			var history: HistoryScreen = _main.history_screen()
+			if history.row_count() == 0:
+				_fail("%s: в истории нет заезда" % id)
+				return
+			history.select_index(0)
+			if not history.detail().request_delete():
+				_fail("%s: диалог удаления не открылся" % id)
+				return
+			await _shoot(id)
+			history.detail().cancel_delete()
+			history.back_to_list()
 		_:
 			_fail("%s: неизвестный диалог '%s'" % [id, dialog])
 
