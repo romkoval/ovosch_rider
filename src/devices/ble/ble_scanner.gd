@@ -3,8 +3,9 @@ extends RefCounted
 ## Сканер BLE-устройств и модель списка (REQ-DEV-01 крит. 1–4).
 ##
 ## `start()` → `bridge.start_scan(BleUuids.SCAN_SERVICES)`; каждое `device_found`
-## добавляет или обновляет запись `devices` (дедупликация по id, обновление имени/RSSI).
-## Запись: `{id, name, rssi, kind, last_seen_sec, available}`; `kind` — в терминах
+## добавляет или обновляет запись `devices` (дедупликация по id, обновление имени/RSSI;
+## `services` — объединение сервисов всех пакетов рекламы, `kind` — по нему).
+## Запись: `{id, name, rssi, kind, services, last_seen_sec, available}`; `kind` — в терминах
 ## `RememberedDevices.KIND_*` ("trainer"|"hr"|"cadence"|"power") либо "unknown".
 ## Время подаётся через `tick(delta)`: без рекламы 10 с → `available = false`,
 ## 30 с → запись удаляется. События после `stop()` игнорируются.
@@ -133,14 +134,14 @@ func _on_device_found(id: String, name: String, rssi: int, service_uuids: Packed
 	if not scanning or id.is_empty():
 		return
 	_session_seen[id] = true
-	var kind: String = kind_from_services(service_uuids)
 	var entry: Dictionary = {}
 	for d in devices:
 		if d["id"] == id:
 			entry = d
 			break
 	if entry.is_empty():
-		entry = {"id": id, "name": name, "rssi": rssi, "kind": kind, "last_seen_sec": _time_sec, "available": true}
+		entry = {"id": id, "name": name, "rssi": rssi, "kind": KIND_UNKNOWN, "services": PackedStringArray(),
+				"last_seen_sec": _time_sec, "available": true}
 		devices.append(entry)
 	else:
 		if not name.is_empty():
@@ -148,8 +149,19 @@ func _on_device_found(id: String, name: String, rssi: int, service_uuids: Packed
 		entry["rssi"] = rssi
 		entry["last_seen_sec"] = _time_sec
 		entry["available"] = true
-		if kind != KIND_UNKNOWN:
-			entry["kind"] = kind
+	# Устройство может рекламировать сервисы в разных пакетах (основной пакет и ответ
+	# на сканирование приходят отдельными событиями): Tacx Neo шлёт пакеты и с FTMS,
+	# и только с CSC/CPS. Тип — по объединению всех сервисов сеанса, иначе последний
+	# пакет без FTMS превращает станок в «датчик каденса».
+	var seen: PackedStringArray = entry["services"]
+	for s in service_uuids:
+		var u: String = BleUuids.normalize(s)
+		if not seen.has(u):
+			seen.append(u)
+	entry["services"] = seen
+	var kind: String = kind_from_services(seen)
+	if kind != KIND_UNKNOWN:
+		entry["kind"] = kind
 	_sort()
 	devices_changed.emit()
 	device_found.emit(entry.duplicate())

@@ -149,3 +149,17 @@ func test_seen_in_session_survives_expiry_and_resets_on_new_session() -> void:
 	assert_false(_scanner.seen_in_session("neo"), "сеанс закончился")
 	_scanner.start()
 	assert_false(_scanner.seen_in_session("neo"), "новый сеанс — с чистого листа")
+
+
+func test_kind_from_union_of_advertisement_packets_trainer_not_downgraded() -> void:
+	# Tacx Neo: пакет с FTMS и отдельные пакеты только с CSC/CPS (основной пакет и ответ
+	# на сканирование). Станок не должен становиться «датчиком каденса» (REQ-DEV-01 крит. 2).
+	_scanner.start()
+	_adv("neo", "Tacx Neo 11565", -68, ["1826", "1818"])
+	_adv("neo", "Tacx Neo 11565", -68, ["1816"])
+	assert_eq(_scanner.find("neo")["kind"], RememberedDevices.KIND_TRAINER, "FTMS из любого пакета — станок")
+	_adv("neo2", "Tacx Neo 2T", -70, ["1816"])
+	assert_eq(_scanner.find("neo2")["kind"], RememberedDevices.KIND_CADENCE)
+	_adv("neo2", "Tacx Neo 2T", -70, ["00001826-0000-1000-8000-00805f9b34fb"])
+	assert_eq(_scanner.find("neo2")["kind"], RememberedDevices.KIND_TRAINER, "FTMS пришёл позже — станок")
+	assert_eq(_scanner.find("neo2")["services"], PackedStringArray(["1816", "1826"]))
