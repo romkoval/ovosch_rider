@@ -15,7 +15,7 @@ import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
-from . import meshops
+from . import meshops, regions
 from .proportions import frame, head_system, owners, ring, segments, spec_center_local, target_joints
 
 PROJECT_LIMIT_M = 0.06
@@ -174,14 +174,24 @@ def wrap(obj, target, passes=(("PROJECT", 0.04, 0.5, 3), ("NEAREST_SURFACEPOINT"
     new.name = obj.name
 
 
-def cut_planes(contract, T):
-    """Плоскости границ регионов (A-поза): [(звено, t, имя)] — по `pipeline_data` «regions»."""
+def torso_at(T, arc):
+    """Звено корпуса и t на дуге `arc` от S по оси pelvis → spine (суставы `T`)."""
+    pl = (T["pelvis"] - T["spine"]).length
+    if arc <= pl:
+        return "pelvis", arc / pl
+    return "spine", (arc - pl) / (T["spine"] - T["chest"]).length
+
+
+def cut_planes(contract, T, cuts=None):
+    """Плоскости границ регионов (A-поза): [(звено, t, имя)] — по `pipeline_data` «regions»;
+    шорты и низ джерси — `cuts` (`regions.nominal_cuts`, низ джерси — после `jersey_bottom_apose`)."""
     r = contract.data["regions"]
+    cuts = cuts or regions.nominal_cuts(contract)
     L = lambda a, b: (T[a] - T[b]).length  # noqa: E731
     out = []
     for s in (".L", ".R"):
         th = L("thigh" + s, "shin" + s)
-        end = sum(r["shorts_leg_end_t"]["range"]) / 2
+        end = cuts["shorts_end_t"]
         out += [("thigh" + s, end, "shorts_end"), ("thigh" + s, end - r["shorts_gripper_m"]["value"] / th, "gripper")]
         sh = L("shin" + s, "foot" + s)
         top = sum(r["sock_top_above_ankle_m"]["range"]) / 2
@@ -196,12 +206,7 @@ def cut_planes(contract, T):
     out += [("chest", c - band / 2 / ch, "band_lo"), ("chest", c + band / 2 / ch, "band_hi"),
             ("chest", r["jersey_yoke_t"]["value"], "yoke"), ("neck", r["collar_t"]["value"], "collar")]
     # Низ джерси: по оси корпуса от S (pelvis → spine → chest).
-    jb = sum(r["jersey_bottom_back_m"]["range"]) / 2
-    pl = L("pelvis", "spine")
-    if jb <= pl:
-        out.append(("pelvis", jb / pl, "jersey_bottom"))
-    else:
-        out.append(("spine", (jb - pl) / L("spine", "chest"), "jersey_bottom"))
+    out.append(torso_at(T, cuts["jersey_bottom_m"]) + ("jersey_bottom",))
     return out
 
 
@@ -216,25 +221,84 @@ def _group(bone):
     return bone
 
 
-def cut_regions(obj, contract, T):
-    """Рёбра по границам регионов: сечение граней своего звена плоскостью поперёк кости."""
+def _plane(T, bone, t0):
+    segs = segments()
+    _, a, b = segs[[s[0] for s in segs].index(bone)]
+    return T[a].lerp(T[b], t0), (T[b] - T[a]).normalized()
+
+
+def _cut_mask(co, T, bone, point, normal):
+    """Вершины цепи звена (`_group`) и вершины не дальше CUT_BAND_M от плоскости границы."""
     segs = segments()
     names = [s[0] for s in segs]
+    d, _ = owners(co, T, segs)
+    group = [i for i, n in enumerate(names) if _group(n) == _group(bone)]
+    return np.isin(d.argmin(axis=1), group), np.abs((co - np.array(point)) @ np.array(normal)) < CUT_BAND_M
+
+
+# Режется грань своей цепи, у которой хоть одна вершина ближе этого к плоскости: длинная грань
+# (на спине у сгиба корпуса — до 6 см) с дальней вершиной иначе не режется, и кольцо границы
+# обходит её зубцом.
+CUT_BAND_M = 0.05
+
+
+# Поправка низа джерси на сгиб корпуса в rest: столько повторов «дуга в rest → поправка дуги A-позы».
+JB_FIT_PASSES = 6
+JB_FIT_TOL_M = 0.0002
+
+
+def jersey_bottom_apose(obj, contract, T, cuts):
+    """Дуга низа джерси в A-позе (м по оси корпуса от S), при которой кольцо рёбер в rest контракта
+    ложится на `cuts["jersey_bottom_m"]` по оси корпуса rest («по спине», art-bible «Корпус»). В A-позе корпус
+    прямой, в rest он сгибается у начала spine, и вес pelvis тянет кольцо за суставом назад к тазу:
+    без поправки номинал 0.24 в rest выходит ≈ 0.232. Каждый повтор — пробная копия сетки: рез
+    плоскостью, триангуляция и посадка в rest, как на шагах 4–5 (тепловые веса, DQS); мера —
+    центр кольца новых вершин. Итог: (дуга A-позы, дуга кольца в rest)."""
+    from . import weights
+    target = cuts["jersey_bottom_m"]
+    chain = [np.array(contract.head(n)) for n in ("pelvis", "spine", "chest")]
+    nv = len(obj.data.vertices)
+
+    def rest_arc(arc):
+        probe = meshops.mesh_object("jb_probe", obj.data.copy())
+        cut_regions(probe, contract, T, dict(cuts, jersey_bottom_m=arc), only=("jersey_bottom",))
+        bm = bmesh.new()
+        bm.from_mesh(probe.data)
+        bmesh.ops.triangulate(bm, faces=bm.faces[:])
+        bm.to_mesh(probe.data)
+        bm.free()
+        weights.repose_to_rest(probe, contract)
+        ring_rest = meshops.verts_np(probe.data)[nv:]
+        me = probe.data
+        bpy.data.objects.remove(probe)
+        bpy.data.meshes.remove(me)
+        for arm in [a for a in bpy.data.armatures if a.users == 0]:
+            bpy.data.armatures.remove(arm)
+        return regions.torso_arc(ring_rest.mean(axis=0), chain)
+
+    arc = target
+    got = rest_arc(arc)
+    for _ in range(JB_FIT_PASSES):
+        if abs(target - got) < JB_FIT_TOL_M:
+            break
+        arc += target - got
+        got = rest_arc(arc)
+    return arc, got
+
+
+def cut_regions(obj, contract, T, cuts=None, only=None, skip=()):
+    """Рёбра по границам регионов: сечение граней своего звена плоскостью поперёк кости
+    (`only` — только эти границы, `skip` — кроме этих; имена — `cut_planes`)."""
     count = 0
-    for bone, t0, _ in cut_planes(contract, T):
-        k = names.index(bone)
-        _, a, b = segs[k]
-        pa, pb = T[a], T[b]
-        normal = (pb - pa).normalized()
-        point = pa.lerp(pb, t0)
+    for bone, t0, name in cut_planes(contract, T, cuts):
+        if (only is not None and name not in only) or name in skip:
+            continue
+        point, normal = _plane(T, bone, t0)
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         co = np.array([v.co[:] for v in bm.verts])
-        d, t = owners(co, T, segs)
-        own = d.argmin(axis=1)
-        group = [i for i, n in enumerate(names) if _group(n) == _group(bone)]
-        near = np.isin(own, group) & (np.abs((co - np.array(point)) @ np.array(normal)) < 0.05)
-        faces = [f for f in bm.faces if all(near[v.index] for v in f.verts)]
+        own, near = _cut_mask(co, T, bone, point, normal)
+        faces = [f for f in bm.faces if all(own[v.index] for v in f.verts) and any(near[v.index] for v in f.verts)]
         geom = list({e for f in faces for e in f.edges}) + faces + list({v for f in faces for v in f.verts})
         res = bmesh.ops.bisect_plane(bm, geom=geom, plane_co=point, plane_no=normal, dist=1e-5)
         count += sum(1 for g in res["geom_cut"] if isinstance(g, bmesh.types.BMVert))
@@ -278,7 +342,12 @@ def project(scan_obj, contract, data):
     obj = meshops.mesh_object("body_m", base)
     base.name = "body_m"
     wrap(obj, scan_obj)
-    cuts = cut_regions(obj, contract, T)
+    region_cuts = regions.nominal_cuts(contract)
+    cuts = cut_regions(obj, contract, T, region_cuts, skip=("jersey_bottom",))
+    # Низ джерси — последним: пробная посадка в rest идёт по сетке со всеми прочими рёбрами границ.
+    jb_rest = region_cuts["jersey_bottom_m"]
+    region_cuts["jersey_bottom_m"], jb_got = jersey_bottom_apose(obj, contract, T, region_cuts)
+    cuts += cut_regions(obj, contract, T, region_cuts, only=("jersey_bottom",))
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bmesh.ops.triangulate(bm, faces=bm.faces[:])
@@ -289,7 +358,13 @@ def project(scan_obj, contract, data):
     for p in obj.data.polygons:
         p.use_smooth = True
     metrics, warns = quality(obj, scan_obj, data)
-    metrics.update({"graph_verts": nv, "graph_edges": ne, "base_tris": base_tris, "region_cut_verts": cuts})
+    metrics.update({"graph_verts": nv, "graph_edges": ne, "base_tris": base_tris, "region_cut_verts": cuts,
+                    "shorts_end_t": round(region_cuts["shorts_end_t"], 4),
+                    "jersey_bottom_apose_m": round(region_cuts["jersey_bottom_m"], 4),
+                    "jersey_bottom_rest_m": round(jb_got, 4)})
+    if abs(jb_got - jb_rest) > 0.002:
+        warns.append("низ джерси в rest %.3f м по оси корпуса, номинал %.3f — поправка на сгиб корпуса не сошлась" % (jb_got, jb_rest))
+    obj["region_cuts"] = region_cuts
     return obj, metrics, warns
 
 

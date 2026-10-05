@@ -132,6 +132,12 @@ class DataVsSpec(unittest.TestCase):
         self.assertIn("до середины плеча (%d–%d %%), манжета %.1f см" % (lo * 100, hi * 100, r["jersey_cuff_m"]["value"] * 100), art)
         lo, hi = r["jersey_bottom_back_m"]["range"]
         self.assertIn("на %.2f–%.2f м выше верха седла" % (lo, hi), art)
+        # Номиналы ред. 4.6 — из текста спеки и внутри диапазона.
+        self.assertIn("номинал %d %%" % round(r["shorts_leg_end_t"]["nominal"] * 100), art)
+        self.assertIn("низ джерси на %.2f м" % r["jersey_bottom_back_m"]["nominal"], art)
+        for key in ("shorts_leg_end_t", "jersey_bottom_back_m"):
+            lo, hi = r[key]["range"]
+            self.assertTrue(lo <= r[key]["nominal"] <= hi, key)
         lo, hi = r["jersey_band_m"]["range"]
         self.assertIn("(высота %d–%d см)" % (lo * 100, hi * 100), brief)
 

@@ -178,9 +178,6 @@ def waist_width(co, joints, band=0.01, gap=0.02):
     return None if r is None or l is None else r + l
 
 
-CROWN_CAP_M = 0.004
-
-
 def head_measures(co, joints):
     """Голова в своей системе (взгляд горизонтально), м: высота «подбородок — макушка», ширина,
     длина; макушка (верхняя точка сетки головы) — вверх и вперёд от начала head. Подбородок —
@@ -191,11 +188,10 @@ def head_measures(co, joints):
            (loc[:, 2] > -0.2 * k) & (loc[:, 2] < 0.3 * k)
     if near.sum() < 20:
         return {}
-    # Макушка — верхняя точка сетки головы; на плоском куполе (закрытая дыра, срез) верхняя
-    # вершина прыгает по краю, поэтому — середина вершин в 4 мм от верха.
-    zmax = float(loc[near, 2].max())
-    cap = near & (loc[:, 2] > zmax - CROWN_CAP_M)
-    out = {"crown_up_m": zmax, "crown_forward_m": float(-loc[cap, 1].mean())}
+    # Макушка — верхняя точка сетки головы (спека ред. 4.2), одна вершина, без усреднения.
+    idx = np.flatnonzero(near)
+    top = int(idx[np.argmax(loc[idx, 2])])
+    out = {"crown_up_m": float(loc[top, 2]), "crown_forward_m": float(-loc[top, 1])}
     neck = near & (np.abs(loc[:, 0]) < 0.05 * k) & (loc[:, 2] > -0.11 * k) & (loc[:, 2] < -0.09 * k)
     if neck.sum() >= 4:
         front = float(loc[neck, 1].min())
@@ -299,7 +295,9 @@ def target_joints(contract):
 FIT_PASSES = 4
 # Кивок головы при подгонке не больше этого (рад, 10°): больше — голова скана не по спеке.
 NOD_MAX = math.radians(10.0)
-NOD_MARGIN_M = 0.003
+# Макушка целится в номинал спеки (`crown_in_head_m` «вперёд», 0.03 м) с мёртвой зоной ± столько:
+# внутри — кивок не трогается (верхняя вершина на куполе прыгает от поворота на ~мм).
+NOD_DEADBAND_M = 0.002
 # Ключ меры → индекс в `head_size_m` (ширина × высота × длина) и ось системы головы (X, Y, Z).
 HEAD_KEYS = {"head_width_m": 0, "head_height_m": 1, "head_length_m": 2}
 HEAD_AXIS = {"head_width_m": 0, "head_length_m": 1, "head_height_m": 2}
@@ -397,11 +395,11 @@ def fit(obj, lm, contract):
         _, _, k = head_system(src)
         cs = spec_c * k
     ct = spec_c.copy()
-    # Кивок: система головы спеки задана макушкой (0.02–0.04 м впереди начала head), ориентир
-    # crown скана — только оценка наклона. Макушка вне полосы (с запасом NOD_MARGIN_M) — кивок
-    # вокруг центра до ближней границы полосы; внутри — не трогать (на круглом куполе макушка
-    # почти не двигается от кивка, точная подгонка дала бы большой поворот лица).
-    lo_f, hi_f = data["apose"]["crown_in_head_m"]["forward_range"]
+    # Кивок: система головы спеки задана макушкой (0.02–0.04 м впереди начала head, номинал 0.03),
+    # ориентир crown скана — только оценка наклона. Макушка (верхняя вершина сетки) дальше
+    # NOD_DEADBAND_M от номинала — кивок вокруг центра до ближней границы мёртвой зоны; внутри —
+    # не трогать (верхняя вершина на куполе прыгает от поворота, погоня за ней качала бы лицо).
+    nom_f = data["apose"]["crown_in_head_m"]["value"][1]
     pitch = 0.0
     for n in range(FIT_PASSES):
         out = _map(co, src, target, segs, w, ratios, shoulder_root, (cs, ct, pitch))
@@ -419,7 +417,7 @@ def fit(obj, lm, contract):
             ct = ct + (spec_c - c_after)
             if "crown_up_m" in after:
                 fwd = after["crown_forward_m"]
-                want_f = min(max(fwd, lo_f + NOD_MARGIN_M), hi_f - NOD_MARGIN_M)
+                want_f = min(max(fwd, nom_f - NOD_DEADBAND_M), nom_f + NOD_DEADBAND_M)
                 dz = after["crown_up_m"] - c_after[2]
                 got = math.atan2(-fwd - c_after[1], dz)
                 aim = math.atan2(-want_f - c_after[1], dz)

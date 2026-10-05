@@ -12,6 +12,38 @@ import numpy as np
 from .proportions import segments
 
 MATERIAL = "M_rider"
+# Номинал ред. 4.6 стоит на границе диапазона спеки (штанина 70 % при 65–70 %, низ джерси 0.24 м
+# при 0.20–0.24): граница сетки — на столько внутрь диапазона, чтобы float32 и сварка вершин glb
+# не вынесли её за спеку.
+SPEC_EDGE_MARGIN_M = 0.001
+
+
+def nominal_cuts(contract):
+    """Границы шорт и низа джерси по номиналу спеки (pipeline_data «regions» → nominal), внутри
+    диапазона на SPEC_EDGE_MARGIN_M: `shorts_end_t` — доля бедра от сустава, `jersey_bottom_m` —
+    по оси корпуса от S (pelvis → spine → chest), м. Длины звеньев A-позы и rest равны (контракт)."""
+    r = contract.data["regions"]
+    th = (contract.head("thigh.L") - contract.head("shin.L")).length
+    lo, hi = r["shorts_leg_end_t"]["range"]
+    shorts = min(max(r["shorts_leg_end_t"]["nominal"], lo + SPEC_EDGE_MARGIN_M / th), hi - SPEC_EDGE_MARGIN_M / th)
+    lo, hi = r["jersey_bottom_back_m"]["range"]
+    jb = min(max(r["jersey_bottom_back_m"]["nominal"], lo + SPEC_EDGE_MARGIN_M), hi - SPEC_EDGE_MARGIN_M)
+    return {"shorts_end_t": shorts, "jersey_bottom_m": jb}
+
+
+def torso_arc(p, chain):
+    """Точка `p` по оси корпуса: длина дуги от начала цепи `chain` (начала pelvis, spine, chest)
+    до проекции на ближайшее звено, м."""
+    best, acc = None, 0.0
+    for a, b in zip(chain, chain[1:]):
+        d = b - a
+        L = float(np.linalg.norm(d))
+        t = min(1.0, max(0.0, float((p - a) @ d) / (L * L)))
+        dist = float(np.linalg.norm(a + d * t - p))
+        if best is None or dist < best[0]:
+            best = (dist, acc + t * L)
+        acc += L
+    return best[1]
 
 
 def _attr(me, key, width):
@@ -41,17 +73,19 @@ def hint_class(rgb):
     return out
 
 
-def classify(contract, seg_bone, seg_t, seg_n, hint):
-    """Регион каждой грани по правилам спеки (pipeline_data «regions»)."""
+def classify(contract, seg_bone, seg_t, seg_n, hint, cuts=None):
+    """Регион каждой грани по правилам спеки (pipeline_data «regions»). `cuts` — границы шорт и
+    низа джерси, по которым шаг 4 прорезал рёбра (`nominal_cuts`, низ джерси — дуга A-позы после
+    поправки на сгиб корпуса в rest); нет — номинал спеки."""
     r = contract.data["regions"]
+    cuts = cuts or nominal_cuts(contract)
     names = [s[0] for s in segments()]
-    T = {}
     L = lambda a, b: (contract.head(a) - contract.head(b)).length  # noqa: E731
-    shorts_end = sum(r["shorts_leg_end_t"]["range"]) / 2
+    shorts_end = cuts["shorts_end_t"]
     sock_top = sum(r["sock_top_above_ankle_m"]["range"]) / 2
     sleeve = sum(r["sleeve_end_t"]["range"]) / 2
     band = sum(r["jersey_band_m"]["range"]) / 2
-    jb = sum(r["jersey_bottom_back_m"]["range"]) / 2
+    jb = cuts["jersey_bottom_m"]
     lp, ls, lc = L("pelvis", "spine"), L("spine", "chest"), L("chest", "neck")
     side_cos = math.sin(math.radians(r["jersey_side_deg"]["value"]))
     cuff_t = r["glove_cuff_t"]["value"]
@@ -197,7 +231,7 @@ def cut_hairline(body, contract, joints):
             "hair_faces": int(hair.sum())}
 
 
-def assign(body, armature, contract):
+def assign(body, armature, contract, cuts=None):
     me = body.data
     seg_bone = _attr(me, "seg_bone", 1)
     if seg_bone is None:
@@ -207,7 +241,7 @@ def assign(body, armature, contract):
     seg_n = _attr(me, "seg_n", 3)
     hint = _attr(me, "hint_rgb", 4)
     hint = hint[:, :3] if hint is not None else None
-    reg, hcls = classify(contract, seg_bone, seg_t, seg_n, hint)
+    reg, hcls = classify(contract, seg_bone, seg_t, seg_n, hint, cuts)
     hair = _attr(me, "hair", 1)
     if hair is None:
         from . import common

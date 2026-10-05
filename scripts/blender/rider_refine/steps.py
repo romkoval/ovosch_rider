@@ -174,6 +174,12 @@ class Run:
             body, metrics, warns = basemesh.decimate(scan_obj, self.c, self.data)
         else:
             body, metrics, warns = basemesh.project(scan_obj, self.c, self.data)
+        # Границы шорт и низа джерси, по которым прорезаны рёбра, — шагу 8 (decimate: нет, номинал).
+        if "region_cuts" in body:
+            self.state["region_cuts"] = {k: float(v) for k, v in body["region_cuts"].to_dict().items()}
+            del body["region_cuts"]
+        else:
+            self.state.pop("region_cuts", None)
         basemesh.transfer_hint(scan_obj, body)
         from .proportions import target_joints
         metrics.update(regions.cut_hairline(body, self.c, target_joints(self.c)))
@@ -232,7 +238,7 @@ class Run:
     def step8(self):
         self.load(7)
         body = bpy.data.objects["body_m"]
-        metrics, warns = regions.assign(body, bpy.data.objects[rig.RIG_NAME], self.c)
+        metrics, warns = regions.assign(body, bpy.data.objects[rig.RIG_NAME], self.c, self.state.get("region_cuts"))
         self.save(8)
         self.report.step(8, "OK" if not warns else "WARN", "регионы по размерам спеки (цвет — подсказка), UV0 по атласу, один материал M_rider", metrics, warns)
 

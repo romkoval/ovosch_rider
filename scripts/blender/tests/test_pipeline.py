@@ -104,6 +104,13 @@ class Pipeline(unittest.TestCase):
         m = proportions.head_measures(co, j)
         self.assertTrue(0.14 <= m["crown_up_m"] <= 0.16, "макушка над началом head %.4f" % m["crown_up_m"])
         self.assertTrue(0.02 <= m["crown_forward_m"] <= 0.04, "макушка впереди начала head %.4f" % m["crown_forward_m"])
+        # Макушка — верхняя точка сетки (одна вершина, не среднее); взгляд горизонтален — оси мира.
+        top = co[int(np.argmax(co[:, 2]))]
+        fwd = float(j["head"].y - top[1])
+        self.assertAlmostEqual(m["crown_forward_m"], fwd, delta=1e-4, msg="мера макушки — верхняя вершина")
+        nom = self.c.data["apose"]["crown_in_head_m"]["value"][1]
+        self.assertAlmostEqual(fwd, nom, delta=proportions.NOD_DEADBAND_M + 0.001,
+                               msg="верхняя вершина впереди начала head %.4f, цель конвейера — номинал %.2f" % (fwd, nom))
         self.assertTrue(0.21 <= m["head_height_m"] <= 0.23, "высота головы %.4f" % m["head_height_m"])
         w, _, ln = self.c.data["proportions"]["head_size_m"]["value"]
         self.assertAlmostEqual(m["head_width_m"], w, delta=0.01)
@@ -176,6 +183,38 @@ class Pipeline(unittest.TestCase):
         reg = np.empty(len(me.polygons), dtype=np.int32)
         me.attributes["region"].data.foreach_get("value", reg)
         self.assertEqual(sorted(set(reg.tolist())), self.c.data["regions"]["required_body"]["value"])
+
+    def _region_loops(self, me, a, b):
+        """Вершины границы регионов a | b (рёбра между гранями из a и из b)."""
+        reg = np.empty(len(me.polygons), dtype=np.int32)
+        me.attributes["region"].data.foreach_get("value", reg)
+        faces_of = {}
+        for p in me.polygons:
+            for k in p.edge_keys:
+                faces_of.setdefault(k, set()).add(int(reg[p.index]))
+        return sorted({v for k, rs in faces_of.items() if rs & a and rs & b for v in k})
+
+    def test_step8_nominal_rev46_shorts_and_jersey(self):
+        """Номиналы ред. 4.6 (art-bible «Анатомия по частям», «Корпус»; У-21 — при расхождении
+        действует спека): низ шорт — 70 % бедра (граница shorts_gripper | skin, внутри 65–70 %),
+        низ джерси — 0.24 м над седлом по оси корпуса rest (граница джерси | shorts_main, внутри 0.20–0.24)."""
+        from rider_refine import regions
+        objs = self.blend(8)
+        me = objs["body_m"].data
+        co = meshops.verts_np(me)
+        r = self.c.data["regions"]
+        self.assertEqual((r["shorts_leg_end_t"]["nominal"], r["jersey_bottom_back_m"]["nominal"]), (0.70, 0.24))
+        ring = co[self._region_loops(me, {9}, {0})]
+        for s, sx in ((".L", 1.0), (".R", -1.0)):
+            a, b = np.array(self.c.head("thigh" + s)), np.array(self.c.head("shin" + s))
+            c = ring[np.sign(ring[:, 0]) == sx].mean(axis=0)
+            t = float((c - a) @ (b - a) / ((b - a) @ (b - a)))
+            self.assertTrue(0.69 <= t <= 0.70, "низ шорт%s %.4f бедра, номинал 0.70 (внутри 0.65–0.70)" % (s, t))
+        chain = [np.array(self.c.head(n)) for n in ("pelvis", "spine", "chest")]
+        arc = regions.torso_arc(co[self._region_loops(me, {2, 3, 4, 5, 6, 7}, {8})].mean(axis=0), chain)
+        self.assertTrue(0.235 <= arc <= 0.24, "низ джерси %.4f м по оси корпуса от S, номинал 0.24 (внутри 0.20–0.24)" % arc)
+        m4 = self.report()["04_retopo"]["metrics"]
+        self.assertAlmostEqual(m4["jersey_bottom_rest_m"], arc, delta=0.001, msg="пробная посадка шага 4 = итог в rest")
 
     def test_step11_glb_t1_t7(self):
         metrics, errors = glbcheck.check(self.glb, self.c)
