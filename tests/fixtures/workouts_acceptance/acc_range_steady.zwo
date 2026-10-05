@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Приёмка T-149: собрано по описанию экспорта Intervals.icu (SteadyState с PowerLow/PowerHigh без Power, show_avg) -->
+<workout_file>
+    <author>Acceptance Coach</author>
+    <name>Приёмка: диапазоны SteadyState</name>
+    <description>Независимая фикстура tester для T-149.</description>
+    <sportType>bike</sportType>
+    <tags>
+        <tag name="intervals.icu"/>
+    </tags>
+    <workout>
+        <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.65"/>
+        <SteadyState show_avg="1" PowerLow="0.88" PowerHigh="0.94" Duration="480" Cadence="95">
+            <textevent message="Старт" duration="10"/>
+            <textevent timeoffset="240" message="Половина" duration="10"/>
+        </SteadyState>
+        <SteadyState show_avg="1" PowerLow="0.5" PowerHigh="0.5" Duration="120"/>
+        <SteadyState show_avg="1" PowerLow="0.70" PowerHigh="0.60" Duration="60"/>
+        <SteadyState show_avg="1" Power="0.8" PowerLow="0.1" PowerHigh="0.2" Duration="90"/>
+        <Cooldown Duration="300" PowerLow="0.6" PowerHigh="0.4"/>
+    </workout>
+</workout_file>
