@@ -76,6 +76,15 @@ theme_type_variation = &"OverlineLabel"
 auto_translate_mode = 2
 uppercase = true
 
+[node name="EmulatorLabel" type="Label" parent="Root/Margin/Center/Column/Scroll/Content/Header/Meta"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"OverlineLabel"
+auto_translate_mode = 2
+uppercase = true
+
 [node name="SubtitleLabel" type="Label" parent="Root/Margin/Center/Column/Scroll/Content/Header/Meta"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -309,6 +318,14 @@ use_native_dialog = true
 unique_name_in_owner = true
 title = "ui.history.delete"
 ok_button_text = "ui.common.delete"
+cancel_button_text = "ui.common.cancel"
+size = Vector2i(480, 160)
+dialog_autowrap = true
+
+[node name="UploadEmulatorDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "ui.history.upload_emulator.title"
+ok_button_text = "ui.history.upload_emulator.ok"
 cancel_button_text = "ui.common.cancel"
 size = Vector2i(480, 160)
 dialog_autowrap = true

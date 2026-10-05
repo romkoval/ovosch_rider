@@ -23,6 +23,12 @@ extends RefCounted
 ## `total_ascent_m` (набор — по сэмплам, `SampleStream.total_ascent_m`). Заезды,
 ## записанные до появления типа, читаются как `workout` (миграция не нужна).
 ##
+## Источник станка `metadata.trainer_source` (T-160, Н-59): `ble` — реальное устройство,
+## `emulator` — эмулятор станка; пишет сессия по `TrainerDevice.trainer_source()`.
+## Это ось «откуда данные»; режим управления станком (будущий `trainer_mode`, T-152) — отдельное
+## поле. Заезды без поля (записанные до T-160) и с неизвестным значением — `ble`: угадывать
+## источник задним числом нельзя. Заезд на эмуляторе в Strava сам не выгружается (`StravaService`).
+##
 ## Источник заезда (`from_session`) — `WorkoutSession` или сессия свободной езды с тем же
 ## контрактом записи: свойства `samples: SampleStream`, `events: Array[Dictionary]`,
 ## `started_at_unix: int` и метод `metadata() -> Dictionary` (для свободной езды — с
@@ -37,6 +43,9 @@ const KEY_ROUTE_ID: String = "route_id"
 const KEY_SIM_STEEPNESS_START_PCT: String = "sim_steepness_start_pct"
 const KEY_TOTAL_DISTANCE_M: String = "total_distance_m"
 const KEY_TOTAL_ASCENT_M: String = "total_ascent_m"
+const KEY_TRAINER_SOURCE: String = WorkoutSession.META_TRAINER_SOURCE
+const TRAINER_SOURCE_BLE: String = TrainerDevice.SOURCE_BLE
+const TRAINER_SOURCE_EMULATOR: String = TrainerDevice.SOURCE_EMULATOR
 
 const UPLOAD_NONE: String = "none"
 const UPLOAD_QUEUED: String = "queued"
@@ -218,6 +227,17 @@ func total_ascent_m() -> float:
 	return float(v) if v is int or v is float else samples.total_ascent_m()
 
 
+## Источник станка: `TRAINER_SOURCE_EMULATOR` или `TRAINER_SOURCE_BLE` (без поля — `ble`).
+func trainer_source() -> String:
+	var v := str(metadata.get(KEY_TRAINER_SOURCE, TRAINER_SOURCE_BLE))
+	return TRAINER_SOURCE_EMULATOR if v == TRAINER_SOURCE_EMULATOR else TRAINER_SOURCE_BLE
+
+
+## Заезд записан на эмуляторе (данные не настоящие, T-160).
+func is_emulator() -> bool:
+	return trainer_source() == TRAINER_SOURCE_EMULATOR
+
+
 func ftp_w() -> int:
 	return _int(metadata.get("ftp_w"), 0)
 
@@ -293,6 +313,7 @@ func sync_summary_header() -> void:
 	summary.recovered = is_recovered()
 	summary.ride_type = ride_type()
 	summary.route_id = route_id()
+	summary.trainer_source = trainer_source()
 
 
 ## События паузы `{at_sec, duration_sec}` (для FIT и истории). Пауза без

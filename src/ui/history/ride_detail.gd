@@ -20,6 +20,10 @@ extends Control
 ## в зонах (полосы 12 lp с подписями долей); карточка «Strava»: статус, поля «Название»
 ## и «Описание» (REQ-STR-03 крит. 3: значения по умолчанию на языке интерфейса, доступны,
 ## пока заезд не выгружен), «Выгрузить в Strava» (без привязки недоступна с подсказкой).
+## Заезд на эмуляторе (T-160): рядом с меткой режима — метка «ЭМУЛЯТОР» (Overline `text2`);
+## «Выгрузить в Strava» сначала открывает диалог подтверждения «данные не настоящие» (опасная
+## кнопка «Выгрузить» справа, фокус на «Отмена»; REQ-STR-04 крит. 5, UIX-01 крит. 8, 9) —
+## `upload_requested` уходит только после подтверждения.
 ## Ошибка выгрузки — переведённая причина по коду (`Ride.upload.last_error_code`), ответ
 ## Strava — деталью после неё.
 ##
@@ -76,6 +80,7 @@ const KEY_ZONE_SHARE: String = "ui.plan.zones.share"
 const KEY_MENU_MORE: String = "ui.history.menu.more"
 const KEY_TARGET: String = "ui.history.detail.target"
 const KEY_TRACK: String = "ui.history.detail.track"
+const KEY_UPLOAD_EMULATOR_TEXT: String = "ui.history.upload_emulator.text"
 const STAT_SCENE: PackedScene = preload("res://src/ui/common/stat_view.tscn")
 const STAT_IDS: Array[String] = ["time", "distance", "avg_power", "np", "max_power", "work", "avg_hr", "avg_cadence", "ascent"]
 
@@ -91,6 +96,8 @@ var _repository: RideRepository = null
 var _series: RideSeries = null
 var _strava_linked: bool = false
 var _delete_pending: bool = false
+## Открыт диалог подтверждения выгрузки заезда на эмуляторе (T-160).
+var _upload_confirm_pending: bool = false
 var _compact: bool = false
 ## Значения по умолчанию, показанные в полях выгрузки: поле, которое пользователь не менял,
 ## обновляется при перерисовке (например, после смены языка); изменённое — сохраняется.
@@ -106,6 +113,7 @@ var _more_button: Button = null
 @onready var _margin: MarginContainer = %Margin
 @onready var _column: VBoxContainer = %Column
 @onready var _mode_label: Label = %ModeLabel
+@onready var _emulator_label: Label = %EmulatorLabel
 @onready var _subtitle_label: Label = %SubtitleLabel
 @onready var _stats_grid: GridContainer = %StatsGrid
 @onready var _meta_label: Label = %MetaLabel
@@ -130,6 +138,7 @@ var _more_button: Button = null
 @onready var _export_status_label: Label = %ExportStatusLabel
 @onready var _export_dialog: FileDialog = %ExportDialog
 @onready var _delete_dialog: ConfirmationDialog = %DeleteDialog
+@onready var _upload_emulator_dialog: ConfirmationDialog = %UploadEmulatorDialog
 
 
 func _ready() -> void:
@@ -160,6 +169,9 @@ func _ready() -> void:
 	_delete_dialog.confirmed.connect(confirm_delete)
 	_delete_dialog.canceled.connect(cancel_delete)
 	_delete_dialog.get_ok_button().theme_type_variation = &"DangerButton"
+	_upload_emulator_dialog.confirmed.connect(confirm_emulator_upload)
+	_upload_emulator_dialog.canceled.connect(cancel_emulator_upload)
+	_upload_emulator_dialog.get_ok_button().theme_type_variation = &"DangerButton"
 	DialogLayout.attach_all(self)
 	_upload_button.pressed.connect(request_upload)
 	resized.connect(_update_content_width)
@@ -199,6 +211,7 @@ func show_ride(ride: Ride, repository: RideRepository) -> void:
 	_shown_default_name = ""
 	_shown_default_description = ""
 	if is_node_ready():
+		cancel_emulator_upload()
 		close_menu()
 		_set_export_status("")
 		_upload_name_edit.text = ""
@@ -446,9 +459,36 @@ func is_delete_pending() -> bool:
 # Strava (REQ-STR-05 крит. 2, 3)
 # ---------------------------------------------------------------------------
 
+## «Выгрузить в Strava». Заезд на эмуляторе — сначала диалог подтверждения (T-160).
 func request_upload() -> void:
+	if _ride == null or not _strava_linked or not _can_upload():
+		return
+	if _ride.is_emulator():
+		_upload_confirm_pending = true
+		_upload_emulator_dialog.dialog_text = tr(KEY_UPLOAD_EMULATOR_TEXT)
+		_upload_emulator_dialog.popup_centered()
+		return
+	upload_requested.emit(_ride.id, upload_name(), upload_description())
+
+
+## «Выгрузить» в диалоге подтверждения: заезд на эмуляторе уходит в очередь как обычно.
+func confirm_emulator_upload() -> void:
+	if not _upload_confirm_pending:
+		return
+	_upload_confirm_pending = false
 	if _ride != null and _strava_linked and _can_upload():
 		upload_requested.emit(_ride.id, upload_name(), upload_description())
+
+
+## «Отмена», Esc или «назад» в диалоге подтверждения: ничего не выгружается.
+func cancel_emulator_upload() -> void:
+	_upload_confirm_pending = false
+	if _upload_emulator_dialog.visible:
+		_upload_emulator_dialog.hide()
+
+
+func is_upload_confirmation_pending() -> bool:
+	return _upload_confirm_pending
 
 
 ## Название для выгрузки из поля карточки (REQ-STR-03 крит. 3).
@@ -513,6 +553,11 @@ func mode_text() -> String:
 	return _mode_label.text
 
 
+## Метка «Эмулятор» карточки ("" — заезд на станке, T-160).
+func emulator_text() -> String:
+	return _emulator_label.text if _emulator_label.visible else ""
+
+
 func meta_text() -> String:
 	return _meta_label.text
 
@@ -546,6 +591,8 @@ func _render() -> void:
 	if _ride == null:
 		_app_bar.set_title("", false)
 		_mode_label.text = ""
+		_emulator_label.text = ""
+		_emulator_label.visible = false
 		_subtitle_label.text = tr("ui.history.detail.no_ride")
 		_summary_text = tr("ui.history.detail.no_ride")
 		_meta_label.text = ""
@@ -569,6 +616,8 @@ func _render() -> void:
 	_app_bar.set_title(_display_name(), false)
 	_mode_label.text = HistoryFormat.mode_text(free_ride)
 	_mode_label.theme_type_variation = HistoryFormat.mode_variation(free_ride)
+	_emulator_label.text = HistoryFormat.emulator_text(_ride.is_emulator())
+	_emulator_label.visible = _ride.is_emulator()
 	var flags := HistoryFormat.flags_text(_ride.is_in_progress(), _ride.is_recovered(), _ride.stopped_early())
 	var subtitle := HistoryFormat.full_date(_ride.started_at_unix)
 	_subtitle_label.text = subtitle if flags.is_empty() else subtitle + HistoryFormat.DOT + flags

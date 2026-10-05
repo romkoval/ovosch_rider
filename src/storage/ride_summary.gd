@@ -46,6 +46,9 @@ var recovered: bool = false
 var ride_type: String = Ride.RIDE_TYPE_WORKOUT
 ## Трасса свободной езды ("" у тренировки по плану).
 var route_id: String = ""
+## Источник станка: `Ride.TRAINER_SOURCE_BLE` | `Ride.TRAINER_SOURCE_EMULATOR` (T-160);
+## сводки, записанные до T-160, — `ble`.
+var trainer_source: String = Ride.TRAINER_SOURCE_BLE
 
 # --- Метрики ---
 ## Активное время, с (число сэмплов).
@@ -187,6 +190,11 @@ func is_free_ride() -> bool:
 	return ride_type == Ride.RIDE_TYPE_FREE_RIDE
 
 
+## Заезд записан на эмуляторе (метка «Эмулятор» в истории, T-160).
+func is_emulator() -> bool:
+	return trainer_source == Ride.TRAINER_SOURCE_EMULATOR
+
+
 ## Сумма секунд по зонам мощности (должна равняться `power_sample_count`).
 func total_power_zone_sec() -> int:
 	var total: int = 0
@@ -217,6 +225,7 @@ func to_dict() -> Dictionary:
 		"recovered": recovered,
 		"ride_type": ride_type,
 		"route_id": route_id,
+		"trainer_source": trainer_source,
 		"duration_sec": duration_sec,
 		"distance_m": distance_m,
 		"ascent_m": ascent_m,
@@ -252,6 +261,8 @@ static func from_dict(data: Dictionary) -> RideSummary:
 	s.recovered = _bool(data.get("recovered"))
 	s.ride_type = Ride.RIDE_TYPE_FREE_RIDE if str(data.get("ride_type", "")) == Ride.RIDE_TYPE_FREE_RIDE else Ride.RIDE_TYPE_WORKOUT
 	s.route_id = str(data.get("route_id", ""))
+	s.trainer_source = Ride.TRAINER_SOURCE_EMULATOR if str(data.get("trainer_source", "")) == Ride.TRAINER_SOURCE_EMULATOR \
+		else Ride.TRAINER_SOURCE_BLE
 	s.duration_sec = _int(data.get("duration_sec"), 0)
 	s.distance_m = _float(data.get("distance_m"), 0.0)
 	s.ascent_m = _float(data.get("ascent_m"), 0.0)

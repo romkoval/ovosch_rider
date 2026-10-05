@@ -339,10 +339,12 @@ func data_age_sec(source: String) -> int:
 
 
 ## Метаданные заезда (LOC-01 крит. 1 и FRD-07 крит. 3): тип «свободная езда», трасса,
-## крутизна на старте, источник скорости — модель, итоговые дистанция и набор; плана нет.
+## крутизна на старте, источник скорости — модель, итоговые дистанция и набор; плана нет;
+## источник станка (эмулятор / реальное устройство, T-160).
 func metadata() -> Dictionary:
 	return {
 		META_RIDE_TYPE: RIDE_TYPE_FREE_RIDE,
+		WorkoutSession.META_TRAINER_SOURCE: trainer.trainer_source() if trainer != null else TrainerDevice.SOURCE_BLE,
 		META_ROUTE_ID: route.id,
 		META_SIM_STEEPNESS_START_PCT: float(_steepness_start_pct),
 		"speed_source": SampleStream.SPEED_SOURCE_MODEL,

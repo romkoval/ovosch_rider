@@ -14,6 +14,8 @@ extends RefCounted
 ## - Значок Strava: `check` (`accent`) — выгружено, `cloud-upload` (`text2`) — не выгружен,
 ##   `triangle-alert` (`warn`) — ошибка, `refresh-cw` (`text2`) — в очереди / обрабатывается,
 ##   `check` (`text2`) — дубликат. Подсказка — статус словами (`ui.history.strava.*`).
+## - Метка «Эмулятор» / "Emulator" у заезда на эмуляторе (T-160) — рядом с меткой режима, в том
+##   же стиле Overline, цвет `text2` (`OverlineLabel`); у заезда на станке метки нет.
 ## Строки — ключи `ui.history.*` (`strings_menu_lists.csv`, прежние — `strings.csv`).
 
 ## Фильтры списка (`ui.md` п. 8.5: «Все / План / Свободная»).
@@ -27,6 +29,9 @@ const KEY_MON_PREFIX: String = "ui.history.mon."
 const KEY_UNTITLED: String = "ui.history.untitled"
 const KEY_MODE_PLAN: String = "ui.history.mode.plan"
 const KEY_MODE_SIM: String = "ui.history.mode.sim"
+const KEY_EMULATOR: String = "ui.history.emulator"
+## Вариация метки «Эмулятор»: Overline цветом `text2` (как надзаголовок, без акцента режима).
+const EMULATOR_VARIATION: StringName = &"OverlineLabel"
 const KEY_FLAG_STOPPED_EARLY: String = "ui.history.flag.stopped_early"
 const KEY_FLAG_RECOVERED: String = "ui.history.flag.recovered"
 const KEY_FLAG_IN_PROGRESS: String = "ui.history.flag.in_progress"
@@ -104,6 +109,11 @@ static func mode_text(is_free_ride: bool) -> String:
 ## свободная езда — `OverlineSim` (цвет `sim`); цвет задаёт тема, без `self_modulate`.
 static func mode_variation(is_free_ride: bool) -> StringName:
 	return &"OverlineSim" if is_free_ride else &"OverlineAccent"
+
+
+## Метка источника «Эмулятор» / "Emulator" (в сцене `uppercase`); у заезда на станке — пусто.
+static func emulator_text(is_emulator: bool) -> String:
+	return _tr(KEY_EMULATOR) if is_emulator else ""
 
 
 ## Отметки заезда словами: не завершён / восстановлен / завершён досрочно (пусто — нет).

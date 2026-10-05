@@ -182,6 +182,11 @@ func inclination_range() -> Vector2:
 		else Vector2(DEFAULT_INCLINATION_MIN_PCT, DEFAULT_INCLINATION_MAX_PCT)
 
 
+## Источник — станок хаба (датчики источник не меняют, T-160).
+func is_emulator() -> bool:
+	return trainer.is_emulator() if trainer != null else false
+
+
 func get_connection_state() -> int:
 	return trainer.get_connection_state() if trainer != null else ConnectionState.DISCONNECTED
 

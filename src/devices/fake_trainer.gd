@@ -209,6 +209,11 @@ func inclination_range() -> Vector2:
 	return _inclination_range
 
 
+## Эмулятор: данные не настоящие (T-160).
+func is_emulator() -> bool:
+	return true
+
+
 func get_connection_state() -> int:
 	return _state
 

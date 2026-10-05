@@ -1,14 +1,17 @@
 extends GutTest
+## Заезд — ble-станок (T-160: эмулятор не выгружается автоматически).
 ## Приёмка T-049 «Связка Strava с приложением» — независимые тесты тестировщика.
 ## REQ-STR-04 крит. 1, 5; REQ-STR-03 крит. 1–3; REQ-STR-05 крит. 2; REQ-STR-02 крит. 1;
 ## REQ-STR-01 крит. 6 (кнопка выключена без client_id/secret) и механика крит. 9
 ## (сам брендбук — вне контейнера).
 ## Источник истины — `docs/requirements.md`. Сценарии — сквозные через `main.tscn`:
-## данные во временном `user://`, HTTP — `MockHttpTransport`, тренировка — на эмуляторе
-## станка до завершения, привязка — токены в защищённом хранилище профиля.
+## данные во временном `user://`, HTTP — `MockHttpTransport`, тренировка — на двойнике реального
+## станка (`BleSourceTrainer`, источник `ble`) до завершения, привязка — токены в защищённом хранилище профиля.
 ## Ядро очереди/выгрузчика принято отдельно (`test_strava_acceptance.gd`) и здесь не дублируется.
 
 const MAIN_SCENE: String = "res://src/app/main.tscn"
+## Двойник реального станка: `FakeTrainer` с `is_emulator() == false` (T-160).
+const BleSourceTrainer := preload("res://tests/fixtures/devices/ble_source_trainer.gd")
 const CLIENT_ID: String = "4242"
 const CLIENT_SECRET: String = "fixture-client-secret-value"
 ## 2026-10-02 12:00 UTC.
@@ -127,10 +130,19 @@ func _short_workout(name: String, description: String = "") -> Workout:
 	return w
 
 
-## Тренировка на эмуляторе до естественного завершения. `mid_check` — вызывается на
-## середине (заезд пишется, но не завершён). Возвращает id заезда.
-func _ride_on_emulator(main: AppMain, workout: Workout, mid_check: Callable = Callable()) -> String:
-	assert_true(main.start_workout_on_emulator(workout), "тренировка на эмуляторе запущена")
+## Тренировка на станке (двойник `BleSourceTrainer`, источник `ble`) до естественного завершения
+## — тот же запуск, что у `AppMain` для подключённого станка: экран тренировки → навигация → старт.
+## `mid_check` — вызывается на середине (заезд пишется, но не завершён). Возвращает id заезда.
+func _ride_on_ble(main: AppMain, workout: Workout, mid_check: Callable = Callable()) -> String:
+	var trainer: FakeTrainer = BleSourceTrainer.new()
+	trainer.connect_delay_sec = 0.0
+	trainer.connect_device("ble-double")
+	assert_false(trainer.is_emulator(), "предусловие: заезд на реальном станке")
+	var screen := main.workout_screen()
+	var profile: Profile = main.repo.get_active()
+	screen.setup(workout, profile, trainer, main.app_state, null)
+	var started := main.app_state.navigate(AppState.Screen.WORKOUT) and screen.start()
+	assert_true(started, "тренировка на эмуляторе запущена")
 	var session := main.workout_screen().session()
 	var total := workout.total_duration_sec() if workout.has_method("total_duration_sec") else 45
 	var guard := 0
@@ -244,7 +256,7 @@ func test_req_str_04_c1_finished_emulator_ride_enqueued_and_survives_restart() -
 	assert_not_null(main.strava, "сервис Strava создан для выбранного профиля")
 	assert_true(main.strava.is_authorized(), "привязка из защищённого хранилища видна после запуска")
 	var mid_state := {}
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot"), func(id: String) -> void:
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot"), func(id: String) -> void:
 		mid_state["id"] = id
 		mid_state["queued"] = main.strava.queue.has(id)
 		mid_state["status"] = str(main.ride_repository.get_ride(id).upload.get("strava_status", Ride.UPLOAD_NONE)))
@@ -267,7 +279,7 @@ func test_req_str_04_c1_finished_emulator_ride_enqueued_and_survives_restart() -
 func test_req_str_04_c1_edge_not_linked_finished_ride_not_enqueued_no_requests() -> void:
 	var main := _main()
 	assert_false(main.strava.is_authorized())
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot"))
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot"))
 	assert_false(main.strava.queue.has(ride_id), "Strava не привязана — очереди нет")
 	assert_eq(str(main.ride_repository.get_ride(ride_id).upload.get("strava_status", Ride.UPLOAD_NONE)), Ride.UPLOAD_NONE)
 	await main.strava.step_queue()
@@ -279,7 +291,7 @@ func test_req_str_04_c1_edge_auto_upload_off_not_enqueued_manual_still_works() -
 	_profiles.save(_profile)
 	_prelink(_profile.id)
 	var main := _main()
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot"))
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot"))
 	assert_false(main.strava.queue.has(ride_id), "автовыгрузка выключена — не ставится")
 	assert_eq(str(main.ride_repository.get_ride(ride_id).upload.get("strava_status", Ride.UPLOAD_NONE)), Ride.UPLOAD_NONE)
 	main.history_screen().upload_requested.emit(ride_id)
@@ -289,7 +301,7 @@ func test_req_str_04_c1_edge_auto_upload_off_not_enqueued_manual_still_works() -
 func test_req_str_04_c1_edge_resaving_same_ride_no_duplicate_queue_or_upload() -> void:
 	_prelink(_profile.id)
 	var main := _main()
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot"))
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot"))
 	assert_eq(main.strava.queue.size(), 1)
 	# Повторное сохранение того же заезда, пока он в очереди.
 	main.ride_repository.save(main.ride_repository.get_ride(ride_id))
@@ -347,7 +359,7 @@ func test_req_str_04_c5_card_upload_button_enqueues_immediately() -> void:
 	_profile.strava_auto_upload = false
 	_profiles.save(_profile)
 	var main := _main()
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot"))
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot"))
 	main.app_state.navigate(AppState.Screen.HISTORY)
 	var history := main.history_screen()
 	assert_true(history.show_ride(ride_id))
@@ -375,7 +387,7 @@ func test_req_str_03_c1_untitled_ride_name_is_workout_date_in_ui_language() -> v
 	_prelink(_profile.id)
 	var main := _main()
 	assert_eq(TranslationServer.get_locale().substr(0, 2), "ru", "язык интерфейса — русский (settings.json)")
-	var ride_id := _ride_on_emulator(main, _short_workout(""))
+	var ride_id := _ride_on_ble(main, _short_workout(""))
 	var ride := main.ride_repository.get_ride(ride_id)
 	var expected := "Тренировка " + _local_date(ride.started_at_unix)
 	assert_eq(str(main.strava.queue.get_item(ride_id).get("name", "")), expected, "название по дате заезда")
@@ -387,7 +399,7 @@ func test_req_str_03_c1_untitled_ride_name_is_workout_date_in_ui_language() -> v
 func test_req_str_03_c1_named_plan_name_goes_to_request() -> void:
 	_prelink(_profile.id)
 	var main := _main()
-	var ride_id := _ride_on_emulator(main, _short_workout("Пороговая 3×5"))
+	var ride_id := _ride_on_ble(main, _short_workout("Пороговая 3×5"))
 	_ok_upload(main, 52, 5252)
 	await main.strava.step_queue()
 	var reqs := _upload_requests(main)
@@ -411,7 +423,7 @@ func test_req_str_03_c1_language_switched_at_runtime_name_and_app_line_follow_ui
 func test_req_str_03_c2_description_is_plan_text_plus_app_line() -> void:
 	_prelink(_profile.id)
 	var main := _main()
-	_ride_on_emulator(main, _short_workout("Sweet Spot", "3×10 мин на 90 % FTP"))
+	_ride_on_ble(main, _short_workout("Sweet Spot", "3×10 мин на 90 % FTP"))
 	_ok_upload(main, 53, 5353)
 	await main.strava.step_queue()
 	var desc := _field(_upload_requests(main)[0]["body"], "description")
@@ -423,7 +435,7 @@ func test_req_str_03_c2_description_is_plan_text_plus_app_line() -> void:
 func test_req_str_03_c2_no_plan_description_only_app_line() -> void:
 	_prelink(_profile.id)
 	var main := _main()
-	_ride_on_emulator(main, _short_workout("Sweet Spot", ""))
+	_ride_on_ble(main, _short_workout("Sweet Spot", ""))
 	_ok_upload(main, 54, 5454)
 	await main.strava.step_queue()
 	assert_eq(_field(_upload_requests(main)[0]["body"], "description"), tr("ui.strava.default_description"))
@@ -435,7 +447,7 @@ func test_req_str_03_c3_user_edits_name_and_description_in_card_reach_request() 
 	_profiles.save(_profile)
 	_prelink(_profile.id)
 	var main := _main()
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot", "план"))
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot", "план"))
 	main.app_state.navigate(AppState.Screen.HISTORY)
 	var history := main.history_screen()
 	assert_true(history.show_ride(ride_id))
@@ -471,7 +483,7 @@ func test_req_str_03_c3_user_edits_name_and_description_in_card_reach_request() 
 func test_req_str_05_c2_status_persisted_in_meta_and_shown_in_list_and_card() -> void:
 	_prelink(_profile.id)
 	var main := _main()
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot"))
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot"))
 	main.app_state.navigate(AppState.Screen.HISTORY)
 	var history := main.history_screen()
 	assert_eq(history.row_count(), 1)
@@ -496,7 +508,7 @@ func test_req_str_05_c2_status_persisted_in_meta_and_shown_in_list_and_card() ->
 func test_req_str_05_c2_failed_status_with_text_visible_in_card() -> void:
 	_prelink(_profile.id)
 	var main := _main()
-	var ride_id := _ride_on_emulator(main, _short_workout("Sweet Spot"))
+	var ride_id := _ride_on_ble(main, _short_workout("Sweet Spot"))
 	_mock(main).enqueue_json("POST", "/uploads", 201, {"id": 72, "activity_id": null, "error": "Improperly formatted data."})
 	await main.strava.step_queue()
 	assert_eq(str(main.ride_repository.get_ride(ride_id).upload["strava_status"]), Ride.UPLOAD_FAILED)
@@ -516,8 +528,8 @@ func test_req_str_05_c2_failed_status_with_text_visible_in_card() -> void:
 func test_req_str_02_c1_each_request_carries_fit_encoder_bytes_of_its_ride() -> void:
 	_prelink(_profile.id)
 	var main := _main()
-	var first := _ride_on_emulator(main, _short_workout("Первый"))
-	var second := _ride_on_emulator(main, _short_workout("Второй"))
+	var first := _ride_on_ble(main, _short_workout("Первый"))
+	var second := _ride_on_ble(main, _short_workout("Второй"))
 	assert_ne(first, second)
 	assert_eq(main.strava.queue.size(), 2)
 	_ok_upload(main, 81, 8101)

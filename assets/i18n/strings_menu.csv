@@ -132,3 +132,7 @@ ui.menu.rider_look.preset.alpine,Альпы,Alpine
 ui.menu.rider_look.preset.sprint,Спринт,Sprint
 ui.menu.rider_look.preset.stealth,Стелс,Stealth
 ui.menu.rider_look.preset.volga_union,Волга Юнион,Volga Union
+ui.history.emulator,Эмулятор,Emulator
+ui.history.upload_emulator.title,Заезд на эмуляторе,Emulator ride
+ui.history.upload_emulator.text,"Заезд записан на эмуляторе, данные не настоящие. Выгрузить в Strava?","This ride was recorded on the emulator, so the data is not real. Upload it to Strava?"
+ui.history.upload_emulator.ok,Выгрузить,Upload

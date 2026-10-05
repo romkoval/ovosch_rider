@@ -15,6 +15,9 @@ extends RefCounted
 ##   `has_*` в `TrainerSample`, а не нулями.
 ## - Команды (цель мощности, ERG, сопротивление, SIM) должны уходить на станок не позже
 ##   1 с после вызова (REQ-NFR-01); у эмулятора — немедленно, с меткой времени.
+## - Источник станка (`is_emulator`, `trainer_source`, T-160): эмулятор это или реальное
+##   устройство. Сессия пишет его в метаданные заезда, не проверяя класс реализации
+##   (REQ-DEV-09 крит. 1, REQ-NFR-06 крит. 3).
 
 ## Состояние подключения. Переходы:
 ## DISCONNECTED → SCANNING (опционально) → CONNECTING → CONNECTED;
@@ -55,6 +58,11 @@ enum ErrorCode {
 	## UNSUPPORTED (REQ-FRD-04 крит. 6).
 	SIMULATION_REJECTED,
 }
+
+## Источник станка в метаданных заезда (`trainer_source`, T-160, Н-59): реальное устройство
+## или эмулятор. Это ось «откуда данные», а не режим управления станком.
+const SOURCE_BLE: String = "ble"
+const SOURCE_EMULATOR: String = "emulator"
 
 ## Допустимые диапазоны аргументов команд.
 const MIN_TARGET_POWER_W: int = 0
@@ -174,6 +182,18 @@ static func _clamp_sim_param(who: String, param: String, value: float, lo: float
 	if v != value:
 		push_warning("%s.set_simulation: %s = %s вне диапазона %s..%s, заменён на %s" % [who, param, value, lo, hi, v])
 	return v
+
+
+## Эмулятор ли это (данные не с настоящего станка). `FakeTrainer` — да, `BleTrainer` — нет;
+## обёртки (`SensorHub`) отвечают за свой станок (T-160).
+func is_emulator() -> bool:
+	push_error("TrainerDevice.is_emulator: not implemented")
+	return false
+
+
+## Источник станка для метаданных заезда: `SOURCE_EMULATOR` или `SOURCE_BLE` (T-160).
+func trainer_source() -> String:
+	return SOURCE_EMULATOR if is_emulator() else SOURCE_BLE
 
 
 ## Текущее состояние подключения (`ConnectionState`).

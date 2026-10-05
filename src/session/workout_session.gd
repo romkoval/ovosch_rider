@@ -64,6 +64,9 @@ const EVENT_RETRY: String = "retry"
 ## Шаг уровня сопротивления, % (REQ-WRK-04 крит. 1).
 const RESISTANCE_STEP_PCT: int = 5
 const DEFAULT_WEIGHT_KG: float = 75.0
+## Ключ источника станка в метаданных заезда (T-160, Н-59): `TrainerDevice.SOURCE_BLE` |
+## `TrainerDevice.SOURCE_EMULATOR` — по `TrainerDevice.trainer_source()`, без проверки класса.
+const META_TRAINER_SOURCE: String = "trainer_source"
 
 signal state_changed(state: int)
 signal session_finished()
@@ -310,10 +313,12 @@ func data_age_sec(source: String) -> int:
 	return -1
 
 
-## Метаданные заезда (LOC-01 крит. 1): FTP, вес, множитель, источник скорости, досрочность.
+## Метаданные заезда (LOC-01 крит. 1): FTP, вес, множитель, источник скорости, досрочность,
+## источник станка (эмулятор / реальное устройство, T-160).
 func metadata() -> Dictionary:
 	return {
 		"workout_name": executor.workout.name,
+		META_TRAINER_SOURCE: trainer.trainer_source() if trainer != null else TrainerDevice.SOURCE_BLE,
 		"workout_source": executor.workout.source,
 		"started_at_unix": started_at_unix,
 		"ftp_w": executor.ftp_w,

@@ -7,7 +7,8 @@ extends Control
 ## Раскладка: `AppBar` «История» («назад» → `AppState.go_back()`, справа фильтр-фишки
 ## «Все / План / Свободная»), под ним список заездов активного профиля (`RideRepository.list`,
 ## новые сверху) группами по месяцам («ОКТЯБРЬ 2026»). Строка — `ListRow` (вариация темы
-## `ListRowButton`): слева метка режима «ПЛАН» (`accent`) / «SIM» (`sim`), дата и отметка
+## `ListRowButton`): слева метка режима «ПЛАН» (`accent`) / «SIM» (`sim`), у заезда на эмуляторе
+## рядом — метка «ЭМУЛЯТОР» (Overline `text2`, T-160), дата и отметка
 ## (Caption) над названием (Title; у свободной езды без названия — «Свободная езда — <трасса>»),
 ## справа колонки фиксированной ширины с `tnum` — время, км, ср. Вт, NP, набор (у свободной
 ## езды; единицы — в заголовке колонок над списком), значок статуса Strava, шеврон; внизу строки
@@ -209,6 +210,15 @@ func row_for(ride_id: String) -> ListRow:
 		if row.row_id == ride_id:
 			return row
 	return null
+
+
+## Текст метки «Эмулятор» в строке заезда ("" — метки нет или строка не создана; T-160).
+func row_emulator_text(ride_id: String) -> String:
+	var row := row_for(ride_id)
+	if row == null:
+		return ""
+	var label := row.leading_slot().get_node_or_null(^"EmulatorLabel") as Label
+	return label.text if label != null else ""
 
 
 ## Создать строки до индекса `index` включительно (как прокрутка к нему).
@@ -421,6 +431,8 @@ func _make_row(s: RideSummary, parent: Container) -> ListRow:
 	mode.custom_minimum_size.x = MODE_LABEL_WIDTH
 	mode.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_leading(mode)
+	if s.is_emulator():
+		row.add_leading(_make_emulator_label())
 	row.set_columns(HistoryFormat.columns(s, _compact), HistoryFormat.column_widths(_compact), &"NumLabel")
 	var icon_spec := HistoryFormat.strava_icon(s.strava_status)
 	var icon := TextureRect.new()
@@ -443,6 +455,18 @@ func _make_row(s: RideSummary, parent: Container) -> ListRow:
 		row.add_bottom(bar)
 	row.activated.connect(_on_row_activated)
 	return row
+
+
+## Метка «Эмулятор» рядом с меткой режима (T-160): тот же Overline, цвет `text2`.
+static func _make_emulator_label() -> Label:
+	var label := Label.new()
+	label.name = "EmulatorLabel"
+	label.theme_type_variation = HistoryFormat.EMULATOR_VARIATION
+	label.uppercase = true
+	label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	label.text = HistoryFormat.emulator_text(true)
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return label
 
 
 ## Заголовок колонок: подписи по ширинам колонок строк (единицы здесь, а не в строках).

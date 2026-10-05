@@ -261,6 +261,11 @@ func inclination_range() -> Vector2:
 		clampf(supported_inclination["max_pct"], -MAX_SIM_GRADE_PCT, MAX_SIM_GRADE_PCT))
 
 
+## Реальный станок по BLE (T-160).
+func is_emulator() -> bool:
+	return false
+
+
 func get_connection_state() -> int:
 	return _state
 

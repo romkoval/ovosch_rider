@@ -15,6 +15,10 @@ extends RefCounted
 ## `tick()` → `exchange_code` → `authorized_changed(true)`. Мобильная схема —
 ## `handle_redirect_url(url)`. `disconnect_strava()` — отзыв токенов, очистка очереди,
 ## статусы ожидавших заездов → `none` (`disconnect` занято `Object`).
+##
+## Заезд на эмуляторе (`Ride.is_emulator()`, T-160; REQ-STR-04 крит. 1 — исключение по Н-52 (а),
+## Н-59) в очередь сам не ставится и остаётся «не выгружен»; ручная выгрузка `upload_now`
+## доступна — подтверждение «данные не настоящие» спрашивает карточка заезда до вызова.
 
 const QUEUE_TICK_INTERVAL_SEC: float = 5.0
 ## Шаблон названия без плана (REQ-STR-03 крит. 1) — запасной, если перевода нет.
@@ -135,11 +139,12 @@ func set_session_active(active: bool) -> void:
 # ---------------------------------------------------------------------------
 
 ## Заезд записан: завершённый, ещё не выгруженный → в очередь (при привязке и автовыгрузке).
+## Заезд на эмуляторе сам не ставится (T-160): статус остаётся «не выгружен».
 func on_ride_saved(ride_id: String) -> void:
 	if not is_authorized() or not _profile.strava_auto_upload:
 		return
 	var ride := _rides.get_ride(ride_id)
-	if ride == null or ride.profile_id != _profile.id or ride.is_in_progress():
+	if ride == null or ride.profile_id != _profile.id or ride.is_in_progress() or ride.is_emulator():
 		return
 	var status := str(ride.upload.get("strava_status", Ride.UPLOAD_NONE))
 	if status != Ride.UPLOAD_NONE:
@@ -149,6 +154,7 @@ func on_ride_saved(ride_id: String) -> void:
 
 ## Ручная выгрузка из истории (REQ-STR-04 крит. 5, REQ-STR-03 крит. 3): название и описание
 ## пользователя попадают в запрос. false — нет привязки или заезда / он уже выгружен.
+## Заезд на эмуляторе тоже ставится: подтверждение пользователя — забота UI (T-160).
 func upload_now(ride_id: String, name: String = "", description: String = "") -> bool:
 	if not is_authorized():
 		return false

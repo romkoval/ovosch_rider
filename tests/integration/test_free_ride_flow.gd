@@ -1,4 +1,5 @@
 extends GutTest
+## Заезд — ble-станок (T-160: эмулятор не выгружается автоматически).
 ## Сквозной путь свободной езды в оболочке `main.tscn` (T-084): REQ-FRD-01 крит. 1, 4 — запуск с
 ## главного и с выбора трассы, без станка сессии нет (в отладке — эмулятор); REQ-FRD-02 крит. 2 —
 ## трасса сессии и сцены совпадает с выбранной; REQ-FRD-04 крит. 6 / REQ-FRD-06 крит. 7 — станок
@@ -9,6 +10,8 @@ extends GutTest
 ## перехватывается), крит. 2 (на экране езды «назад» — подтверждение).
 
 const MAIN_SCENE: String = "res://src/app/main.tscn"
+## Двойник реального станка: `FakeTrainer` с `is_emulator() == false` (T-160).
+const BleSourceTrainer := preload("res://tests/fixtures/devices/ble_source_trainer.gd")
 
 var _dir: String
 var _previous_locale: String
@@ -72,7 +75,15 @@ func _ride(main: AppMain, seconds: float) -> void:
 
 
 static func _fake(simulation: bool = true) -> FakeTrainer:
-	var trainer := FakeTrainer.new()
+	return _configure(FakeTrainer.new(), simulation)
+
+
+## Станок с источником `ble` (заезд, который Strava выгружает автоматически; T-160).
+static func _ble(simulation: bool = true) -> FakeTrainer:
+	return _configure(BleSourceTrainer.new(), simulation)
+
+
+static func _configure(trainer: FakeTrainer, simulation: bool) -> FakeTrainer:
 	trainer.connect_delay_sec = 0.0
 	trainer.set_simulation_supported(simulation)
 	trainer.set_rider_power(200)
@@ -219,7 +230,7 @@ func test_req_frd_07_c2_c6_c7_finish_saves_ride_history_and_strava_queue() -> vo
 	var profile := main.repo.get_active()
 	main.secure_store.set_secret(SecureStore.key_for(profile.id, SecureStore.SERVICE_STRAVA, SecureStore.ITEM_REFRESH_TOKEN), "refresh")
 	assert_true(main.strava.is_authorized(), "предусловие: Strava привязана")
-	main.launch_free_ride(_fake(), RouteCatalog.MOUNTAINS, 50)
+	main.launch_free_ride(_ble(), RouteCatalog.MOUNTAINS, 50)
 	var screen := main.free_ride_screen()
 	_ride(main, 30.0)
 	screen.toolbar().finish_requested.emit()
