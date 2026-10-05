@@ -65,6 +65,8 @@ const API_ERROR_KEYS: Dictionary = {
 const API_ERROR_UNKNOWN_KEY: String = "ui.settings.err_unknown"
 ## Notice: the language was applied but `AppSettings` could not be written.
 const LOCALE_SAVE_FAILED_KEY: String = "ui.settings.locale_save_failed"
+## Экран «BLE-отладка» (T-165).
+const BLE_DEBUG_SCENE: String = "res://src/ui/ble_debug/ble_debug_screen.tscn"
 const STORE_RESET_DONE_KEY: String = "ui.settings.store_reset_done"
 const STORE_RESET_FAILED_KEY: String = "ui.settings.store_reset_failed"
 ## Подтверждение отвязки (`ui.md` п. 8.6, решение ред. 2): заголовок, пояснение, опасная кнопка.
@@ -199,6 +201,8 @@ var _chip_placeholder: ImageTexture = null
 ## Строки диагностики «О программе» и идущий поверх экрана замер FPS (T-116a).
 var _diagnostics: AboutDiagnostics = null
 var _benchmark: FpsBenchmark = null
+## Экран «BLE-отладка» поверх настроек (T-165; null — закрыт).
+var _ble_debug: BleDebugScreen = null
 
 @onready var _root: VBoxContainer = %Root
 @onready var _app_bar: AppBar = %AppBar
@@ -359,6 +363,10 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_VISIBILITY_CHANGED and is_node_ready() and _benchmark != null:
 		# Ушли с экрана — замер прерывается (сцена заезда не рендерится в фоне).
 		_benchmark.close()
+	if what == NOTIFICATION_VISIBILITY_CHANGED and is_node_ready() and not is_visible_in_tree() \
+			and _ble_debug != null:
+		# Ушли с экрана — отладка закрывается, сканирование приложения возвращается.
+		_close_ble_debug()
 
 
 ## Signal handlers are bound methods (no lambdas); the coroutine results are not awaited here.
@@ -1140,6 +1148,8 @@ func back() -> void:
 ## «Назад» оболочки (Esc, системный «назад»): идёт замер FPS — он прерывается и закрывается,
 ## экран остаётся. true — обработано экраном.
 func handle_back() -> bool:
+	if _ble_debug != null:
+		return _ble_debug.handle_back()
 	if _benchmark != null:
 		return _benchmark.handle_back()
 	return false
@@ -1190,12 +1200,43 @@ func _build_diagnostics() -> void:
 	_diagnostics = AboutDiagnostics.new()
 	get_node(SettingsSections.CONTENT + "AboutSection/Card/Rows").add_child(_diagnostics)
 	_diagnostics.benchmark_requested.connect(_on_benchmark_requested)
+	_diagnostics.ble_debug_requested.connect(open_ble_debug)
 	var version_row := _version_label.get_parent() as Control
 	version_row.gui_input.connect(_on_version_row_input)
 
 
 func _on_benchmark_requested(route_id: String, duration_sec: float) -> void:
 	start_fps_benchmark(route_id, duration_sec)
+
+
+## Экран «BLE-отладка», открытый поверх настроек (null — нет).
+func ble_debug_screen() -> BleDebugScreen:
+	return _ble_debug
+
+
+## Открыть «BLE-отладку» поверх настроек на мосту приложения (T-165). Уже открытый — он же.
+func open_ble_debug() -> BleDebugScreen:
+	if _ble_debug != null:
+		return _ble_debug
+	_ble_debug = (load(BLE_DEBUG_SCENE) as PackedScene).instantiate() as BleDebugScreen
+	_ble_debug.setup(_connections)
+	_ble_debug.closed.connect(_close_ble_debug)
+	add_child(_ble_debug)
+	_ble_debug.back_button().grab_focus.call_deferred()
+	return _ble_debug
+
+
+func _close_ble_debug() -> void:
+	if _ble_debug == null:
+		return
+	var screen := _ble_debug
+	_ble_debug = null
+	if screen.closed.is_connected(_close_ble_debug):
+		screen.closed.disconnect(_close_ble_debug)
+	screen.close()
+	screen.queue_free()
+	if is_visible_in_tree() and _diagnostics != null and _diagnostics.are_dev_tools_visible():
+		_diagnostics.ble_debug_button().grab_focus.call_deferred()
 
 
 ## Нажатие на строку «Версия» (мышь или касание) — счётчик открытия строк разработчика.

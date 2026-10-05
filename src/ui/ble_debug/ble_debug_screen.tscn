@@ -1,0 +1,244 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/ble_debug/ble_debug_screen.gd" id="1_script"]
+
+[node name="BleDebugScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"ScreenMargin"
+
+[node name="Root" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_type_variation = &"Stack12"
+
+[node name="TopRow" type="HBoxContainer" parent="Margin/Root"]
+layout_mode = 2
+theme_type_variation = &"Row12"
+
+[node name="BackButton" type="Button" parent="Margin/Root/TopRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"GhostButton"
+text = "ui.menu.back"
+
+[node name="Title" type="Label" parent="Margin/Root/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"H2Label"
+text = "ui.ble_debug.title"
+
+[node name="AdapterLabel" type="Label" parent="Margin/Root/TopRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+
+[node name="HintLabel" type="Label" parent="Margin/Root"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+text = "ui.ble_debug.hint"
+autowrap_mode = 3
+
+[node name="ScanRow" type="HBoxContainer" parent="Margin/Root"]
+layout_mode = 2
+theme_type_variation = &"Row12"
+
+[node name="ScanButton" type="Button" parent="Margin/Root/ScanRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "ui.ble_debug.scan"
+
+[node name="StopScanButton" type="Button" parent="Margin/Root/ScanRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.stop_scan"
+
+[node name="FilterCheck" type="CheckButton" parent="Margin/Root/ScanRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.app_filter"
+
+[node name="Body" type="HBoxContainer" parent="Margin/Root"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"Row16"
+
+[node name="DevicesColumn" type="VBoxContainer" parent="Margin/Root/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"Stack8"
+
+[node name="DevicesTitle" type="Label" parent="Margin/Root/Body/DevicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+
+[node name="DeviceList" type="ItemList" parent="Margin/Root/Body/DevicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DeviceInfoLabel" type="Label" parent="Margin/Root/Body/DevicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+autowrap_mode = 3
+
+[node name="ConnectRow" type="HBoxContainer" parent="Margin/Root/Body/DevicesColumn"]
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="ConnectButton" type="Button" parent="Margin/Root/Body/DevicesColumn/ConnectRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "ui.ble_debug.connect"
+
+[node name="DisconnectButton" type="Button" parent="Margin/Root/Body/DevicesColumn/ConnectRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.disconnect"
+
+[node name="LinkLabel" type="Label" parent="Margin/Root/Body/DevicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="ServicesColumn" type="VBoxContainer" parent="Margin/Root/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.2
+theme_type_variation = &"Stack8"
+
+[node name="ServicesTitle" type="Label" parent="Margin/Root/Body/ServicesColumn"]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+text = "ui.ble_debug.services"
+
+[node name="ServiceTree" type="Tree" parent="Margin/Root/Body/ServicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+hide_root = true
+
+[node name="CharLabel" type="Label" parent="Margin/Root/Body/ServicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="CharRow" type="HBoxContainer" parent="Margin/Root/Body/ServicesColumn"]
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="ReadButton" type="Button" parent="Margin/Root/Body/ServicesColumn/CharRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.read"
+
+[node name="SubscribeButton" type="Button" parent="Margin/Root/Body/ServicesColumn/CharRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.subscribe"
+
+[node name="DeviceInfoButton" type="Button" parent="Margin/Root/Body/ServicesColumn/CharRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.read_device_info"
+
+[node name="ValueLabel" type="Label" parent="Margin/Root/Body/ServicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+autowrap_mode = 3
+
+[node name="WriteRow" type="HBoxContainer" parent="Margin/Root/Body/ServicesColumn"]
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="HexEdit" type="LineEdit" parent="Margin/Root/Body/ServicesColumn/WriteRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "ui.ble_debug.hex_placeholder"
+
+[node name="ResponseCheck" type="CheckButton" parent="Margin/Root/Body/ServicesColumn/WriteRow"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "ui.ble_debug.with_response"
+
+[node name="WriteButton" type="Button" parent="Margin/Root/Body/ServicesColumn/WriteRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.write"
+
+[node name="PresetsLabel" type="Label" parent="Margin/Root/Body/ServicesColumn"]
+layout_mode = 2
+theme_type_variation = &"CaptionLabel"
+text = "ui.ble_debug.presets"
+
+[node name="Presets" type="HFlowContainer" parent="Margin/Root/Body/ServicesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Flow16"
+
+[node name="LogColumn" type="VBoxContainer" parent="Margin/Root/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.4
+theme_type_variation = &"Stack8"
+
+[node name="LogTitle" type="Label" parent="Margin/Root/Body/LogColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+
+[node name="LogView" type="TextEdit" parent="Margin/Root/Body/LogColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+editable = false
+
+[node name="LogRow" type="HBoxContainer" parent="Margin/Root/Body/LogColumn"]
+layout_mode = 2
+theme_type_variation = &"Row8"
+
+[node name="CopyLogButton" type="Button" parent="Margin/Root/Body/LogColumn/LogRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "ui.ble_debug.copy_log"
+
+[node name="ClearLogButton" type="Button" parent="Margin/Root/Body/LogColumn/LogRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ui.ble_debug.clear_log"
+
+[node name="StatusLabel" type="Label" parent="Margin/Root/Body/LogColumn/LogRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"CaptionLabel"
+autowrap_mode = 3

@@ -115,6 +115,57 @@ ui.settings.fps_limit_title,Ограничить FPS до {fps},Limit FPS to {fp
 ui.settings.fps_limit_hint,Отладка: действует до перезапуска приложения,Debug: lasts until the app restarts
 ui.settings.emulator_title,Эмулятор станка,Trainer emulator
 ui.settings.emulator_hint,"Тренировка и свободная езда без станка («Эмулятор», «На эмуляторе»); до перезапуска приложения","Workouts and free ride without a trainer (Emulator buttons); lasts until the app restarts"
+ui.settings.ble_debug_title,BLE-отладка,BLE debug
+ui.settings.ble_debug_hint,"Сырые данные BLE-устройств: реклама, сервисы, характеристики, журнал","Raw BLE device data: advertising, services, characteristics, log"
+ui.settings.ble_debug_open,Открыть,Open
+ui.ble_debug.title,BLE-отладка,BLE debug
+ui.ble_debug.hint,"Пока экран открыт, сканирование и автоподключение приложения на паузе. Подключённые приложением устройства остаются подключены","While this screen is open, app scanning and auto-connect are paused. Devices connected by the app stay connected"
+ui.ble_debug.unavailable,Bluetooth недоступен,Bluetooth unavailable
+ui.ble_debug.adapter,Адаптер: {state},Adapter: {state}
+ui.ble_debug.scan,Сканировать,Scan
+ui.ble_debug.stop_scan,Остановить,Stop
+ui.ble_debug.app_filter,Фильтр приложения,App filter
+ui.ble_debug.devices,Устройства: {count},Devices: {count}
+ui.ble_debug.no_device,Выберите устройство в списке,Select a device in the list
+ui.ble_debug.no_name,(без имени),(no name)
+ui.ble_debug.info_name,Имя: {name},Name: {name}
+ui.ble_debug.info_id,id: {id},id: {id}
+ui.ble_debug.info_rssi,RSSI: {rssi} дБм,RSSI: {rssi} dBm
+ui.ble_debug.info_kind,Тип по рекламе: {kind},Type from advertising: {kind}
+ui.ble_debug.info_raw,UUID пакета как есть: {uuids},Packet UUIDs as received: {uuids}
+ui.ble_debug.info_norm,UUID пакета нормализованные: {uuids},Packet UUIDs normalized: {uuids}
+ui.ble_debug.info_union,UUID за сеанс: {uuids},UUIDs this session: {uuids}
+ui.ble_debug.info_packets,Пакетов рекламы: {count},Advertising packets: {count}
+ui.ble_debug.connect,Подключить,Connect
+ui.ble_debug.disconnect,Отключить,Disconnect
+ui.ble_debug.link_idle,Не подключено,Not connected
+ui.ble_debug.link_connecting,Подключение: {name}…,Connecting: {name}…
+ui.ble_debug.link_discovering,Поиск сервисов: {name}…,Discovering services: {name}…
+ui.ble_debug.link_ready,Подключено: {name},Connected: {name}
+ui.ble_debug.services,Сервисы и характеристики,Services and characteristics
+ui.ble_debug.subscribed_mark,[подписка],[subscribed]
+ui.ble_debug.no_char,Выберите характеристику в дереве,Select a characteristic in the tree
+ui.ble_debug.read,Прочитать,Read
+ui.ble_debug.subscribe,Подписаться,Subscribe
+ui.ble_debug.unsubscribe,Отписаться,Unsubscribe
+ui.ble_debug.read_device_info,Прочитать 180A,Read 180A
+ui.ble_debug.value_none,Значения ещё нет,No value yet
+ui.ble_debug.value,"Значение ({source}, {time}): {hex}","Value ({source}, {time}): {hex}"
+ui.ble_debug.decoded,Расшифровка: {text},Decoded: {text}
+ui.ble_debug.hex_placeholder,"Байты hex, например 05 96 00","Hex bytes, e.g. 05 96 00"
+ui.ble_debug.with_response,С ответом,With response
+ui.ble_debug.write,Записать,Write
+ui.ble_debug.hex_invalid,"Неверный hex: нужны пары цифр 0–9, A–F","Invalid hex: pairs of digits 0–9, A–F are expected"
+ui.ble_debug.presets,"Пресеты: FTMS Control Point (1826/2AD9) и Tacx FE-C (FEC3)","Presets: FTMS Control Point (1826/2AD9) and Tacx FE-C (FEC3)"
+ui.ble_debug.preset_ftms_request_control,FTMS: запрос управления (00),FTMS: Request Control (00)
+ui.ble_debug.preset_ftms_start,FTMS: старт (07),FTMS: Start (07)
+ui.ble_debug.preset_ftms_target_power,FTMS: мощность 150 Вт (05 96 00),FTMS: target power 150 W (05 96 00)
+ui.ble_debug.preset_ftms_reset,FTMS: сброс (01),FTMS: Reset (01)
+ui.ble_debug.preset_fec_target_power,FE-C: мощность 150 Вт (стр. 0x31),FE-C: target power 150 W (page 0x31)
+ui.ble_debug.log,Журнал: {count},Log: {count}
+ui.ble_debug.copy_log,Скопировать журнал,Copy log
+ui.ble_debug.clear_log,Очистить,Clear
+ui.ble_debug.copied,Журнал скопирован: {count} строк,Log copied: {count} lines
 ui.fps_bench.warmup,Замер FPS · {route} · прогрев,FPS benchmark · {route} · warming up
 ui.fps_bench.progress,Замер FPS · {route} · {elapsed} / {total},FPS benchmark · {route} · {elapsed} / {total}
 ui.fps_bench.result_title,Замер FPS · {route},FPS benchmark · {route}
