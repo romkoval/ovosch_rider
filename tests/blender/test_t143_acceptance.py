@@ -1,7 +1,7 @@
 """Приёмка T-143 (tester): конвейер доводки ИИ-модели гонщика в Blender — независимо от тестов
 исполнителя (`scripts/blender/tests`). REQ-D3D-09 п.7, 9 — механизм; п.1–5 — на синтетике.
 
-Источник истины — art-bible «Гонщик» ред. 4.5 (ред. 4.2 — голова, макушка, рост 1.75), «Вариант Г»
+Источник истины — art-bible «Гонщик» ред. 4.6 (ред. 4.2 — голова, макушка, рост 1.75; ред. 4.6 — фото-референс: номинал шорт 70 %, низ джерси 0.24, верх носка ровным кольцом), «Вариант Г»
 (шаги 0–11, «Вход конвейера из пакета», «A-поза контрактного скелета») и бриф `docs/game/rider-artist-brief.md` §3–§6, §10–§12, §14 Т1–Т7. Числа
 брифа переписаны сюда вручную (не из `rider_contract.json` и не из `pipeline_data.json`).
 
@@ -744,6 +744,124 @@ class T143(unittest.TestCase):
         tot, flat = self._turning(hl[0])
         print("  линия волос: %d вершин, поворот %.0f°, неплоскость %.2f мм" % (len(hl[0]), tot, flat * 1000))
         self.assertLessEqual(tot, 450.0, "линия волос без пилы (сумма поворотов %.0f°)" % tot)
+
+    # ------------------------------------------------------------ регионы шага 8 по размерам спеки (ред. 4.6)
+
+    @staticmethod
+    def _seg_t(p, a, b):
+        """Доля отрезка a → b (кость в rest), на которую проецируется точка p."""
+        d = b - a
+        return float((p - a) @ d / (d @ d))
+
+    def _side_loop(self, loops, s, near):
+        """Петля своей стороны (знак x) ближе всех к точке near."""
+        sx = 1.0 if s == ".L" else -1.0
+        own = [l for l in loops if np.sign(l.mean(axis=0)[0]) == sx]
+        self.assertTrue(own, "нет петли стороны %s" % s)
+        return min(own, key=lambda l: np.linalg.norm(l.mean(axis=0) - near))
+
+    def test_step8_limb_region_boundaries_by_spec_sizes(self):
+        """Карточка T-143 шаг 8: «регионы — границы по размерам спеки». art-bible «Анатомия по частям»,
+        бриф §8, §10 (rest, кости брифа §5.1):
+        - штанина кончается на 65–70 % длины бедра от сустава (граница shorts_gripper | skin), резинка 3 см
+          (граница shorts_main | shorts_gripper на 3 см выше по кости, ± 5 мм);
+        - верх носка на 0.20–0.24 м выше голеностопа (граница socks_cuff | skin), манжета 2 см (± 5 мм);
+        - рукав джерси до середины плеча, 45–55 % (граница jersey_cuff | skin), манжета 2.5 см (± 5 мм).
+        Положение границы — проекция центра петли рёбер границы на кость."""
+        bb = brief_bones()
+        checks = [  # (кость от, кость до, внешняя граница (a, b), внутренняя граница (a, b), мера, диапазон, ширина, имя)
+            ("thigh", "shin", ({9}, {0}), ({8}, {9}), "t", (0.65, 0.70), 0.03, "штанина"),
+            ("foot", "shin", ({11}, {0}), ({10}, {11}), "m", (0.20, 0.24), 0.02, "носок"),
+            ("upperarm", "forearm", ({6}, {0}), ({2, 3, 4, 5}, {6}), "t", (0.45, 0.55), 0.025, "рукав"),
+        ]
+        for a_b, b_b, outer, inner, kind, rng, width, label in checks:
+            lo_loops, _ = self._boundary_loops(*outer)
+            in_loops, _ = self._boundary_loops(*inner)
+            for s in (".L", ".R"):
+                A, B = bb[a_b + s][1], bb[b_b + s][1]
+                L = float(np.linalg.norm(B - A))
+                guess = A + (B - A) * (sum(rng) / 2 / (L if kind == "m" else 1.0))
+                ring = self._side_loop(lo_loops, s, guess)
+                ring_in = self._side_loop(in_loops, s, guess)
+                t = self._seg_t(ring.mean(axis=0), A, B)
+                t_in = self._seg_t(ring_in.mean(axis=0), A, B)
+                val = t * L if kind == "m" else t
+                w = abs(t - t_in) * L
+                print("\n  %s%s: граница %.4f %s (спека %s), ширина манжеты %.4f м (спека %.3f)"
+                      % (label, s, val, "м" if kind == "m" else "доли", rng, w, width))
+                self.assertTrue(rng[0] <= val <= rng[1], "%s%s: граница %.4f вне %s" % (label, s, val, rng))
+                self.assertAlmostEqual(w, width, delta=0.005, msg="%s%s: ширина манжеты/резинки %.4f, спека %.3f" % (label, s, w, width))
+
+    def test_sock_top_is_level_edge_ring_rev46(self):
+        """art-bible ред. 4.6 «Носки»: «верх носка — ровное кольцо по ребру сетки, без зубцов и наклона»
+        (бриф §8 ред. 2.5). Граница socks_cuff | skin (11 | 0) у каждой ноги — одна простая петля
+        (у вершин ровно 2 ребра границы), без «пилы» (сумма поворотов ≤ 450°, как у манжет перчаток),
+        плоская (≤ 1 мм) и без наклона: плоскость кольца поперёк голени — угол нормали к оси shin ≤ 5°
+        (наклон 5° на диаметре носка ≈ 0.12 м — перепад 1 см, половина манжеты 2 см)."""
+        loops, deg = self._boundary_loops({11}, {0})
+        self.assertEqual(len(loops), 2, "верх носка — по одной петле на ногу (%d)" % len(loops))
+        self.assertEqual(sorted(set(deg.values())), [2], "верх носка: у вершин ровно 2 ребра границы")
+        bb = brief_bones()
+        for s in (".L", ".R"):
+            A, B = bb["shin" + s][1], bb["foot" + s][1]
+            ring = self._side_loop(loops, s, (A + B) / 2)
+            tot, flat = self._turning(ring)
+            c = ring.mean(axis=0)
+            _, _, vt = np.linalg.svd(ring - c)
+            axis = (B - A) / np.linalg.norm(B - A)
+            tilt = math.degrees(math.acos(min(1.0, abs(float(vt[2] @ axis)))))
+            print("\n  верх носка%s: %d вершин, поворот %.0f°, неплоскость %.2f мм, наклон к голени %.2f°"
+                  % (s, len(ring), tot, flat * 1000, tilt))
+            self.assertLessEqual(tot, 450.0, "верх носка%s без пилы (сумма поворотов %.0f°)" % (s, tot))
+            self.assertLessEqual(flat, 0.001, "верх носка%s — плоское кольцо (%.2f мм)" % (s, flat * 1000))
+            self.assertLessEqual(tilt, 5.0, "верх носка%s без наклона: %.2f° к оси голени" % (s, tilt))
+
+    def _jersey_bottom_arc(self):
+        """Низ джерси «по спине» (art-bible «Корпус»): центр петли границы джерси (2–7) | shorts_main (8),
+        спроецированный на ось корпуса pelvis → spine → chest (rest), — длина дуги от S (начало pelvis,
+        верх седла 0.965). Возвращает (дуга, м; высота над седлом самой задней точки границы, м)."""
+        loops, _ = self._boundary_loops({2, 3, 4, 5, 6, 7}, {8})
+        self.assertEqual(len(loops), 1, "низ джерси — одна петля вокруг корпуса (%d)" % len(loops))
+        bb = brief_bones()
+        chain = [bb[n][1] for n in ("pelvis", "spine", "chest")]
+        c = loops[0].mean(axis=0)
+        best, acc_len = None, 0.0
+        for a, b in zip(chain, chain[1:]):
+            L = float(np.linalg.norm(b - a))
+            t = min(1.0, max(0.0, self._seg_t(c, a, b)))
+            d = float(np.linalg.norm(a + (b - a) * t - c))
+            if best is None or d < best[0]:
+                best = (d, acc_len + t * L)
+            acc_len += L
+        back = loops[0][int(np.argmax(loops[0][:, 1]))]  # сзади — +Y Blender (вперёд — −Y)
+        return best[1], float(back[2] - 0.965)
+
+    def test_step8_jersey_bottom_back_by_spec(self):
+        """art-bible «Корпус» (ред. 3): «низ джерси сзади — на 0.20–0.24 м выше верха седла (по спине)»;
+        бриф §8. Граница джерси | шорты — одна петля, по оси корпуса от S в 0.20–0.24 м."""
+        arc, back_z = self._jersey_bottom_arc()
+        print("\n  низ джерси: по спине %.4f м от S, задняя точка на %.4f м выше седла" % (arc, back_z))
+        self.assertTrue(0.20 <= arc <= 0.24, "низ джерси по спине %.4f м, спека 0.20–0.24" % arc)
+
+    def test_rev46_nominal_shorts_70pct_and_jersey_bottom_024(self):
+        """Спека ред. 4.6 (фото-референс 2026-10-04; art-bible «Гонщик», сводка ред. 4.6 и «Анатомия по
+        частям», бриф §8 ред. 2.5): «низ шорт — номинал 13 см над коленом (70 %)», «Номинал — верхняя
+        граница спеки: низ джерси на 0.24 м выше седла». Шаг 8 ставит границы регионов «по размерам
+        спеки» — номинал ред. 4.6, а не середина прежнего диапазона. Допуск — 1 % длины бедра (4 мм) и
+        5 мм по спине (шаг сетки и проекция)."""
+        bb = brief_bones()
+        loops, _ = self._boundary_loops({9}, {0})
+        got = {}
+        for s in (".L", ".R"):
+            A, B = bb["thigh" + s][1], bb["shin" + s][1]
+            got["штанина" + s] = self._seg_t(self._side_loop(loops, s, A + (B - A) * 0.7).mean(axis=0), A, B)
+        arc, _ = self._jersey_bottom_arc()
+        print("\n  номинал ред. 4.6: штанина %s (номинал 0.70), низ джерси %.4f м (номинал 0.24)"
+              % ({k: round(v, 4) for k, v in got.items()}, arc))
+        bad = ["%s %.4f (номинал 0.70 ± 0.01)" % (k, v) for k, v in got.items() if abs(v - 0.70) > 0.01]
+        if abs(arc - 0.24) > 0.005:
+            bad.append("низ джерси %.4f м (номинал 0.24 ± 0.005)" % arc)
+        self.assertEqual(bad, [], "границы регионов не по номиналу ред. 4.6: %s" % "; ".join(bad))
 
     # ------------------------------------------------------------ rider.glb: Т1–Т7 по файлу
 
