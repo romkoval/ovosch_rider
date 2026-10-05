@@ -260,7 +260,11 @@ void AppleBackend::stop_scan() {
 	});
 }
 
-void AppleBackend::connect_peripheral(const std::string &id) {
+void AppleBackend::connect_peripheral(const std::string &id_arg) {
+	// Копии аргументов до dispatch_async: блок захватывает C++-ссылку `const std::string &` как
+	// ссылку, а к моменту выполнения блока строка вызывающей стороны уже разрушена — id приходил
+	// пустым («peripheral not found: »), и после connected ничего не работало.
+	const std::string id = id_arg;
 	OvoschBleCentralDelegate *delegate = delegate_;
 	NSString *identifier = ovosch_to_ns(id);
 	dispatch_async([delegate queue], ^{
@@ -279,7 +283,9 @@ void AppleBackend::connect_peripheral(const std::string &id) {
 	});
 }
 
-void AppleBackend::disconnect_peripheral(const std::string &id) {
+void AppleBackend::disconnect_peripheral(const std::string &id_arg) {
+	// Копии аргументов для блока dispatch_async (см. connect_peripheral).
+	const std::string id = id_arg;
 	OvoschBleCentralDelegate *delegate = delegate_;
 	NSString *identifier = ovosch_to_ns(id);
 	dispatch_async([delegate queue], ^{
@@ -292,7 +298,9 @@ void AppleBackend::disconnect_peripheral(const std::string &id) {
 	});
 }
 
-void AppleBackend::discover_services(const std::string &id) {
+void AppleBackend::discover_services(const std::string &id_arg) {
+	// Копии аргументов для блока dispatch_async (см. connect_peripheral).
+	const std::string id = id_arg;
 	OvoschBleCentralDelegate *delegate = delegate_;
 	dispatch_async([delegate queue], ^{
 		CBPeripheral *p = peripheral_or_error(id, true);
@@ -304,7 +312,11 @@ void AppleBackend::discover_services(const std::string &id) {
 	});
 }
 
-void AppleBackend::subscribe(const std::string &id, const std::string &service_uuid, const std::string &char_uuid) {
+void AppleBackend::subscribe(const std::string &id_arg, const std::string &service_uuid_arg, const std::string &char_uuid_arg) {
+	// Копии аргументов для блока dispatch_async (см. connect_peripheral).
+	const std::string id = id_arg;
+	const std::string service_uuid = service_uuid_arg;
+	const std::string char_uuid = char_uuid_arg;
 	OvoschBleCentralDelegate *delegate = delegate_;
 	dispatch_async([delegate queue], ^{
 		CBPeripheral *p = peripheral_or_error(id, true);
@@ -319,7 +331,11 @@ void AppleBackend::subscribe(const std::string &id, const std::string &service_u
 	});
 }
 
-void AppleBackend::unsubscribe(const std::string &id, const std::string &service_uuid, const std::string &char_uuid) {
+void AppleBackend::unsubscribe(const std::string &id_arg, const std::string &service_uuid_arg, const std::string &char_uuid_arg) {
+	// Копии аргументов для блока dispatch_async (см. connect_peripheral).
+	const std::string id = id_arg;
+	const std::string service_uuid = service_uuid_arg;
+	const std::string char_uuid = char_uuid_arg;
 	OvoschBleCentralDelegate *delegate = delegate_;
 	dispatch_async([delegate queue], ^{
 		CBPeripheral *p = [[delegate peripherals] objectForKey:ovosch_to_ns(id)];
@@ -333,8 +349,12 @@ void AppleBackend::unsubscribe(const std::string &id, const std::string &service
 	});
 }
 
-void AppleBackend::write(const std::string &id, const std::string &service_uuid, const std::string &char_uuid,
+void AppleBackend::write(const std::string &id_arg, const std::string &service_uuid_arg, const std::string &char_uuid_arg,
 		const std::vector<uint8_t> &bytes, bool with_response) {
+	// Копии аргументов для блока dispatch_async (см. connect_peripheral).
+	const std::string id = id_arg;
+	const std::string service_uuid = service_uuid_arg;
+	const std::string char_uuid = char_uuid_arg;
 	OvoschBleCentralDelegate *delegate = delegate_;
 	NSData *data = [NSData dataWithBytes:(bytes.empty() ? nullptr : bytes.data()) length:bytes.size()];
 	dispatch_async([delegate queue], ^{
@@ -356,7 +376,11 @@ void AppleBackend::write(const std::string &id, const std::string &service_uuid,
 	});
 }
 
-void AppleBackend::read_characteristic(const std::string &id, const std::string &service_uuid, const std::string &char_uuid) {
+void AppleBackend::read_characteristic(const std::string &id_arg, const std::string &service_uuid_arg, const std::string &char_uuid_arg) {
+	// Копии аргументов для блока dispatch_async (см. connect_peripheral).
+	const std::string id = id_arg;
+	const std::string service_uuid = service_uuid_arg;
+	const std::string char_uuid = char_uuid_arg;
 	OvoschBleCentralDelegate *delegate = delegate_;
 	dispatch_async([delegate queue], ^{
 		CBPeripheral *p = peripheral_or_error(id, true);
