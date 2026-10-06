@@ -159,3 +159,29 @@ func test_scan_connect_tree_and_presets_through_screen_buttons() -> void:
 	assert_null(main.settings_screen().ble_debug_screen(), "«Назад» экрана закрывает его")
 	assert_eq(stub.calls_of("disconnect_peripheral").size(), 1, "своё устройство отключено при выходе")
 	assert_false(stub.scanning, "скан отладки остановлен")
+
+
+func test_service_tree_keeps_room_for_characteristics_after_connect() -> void:
+	# Владелец 2026-10-06: дерево сжималось до одной строки — пресеты и поле записи забирали
+	# высоту колонки, характеристики FEC2/FEC3 нельзя было выбрать, «Subscribe» оставалась серой.
+	var previous_size := get_tree().root.size
+	get_tree().root.size = Vector2i(1000, 555)  # окно владельца (снимок 2000×1110 на Retina)
+	var main := _main()
+	var stub := _stub(main)
+	stub.set_device_services(NEO, {"180A": ["2A29", "2A24", "2A25", "2A27", "2A26"], "1816": ["2A5B", "2A5C", "2A5D"],
+			"1818": ["2A63", "2A65", "2A5D", "2A64", "2A66"], FEC_SERVICE: [FEC_NOTIFY, FEC_WRITE],
+			"669AA501-0C08-969E-E211-86AD5062675F": ["669AAC01-0C08-969E-E211-86AD5062675F"]})
+	var screen := _open(main)
+	screen.scan_button().pressed.emit()
+	stub.emit_device_found(NEO, "Tacx Neo 11565", -50, PackedStringArray(["1816", "1818", "180A", FEC_SERVICE]))
+	screen.render_now()
+	screen.device_list().select(0)
+	screen.device_list().item_selected.emit(0)
+	(screen.get_node("%ConnectButton") as Button).pressed.emit()
+	stub.pump()
+	screen.render_now()
+	await wait_process_frames(3)
+	var tree := screen.service_tree()
+	assert_eq(tree.get_root().get_child_count(), 5, "пять сервисов Neo в дереве")
+	assert_gte(tree.size.y, 300.0, "дерево не сжимается до одной строки: видны сервисы и характеристики")
+	get_tree().root.size = previous_size
