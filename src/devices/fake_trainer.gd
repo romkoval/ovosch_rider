@@ -39,6 +39,10 @@ extends TrainerDevice
 ## SIM тоже даёт `SIMULATION_REJECTED` и UNSUPPORTED (как ответ станка ≠ 0x01 у
 ## `BleTrainer`); `fail_next_command(WRITE_FAILED)` — отказ записи, поддержка не меняется.
 ## `set_inclination_range(min, max)` — диапазон уклона станка (по умолчанию запасной).
+##
+## Станок без канала управления (REQ-WRK-09, DEV-10 п.4): `controllable = false` —
+## `has_control() == false`, команды не принимаются и в журнал не пишутся (на станок не ушли).
+## То же — пока управление запрещено `set_control_allowed(false)`.
 
 ## Тип команды в журнале.
 const CMD_TARGET_POWER: String = "target_power"
@@ -73,6 +77,8 @@ var rider_cadence_rpm: int = 85
 ## Передавать ли поле скорости в телеметрии (false — станок без поля скорости,
 ## сессия берёт скорость из модели, REQ-WRK-08 крит. 5).
 var emit_speed: bool = true
+## Есть ли у эмулируемого станка канал управления (false — только данные, REQ-WRK-09).
+var controllable: bool = true
 
 # --- Журнал и состояние, доступные тестам на чтение ---
 
@@ -112,6 +118,7 @@ var _cadence_sequence: Array[int] = []
 var _cadence_index: int = 0
 var _simulation_supported: bool = true
 var _inclination_range := Vector2(DEFAULT_INCLINATION_MIN_PCT, DEFAULT_INCLINATION_MAX_PCT)
+var _control_allowed: bool = true
 
 
 func _init(seed: int = 42) -> void:
@@ -207,6 +214,14 @@ func simulation_support() -> int:
 
 func inclination_range() -> Vector2:
 	return _inclination_range
+
+
+func has_control() -> bool:
+	return controllable and _control_allowed
+
+
+func set_control_allowed(allowed: bool) -> void:
+	_control_allowed = allowed
 
 
 ## Эмулятор: данные не настоящие (T-160).
@@ -379,6 +394,8 @@ func _finish_connect() -> void:
 ## Записывает вызов в журнал и решает, принимает ли команду станок.
 ## Возвращает true, если команду нужно применить к модели; иначе испускает `error`.
 func _accept_command(type: String, value: Variant, extra: Dictionary = {}) -> bool:
+	if not has_control():
+		return false  # канала управления нет: команда на станок не уходит
 	var accepted: bool = true
 	var code: int = ErrorCode.NONE
 	var message: String = ""

@@ -20,6 +20,13 @@ extends TrainerDevice
 ## станка пульс/каденс датчиков продолжают записываться (REQ-DEV-08 крит. 2).
 ## `heart_rate(bpm)` испускается в ту же секунду, если пульс есть хоть у кого-то.
 ## Датчики подключает владелец (`connect_device` у каждого); хаб только тикает их.
+##
+## Измеритель мощности, ушедший из CONNECTED (обрыв, переподключение, отключение), сразу
+## перестаёт быть источником мощности и каденса — «нет данных» или запасной источник без
+## ожидания порога 5 с (REQ-WRK-09 п.6 (б), REQ-DEV-08 крит. 2).
+##
+## Станка может не быть (`trainer == null`): хаб из одних датчиков — основа режима без
+## управляемого станка (`UncontrolledTrainer`, REQ-WRK-09).
 
 const SOURCE_TIMEOUT_SEC: float = 5.0
 ## Порог свежести источников каденса (REQ-DEV-04 крит. 3, решение Н-4).
@@ -62,6 +69,8 @@ var _heart_rate_source_in_use: String = SOURCE_NONE
 
 func _init(trainer_device: TrainerDevice) -> void:
 	trainer = trainer_device
+	if trainer == null:
+		return
 	trainer.telemetry.connect(_on_trainer_telemetry)
 	trainer.heart_rate.connect(_on_trainer_heart_rate)
 	trainer.connection_state_changed.connect(_forward_state)
@@ -108,8 +117,11 @@ func set_cadence_sensor(sensor: SensorDevice) -> void:
 
 
 func set_power_meter(sensor: SensorDevice) -> void:
-	_swap_sensor(power_meter, sensor, {"power": _on_pm_power, "cadence": _on_pm_cadence})
+	_swap_sensor(power_meter, sensor, {"power": _on_pm_power, "cadence": _on_pm_cadence,
+		"connection_state_changed": _on_pm_state})
 	power_meter = sensor
+	_pm_power_at = -INF
+	_pm_rpm_at = -INF
 
 
 ## false — неизвестный источник (предупреждение, выбор не меняется).
@@ -182,6 +194,15 @@ func inclination_range() -> Vector2:
 		else Vector2(DEFAULT_INCLINATION_MIN_PCT, DEFAULT_INCLINATION_MAX_PCT)
 
 
+func has_control() -> bool:
+	return trainer.has_control() if trainer != null else false
+
+
+func set_control_allowed(allowed: bool) -> void:
+	if trainer != null:
+		trainer.set_control_allowed(allowed)
+
+
 ## Источник — станок хаба (датчики источник не меняют, T-160).
 func is_emulator() -> bool:
 	return trainer.is_emulator() if trainer != null else false
@@ -239,6 +260,13 @@ func _on_pm_power(watts: int) -> void:
 func _on_pm_cadence(rpm: int) -> void:
 	_pm_rpm = rpm
 	_pm_rpm_at = _time_sec
+
+
+## Измеритель не в CONNECTED — его значения больше не свежие (WRK-09 п.6 (б)).
+func _on_pm_state(state: int) -> void:
+	if state != ConnectionState.CONNECTED:
+		_pm_power_at = -INF
+		_pm_rpm_at = -INF
 
 
 # ---------------------------------------------------------------------------

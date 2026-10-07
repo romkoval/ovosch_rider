@@ -25,9 +25,13 @@ extends RefCounted
 ##
 ## Источник станка `metadata.trainer_source` (T-160, Н-59): `ble` — реальное устройство,
 ## `emulator` — эмулятор станка; пишет сессия по `TrainerDevice.trainer_source()`.
-## Это ось «откуда данные»; режим управления станком (будущий `trainer_mode`, T-152) — отдельное
-## поле. Заезды без поля (записанные до T-160) и с неизвестным значением — `ble`: угадывать
+## Это ось «откуда данные»; режим сессии `trainer_mode` — отдельное поле. Заезды без поля (записанные до T-160) и с неизвестным значением — `ble`: угадывать
 ## источник задним числом нельзя. Заезд на эмуляторе в Strava сам не выгружается (`StravaService`).
+##
+## Режим сессии `metadata.trainer_mode` (REQ-WRK-09 п.8, LOC-01 п.1): `smart` — с управляемым
+## станком, `power_meter` — по источнику мощности без управления; пишет сессия по
+## `TrainerDevice.trainer_mode()`. Заезды без поля (до WRK-09) и с неизвестным значением — `smart`.
+## В режиме `power_meter` `trainer_source` описывает источник мощности (симулятор CPS — `emulator`).
 ##
 ## Источник заезда (`from_session`) — `WorkoutSession` или сессия свободной езды с тем же
 ## контрактом записи: свойства `samples: SampleStream`, `events: Array[Dictionary]`,
@@ -46,6 +50,9 @@ const KEY_TOTAL_ASCENT_M: String = "total_ascent_m"
 const KEY_TRAINER_SOURCE: String = WorkoutSession.META_TRAINER_SOURCE
 const TRAINER_SOURCE_BLE: String = TrainerDevice.SOURCE_BLE
 const TRAINER_SOURCE_EMULATOR: String = TrainerDevice.SOURCE_EMULATOR
+const KEY_TRAINER_MODE: String = WorkoutSession.META_TRAINER_MODE
+const TRAINER_MODE_SMART: String = TrainerDevice.MODE_SMART
+const TRAINER_MODE_POWER_METER: String = TrainerDevice.MODE_POWER_METER
 
 const UPLOAD_NONE: String = "none"
 const UPLOAD_QUEUED: String = "queued"
@@ -238,6 +245,17 @@ func is_emulator() -> bool:
 	return trainer_source() == TRAINER_SOURCE_EMULATOR
 
 
+## Режим сессии: `TRAINER_MODE_POWER_METER` или `TRAINER_MODE_SMART` (без поля — `smart`).
+func trainer_mode() -> String:
+	var v := str(metadata.get(KEY_TRAINER_MODE, TRAINER_MODE_SMART))
+	return TRAINER_MODE_POWER_METER if v == TRAINER_MODE_POWER_METER else TRAINER_MODE_SMART
+
+
+## Заезд без управляемого станка (WRK-09).
+func is_power_meter_mode() -> bool:
+	return trainer_mode() == TRAINER_MODE_POWER_METER
+
+
 func ftp_w() -> int:
 	return _int(metadata.get("ftp_w"), 0)
 
@@ -314,6 +332,7 @@ func sync_summary_header() -> void:
 	summary.ride_type = ride_type()
 	summary.route_id = route_id()
 	summary.trainer_source = trainer_source()
+	summary.trainer_mode = trainer_mode()
 
 
 ## События паузы `{at_sec, duration_sec}` (для FIT и истории). Пауза без

@@ -262,7 +262,7 @@ func _on_plan_workout_chosen(workout: Workout, source: String) -> void:
 ## «Начать» в карточке плана (REQ-UIX-02 крит. 1): то же правило станка, что у экрана выбора;
 ## без станка выбор «эмулятор / устройства» показывает экран выбора тренировки.
 func _on_home_workout_start(workout: Workout) -> void:
-	if not is_trainer_ready():
+	if not can_start_session():
 		app_state.navigate(AppState.Screen.PLAN)
 	start_workout(workout)
 
@@ -323,16 +323,32 @@ func is_trainer_ready() -> bool:
 		and connections.trainer.get_connection_state() == TrainerDevice.ConnectionState.CONNECTED
 
 
-## Запуск плана (из экрана выбора, REQ-IMP-04 крит. 3): на реальном станке через хаб, если он
-## подключён; иначе — экран выбора просит выбрать «эмулятор» или «подключить устройства».
+## Правило старта (REQ-WRK-09 п.1–2, DEV-05 п.5, FRD-01 п.4): режим и причина запрета —
+## `ConnectionManager.start_check()` (`{allowed, mode, power_source, reason, connecting}`).
+func session_start_check() -> Dictionary:
+	if connections == null:
+		return ConnectionManager.start_rule(TrainerDevice.ConnectionState.DISCONNECTED, false,
+			TrainerDevice.ConnectionState.DISCONNECTED)
+	return connections.start_check()
+
+
+## Можно ли начать тренировку или свободную езду на подключённых устройствах: управляемый
+## станок (`smart`) или источник мощности без управления (`power_meter`).
+func can_start_session() -> bool:
+	return bool(session_start_check()["allowed"])
+
+
+## Запуск плана (из экрана выбора, REQ-IMP-04 крит. 3) по правилу старта (`can_start_session`):
+## управляемый станок — хаб (`smart`), без него с источником мощности — `power_meter` (WRK-09 п.2 (б),
+## сразу, без диалога); иначе — экран выбора просит выбрать «эмулятор» или «подключить устройства».
 ## Возвращает true, если тренировка запущена сразу.
 func start_workout(workout: Workout) -> bool:
 	var screen := workout_screen()
 	if screen == null or workout == null:
 		return false
-	if is_trainer_ready():
+	if can_start_session():
 		_pending_workout = null
-		return _launch(screen, workout, connections.hub, connections)
+		return _launch(screen, workout, connections.session_device(), connections)
 	_pending_workout = workout
 	var plan := plan_screen()
 	if plan != null:
@@ -359,15 +375,15 @@ func _launch(screen: WorkoutScreen, workout: Workout, trainer: TrainerDevice, ma
 # ---------------------------------------------------------------------------
 
 ## Запуск свободной езды по трассе с крутизной SIM («Поехать» на главном и на экране выбора
-## трассы). Правило станка — как у плана: подключён станок (хаб `ConnectionManager`) — заезд
-## стартует на нём; нет — сессия не создаётся, диалог поясняет и ведёт на «Устройства», а при
+## трассы). Правило старта — как у плана: управляемый станок или источник мощности без управления
+## (`ConnectionManager.session_device()`, режим `smart` или `power_meter`) — заезд стартует; нет — сессия не создаётся, диалог поясняет и ведёт на «Устройства», а при
 ## `emulator_enabled()` предлагает эмулятор (FRD-01 крит. 4). true — заезд запущен сразу.
 func start_free_ride(route_id: String, steepness_pct: int) -> bool:
 	if free_ride_screen() == null:
 		return false
-	if is_trainer_ready():
+	if can_start_session():
 		_pending_free_ride = {}
-		return launch_free_ride(connections.hub, route_id, steepness_pct, connections)
+		return launch_free_ride(connections.session_device(), route_id, steepness_pct, connections)
 	_pending_free_ride = {"route_id": route_id, "steepness_pct": steepness_pct}
 	_free_ride_trainer_dialog.popup_centered()
 	return false
@@ -464,6 +480,8 @@ func _on_free_ride_created(session: FreeRideSession) -> void:
 ## `ride_saved`, FRD-07 крит. 7): экран показывает итог сохранённого заезда.
 func _on_free_ride_finished(session: FreeRideSession) -> void:
 	last_finished_free_ride = session
+	if connections != null:
+		connections.release_session_device()
 	if ride_recorder != null and ride_recorder.session == session and ride_recorder.ride != null:
 		free_ride_screen().show_saved_ride(ride_recorder.ride)
 
@@ -472,6 +490,8 @@ func _on_free_ride_finished(session: FreeRideSession) -> void:
 ## пишет следом в том же сигнале. Итог получает id для «Открыть в истории».
 func _on_workout_finished(session: WorkoutSession) -> void:
 	last_finished_session = session
+	if connections != null:
+		connections.release_session_device()
 	if ride_recorder != null and ride_recorder.session == session and ride_recorder.ride != null:
 		workout_screen().set_saved_ride_id(ride_recorder.ride_id())
 

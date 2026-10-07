@@ -49,6 +49,14 @@ extends RefCounted
 ## у `Ride.free_ride_metadata` (класс хранилища слою сессии недоступен, ключи
 ## продублированы константами `META_*`; совпадение проверяет тест).
 ##
+## Режим сессии `trainer_mode` (REQ-WRK-09 п.7) — у устройства при создании, до конца не
+## меняется. В режиме `power_meter` станком никто не управляет: контроллер SIM не стартует и не
+## тикает (ни одной команды, нет и события «SIM недоступен»), крутизна, уровень и режим
+## SIM ↔ сопротивление не меняются (`set_*` ничего не делают). Позиция, дистанция, высота и
+## скорость считаются той же моделью с полным уклоном трассы от мощности источника.
+## Секунда без мощности — аватар стоит: скорость модели 0, позиция не движется, мощность
+## в сэмпле «нет данных» (решение владельца по WRK-09; во всех режимах).
+##
 ## Подписки на сигналы станка и контроллера — связанными методами; `dispose()`
 ## отключает их и освобождает контроллер.
 
@@ -96,6 +104,8 @@ var samples := SampleStream.new()
 var events: Array[Dictionary] = []
 ## Время старта, unix-секунды (0 — не стартовала).
 var started_at_unix: int = 0
+## Режим сессии (`TrainerDevice.MODE_*`), фиксирован при создании.
+var trainer_mode: String = TrainerDevice.MODE_SMART
 ## Вес всадника для модели скорости, кг.
 var weight_kg: float = DEFAULT_WEIGHT_KG
 ## FTP всадника на момент заезда, Вт (для метаданных: зоны сводки и графика; 0 — не задан).
@@ -130,6 +140,7 @@ func _init(device: TrainerDevice, route_id: String = RouteCatalog.DEFAULT_ID,
 		initial_mode: SimController.Mode = SimController.Mode.SIM,
 		resistance_pct: int = SimController.DEFAULT_RESISTANCE_PCT) -> void:
 	trainer = device
+	trainer_mode = device.trainer_mode()
 	weight_kg = rider_weight_kg
 	ftp_w = maxi(rider_ftp_w, 0)
 	var resolved: String = RouteCatalog.resolve_id(route_id)
@@ -189,7 +200,8 @@ func start() -> void:
 	started_at_unix = int(Time.get_unix_time_from_system())
 	_set_state(WorkoutSession.State.RUNNING)
 	_log(WorkoutSession.EVENT_START, 0)
-	sim.start(position.grade_pct())
+	if controls_trainer():
+		sim.start(position.grade_pct())
 
 
 ## Продвигает время. Большая дельта нарезается по границам целых секунд активного
@@ -211,7 +223,7 @@ func tick(delta_sec: float) -> void:
 			if _pending_sec >= 1.0 - TIME_EPSILON:
 				_pending_sec = 0.0
 				_close_second()
-		if sim != null:
+		if sim != null and controls_trainer():
 			sim.tick(piece, position.grade_pct())
 		remaining -= piece
 
@@ -220,7 +232,8 @@ func tick(delta_sec: float) -> void:
 func pause() -> void:
 	if _state != WorkoutSession.State.RUNNING:
 		return
-	sim.pause()
+	if controls_trainer():
+		sim.pause()
 	_set_state(WorkoutSession.State.PAUSED)
 	_pause_event_index = events.size()
 	_pause_started_wall_sec = _wall_sec
@@ -237,7 +250,8 @@ func resume() -> void:
 	_latest_sample = null
 	_latest_hr_bpm = -1
 	_log(WorkoutSession.EVENT_RESUME, _elapsed_sec)
-	sim.resume()
+	if controls_trainer():
+		sim.resume()
 
 
 ## Завершение — только явным вызовом (подтверждение — на стороне UI, FRD-07 крит. 2).
@@ -248,7 +262,8 @@ func stop() -> void:
 		return
 	_close_pause()
 	_log(WorkoutSession.EVENT_STOP, _elapsed_sec)
-	sim.stop()
+	if controls_trainer():
+		sim.stop()
 	_log(WorkoutSession.EVENT_FINISH, _elapsed_sec)
 	_set_state(WorkoutSession.State.FINISHED)
 	session_finished.emit()
@@ -256,23 +271,25 @@ func stop() -> void:
 
 ## Крутизна SIM, % (0..100, шаг 5; FRD-05 крит. 1, 3).
 func set_steepness(percent: int) -> void:
-	sim.set_steepness(percent)
+	if controls_trainer():
+		sim.set_steepness(percent)
 
 
 ## Уровень фиксированного сопротивления, % (0..100, шаг 5; FRD-05 крит. 4).
 func set_resistance_level(percent: int) -> void:
-	sim.set_resistance_level(percent)
+	if controls_trainer():
+		sim.set_resistance_level(percent)
 
 
 ## Режим SIM ↔ фиксированное сопротивление (FRD-05 крит. 4). Возвращает, действует ли
 ## запрошенный режим (без поддержки SIM возврат в SIM отклоняется).
 func set_mode(new_mode: SimController.Mode) -> bool:
-	return sim.set_mode(new_mode)
+	return sim.set_mode(new_mode) if controls_trainer() else false
 
 
 ## Одно действие пользователя «SIM ↔ сопротивление».
 func toggle_mode() -> bool:
-	return sim.toggle_mode()
+	return sim.toggle_mode() if controls_trainer() else false
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +299,11 @@ func toggle_mode() -> bool:
 ## Значение `WorkoutSession.State`.
 func get_state() -> int:
 	return _state
+
+
+## Сессия управляет станком (`smart`); в `power_meter` — нет (WRK-09 п.4, 7).
+func controls_trainer() -> bool:
+	return trainer_mode == TrainerDevice.MODE_SMART
 
 
 ## Целые секунды активного времени (пауза не входит).
@@ -345,6 +367,7 @@ func metadata() -> Dictionary:
 	return {
 		META_RIDE_TYPE: RIDE_TYPE_FREE_RIDE,
 		WorkoutSession.META_TRAINER_SOURCE: trainer.trainer_source() if trainer != null else TrainerDevice.SOURCE_BLE,
+		WorkoutSession.META_TRAINER_MODE: trainer_mode,
 		META_ROUTE_ID: route.id,
 		META_SIM_STEEPNESS_START_PCT: float(_steepness_start_pct),
 		"speed_source": SampleStream.SPEED_SOURCE_MODEL,
@@ -408,8 +431,12 @@ func _close_second() -> void:
 	_power_age = 0 if sample != null and sample.has_power else (_power_age + 1 if _power_age >= 0 else -1)
 	_cadence_age = 0 if sample != null and sample.has_cadence else (_cadence_age + 1 if _cadence_age >= 0 else -1)
 	_hr_age = 0 if _latest_hr_bpm >= 0 else (_hr_age + 1 if _hr_age >= 0 else -1)
-	var power: float = float(sample.power_w) if sample != null and sample.has_power else 0.0
-	var v: float = _speed_model.step(power, weight_kg, 1.0, position.grade_pct())
+	var v: float = 0.0
+	if sample != null and sample.has_power:
+		v = _speed_model.step(float(sample.power_w), weight_kg, 1.0, position.grade_pct())
+	else:
+		# Источников мощности нет — аватар стоит (решение владельца по WRK-09).
+		_speed_model.reset(0.0)
 	position.advance(v, 1.0)
 	samples.append(_elapsed_sec - 1, sample, _latest_hr_bpm, 0, -1, false, v,
 		{"power": _power_age, "cadence": _cadence_age, "heart_rate": _hr_age},

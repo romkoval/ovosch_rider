@@ -34,8 +34,19 @@ extends RefCounted
 ##   истинно — `SensorHub` (станок + датчики). Когда сессия тренировки берёт хаб под
 ##   свой `SessionTicker`, владелец ставит `ticks_devices = false`, иначе устройства
 ##   получат время дважды.
+## - Правило старта сессии (REQ-WRK-09 п.1–2, REQ-DEV-05 п.5, REQ-FRD-01 п.4): `start_check()` —
+##   можно ли начать тренировку или свободную езду, в каком режиме и почему нельзя;
+##   `session_device()` — устройство для сессии (хаб в режиме `smart`, `UncontrolledTrainer`
+##   в режиме `power_meter`); `release_session_device()` — после сессии (возвращает хабу
+##   источник мощности и разрешение станку на управление). Устройство «подключение» или
+##   «переподключение» считается неподключённым (WRK-09 п.2 (г)).
 
 const AUTO_CONNECT_TIMEOUT_SEC: float = 30.0
+
+## Причина запрета старта (`start_check()["reason"]`): нет ни станка, ни источника мощности
+## в состоянии «подключено» (в том числе подключены только пульсометр и датчик каденса).
+const START_OK: String = ""
+const START_NO_POWER_SOURCE: String = "no_power_source"
 
 ## Состояние/заряд устройства изменилось.
 signal state_changed(id: String)
@@ -70,6 +81,8 @@ var _deferred_auto_profile: String = ""
 var _auto_connect_deferred: bool = false
 ## kind → [Callable состояния, Callable батареи] — связанные обработчики датчика.
 var _sensor_handlers: Dictionary = {}
+## Устройство текущей сессии `power_meter` (null — нет или режим `smart`).
+var _session_device: UncontrolledTrainer = null
 
 
 func _init(ble_bridge: BleBridge, remembered_devices: RememberedDevices,
@@ -94,6 +107,7 @@ func _init(ble_bridge: BleBridge, remembered_devices: RememberedDevices,
 ## Освободить всё: отключить обработчики, `dispose()` у хаба, станка, датчиков и сканера.
 ## Вызывается владельцем при закрытии приложения; после этого менеджер неработоспособен.
 func dispose() -> void:
+	release_session_device()
 	cancel_auto_connect()
 	if scanner != null:
 		if scanner.device_found.is_connected(_on_scanner_device_found):
@@ -271,6 +285,85 @@ func forget(for_profile_id: String, id: String) -> bool:
 	var removed: bool = remembered.forget(for_profile_id, id)
 	devices_changed.emit()
 	return removed
+
+
+# ---------------------------------------------------------------------------
+# Правило старта и режим сессии (REQ-WRK-09 п.1–2)
+# ---------------------------------------------------------------------------
+
+## Решение о старте по устройствам в состоянии «подключено» — для «Начать» и «Поехать»:
+## `{allowed: bool, mode: "smart"|"power_meter"|"", power_source: "trainer"|"power_meter"|"",
+## reason: START_OK|START_NO_POWER_SOURCE, connecting: bool}`. `power_source` — откуда мощность
+## (в `smart` — выбор хаба, DEV-05 п.2); `connecting` — станок или измеритель мощности сейчас
+## подключается или переподключается (для пояснения в диалоге).
+func start_check() -> Dictionary:
+	var pm: SensorDevice = sensor(RememberedDevices.KIND_POWER) if sensor_ids.has(RememberedDevices.KIND_POWER) else null
+	var pm_state: int = pm.get_connection_state() if pm != null else TrainerDevice.ConnectionState.DISCONNECTED
+	var trainer_state: int = trainer.get_connection_state() if trainer != null and not trainer_id.is_empty() \
+		else TrainerDevice.ConnectionState.DISCONNECTED
+	var trainer_controls: bool = trainer != null and trainer.has_control()
+	var check := start_rule(trainer_state, trainer_controls, pm_state)
+	if check["mode"] == TrainerDevice.MODE_SMART and hub != null:
+		check["power_source"] = hub.power_source
+	return check
+
+
+## Чистое правило старта (WRK-09 п.1): станок CONNECTED с каналом управления → `smart`;
+## иначе измеритель CONNECTED → `power_meter` по измерителю; иначе станок CONNECTED без
+## управления → `power_meter` по станку; иначе старт запрещён.
+static func start_rule(trainer_state: int, trainer_has_control: bool, power_meter_state: int) -> Dictionary:
+	var trainer_up: bool = trainer_state == TrainerDevice.ConnectionState.CONNECTED
+	var pm_up: bool = power_meter_state == TrainerDevice.ConnectionState.CONNECTED
+	var connecting: bool = false
+	for st in [trainer_state, power_meter_state]:
+		if st == TrainerDevice.ConnectionState.CONNECTING or st == TrainerDevice.ConnectionState.RECONNECTING:
+			connecting = true
+	var out: Dictionary = {"allowed": true, "mode": TrainerDevice.MODE_SMART,
+		"power_source": SensorHub.SOURCE_TRAINER, "reason": START_OK, "connecting": connecting}
+	if trainer_up and trainer_has_control:
+		return out
+	out["mode"] = TrainerDevice.MODE_POWER_METER
+	if pm_up:
+		out["power_source"] = SensorHub.SOURCE_POWER_METER
+		return out
+	if trainer_up:
+		return out
+	out["allowed"] = false
+	out["mode"] = ""
+	out["power_source"] = ""
+	out["reason"] = START_NO_POWER_SOURCE
+	return out
+
+
+## Можно ли начать сессию (`start_check()["allowed"]`).
+func can_start_session() -> bool:
+	return bool(start_check()["allowed"])
+
+
+## Режим, в котором стартует сессия сейчас ("" — старт запрещён).
+func session_mode() -> String:
+	return str(start_check()["mode"])
+
+
+## Устройство для новой сессии по правилу старта: `hub` (`smart`), новый `UncontrolledTrainer`
+## над хабом (`power_meter`) или null (старт запрещён). Прежнее устройство `power_meter`
+## освобождается. Режим фиксируется на сессию: устройство не меняется при подключениях.
+func session_device() -> TrainerDevice:
+	release_session_device()
+	var check := start_check()
+	if not check["allowed"]:
+		return null
+	if check["mode"] == TrainerDevice.MODE_SMART:
+		return hub
+	_session_device = UncontrolledTrainer.new(hub, str(check["power_source"]))
+	return _session_device
+
+
+## Освободить устройство сессии `power_meter` (после завершения сессии). Без него — ничего.
+func release_session_device() -> void:
+	if _session_device != null:
+		_session_device.dispose()
+		_session_device = null
 
 
 # ---------------------------------------------------------------------------

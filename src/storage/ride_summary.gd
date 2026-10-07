@@ -49,6 +49,9 @@ var route_id: String = ""
 ## Источник станка: `Ride.TRAINER_SOURCE_BLE` | `Ride.TRAINER_SOURCE_EMULATOR` (T-160);
 ## сводки, записанные до T-160, — `ble`.
 var trainer_source: String = Ride.TRAINER_SOURCE_BLE
+## Режим сессии: `Ride.TRAINER_MODE_SMART` | `Ride.TRAINER_MODE_POWER_METER` (REQ-WRK-09 п.8);
+## сводки без поля — `smart`.
+var trainer_mode: String = Ride.TRAINER_MODE_SMART
 
 # --- Метрики ---
 ## Активное время, с (число сэмплов).
@@ -195,6 +198,11 @@ func is_emulator() -> bool:
 	return trainer_source == Ride.TRAINER_SOURCE_EMULATOR
 
 
+## Заезд без управляемого станка — по источнику мощности (WRK-09).
+func is_power_meter_mode() -> bool:
+	return trainer_mode == Ride.TRAINER_MODE_POWER_METER
+
+
 ## Сумма секунд по зонам мощности (должна равняться `power_sample_count`).
 func total_power_zone_sec() -> int:
 	var total: int = 0
@@ -226,6 +234,7 @@ func to_dict() -> Dictionary:
 		"ride_type": ride_type,
 		"route_id": route_id,
 		"trainer_source": trainer_source,
+		"trainer_mode": trainer_mode,
 		"duration_sec": duration_sec,
 		"distance_m": distance_m,
 		"ascent_m": ascent_m,
@@ -263,6 +272,8 @@ static func from_dict(data: Dictionary) -> RideSummary:
 	s.route_id = str(data.get("route_id", ""))
 	s.trainer_source = Ride.TRAINER_SOURCE_EMULATOR if str(data.get("trainer_source", "")) == Ride.TRAINER_SOURCE_EMULATOR \
 		else Ride.TRAINER_SOURCE_BLE
+	s.trainer_mode = Ride.TRAINER_MODE_POWER_METER if str(data.get("trainer_mode", "")) == Ride.TRAINER_MODE_POWER_METER \
+		else Ride.TRAINER_MODE_SMART
 	s.duration_sec = _int(data.get("duration_sec"), 0)
 	s.distance_m = _float(data.get("distance_m"), 0.0)
 	s.ascent_m = _float(data.get("ascent_m"), 0.0)

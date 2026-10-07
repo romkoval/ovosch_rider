@@ -66,6 +66,15 @@ extends TrainerDevice
 ## после `connected` — заново discover/subscribe/Request Control → CONNECTED.
 ## `disconnect_device()` → DISCONNECTED, переподключение не выполняется.
 ##
+## Только данные (REQ-DEV-10 п.4, REQ-WRK-09): если в известном списке сервисов у FTMS нет
+## Control Point `2AD9` или управление запрещено `set_control_allowed(false)` (сессия
+## `power_meter`), подключение идёт без управления: подписки 2AD2 (и 2ADA, если есть) и батарея,
+## без подписки на 2AD9 и без Request Control → CONNECTED с `data_only == true`,
+## `has_control() == false`. Команды запоминаются, но на станок не пишутся ни при каких условиях
+## (единая точка — `_write_control_point`). `set_control_allowed(true)` у подключённого
+## станка в режиме «только данные» с заявленным (или неизвестным) 2AD9 берёт управление:
+## подписка 2AD9, Request Control и чтения возможностей, как при обычном подключении.
+##
 ## `set_erg_enabled` с текущим значением — no-op: при повторной отправке режима
 ## сессией (возобновление, реконнект: `erg=true` + цель) цель не дублируется.
 ## `dispose()` отключает обработчики сигналов моста и обнуляет ссылку на него —
@@ -93,6 +102,10 @@ var resistance_range: Dictionary = {}
 var services: Dictionary = {}
 ## Станок подтвердил Request Control.
 var control_granted: bool = false
+## Подключён без канала управления (нет 2AD9 или управление запрещено) — только данные.
+var data_only: bool = false
+## Разрешено ли брать управление (`set_control_allowed`).
+var control_allowed: bool = true
 ## Последний известный заряд, %; -1 — неизвестен / сервиса нет.
 var battery_percent: int = -1
 
@@ -156,6 +169,7 @@ func connect_device(id: String) -> void:
 	device_id = id
 	_disconnect_requested = false
 	control_granted = false
+	data_only = false
 	_reset_control_point()
 	_reconnect.stop()
 	_connecting_since_sec = _time_sec
@@ -261,6 +275,21 @@ func inclination_range() -> Vector2:
 		clampf(supported_inclination["max_pct"], -MAX_SIM_GRADE_PCT, MAX_SIM_GRADE_PCT))
 
 
+## Канал управления: нет — после подключения в режиме «только данные».
+func has_control() -> bool:
+	return not data_only
+
+
+func set_control_allowed(allowed: bool) -> void:
+	if allowed == control_allowed:
+		return
+	control_allowed = allowed
+	if allowed and _state == ConnectionState.CONNECTED and data_only and bridge != null \
+			and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT):
+		data_only = false
+		_acquire_control(device_id)
+
+
 ## Реальный станок по BLE (T-160).
 func is_emulator() -> bool:
 	return false
@@ -320,7 +349,23 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 		return
 	services = svc
 	bridge.subscribe(id, FTMS, BleUuids.INDOOR_BIKE_DATA)
-	bridge.subscribe(id, FTMS, BleUuids.FTMS_STATUS)
+	var with_control: bool = control_allowed and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT)
+	if with_control or _has_characteristic(FTMS, BleUuids.FTMS_STATUS):
+		bridge.subscribe(id, FTMS, BleUuids.FTMS_STATUS)
+	data_only = not with_control
+	if with_control:
+		_acquire_control(id)
+	if services.is_empty() or services.has(BleUuids.BATTERY_SERVICE):
+		bridge.read_characteristic(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
+		bridge.subscribe(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
+	if data_only:
+		# Только данные (DEV-10 п.4, WRK-09): без Request Control — подключён по подпискам.
+		_reconnect.stop()
+		_set_state(ConnectionState.CONNECTED)
+
+
+## Подписка на Control Point, Request Control и чтения возможностей станка.
+func _acquire_control(id: String) -> void:
 	bridge.subscribe(id, FTMS, BleUuids.FTMS_CONTROL_POINT)
 	_write_control_point(FtmsCodec.encode_request_control())
 	if _has_characteristic(FTMS, BleUuids.SUPPORTED_RESISTANCE_RANGE):
@@ -331,9 +376,6 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 		bridge.read_characteristic(id, FTMS, BleUuids.FITNESS_MACHINE_FEATURE)
 	if _declares_characteristic(FTMS, BleUuids.SUPPORTED_INCLINATION_RANGE):
 		bridge.read_characteristic(id, FTMS, BleUuids.SUPPORTED_INCLINATION_RANGE)
-	if services.is_empty() or services.has(BleUuids.BATTERY_SERVICE):
-		bridge.read_characteristic(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
-		bridge.subscribe(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
 
 
 func _on_notification(id: String, char_uuid: String, bytes: PackedByteArray) -> void:
@@ -576,7 +618,8 @@ func _forget_simulation_capabilities() -> void:
 
 ## Поставить команду в очередь Control Point (см. шапку: объединение и дедупликация).
 func _write_control_point(bytes: PackedByteArray) -> void:
-	if bridge == null or bytes.is_empty():
+	# Без канала управления или с запретом на управление на станок не пишется ничего (WRK-09 п.4).
+	if bridge == null or bytes.is_empty() or data_only or not control_allowed:
 		return
 	if _is_mode_opcode(bytes[0]):
 		_mode_sent = true

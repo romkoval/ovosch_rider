@@ -18,6 +18,14 @@ extends RefCounted
 ## - Источник станка (`is_emulator`, `trainer_source`, T-160): эмулятор это или реальное
 ##   устройство. Сессия пишет его в метаданные заезда, не проверяя класс реализации
 ##   (REQ-DEV-09 крит. 1, REQ-NFR-06 крит. 3).
+## - Режим сессии (`trainer_mode()`, REQ-WRK-09): `MODE_SMART` — управляемый станок (команды
+##   уходят на него); `MODE_POWER_METER` — источник мощности без управления (`UncontrolledTrainer`):
+##   команды управления не уходят никуда, сессия их и не вызывает. Сессия читает режим один раз
+##   при создании и пишет его в метаданные заезда, не проверяя класс реализации.
+## - Канал управления (`has_control()`, REQ-WRK-09 «Термины», DEV-10 п.4): есть ли у подключённого
+##   станка Control Point. Станок без него — только источник данных. `set_control_allowed(false)`
+##   запрещает станку брать управление (на время сессии `power_meter`: станок, подключившийся
+##   посреди такой сессии, не получает ни одной записи, WRK-09 п.1).
 
 ## Состояние подключения. Переходы:
 ## DISCONNECTED → SCANNING (опционально) → CONNECTING → CONNECTED;
@@ -63,6 +71,11 @@ enum ErrorCode {
 ## или эмулятор. Это ось «откуда данные», а не режим управления станком.
 const SOURCE_BLE: String = "ble"
 const SOURCE_EMULATOR: String = "emulator"
+
+## Режим сессии в метаданных заезда (`trainer_mode`, REQ-WRK-09 п.8, LOC-01 п.1): управляемый
+## станок или источник мощности без управления. Отдельная ось от `trainer_source`.
+const MODE_SMART: String = "smart"
+const MODE_POWER_METER: String = "power_meter"
 
 ## Допустимые диапазоны аргументов команд.
 const MIN_TARGET_POWER_W: int = 0
@@ -189,6 +202,24 @@ static func _clamp_sim_param(who: String, param: String, value: float, lo: float
 func is_emulator() -> bool:
 	push_error("TrainerDevice.is_emulator: not implemented")
 	return false
+
+
+## Режим сессии с этим устройством: `MODE_SMART` (по умолчанию) или `MODE_POWER_METER`
+## (устройство без управления, REQ-WRK-09).
+func trainer_mode() -> String:
+	return MODE_SMART
+
+
+## Есть ли у станка канал управления (FTMS Control Point, REQ-WRK-09 «Термины», DEV-10 п.4).
+## Смысл имеет в состоянии CONNECTED; по умолчанию — есть.
+func has_control() -> bool:
+	return true
+
+
+## Разрешить или запретить станку брать управление (Request Control и любые записи команд).
+## По умолчанию разрешено; реализации без автоматических записей могут ничего не делать.
+func set_control_allowed(_allowed: bool) -> void:
+	pass
 
 
 ## Источник станка для метаданных заезда: `SOURCE_EMULATOR` или `SOURCE_BLE` (T-160).

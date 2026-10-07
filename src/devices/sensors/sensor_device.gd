@@ -72,6 +72,11 @@ static func failure_name(reason: int) -> String:
 	return "none"
 
 
+## Эмулятор ли это (данные не с настоящего датчика, T-160; симулятор CPS — REQ-WRK-09 п.12).
+func is_emulator() -> bool:
+	return false
+
+
 ## Последний известный заряд, %; -1 — неизвестен / сервиса нет («—», REQ-DEV-07 крит. 3).
 func get_battery_level() -> int:
 	return -1

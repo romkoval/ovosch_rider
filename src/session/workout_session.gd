@@ -44,6 +44,16 @@ extends RefCounted
 ## Сумма длительностей всех пауз — `metadata()["paused_total_sec"]` (для FIT
 ## `timer_stopped/started` и истории). `stop()` на паузе закрывает текущую паузу
 ## так же, как `resume()`. Пульс 0 уд/мин от датчика считается отсутствием данных.
+##
+## Режим сессии `trainer_mode` (REQ-WRK-09) берётся у устройства один раз при создании
+## (`TrainerDevice.trainer_mode()`) и до конца не меняется. В режиме `power_meter` сессия не
+## вызывает ни одной команды управления: ERG выключен во всех сэмплах, `set_erg_enabled` и
+## `set_resistance_level` ничего не меняют и событий не пишут; план идёт по таймеру, цель —
+## плановая (с множителем), переходы и события — как в `smart` (WRK-09 п.3).
+##
+## Скорость — по модели мощность/вес (D3D-02). Секунда без мощности — аватар стоит: скорость
+## модели 0, мощность в сэмпле «нет данных», таймер плана идёт (решение владельца по WRK-09).
+## В режиме `power_meter` источник скорости — всегда модель.
 
 enum State { IDLE, RUNNING, PAUSED, FINISHED }
 
@@ -67,6 +77,8 @@ const DEFAULT_WEIGHT_KG: float = 75.0
 ## Ключ источника станка в метаданных заезда (T-160, Н-59): `TrainerDevice.SOURCE_BLE` |
 ## `TrainerDevice.SOURCE_EMULATOR` — по `TrainerDevice.trainer_source()`, без проверки класса.
 const META_TRAINER_SOURCE: String = "trainer_source"
+## Ключ режима сессии в метаданных заезда (REQ-WRK-09 п.8, LOC-01 п.1): `TrainerDevice.MODE_*`.
+const META_TRAINER_MODE: String = "trainer_mode"
 
 signal state_changed(state: int)
 signal session_finished()
@@ -92,6 +104,8 @@ var resistance_level: int = 50
 var weight_kg: float = DEFAULT_WEIGHT_KG
 ## Время старта, unix-секунды (0 — не стартовала).
 var started_at_unix: int = 0
+## Режим сессии (`TrainerDevice.MODE_SMART` | `MODE_POWER_METER`), фиксирован при создании.
+var trainer_mode: String = TrainerDevice.MODE_SMART
 
 var _state: State = State.IDLE
 var _current_target_w: int = 0
@@ -118,6 +132,10 @@ func _init(workout: Workout, device: TrainerDevice, ftp_w: int, intensity: float
 		rider_weight_kg: float = DEFAULT_WEIGHT_KG) -> void:
 	trainer = device
 	weight_kg = rider_weight_kg
+	trainer_mode = device.trainer_mode()
+	if not controls_trainer():
+		erg_enabled = false
+		samples.speed_source = SampleStream.SPEED_SOURCE_MODEL
 	executor = IntervalExecutor.new(workout, ftp_w, intensity)
 	executor.step_changed.connect(_on_step_changed)
 	executor.target_changed.connect(_on_target_changed)
@@ -145,12 +163,12 @@ func start() -> void:
 	started_at_unix = int(Time.get_unix_time_from_system())
 	_set_state(State.RUNNING)
 	_log(EVENT_START, 0)
-	if not erg_enabled:
+	if not erg_enabled and controls_trainer():
 		trainer.set_erg_enabled(false)
 		trainer.set_resistance_level(resistance_level)
 	executor.start()
 	# Не подключён — режим и цель уйдут при CONNECTED (_on_connection_state_changed).
-	if _state == State.RUNNING and trainer.get_connection_state() == TrainerDevice.ConnectionState.CONNECTED \
+	if _state == State.RUNNING and controls_trainer() and trainer.get_connection_state() == TrainerDevice.ConnectionState.CONNECTED \
 			and trainer.is_erg_enabled() != _effective_erg():
 		_resend(true)
 
@@ -236,7 +254,7 @@ func intensity() -> float:
 ## Переключение ERG пользователем (REQ-WRK-03). Одно действие — `toggle_erg()`.
 ## На паузе — откладывается до `resume()`.
 func set_erg_enabled(enabled: bool) -> void:
-	if enabled == erg_enabled:
+	if enabled == erg_enabled or not controls_trainer():
 		return
 	erg_enabled = enabled
 	_freeride_suspended = enabled and _current_step_is_free_ride()
@@ -259,7 +277,7 @@ func toggle_erg() -> void:
 ## ERG в RUNNING уходит сразу, при включённом ERG — только запоминается (крит. 3).
 func set_resistance_level(percent: int) -> void:
 	var snapped: int = snap_resistance(percent)
-	if snapped == resistance_level:
+	if snapped == resistance_level or not controls_trainer():
 		return
 	resistance_level = snapped
 	_log(EVENT_RESISTANCE, snapped)
@@ -281,6 +299,11 @@ static func snap_resistance(percent: int) -> int:
 
 func get_state() -> State:
 	return _state
+
+
+## Сессия управляет станком (`smart`); в `power_meter` — нет (WRK-09 п.4).
+func controls_trainer() -> bool:
+	return trainer_mode == TrainerDevice.MODE_SMART
 
 
 func current_target_watts() -> int:
@@ -319,6 +342,7 @@ func metadata() -> Dictionary:
 	return {
 		"workout_name": executor.workout.name,
 		META_TRAINER_SOURCE: trainer.trainer_source() if trainer != null else TrainerDevice.SOURCE_BLE,
+		META_TRAINER_MODE: trainer_mode,
 		"workout_source": executor.workout.source,
 		"started_at_unix": started_at_unix,
 		"ftp_w": executor.ftp_w,
@@ -379,6 +403,8 @@ func _current_step_is_free_ride() -> bool:
 ## Повторная отправка текущего режима на станок: при `with_erg` — сначала
 ## действующее состояние ERG; затем цель (ERG, в том числе 0 Вт) или уровень (не ERG).
 func _resend(with_erg: bool) -> void:
+	if not controls_trainer():
+		return
 	var erg_now: bool = _effective_erg()
 	if with_erg:
 		trainer.set_erg_enabled(erg_now)
@@ -390,6 +416,8 @@ func _resend(with_erg: bool) -> void:
 
 ## Смена шага: режим FreeRide по В-10 — приостановить/вернуть ERG на станке.
 func _on_step_changed(_index: int, step: WorkoutStep) -> void:
+	if not controls_trainer():
+		return
 	var want_suspended: bool = erg_enabled and step.is_free_ride()
 	if want_suspended == _freeride_suspended:
 		return
@@ -426,8 +454,12 @@ func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec:
 	# Пока станок не показал поле скорости (или его нет) — скорость из модели.
 	var model_speed: float = -1.0
 	if samples.speed_source != SampleStream.SPEED_SOURCE_TRAINER:
-		var power: float = float(sample.power_w) if sample != null and sample.has_power else 0.0
-		model_speed = _speed_model.step(power, weight_kg, 1.0)
+		if sample != null and sample.has_power:
+			model_speed = _speed_model.step(float(sample.power_w), weight_kg, 1.0)
+		else:
+			# Источников мощности нет — аватар стоит (решение владельца по WRK-09).
+			_speed_model.reset(0.0)
+			model_speed = 0.0
 	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, _current_target_w,
 		executor.current_step_index(), erg_enabled, model_speed,
 		{"power": _power_age, "cadence": _cadence_age, "heart_rate": _hr_age})

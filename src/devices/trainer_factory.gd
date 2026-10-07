@@ -40,6 +40,27 @@ static func _create_fake() -> TrainerDevice:
 	return trainer
 
 
+## Эмулятор режима без управляемого станка (REQ-WRK-09 п.12): `UncontrolledTrainer` над хабом
+## без станка с симулятором CPS `FakePowerMeter` (200 Вт, 90 об/мин), подключённым сразу.
+## Обёртка владеет хабом и датчиком (`dispose()` освобождает их). Источник — эмулятор (T-160).
+## Мощность и каденс меняются через `power_meter_emulator_sensor(device)`.
+static func create_power_meter_emulator() -> TrainerDevice:
+	var pm := FakePowerMeter.new()
+	var hub := SensorHub.new(null)
+	hub.set_power_meter(pm)
+	pm.connect_device("emulator-power-meter")
+	var device := UncontrolledTrainer.new(hub, SensorHub.SOURCE_POWER_METER)
+	device.owns_hub = true
+	return device
+
+
+## Симулятор CPS эмулятора `create_power_meter_emulator` (null — устройство не оттуда).
+static func power_meter_emulator_sensor(device: TrainerDevice) -> FakePowerMeter:
+	if device is UncontrolledTrainer and (device as UncontrolledTrainer).hub != null:
+		return (device as UncontrolledTrainer).hub.power_meter as FakePowerMeter
+	return null
+
+
 ## `BleTrainer` поверх явно переданного моста (тесты на `StubBleBridge`, инъекция).
 static func create_ble(bridge: BleBridge) -> TrainerDevice:
 	return BleTrainer.new(bridge)
