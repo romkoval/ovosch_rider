@@ -12,6 +12,8 @@ ui.hud.unit.rpm,rpm,rpm
 ui.hud.status.trainer,СТАНОК,TRAINER
 ui.hud.status.hr,ПУЛЬС,HR
 ui.hud.status.erg,ERG,ERG
+ui.hud.status.no_trainer,БЕЗ СТАНКА,NO TRAINER
+ui.hud.status.no_trainer_hint,"Без станка: нагрузку держите сами","No trainer: you hold the load yourself"
 ui.hud.status.hr_ok,Датчик пульса на связи,Heart rate sensor connected
 ui.hud.status.hr_missing,Нет данных пульса,No heart rate data
 ui.hud.status.intensity,{value} %,{value} %

@@ -25,6 +25,11 @@ extends PanelContainer
 ##   сопротивление (свободная езда); `+`/`−` — интенсивность (план), крутизна или
 ##   сопротивление (свободная езда); N — пропустить шаг (план). Буквы — по физической
 ##   клавише, поэтому работают и в русской раскладке;
+## - без управления станком (`set_controls_trainer(false)`, режим сессии `power_meter`,
+##   REQ-WRK-09 п.5 (д), п.7): кнопок ERG, сопротивления, SIM ↔ сопротивление и крутизны нет
+##   (скрыты, а не недоступны); E ничего не делает. План — интенсивность, «Пропустить шаг»,
+##   «Завершить» (телефон: ряд «Пропустить шаг» · «Завершить», под ним интенсивность), `+`/`−` —
+##   интенсивность; свободная езда — только «Завершить», `+`/`−` ничего не делают;
 ## - `set_paused(true)` (экран на паузе): панель убрана, ввод её не показывает, горячие
 ##   клавиши молчат — паузой управляет `PauseOverlay`.
 ##
@@ -86,6 +91,8 @@ var _mode: Mode = Mode.PLAN
 var _compact: bool = false
 var _erg_enabled: bool = true
 var _sim_enabled: bool = true
+## Сессия управляет станком (`smart`); false — `power_meter`: органов управления станком нет.
+var _controls_trainer: bool = true
 var _intensity_pct: int = 100
 var _resistance_pct: int = 0
 var _steepness_pct: int = 50
@@ -201,6 +208,19 @@ func set_sim_enabled(enabled: bool) -> void:
 
 func is_sim_enabled() -> bool:
 	return _sim_enabled
+
+
+## Сессия управляет станком (`smart`). false (`power_meter`, REQ-WRK-09 п.5 (д)): кнопки ERG,
+## сопротивления, SIM и крутизны скрыты, клавиша E (и `+`/`−` свободной езды) — без действия.
+func set_controls_trainer(controls: bool) -> void:
+	if _controls_trainer == controls:
+		return
+	_controls_trainer = controls
+	_relayout()
+
+
+func controls_trainer() -> bool:
+	return _controls_trainer
 
 
 func set_intensity_pct(pct: int) -> void:
@@ -350,12 +370,16 @@ func trigger(action: StringName) -> bool:
 		ACTION_PAUSE:
 			pause_requested.emit()
 		ACTION_TOGGLE:
+			if not _controls_trainer:
+				return false
 			if _mode == Mode.PLAN:
 				erg_toggle_requested.emit()
 			else:
 				sim_toggle_requested.emit()
 		ACTION_PLUS, ACTION_MINUS:
 			var sign := 1 if action == ACTION_PLUS else -1
+			if _mode != Mode.PLAN and not _controls_trainer:
+				return false
 			if _mode == Mode.PLAN:
 				intensity_step_requested.emit(sign * INTENSITY_STEP_PCT)
 			elif _sim_enabled:
@@ -482,7 +506,18 @@ func _relayout() -> void:
 		_rows.remove_child(row)
 		row.free()
 	var stepper := _active_stepper()
-	if _mode == Mode.PLAN:
+	if not _controls_trainer:
+		if _mode == Mode.PLAN:
+			if _compact:
+				_add_row([_skip_button, _finish_button])
+				_add_stepper(&"intensity")
+			else:
+				_add_stepper(&"intensity")
+				_add_row([_skip_button])
+				_add_row([_finish_button])
+		else:
+			_add_row([_finish_button])
+	elif _mode == Mode.PLAN:
 		if _compact:
 			_add_row([_erg_button, _skip_button, _finish_button])
 			_add_stepper(stepper)
@@ -508,7 +543,7 @@ func _relayout() -> void:
 ## свободная езда — крутизна в SIM или сопротивление.
 func _active_stepper() -> StringName:
 	if _mode == Mode.PLAN:
-		return &"resistance" if _compact and not _erg_enabled else &"intensity"
+		return &"resistance" if _compact and not _erg_enabled and _controls_trainer else &"intensity"
 	return &"steepness" if _sim_enabled else &"resistance"
 
 

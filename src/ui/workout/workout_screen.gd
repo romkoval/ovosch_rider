@@ -41,6 +41,10 @@ extends Control
 ## LOC-04 потока сессии), паузы — только если были; «Открыть в истории» и «На главный».
 ## Сохранение заезда — по сигналу `session_finished(session)`; id сохранённого заезда владелец
 ## сообщает `set_saved_ride_id`.
+##
+## Режим сессии без управляемого станка (`power_meter`, REQ-WRK-09 п.5 (д), (е)): на панели
+## инструментов нет ERG и сопротивления, E без действия (`HudToolbar.set_controls_trainer`);
+## фишка режима вместо «ERG» — «БЕЗ СТАНКА» (точка `hud.text2`).
 
 const UNIT_KEY: String = "ui.workout.unit_w"
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
@@ -115,6 +119,7 @@ var _frame_probe: FrameStatsProbe
 @onready var _connection_label: Label = %ConnectionLabel
 @onready var _hr_chip: Control = %HrChip
 @onready var _mode_chip: Control = %ModeChip
+@onready var _mode_label: Label = %ModeStatusLabel
 @onready var _intensity_chip: Control = %IntensityChip
 @onready var _intensity_status_label: Label = %IntensityStatusLabel
 @onready var _pause_button: Button = %PauseButton
@@ -192,6 +197,7 @@ func start() -> bool:
 		_session.resistance_level = WorkoutSession.snap_resistance(_profile.resistance_level_default)
 	_session.resistance_level_changed.connect(_on_resistance_level_changed)
 	_session.state_changed.connect(_on_session_state)
+	_toolbar.set_controls_trainer(_session.controls_trainer())
 	_hud = HudModel.new(_session, _profile)
 	_hud.changed.connect(_on_hud_changed)
 	_bind_plan_views()
@@ -678,7 +684,13 @@ func _update_hotkeys() -> void:
 		_toolbar.hotkeys_enabled = is_visible_in_tree() and _is_live()
 
 
-## Фишки статусов (`hud.md` п. 10.3): станок, пульс, ERG, интенсивность ≠ 100 %.
+## Фишка режима: «ERG» или, без управляемого станка, «БЕЗ СТАНКА» (`hud.md` п. 16.1).
+func mode_chip_text() -> String:
+	return _mode_label.text
+
+
+## Фишки статусов (`hud.md` п. 10.3): станок, пульс, ERG (без станка — «БЕЗ СТАНКА»),
+## интенсивность ≠ 100 %.
 func _render_status(s: Dictionary) -> void:
 	_trainer_chip.tooltip_text = tr(s["connection_key"])
 	_frame.set_dot(_trainer_chip, HudScreenFrame.connection_dot(int(s["connection_state"])))
@@ -686,8 +698,13 @@ func _render_status(s: Dictionary) -> void:
 	_hr_chip.tooltip_text = tr("ui.hud.status.hr_ok") if has_hr else tr("ui.hud.status.hr_missing")
 	_frame.set_dot(_hr_chip, UiTokens.HUD_OK if has_hr else UiTokens.HUD_ERR)
 	var erg_on: bool = s["erg_enabled"]
+	_mode_label.text = tr("ui.hud.status.erg")
 	_mode_chip.tooltip_text = tr("ui.workout.erg_on") if erg_on else tr("ui.workout.erg_off")
-	if not erg_on:
+	if not _session.controls_trainer():
+		_mode_label.text = tr("ui.hud.status.no_trainer")
+		_mode_chip.tooltip_text = tr("ui.hud.status.no_trainer_hint")
+		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
+	elif not erg_on:
 		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
 	else:
 		_frame.set_dot(_mode_chip, UiTokens.HUD_OK if s["erg_active_on_trainer"] else UiTokens.HUD_WARN)

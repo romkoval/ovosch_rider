@@ -30,6 +30,6 @@ ui.free_ride.summary.ascent,Набор,Elevation gain
 ui.free_ride.summary.home,На главный,Home
 ui.free_ride.summary.history,Открыть в истории,Open in history
 ui.free_ride.no_trainer.title,Станок не подключён,No trainer connected
-ui.free_ride.no_trainer.text,Для свободной езды нужен подключённый станок. Подключите его на экране «Устройства».,Free ride needs a connected trainer. Connect it on the Devices screen.
+ui.free_ride.no_trainer.text,Нужен станок или датчик мощности. Подключите их на экране «Устройства».,You need a trainer or a power meter. Connect one on the Devices screen.
 ui.free_ride.no_trainer.devices,Устройства,Devices
 ui.free_ride.no_trainer.emulator,Эмулятор,Emulator

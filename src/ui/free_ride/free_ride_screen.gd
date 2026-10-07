@@ -37,6 +37,10 @@ extends Control
 ##
 ## Общая с экраном тренировки часть — фишки статусов, расстановка слотов, панель инструментов,
 ## плашка слота подсказки и Esc на карточке паузы — в `HudScreenFrame`.
+##
+## Без управляемого станка (`power_meter`, REQ-WRK-09 п.7): на панели инструментов только
+## «Завершить» (SIM ↔ сопротивление и крутизна скрыты, E и `+`/`−` без действия), фишка режима —
+## «БЕЗ СТАНКА» вместо «SIM» / «СОПР.».
 
 ## Сессия создана и сейчас стартует — владелец подключает запись заезда (`RideRecorder`).
 signal session_created(session: FreeRideSession)
@@ -194,6 +198,7 @@ func start() -> bool:
 	_session.steepness_changed.connect(_on_steepness_changed)
 	_session.resistance_level_changed.connect(_on_resistance_changed)
 	_session.simulation_unavailable.connect(_on_simulation_unavailable)
+	_toolbar.set_controls_trainer(_session.controls_trainer())
 	_hud = FreeRideHudModel.new(_session, _profile)
 	_hud.changed.connect(_on_hud_changed)
 	_ensure_ride_scene(_session.route.id)
@@ -455,7 +460,7 @@ func notice_text() -> String:
 	return _notice_label.text if _notice_plate.visible else ""
 
 
-## Подпись фишки режима: «SIM» или «СОПР.».
+## Подпись фишки режима: «SIM», «СОПР.» или без станка — «БЕЗ СТАНКА».
 func mode_chip_text() -> String:
 	return _mode_label.text
 
@@ -517,7 +522,11 @@ func _render_status(s: Dictionary) -> void:
 	_frame.set_dot(_hr_chip, UiTokens.HUD_OK if has_hr else UiTokens.HUD_ERR)
 	var sim: bool = int(s[HudMetricPanel.KEY_LOAD_MODE]) == SimController.Mode.SIM
 	_mode_label.text = tr("ui.free_ride.status.sim") if sim else tr("ui.free_ride.status.fixed")
-	if sim:
+	if _session != null and not _session.controls_trainer():
+		_mode_label.text = tr("ui.hud.status.no_trainer")
+		_mode_chip.tooltip_text = tr("ui.hud.status.no_trainer_hint")
+		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
+	elif sim:
 		_mode_chip.tooltip_text = tr("ui.free_ride.status.sim_hint").format({"value": int(s[HudMetricPanel.KEY_STEEPNESS_PCT])})
 		_frame.set_dot(_mode_chip, UiTokens.HUD_OK)
 	else:

@@ -190,8 +190,8 @@ func place_toolbar() -> void:
 		return
 	_placing_toolbar = true
 	var slot := _layout.toolbar_slot.size
-	var key := "%s|%d|%d|%d|%s|%s" % [_layout.phone, roundi(slot.y), roundi(_touch_applied), _toolbar.get_mode(),
-			_toolbar.is_erg_enabled(), _toolbar.is_sim_enabled()]
+	var key := "%s|%d|%d|%d|%s|%s|%s" % [_layout.phone, roundi(slot.y), roundi(_touch_applied), _toolbar.get_mode(),
+			_toolbar.is_erg_enabled(), _toolbar.is_sim_enabled(), _toolbar.controls_trainer()]
 	if key != _toolbar_fit_key:
 		_toolbar_fit_key = key
 		if _layout.phone:

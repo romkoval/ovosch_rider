@@ -137,7 +137,7 @@ ui.plan.import.failed,Импорт не выполнен,Import failed
 ui.plan.import.done,Импортировано: {name},Imported: {name}
 ui.plan.import.updated,Тренировка уже в библиотеке — обновлена,Workout already in the library — updated
 ui.plan.trainer_choice.title,Станок не подключён,Trainer not connected
-ui.plan.trainer_choice.text,Станок не подключён. Провести тренировку на эмуляторе или подключить устройства?,No trainer is connected. Ride on the emulator or connect devices?
+ui.plan.trainer_choice.text,Нужен станок или датчик мощности. Подключите их на экране «Устройства» или проведите тренировку на эмуляторе.,You need a trainer or a power meter. Connect one on the Devices screen or ride on the emulator.
 ui.plan.trainer_choice.emulator,Эмулятор,Emulator
 ui.plan.trainer_choice.devices,Подключить устройства,Connect devices
 ui.plan.import.error.in_file,{file}: {text},{file}: {text}
