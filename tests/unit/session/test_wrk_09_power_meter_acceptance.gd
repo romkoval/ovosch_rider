@@ -384,6 +384,105 @@ func test_req_wrk_09_c1_dev_05_c2a_cps_joining_mid_session_overrides_data_only_t
 
 
 # ---------------------------------------------------------------------------
+# Повтор приёмки после aaf9845 (Д-1, Д-2): граничные случаи исправления
+# ---------------------------------------------------------------------------
+
+func test_req_wrk_09_c1_c4_retest_d1_after_session_trainer_takes_control_next_start_smart() -> void:
+	# Д-1: отказ Request Control, доставленный в сессии power_meter, не повторяется. После сессии
+	# управляемый станок (2AD9 есть) не должен остаться «только данные»: следующий старт — smart
+	# (п.1: «управляемый станок подключён → smart»).
+	var b := _bridge()
+	var cm := _manager(b)
+	_cps_fixture(b, "quarq")
+	cm.connect_sensor("quarq", RememberedDevices.KIND_POWER)
+	b.pump()
+	_ftms_fixture(b, "neo", true)
+	b.auto_control_point_response = false
+	b.fail_next_write()
+	cm.connect_trainer("neo")
+	var guard := 0
+	while b.calls_of("write").is_empty() and not b.pending.is_empty() and guard < 50:
+		guard += 1
+		var cb: Callable = b.pending.pop_front()
+		cb.call()
+	assert_eq(cm.trainer.get_connection_state(), TrainerDevice.ConnectionState.CONNECTING, "предусловие: станок подключается")
+	var dev := cm.session_device()
+	assert_eq(dev.trainer_mode(), TrainerDevice.MODE_POWER_METER)
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(20, 200.0)] as Array[WorkoutStep]), dev, FTP)
+	s.start()
+	b.clear_calls()
+	b.pump()
+	while s.get_state() != WorkoutSession.State.FINISHED:
+		_cps_packet(b, "quarq", 200)
+		_ibd_packet(b, "neo", 170)
+		s.toggle_erg()
+		s.set_resistance_level(40)
+		s.tick(1.0)
+		cm.tick(1.0)
+		b.pump()
+	assert_eq(b.calls_of("write"), [] as Array[Dictionary], "за сессию ни одного write")
+	assert_eq(s.samples.power_w[s.samples.size() - 1], 200, "мощность — от измерителя")
+	b.auto_control_point_response = true
+	cm.release_session_device()
+	b.pump()
+	for i in 3:
+		cm.tick(1.0)
+		b.pump()
+	assert_eq(cm.trainer.get_connection_state(), CONNECTED, "станок подключён")
+	assert_true(cm.trainer.has_control(), "после сессии станок с 2AD9 снова управляемый")
+	assert_eq(cm.start_check()["mode"], TrainerDevice.MODE_SMART, "следующий старт — smart")
+
+
+func test_req_wrk_09_c1_dev_05_c2_retest_d2_cps_joins_drops_returns_trainer_fallback() -> void:
+	# Д-2: сессия по станку без 2AD9; CPS подключился (→ CPS), оборвался (→ станок со следующего
+	# сэмпла, без «нет данных»), вернулся (→ CPS). Режим и ни одного write.
+	var b := _bridge()
+	var cm := _manager(b)
+	_ftms_fixture(b, "kickr", false)
+	cm.connect_trainer("kickr")
+	b.pump()
+	var dev := cm.session_device()
+	assert_eq(dev.trainer_mode(), TrainerDevice.MODE_POWER_METER)
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(90, 200.0)] as Array[WorkoutStep]), dev, FTP)
+	s.start()
+	b.clear_calls()
+	while s.get_state() != WorkoutSession.State.FINISHED:
+		var t := s.executor.elapsed_sec()
+		if t == 20:
+			_cps_fixture(b, "quarq")
+			cm.connect_sensor("quarq", RememberedDevices.KIND_POWER)
+			b.pump()
+		if t == 40:
+			b.auto_connect = false
+			b.emit_disconnected("quarq", BleBridge.DisconnectReason.LINK_LOSS)
+			b.pump()
+		if t == 60:
+			b.auto_connect = true
+			b.emit_connected("quarq")
+			b.pump()
+		if (t >= 20 and t < 40) or t >= 60:
+			_cps_packet(b, "quarq", 250)
+		_ibd_packet(b, "kickr", 180)
+		s.tick(1.0)
+		cm.tick(1.0)
+		b.pump()
+	var st := s.samples
+	assert_eq(st.size(), 90)
+	for k in st.size():
+		assert_true(st.has_power[k], "сэмпл %d: мощность есть" % (k + 1))
+	assert_eq(st.power_w[10], 180, "до CPS — станок")
+	assert_eq(st.power_w[30], 250, "CPS подключился → CPS")
+	assert_eq(st.power_w[40], 180, "CPS оборвался на 40-й с → 41-й сэмпл уже от станка")
+	assert_eq(st.power_w[55], 180)
+	assert_eq(st.power_w[65], 250, "CPS вернулся → снова CPS")
+	assert_eq(st.power_w[89], 250)
+	assert_eq(s.trainer_mode, TrainerDevice.MODE_POWER_METER, "режим не изменился")
+	assert_eq(dev.get_connection_state(), CONNECTED, "источник сессии (станок) подключён всё время")
+	assert_eq(_control_calls(b), [] as Array[Dictionary], "ни одного write и subscribe 2AD9")
+	cm.release_session_device()
+
+
+# ---------------------------------------------------------------------------
 # REQ-WRK-09 п.3, REQ-WRK-01 п.6 — план по таймеру, эквивалентность smart
 # ---------------------------------------------------------------------------
 
