@@ -5,9 +5,12 @@ extends TrainerDevice
 ##
 ## Обёртка над `SensorHub`: телеметрия и пульс — объединённые хабом (мощность: измеритель
 ## мощности CPS, при его отсутствии — станок без управления; каденс: CSC > CPS > станок;
-## пульс: HRS > станок). Хабу на время жизни обёртки ставится источник мощности
-## `power_source` (по умолчанию — измеритель, WRK-09 п.1: при двух источниках — измеритель),
-## при его отсутствии хаб берёт другой и возвращается к нему, когда тот ожил.
+## пульс: HRS > станок). Хабу на время жизни обёртки ставится приоритет мощности «измеритель >
+## станок» (WRK-09 п.1, DEV-05 п.2): подключены оба — мощность измерителя, в том числе если
+## измеритель подключился посреди сессии, начатой по станку без управления; измеритель отвалился —
+## мощность станка без остановки сессии; вернулся — снова измеритель.
+## `power_source` — источник мощности на старте сессии: по нему — состояние подключения и
+## `is_emulator()`.
 ##
 ## Команды управления (`set_target_power`, `set_erg_enabled`, `set_resistance_level`,
 ## `set_simulation`) — пустые: ни одна не доходит ни до станка, ни до моста (WRK-09 п.4).
@@ -22,7 +25,8 @@ extends TrainerDevice
 ## Подписки — связанными методами; владелец вызывает `dispose()`.
 
 var hub: SensorHub
-## `SensorHub.SOURCE_POWER_METER` или `SensorHub.SOURCE_TRAINER` (станок без управления).
+## Источник мощности на старте: `SensorHub.SOURCE_POWER_METER` или `SensorHub.SOURCE_TRAINER`
+## (станок без управления). Приоритет мощности в хабе — всегда измеритель.
 var power_source: String = SensorHub.SOURCE_POWER_METER
 ## Обёртка владеет хабом и его устройствами (эмулятор из `TrainerFactory`): `dispose()` их освобождает.
 var owns_hub: bool = false
@@ -36,7 +40,7 @@ func _init(sensor_hub: SensorHub, source: String = SensorHub.SOURCE_POWER_METER)
 	hub = sensor_hub
 	power_source = SensorHub.SOURCE_TRAINER if source == SensorHub.SOURCE_TRAINER else SensorHub.SOURCE_POWER_METER
 	_previous_power_source = hub.power_source
-	hub.set_power_source(power_source)
+	hub.set_power_source(SensorHub.SOURCE_POWER_METER)
 	hub.set_control_allowed(false)
 	hub.telemetry.connect(_on_hub_telemetry)
 	hub.heart_rate.connect(_on_hub_heart_rate)

@@ -360,8 +360,14 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 		bridge.subscribe(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
 	if data_only:
 		# Только данные (DEV-10 п.4, WRK-09): без Request Control — подключён по подпискам.
-		_reconnect.stop()
-		_set_state(ConnectionState.CONNECTED)
+		_finish_data_only()
+
+
+## Подключение без канала управления: CONNECTED с `data_only == true`.
+func _finish_data_only() -> void:
+	data_only = true
+	_reconnect.stop()
+	_set_state(ConnectionState.CONNECTED)
 
 
 ## Подписка на Control Point, Request Control и чтения возможностей станка.
@@ -514,7 +520,17 @@ func _on_write_done(id: String, char_uuid: String, ok: bool) -> void:
 ## Отказ записи команды в полёте: один немедленный повтор тех же байт; при повторном
 ## отказе — `error(WRITE_FAILED)` (REQ-NFR-01 крит. 2) и следующая команда очереди.
 ## Двойной отказ Request Control в CONNECTING срывает подключение (REQ-DEV-07 крит. 1).
+## Управление запрещено (`set_control_allowed(false)`, сессия `power_meter`) или станок «только
+## данные» — повтора нет: команда в полёте и очередь сбрасываются; отказ Request Control в
+## CONNECTING завершает подключение без управления (REQ-WRK-09 п.1, 4).
 func _handle_write_failure(reason: String) -> void:
+	if not control_allowed or data_only:
+		var dropped: int = _cp_inflight["opcode"]
+		_cp_inflight = {}
+		_cp_queue.clear()
+		if dropped == FtmsCodec.OP_REQUEST_CONTROL and _state == ConnectionState.CONNECTING:
+			_finish_data_only()
+		return
 	if not _cp_inflight["retried"]:
 		_cp_inflight["retried"] = true
 		_cp_inflight["sent_at"] = _time_sec
@@ -661,6 +677,9 @@ func _send_control_point(bytes: PackedByteArray) -> void:
 ## Отправить следующую команду очереди, если Control Point свободен.
 func _pump_control_point() -> void:
 	if bridge == null or not _cp_inflight.is_empty() or _cp_queue.is_empty():
+		return
+	if not control_allowed or data_only:
+		_cp_queue.clear()  # команды, поставленные до запрета, на станок не уходят
 		return
 	_send_control_point(_cp_queue.pop_front())
 
