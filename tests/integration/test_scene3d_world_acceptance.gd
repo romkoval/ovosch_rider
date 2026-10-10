@@ -1055,15 +1055,15 @@ func test_req_d3d_07_c4_every_rider_mesh_has_outline_pass_with_nonzero_weight() 
 			var code: String = (outline as ShaderMaterial).shader.code
 			assert_true(code.contains("cull_front"), "%s: контур — инвертированная оболочка" % mi.name)
 			assert_gt(float((outline as ShaderMaterial).get_shader_parameter("outline_width")), 0.0, "%s: толщина контура > 0" % mi.name)
-	# Вес контура — альфа цвета вершины: у тела, ног и рамы контур не схлопнут.
+	# Outline weight — by the region in UV0 (T-106a3): body, legs and frame keep the outline.
 	for part in ["Body", "Helmet", "ShoeR", "Bike"]:
 		var pm := s.rider().get_node("%" + part) as MeshInstance3D
-		var cols: PackedColorArray = pm.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+		var uvs: PackedVector2Array = pm.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
 		var weighted: int = 0
-		for c in cols:
-			if c.a >= 0.5:
+		for uv in uvs:
+			if RiderRegions.outline_weight(MeshKit.uv_region(uv)) >= 0.5:
 				weighted += 1
-		assert_gte(float(weighted) / maxf(float(cols.size()), 1.0), 0.5, "%s: у %d из %d вершин вес контура ≥ 0.5" % [part, weighted, cols.size()])
+		assert_gte(float(weighted) / maxf(float(uvs.size()), 1.0), 0.5, "%s: у %d из %d вершин вес контура ≥ 0.5" % [part, weighted, uvs.size()])
 
 
 func test_req_d3d_07_c4_ground_casts_no_shadows_and_world_uses_toon_materials_on_any_track() -> void:

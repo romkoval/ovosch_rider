@@ -1,11 +1,10 @@
 [gd_resource type="ShaderMaterial" load_steps=2 format=3]
 
-[ext_resource type="Shader" path="res://src/scene3d/shaders/outline.gdshader" id="1_outline"]
+[ext_resource type="Shader" path="res://src/scene3d/shaders/rider_outline.gdshader" id="1_outline"]
 
 [resource]
 render_priority = 0
 shader = ExtResource("1_outline")
 shader_parameter/outline_color = Color(0.07, 0.06, 0.09, 1)
 shader_parameter/outline_width = 0.011
-shader_parameter/albedo_mix = 0.0
-shader_parameter/albedo_darken = 0.35
+shader_parameter/region_outline = PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1)

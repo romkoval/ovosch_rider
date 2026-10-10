@@ -173,10 +173,11 @@ func test_preview_atlas_columns_tone_and_lens() -> void:
 		for y in [255, 191, 128, 64, 0]:
 			var v: float = 1.0 - (float(y) + 0.5) / 256.0
 			var base: Color = SPEC_CLASSIC[k]
-			if k == 19 and v >= 0.75:
-				base = SPEC_LENS_HIGHLIGHT
 			var lin: Color = base.srgb_to_linear() * (0.6 + 0.8 * v)
 			var want := Color(minf(lin.r, 1.0), minf(lin.g, 1.0), minf(lin.b, 1.0)).linear_to_srgb()
+			if k == 19 and v >= 0.75:
+				# Spec rev. 4.1: the highlight is flat, without tone (T-106a3).
+				want = SPEC_LENS_HIGHLIGHT
 			assert_lt(_rgb_dist(img.get_pixel(x0 + 16, y), want), 2.0 / 255.0,
 				"колонка %d (%s), V = %.2f" % [k, SPEC_REGIONS[k][0], v])
 	assert_gt(img.get_pixel(16, 0).get_luminance(), img.get_pixel(16, 255).get_luminance(), "верх (тон 1.4) светлее низа (0.6)")

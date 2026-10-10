@@ -811,28 +811,33 @@ func test_p18_tail_tip_clearance_to_jersey() -> void:
 			fig, gaps[0], gaps[1], along, at_root, low])
 
 
-## Вершины сетки rest `[кость, точка]` (кость −1 — все), сдвинутые по нормали на `outline` × вес
-## контура (альфа цвета вершины, как в шейдере контура).
+## Вершины сетки rest `[кость, точка]` (кость −1 — все), сдвинутые на `outline` × вес контура
+## (T-106a3: weight of the vertex region in UV0, direction — the smoothed outline normal in
+## TANGENT, as in `rider_outline.gdshader`).
 func _bone_points(mesh: Mesh, bone: int, outline: float) -> Array:
 	var arr: Array = mesh.surface_get_arrays(0)
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
-	var c: PackedColorArray = arr[Mesh.ARRAY_COLOR]
 	var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
 	var out: Array = []
 	for i in v.size():
 		if bone < 0 or bones[i * 4] == bone:
-			out.append([bones[i * 4], v[i] + n[i] * outline * c[i].a])
+			out.append([bones[i * 4], v[i] + _outline_offset(arr, i) * outline])
 	return out
 
 
+## Outline offset of vertex `i` per metre of outline width: smoothed normal × region weight.
+static func _outline_offset(arr: Array, i: int) -> Vector3:
+	var t: PackedFloat32Array = arr[Mesh.ARRAY_TANGENT]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var w: float = RiderRegions.outline_weight(MeshKit.uv_region(uv[i]))
+	return Vector3(t[i * 4], t[i * 4 + 1], t[i * 4 + 2]).normalized() * w
+
+
 ## Треугольники сетки rest (тройки точек) с вершиной ближе `radius` к `near`, вершины сдвинуты
-## по нормали на `outline` × вес контура; треугольники на костях `skip_bones` пропускаются.
+## на `outline` × вес контура (`_outline_offset`); треугольники на костях `skip_bones` пропускаются.
 func _tris_near(mesh: Mesh, near: Vector3, radius: float, outline: float, skip_bones: Array[int] = []) -> PackedVector3Array:
 	var arr: Array = mesh.surface_get_arrays(0)
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
-	var c: PackedColorArray = arr[Mesh.ARRAY_COLOR]
 	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
 	var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
 	var out := PackedVector3Array()
@@ -845,7 +850,7 @@ func _tris_near(mesh: Mesh, near: Vector3, radius: float, outline: float, skip_b
 		if close:
 			for j in 3:
 				var k: int = idx[t + j]
-				out.append(v[k] + n[k] * outline * c[k].a)
+				out.append(v[k] + _outline_offset(arr, k) * outline)
 	return out
 
 

@@ -24,6 +24,12 @@ extends SceneTree
 ## 1/60 с, как в игре. Файлы `series_<view>/<view>_<NNN>.png` и `series_<view>/series.csv`
 ## (время, φ, углы хвоста). Пример — rear_low 2 с при 100 об/мин, 30 кадров/с:
 ##   ./scripts/screenshot.sh shots 32 100 0 flat --views=rear_low --series=2.0 --fps=30 --figure=f --hair=tail
+##
+## Appearance palette (T-106a3): `--look=<preset>[,<slot>=<value>…]` writes the colors of preset
+## `<preset>` (`RiderLook.PRESET_IDS`) with slot overrides into the rider material palette
+## (`Rider.set_palette`; figure, hair, models of helmet/glasses/shoes are not applied — T-109).
+## Example — the black jersey of `classic` for the rim check:
+##   ./scripts/screenshot.sh shots 0 0 0 flat --views=work --look=classic,jersey.main=black
 
 const RIDE_SCENE: String = "res://src/scene3d/ride_scene.tscn"
 const SETTLE_FRAMES: int = 120
@@ -44,8 +50,11 @@ func _run() -> void:
 	var hair: String = ""
 	var series_sec: float = 0.0
 	var series_fps: float = 30.0
+	var look_arg: String = ""
 	for a in OS.get_cmdline_user_args():
-		if a == "--bike-only":
+		if a.begins_with("--look="):
+			look_arg = a.trim_prefix("--look=")
+		elif a == "--bike-only":
 			bike_only = true
 		elif a.begins_with("--figure="):
 			figure = a.trim_prefix("--figure=")
@@ -80,6 +89,8 @@ func _run() -> void:
 		scene.rider().set_figure(figure)
 	if not hair.is_empty():
 		scene.rider().set_hair_style(hair)
+	if not look_arg.is_empty():
+		_apply_look(scene.rider(), look_arg)
 	if not other.is_empty():
 		var vp := SubViewport.new()
 		vp.own_world_3d = true
@@ -111,6 +122,19 @@ func _run() -> void:
 		var err: Error = root.get_texture().get_image().save_png(path)
 		print("ride_screenshot: %s (%s)" % [path, error_string(err)])
 	quit(0)
+
+
+## `--look=<preset>[,<slot>=<value>…]`: palette of the preset with slot overrides.
+func _apply_look(rider: Rider, arg: String) -> void:
+	var parts: PackedStringArray = arg.split(",")
+	var look := RiderLook.preset(parts[0])
+	for i in range(1, parts.size()):
+		var kv: PackedStringArray = parts[i].split("=")
+		if kv.size() == 2:
+			look.set_value(kv[0], kv[1])
+	var palette := PackedColorArray(RiderRegions.palette(look))
+	rider.set_palette(palette, RiderRegions.lens_highlight(look))
+	print("ride_screenshot: look %s" % arg)
 
 
 ## Ракурсы `RiderRig.VIEWS`: гонщик стоит (скорость и каденс 0, наклона нет), камера — в

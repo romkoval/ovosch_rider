@@ -9,11 +9,42 @@ extends RefCounted
 ## Цвета передаются в sRGB (как в палитре арт-библии) и переводятся в линейное
 ## пространство при добавлении: шейдер получает COLOR без преобразования.
 ## Используется только при построении сцены, не в кадре.
+##
+## Color regions (T-106a3, REQ-D3D-09 p.6; art bible "Rider" -> "Appearance slots", "Color
+## regions in glTF"): the rider and bike set `region` (and `accent_region` for the accent part
+## of a primitive: tube side panels, ellipsoid band) before adding primitives. Every vertex then
+## also gets a region code in UV0 (U = column of the 32-column atlas, V = tone, Blender
+## convention flipped like glTF). `to_mesh` writes UV0 instead of COLOR for such a kit,
+## resolves regions per face (each face entirely inside one column: a face touching an accent
+## vertex — side panel, band, lens highlight — takes the accent region, so borders run along
+## quad edges; vertices on region borders are duplicated) and stores smoothed
+## outline normals (average over all vertices at the same position) in TANGENT: the rider
+## outline pass moves vertices along them, so hard edges and region seams do not tear it.
+## Vertex colors of such a kit stay filled (the artist pack `bike_reference.glb` reads them),
+## the game does not use them.
 
 var vertices := PackedVector3Array()
 var normals := PackedVector3Array()
 var colors := PackedColorArray()
 var indices := PackedInt32Array()
+## UV0 region codes, one per vertex while `region` >= 0 (empty for world kits).
+var uvs := PackedVector2Array()
+## 1 — the vertex is in the accent part of its primitive (accent region or highlight tone).
+var accents := PackedByteArray()
+## Smoothed outline normals (filled by `finalize_regions`).
+var outline_normals := PackedVector3Array()
+## Region of new vertices (0-31); -1 — no region coding (world kits).
+var region: int = -1
+## Region of the accent part of a primitive (tube side panels, ellipsoid band); -1 — `region`.
+var accent_region: int = -1
+## Tone V of new vertices (Blender convention: tone = 0.6 + 0.8 * V, 0.5 -> 1.0).
+var tone_v: float = 0.5
+## Ellipsoid vertices with local unit Y at or above this get `highlight_v` instead of `tone_v`
+## (lens highlight strip, region 19); > 1 — off.
+var highlight_from_y: float = 2.0
+var highlight_v: float = 0.9
+
+const REGION_COLUMNS: int = 32
 
 
 func vertex_count() -> int:
@@ -27,10 +58,34 @@ static func lin(c: Color) -> Color:
 	return l
 
 
-func _add_vertex(p: Vector3, n: Vector3, c: Color) -> int:
+## UV0 of region `code` with tone `v` (Blender V, 0 — atlas bottom): column centre, V flipped
+## as glTF does.
+static func region_uv(code: int, v: float = 0.5) -> Vector2:
+	return Vector2((float(code) + 0.5) / float(REGION_COLUMNS), 1.0 - v)
+
+
+## Region code of a UV0 (`floor(U * 32)`).
+static func uv_region(uv: Vector2) -> int:
+	return clampi(int(floor(uv.x * float(REGION_COLUMNS))), 0, REGION_COLUMNS - 1)
+
+
+func uses_regions() -> bool:
+	return not uvs.is_empty()
+
+
+## Raw vertex (for lofts built outside the primitives below); `accent` — the accent region.
+func add_vertex(p: Vector3, n: Vector3, c: Color, accent: bool = false, v: float = -1.0) -> int:
+	return _add_vertex(p, n, c, accent, v)
+
+
+func _add_vertex(p: Vector3, n: Vector3, c: Color, accent: bool = false, v: float = -1.0) -> int:
 	vertices.append(p)
 	normals.append(n)
 	colors.append(c)
+	if region >= 0:
+		var code: int = accent_region if accent and accent_region >= 0 else region
+		uvs.append(region_uv(code, tone_v if v < 0.0 else v))
+		accents.append(1 if (accent and accent_region >= 0) or v >= 0.0 else 0)
 	return vertices.size() - 1
 
 
@@ -57,13 +112,14 @@ func add_tube(a: Vector3, b: Vector3, ra: Vector2, rb: Vector2, color: Color, si
 		var ang: float = TAU * float(i) / float(sides)
 		var c: float = cos(ang)
 		var s: float = sin(ang)
-		var col: Color = accent if absf(c) > side_threshold else base_col
+		var is_side: bool = side_color.a >= 0.0 and absf(c) > side_threshold
+		var col: Color = accent if is_side else base_col
 		# Нормаль эллипса: градиент (c/rx, s/ry) с поправкой на конусность.
 		var na: Vector3 = (u * (c / maxf(ra.x, 1e-4)) + v * (s / maxf(ra.y, 1e-4))).normalized()
 		var slope: float = (ra.x - rb.x) / length
 		var n: Vector3 = (na + dir * slope).normalized()
-		_add_vertex(a + u * c * ra.x + v * s * ra.y, n, col)
-		_add_vertex(b + u * c * rb.x + v * s * rb.y, n, col)
+		_add_vertex(a + u * c * ra.x + v * s * ra.y, n, col, is_side)
+		_add_vertex(b + u * c * rb.x + v * s * rb.y, n, col, is_side)
 	for i in sides:
 		var i0: int = start + i * 2
 		indices.append_array(PackedInt32Array([i0, i0 + 2, i0 + 1, i0 + 1, i0 + 2, i0 + 3]))
@@ -95,10 +151,12 @@ func add_limb(pts: PackedVector3Array, radii: PackedFloat32Array, color: Color, 
 
 ## Эллипсоид с полуосями `radii` в базисе `basis`. `band_axis`/`band_*` — цветная полоса
 ## (например, вентиляционные прорези шлема): вершины, у которых координата вдоль
-## `band_axis` в долях радиуса попадает в [band_from; band_to], красятся `band_color`.
+## `band_axis` в долях радиуса попадает в [band_from; band_to], красятся `band_color`
+## (region kits: `accent_region`). `band_min_y` — the band only where local unit Y >= it
+## (helmet: the stripe stops above the lower rim).
 func add_ellipsoid(center: Vector3, radii: Vector3, color: Color, basis: Basis = Basis.IDENTITY,
 		rings: int = 6, segments: int = 12, band_axis: int = -1, band_from: float = 0.0,
-		band_to: float = 0.0, band_color: Color = Color.BLACK) -> void:
+		band_to: float = 0.0, band_color: Color = Color.BLACK, band_min_y: float = -2.0) -> void:
 	var base_col := lin(color)
 	var accent := lin(band_color)
 	var start: int = vertices.size()
@@ -110,9 +168,12 @@ func add_ellipsoid(center: Vector3, radii: Vector3, color: Color, basis: Basis =
 			var local := unit * radii
 			var n_local := Vector3(unit.x / radii.x, unit.y / radii.y, unit.z / radii.z).normalized()
 			var col: Color = base_col
-			if band_axis >= 0 and unit[band_axis] >= band_from and unit[band_axis] <= band_to:
+			var in_band: bool = band_axis >= 0 and unit[band_axis] >= band_from and unit[band_axis] <= band_to \
+				and unit.y >= band_min_y
+			if in_band:
 				col = accent
-			_add_vertex(center + basis * local, (basis * n_local).normalized(), col)
+			var v: float = highlight_v if unit.y >= highlight_from_y else -1.0
+			_add_vertex(center + basis * local, (basis * n_local).normalized(), col, in_band, v)
 	for r in rings:
 		for s in segments:
 			var i0: int = start + r * (segments + 1) + s
@@ -288,15 +349,90 @@ func fix_winding() -> void:
 			indices[t + 2] = i1
 
 
-## Собрать `ArrayMesh` с одной поверхностью.
-func to_mesh(material: Material = null) -> ArrayMesh:
+## Region kits: one region per face and smoothed outline normals (see the class comment).
+## Idempotent; call after all primitives are added (winding is fixed first).
+func finalize_regions() -> void:
+	if not uses_regions():
+		return
+	assert(uvs.size() == vertices.size() and accents.size() == vertices.size(),
+		"MeshKit: every vertex of a region kit needs a region")
 	fix_winding()
+	# Region (UV) of each face: an accent vertex wins (the accent covers whole quads, borders run
+	# along quad edges); border vertices are duplicated.
+	var copies: Dictionary = {}
+	for t in range(0, indices.size(), 3):
+		var face: Vector2 = uvs[indices[t]]
+		for j in 3:
+			if accents[indices[t + j]] == 1:
+				face = uvs[indices[t + j]]
+				break
+		for j in 3:
+			var i: int = indices[t + j]
+			if uvs[i] == face:
+				continue
+			var key: String = "%d:%f:%f" % [i, face.x, face.y]
+			if not copies.has(key):
+				copies[key] = vertices.size()
+				vertices.append(vertices[i])
+				normals.append(normals[i])
+				colors.append(colors[i])
+				uvs.append(face)
+				accents.append(accents[i])
+			indices[t + j] = copies[key]
+	outline_normals = smoothed_normals(vertices, normals)
+
+
+## Average of the normals of all vertices at the same position (to 0.1 mm), normalized.
+static func smoothed_normals(pts: PackedVector3Array, ns: PackedVector3Array) -> PackedVector3Array:
+	var sums: Dictionary = {}
+	var keys: Array[Vector3i] = []
+	keys.resize(pts.size())
+	for i in pts.size():
+		var key := Vector3i((pts[i] * 10000.0).round())
+		keys[i] = key
+		sums[key] = sums.get(key, Vector3.ZERO) + ns[i]
+	var out := PackedVector3Array()
+	out.resize(pts.size())
+	for i in pts.size():
+		var sum: Vector3 = sums[keys[i]]
+		out[i] = sum.normalized() if sum.length_squared() > 1e-12 else ns[i]
+	return out
+
+
+## Outline normals as the TANGENT array (w = 1): skinning moves them with the bone.
+func outline_tangents() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(outline_normals.size() * 4)
+	for i in outline_normals.size():
+		var n: Vector3 = outline_normals[i]
+		out[i * 4] = n.x
+		out[i * 4 + 1] = n.y
+		out[i * 4 + 2] = n.z
+		out[i * 4 + 3] = 1.0
+	return out
+
+
+## Surface arrays: world kits — COLOR; region kits — UV0 and TANGENT (outline normals),
+## without COLOR (the rider shaders read only the region).
+func surface_arrays() -> Array:
+	fix_winding()
+	finalize_regions()
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
 	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_COLOR] = colors
+	if uses_regions():
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		arrays[Mesh.ARRAY_TANGENT] = outline_tangents()
+	else:
+		arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_INDEX] = indices
+	return arrays
+
+
+## Собрать `ArrayMesh` с одной поверхностью.
+func to_mesh(material: Material = null) -> ArrayMesh:
+	var arrays: Array = surface_arrays()
 	var mesh := ArrayMesh.new()
 	if vertices.is_empty():
 		return mesh

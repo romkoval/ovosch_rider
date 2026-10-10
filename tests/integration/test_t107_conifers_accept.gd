@@ -73,6 +73,9 @@ const SPEC_MOUNTAINS_SHADE_MIN: float = 0.92
 const MATERIALS_BEFORE: Dictionary = {"flat": 5, "hills": 5, "mountains": 5, "seaside": 6}
 const FULL_MATERIALS_BEFORE: Dictionary = {"flat": 8, "hills": 8, "mountains": 8, "seaside": 9}
 const SHADERS_BEFORE: Dictionary = {"flat": 6, "hills": 6, "mountains": 6, "seaside": 7}
+## T-106a3: the rider got its own shaders (`rider_toon.gdshader`, `rider_outline.gdshader`, region
+## palette) instead of the shared toon/outline ones; materials stay the same, conifers add none.
+const RIDER_SHADERS_T106A3: int = 2
 ## Размеры форм на масштабе 1 (таблица форм): H, м, и W / H.
 const SPEC_H: Dictionary = {"spruce": 9.0, "fir": 11.0, "spruce_wind": 8.0, "stone_pine": 10.0, "stone_pine_lean": 9.0}
 const SPEC_WH: Dictionary = {"spruce": Vector2(0.40, 0.45), "fir": Vector2(0.24, 0.28), "spruce_wind": Vector2(0.35, 0.35),
@@ -657,7 +660,7 @@ func test_req_d3d_10_c4_layers_materials_instances() -> void:
 			int(c["materials"]), mats.size(), shaders.size(), int(c["multimesh_instances"])])
 		assert_lte(int(c["materials"]), int(MATERIALS_BEFORE[id]), "%s: материалов не больше, чем до T-107" % id)
 		assert_lte(mats.size(), int(FULL_MATERIALS_BEFORE[id]), "%s: материалов (с проходом контура) не больше, чем до T-107" % id)
-		assert_lte(shaders.size(), int(SHADERS_BEFORE[id]), "%s: шейдеров не больше, чем до T-107" % id)
+		assert_lte(shaders.size(), int(SHADERS_BEFORE[id]) + RIDER_SHADERS_T106A3, "%s: шейдеров не больше, чем до T-107 (+2 rider shaders of T-106a3)" % id)
 		assert_lte(int(c["materials"]), 12, "%s: материалов ≤ 12" % id)
 		assert_lte(int(c["multimesh_instances"]), 40000, "%s: MultiMesh всего ≤ 40000" % id)
 		var visible: int = PerfBudget.max_visible_along([s], s.track, 50.0)

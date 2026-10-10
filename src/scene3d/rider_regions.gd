@@ -22,6 +22,39 @@ const LENS_HIGHLIGHT_V: float = 0.75
 ## Первый регион велосипеда: 23–31 художник не использует.
 const FIRST_BIKE: int = 23
 
+# Region codes (table "Regions" of the spec) used by the procedural mannequin and bike.
+const SKIN: int = 0
+const HAIR: int = 1
+const JERSEY_MAIN: int = 2
+const JERSEY_SIDE: int = 3
+const JERSEY_BAND: int = 4
+const JERSEY_YOKE: int = 5
+const JERSEY_CUFF: int = 6
+const JERSEY_COLLAR: int = 7
+const SHORTS_MAIN: int = 8
+const SHORTS_GRIPPER: int = 9
+const SOCKS_MAIN: int = 10
+const SOCKS_CUFF: int = 11
+const SHOE_MAIN: int = 12
+const SHOE_ACCENT: int = 13
+const SHOE_SOLE: int = 14
+const CLEAT: int = 15
+const HELMET_MAIN: int = 16
+const HELMET_ACCENT: int = 17
+const HELMET_INNER: int = 18
+const GLASSES_FRAME: int = 20
+const GLOVE: int = 21
+const GLOVE_PALM: int = 22
+const FRAME_MAIN: int = 23
+const FRAME_ACCENT: int = 24
+const RIM_DECAL: int = 25
+const BAR_TAPE: int = 26
+const TIRE: int = 27
+const RIM_CARBON: int = 28
+const METAL: int = 29
+const COMPONENT: int = 30
+const BOTTLE: int = 31
+
 ## [имя, вес контура] по кодам 0–31.
 const REGIONS: Array = [
 	["skin", 1.0], ["hair", 1.0], ["jersey_main", 1.0], ["jersey_side", 1.0],
@@ -109,12 +142,12 @@ static func u_range(code: int) -> Vector2:
 
 
 ## Цвет пикселя атласа-превью: цвет региона из `colors` × тон (в линейном пространстве, как
-## множитель в шейдере), обратно в sRGB; у линзы при V ≥ 0.75 — цвет блика `highlight`.
+## множитель в шейдере), обратно в sRGB; у линзы при V ≥ 0.75 — цвет блика `highlight` flat,
+## without tone (spec rev. 4.1; the same as `rider_toon.gdshader`, T-106a3).
 static func preview_color(colors: Array[Color], highlight: Color, code: int, v: float) -> Color:
-	var base: Color = colors[code]
 	if code == LENS and v >= LENS_HIGHLIGHT_V:
-		base = highlight
-	var lin: Color = base.srgb_to_linear() * tone(v)
+		return Color(highlight.r, highlight.g, highlight.b)
+	var lin: Color = colors[code].srgb_to_linear() * tone(v)
 	return Color(minf(lin.r, 1.0), minf(lin.g, 1.0), minf(lin.b, 1.0)).linear_to_srgb()
 
 

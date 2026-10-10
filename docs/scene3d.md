@@ -71,7 +71,9 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
 - `SceneryBuilder.build(track, env, field, material, budget)` — деревья, ели, кусты, трава
   (`MultiMeshInstance3D` на тип), урезается под остаток бюджета MultiMesh; сигнальные столбики —
   `RideScene.props()`.
-- `MeshKit` — процедурные меши с цветом вершин (альфа — вес контура); `RiderModel` — меши и
+- `MeshKit` — процедурные меши с цветом вершин (альфа — вес контура); region kits (T-106a3,
+  rider and bike) write the region code to UV0 instead of COLOR, one region per face, and the
+  smoothed outline normal to TANGENT; `RiderModel` — меши и
   геометрия велосипедиста (IK `two_bone_joint`, `two_bone_joint_x`, оси костей `bone_basis`);
   велосипед подогнан под контракт скелета (T-106a1): седло, тормозные ручки, контактные педали —
   шатуны одним мешем со скиннингом на 3 кости (`CrankRig`), педали держат угол стопы θ(φ).
@@ -79,8 +81,8 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
   (`body_m`/`body_f`), `Hair` (`hair_short`/`hair_tail`), `Helmet`, `Eyewear`, `ShoeL/R` со
   скиннингом, вес 1 на кость, один `Skin` (`RiderModel.rider_skin`); всего 10 `MeshInstance3D`
   с велосипедом. `Rider._pose_body` каждый кадр ставит позы костей без аллокаций: IK ног (шип на
-  оси педали, θ(φ), колено вбок), IK рук (ладонь на `grip`, предплечье с кистью — одно звено,
-  запястье прямое), крен таза вокруг S, крен и рыскание корпуса с компенсацией головы, пружина
+  оси педали, θ(φ), колено вбок), arm IK (the elbow holds its rest angle; body sway turns the
+  hand around `grip` by ≤ 2.5° and slides the palm on the hood by a few mm), крен таза вокруг S, крен и рыскание корпуса с компенсацией головы, пружина
   хвоста (сетка и оси — по костям `hair_tail.1/2`, кончик — окончание `hair_tail.2`). Числа движения — `RiderMotion`
   (спека «Движение по видео-референсу»); размах — коэффициент усилия k от P сэмпла и FTP
   профиля (`Rider.set_power`; `RideScene.apply_telemetry` + `bind`, свободная езда — экран), без
@@ -88,7 +90,12 @@ WorkoutSession ──second_elapsed──▶ RideScene.bind()            Environ
 - `RiderRig` — контракт скелета модели гонщика (25 костей, rest, окончания и оси костей,
   точки велосипеда, перевод осей Godot ↔ Blender ↔ glTF, эталонные ракурсы `VIEWS`,
   контрольные позы); `RiderRegions` — регионы цвета (UV-код), связь «регион → слот
-  `RiderLook`», палитра внешности, атласы. Эталонный пакет для подготовки `rider.glb`
+  `RiderLook`», палитра внешности, атласы. Colors (T-106a3): one material `rider_toon.tres`
+  (`rider_toon.gdshader`: palette of 32 regions + lens highlight, additive rim) with the outline
+  `next_pass` (`rider_outline.gdshader`: weight by region; Forward+/Mobile — along the smoothed
+  normal in TANGENT, Compatibility — along NORMAL: its skinning loses TANGENT); `RiderPalette` —
+  palette read/write, jersey patterns (regions 3–7) from slot values without `src/profiles/`;
+  `Rider.set_palette`/`set_region_color` (own material copy), `Rider.set_rims` (`deep`/`shallow`). Эталонный пакет для подготовки `rider.glb`
   (конвейер доводки в Blender, бриф художнику) — `assets/rider/reference/`
   (`./scripts/rider_artist_kit.sh` → `scripts/dev/rider_reference_pack.gd`, побайтно
   воспроизводим, в сборку не входит; проверка в Blender —

@@ -28,8 +28,10 @@ void light() {
 	float l = lit * shadow;
 	vec3 sun = LIGHT_COLOR / PI * l * toon_sun_gain;
 	if (toon_rim > 0.0) {
+		// Rim (rider, T-106a3): a light line of sun tint on the lit side, added on top of the
+		// albedo (specular light is not multiplied by it), so it shows on a black jersey too.
 		float rim = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-		sun += LIGHT_COLOR / PI * smoothstep(0.62, 0.68, rim) * l * toon_rim;
+		SPECULAR_LIGHT += LIGHT_COLOR / PI * smoothstep(0.62, 0.68, rim) * l * toon_rim;
 	}
 	DIFFUSE_LIGHT += look_diffuse(sun, ALBEDO, FRAGCOORD, VIEWPORT_SIZE, INV_PROJECTION_MATRIX);
 }

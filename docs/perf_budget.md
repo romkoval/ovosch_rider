@@ -27,6 +27,23 @@
 Draw calls на устройстве оцениваются вручную: каждый меш с контуром — две проходки; земля
 (дорога, трава, рельеф) тени не отбрасывает.
 
+## Гонщик с велосипедом (T-106a3, REQ-D3D-09 п.7)
+
+Гонщик с велосипедом: ≤ 18 500 треугольников (самые тяжёлые варианты), ≤ 10 `MeshInstance3D`, 1 материал, 0 текстур, ≤ 28 костей; эталон — MacBook Pro M1 Pro (MacBookPro18,3), У-25.
+
+- Now (procedural mannequin, T-106a2/T-106a3): 11 964 triangles with the heaviest variants
+  (`body_m` 4600, `hair_tail` 392, helmet 424, eyewear 112, shoes 2 × 328, bike 2484, wheels
+  1304 + 1560, crank 432), 10 `MeshInstance3D`, 25 bones; one material `rider_toon.tres` with the
+  outline as `next_pass` (`rider_outline.tres`), 0 textures. Checked by
+  `tests/integration/test_rider_regions_palette.gd`.
+- Colors are a palette of 32 regions in the material (region code in UV0): changing a color or
+  a jersey pattern is a parameter write, no new material or draw call. A rider with its own
+  look (`Rider.set_palette`) gets its own copy of the material instead of the shared one — the
+  count of unique materials does not change.
+- Shadow: `soft_shadow_filter_quality` = 1 (PCF soft low), `directional_shadow_split_1` = 0.15
+  at `max_distance` 90 m (first split 13.5 m instead of 22.5 m). If the T-116a measurement on
+  the reference Mac shows the filter costs more than 1 ms per frame, only the split stays.
+
 ## Параметры экземпляра: свет и туман своей сцены (T-112)
 
 Окружающий свет и туман трассы шейдеры мира берут из параметров экземпляра (`instance uniform

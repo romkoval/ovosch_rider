@@ -23,6 +23,12 @@ extends Node3D
 ## (`set_lean`), на уклоне продольный наклон задаёт трасса (REQ-D3D-08 п.5).
 ## Скелет, меши и массивы поз строятся в `_ready()`; в `_process`/`advance` — только
 ## арифметика (D3D-05 п.4).
+##
+## Colors (T-106a3): one toon material for all 10 nodes (`RIDER_MATERIAL`, outline —
+## `next_pass`); a face's color is its region (UV0) in the material palette. `set_palette` /
+## `set_region_color` give the rider its own copy of the material (two riders with different
+## looks do not share colors) and write the palette; the meshes stay. Rims (`bike.rims`) —
+## `set_rims`, a mesh swap of the wheel nodes.
 
 const SMOOTHING_TAU_SEC: float = 0.5
 const PEDAL_ANIMATION: String = "pedal"
@@ -33,6 +39,7 @@ const RIDER_MATERIAL: Material = preload("res://src/scene3d/materials/rider_toon
 ## Фигуры и причёски манекена (слоты `body.figure`, `hair.style`; проводка `RiderLook` — T-109).
 const FIGURES: Array[String] = ["m", "f"]
 const HAIR_STYLES: Array[String] = ["short", "tail"]
+const RIMS: Array[String] = ["deep", "shallow"]
 
 # Индексы костей — порядок `RiderRig.BONES` (сверяется в `_ready`).
 const B_PELVIS: int = 0
@@ -55,6 +62,7 @@ var lean_rad: float = 0.0
 var effort_k: float = 1.0
 var figure: String = "m"
 var hair_style: String = "short"
+var rims: String = "deep"
 
 var _power_w: int = 0
 var _has_power: bool = false
@@ -87,6 +95,8 @@ var _tail_prev_p := Vector3.ZERO
 var _tail_prev_v := Vector3.ZERO
 var _tail_primed: int = 0
 var _meshes: Dictionary = {}
+# The rider material: `RIDER_MATERIAL` until the first palette write, then an own copy.
+var _material: ShaderMaterial = RIDER_MATERIAL
 
 @onready var _anim: AnimationPlayer = %PedalPlayer
 @onready var _crank: Node3D = %Crank
@@ -165,6 +175,39 @@ func set_hair_style(value: String) -> void:
 		_hair.mesh = _meshes["hair_" + value]
 		_tail_reset()
 		_pose_body(0.0)
+
+
+## Rims (`deep`/`shallow`): mesh swap of `FrontWheel` and `RearWheel`. Not per frame.
+func set_rims(value: String) -> void:
+	assert(RIMS.has(value), "Rider: unknown rims %s" % value)
+	rims = value
+	var suffix: String = "" if value == "deep" else "_" + value
+	if _front_wheel != null and _meshes.has("wheel" + suffix):
+		(_front_wheel as MeshInstance3D).mesh = _meshes["wheel" + suffix]
+		(_rear_wheel as MeshInstance3D).mesh = _meshes["rear_wheel" + suffix]
+
+
+## Active material of all rider nodes (palette `RiderPalette.PALETTE_PARAM`).
+func material() -> ShaderMaterial:
+	return _material
+
+
+## Write the appearance palette: 32 region colors (sRGB) and the lens highlight. Not per frame.
+func set_palette(palette: PackedColorArray, lens_highlight: Color) -> void:
+	RiderPalette.write(_own_material(), palette, lens_highlight)
+
+
+## Write the color of region `code` only (sRGB). Not per frame.
+func set_region_color(code: int, color: Color) -> void:
+	RiderPalette.write_region(_own_material(), code, color)
+
+
+func _own_material() -> ShaderMaterial:
+	if _material == RIDER_MATERIAL:
+		_material = RIDER_MATERIAL.duplicate() as ShaderMaterial
+		for node in find_children("*", "MeshInstance3D", true, false):
+			(node as MeshInstance3D).material_override = _material
+	return _material
 
 
 ## Продольный наклон велосипедиста, рад (> 0 — нос вверх): угол направления движения
