@@ -46,8 +46,12 @@ const CHEST_ROLL_LIMIT_DEG: float = 2.0
 const HEAD_SHIFT_LIMIT_M: float = 0.02
 const HEAD_WORLD_ROLL_LIMIT_DEG: float = 0.6
 const PELVIS_ROLL_LIMIT_DEG: float = 1.0
-## Руки: предплечье с кистью — жёсткое звено (запястье прямое, ≤ 5°), сгиб «дышит» локтем; локоть
-## не сгибается сильнее этого угла (предел спеки 140°, запас 1°) — иначе ладонь сдвигается по ручке.
+## Arms (spec p.8, rev. 4.3): the elbow holds its rest angle; body sway is taken by the wrist
+## turning the hand around `grip` — at most this far from rest (the wrist stays ≤ 5° from the
+## forearm line in absolute terms: rest 2.3° + 2.5°) — and the remainder slides the palm on the
+## hood (spec ≤ 0.015 m).
+const WRIST_BEND_MAX_DEG: float = 2.5
+## Elbow limit of the spec (140°) with a 1° margin — checked by the tests.
 const ELBOW_MIN_DEG: float = 141.0
 ## Пружина хвоста (`hair.style` = `tail`): собственная частота 1.5–2 Гц, затухание 0.3–0.5 от
 ## критического, отклонение кончика вбок до ±8°, вверх-вниз до ±4°, конус 20° от rest.

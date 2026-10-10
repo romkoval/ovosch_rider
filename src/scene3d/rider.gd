@@ -67,13 +67,14 @@ var _parent := PackedInt32Array()
 var _thigh_len: float = 0.0
 var _shin_len: float = 0.0
 var _upper_len: float = 0.0
-# Звено «предплечье + кисть»: длина «локоть → точка хвата» и запястье в системе звена
-# (`RiderModel.arm_frame`) в rest — правая и левая руки.
-var _elbow_grip_len: float = 0.0
-# Наименьшее расстояние «плечо → точка хвата»: локоть не сгибается сильнее `RiderMotion.ELBOW_MIN_DEG`.
-var _arm_min_reach: float = 0.0
-var _wrist_off_r := Vector3.ZERO
-var _wrist_off_l := Vector3.ZERO
+# Arm (T-106a2 acceptance fix, REQ-D3D-09 p.15): the elbow holds its rest angle, so the distance
+# shoulder -> wrist is fixed (`_shoulder_wrist_len`); forearm and hand lengths; the rest angle
+# shoulder - wrist - grip (`_wrist_rest_rad`) — the wrist bends around it by at most
+# `RiderMotion.WRIST_BEND_MAX_DEG`, the rest of the shoulder motion slides the palm on the hood.
+var _forearm_len: float = 0.0
+var _hand_len: float = 0.0
+var _shoulder_wrist_len: float = 0.0
+var _wrist_rest_rad: float = 0.0
 var _sole_rest_rad: float = 0.0
 # Оси «вбок» костей хвоста в rest: перпендикуляр к своей кости в продольной плоскости.
 var _tail_side_axis_1 := Vector3.UP
@@ -292,20 +293,33 @@ func _turn(bone: int, roll: float, yaw: float, parent_m: Transform3D) -> Transfo
 ## кистью — одно жёсткое звено «локоть → точка хвата» (запястье держит изгиб rest, ≈ 2.3°, —
 ## прямое, спека: ≤ 5° от линии предплечья); локоть — IK «плечо → точка хвата» с направлением
 ## сгиба rest, угол локтя «дышит» с плечами.
+## Arm to the hood (spec "What to code in T-106a2" p.8, rev. 4.3): the elbow keeps its rest
+## angle; the change of the distance shoulder -> grip (body sway) is taken by the wrist turning
+## the hand around `grip` in the arm plane (≤ `RiderMotion.WRIST_BEND_MAX_DEG` from rest), the
+## remainder slides the palm along the line shoulder -> grip (a few mm, spec ≤ 0.015 m). No
+## allocations (per frame).
 func _solve_arm(b_upper: int, m_chest: Transform3D) -> void:
 	var b_fore: int = b_upper + 1
 	var b_hand: int = b_upper + 2
 	var b_grip: int = b_upper + 3
-	var wrist_off: Vector3 = _wrist_off_r if b_upper == B_UPPERARM_R else _wrist_off_l
 	var shoulder: Vector3 = m_chest * _rest[b_upper].origin
 	var grip: Vector3 = _rest[b_grip].origin
-	# Плечо ближе, чем допускает предел сгиба локтя, — ладонь сдвигается по ручке (≈ мм).
+	var sw: float = _shoulder_wrist_len
+	var l3: float = _hand_len
 	var reach: float = grip.distance_to(shoulder)
-	if reach < _arm_min_reach:
-		grip = shoulder + (grip - shoulder) * (_arm_min_reach / reach)
-	var hint: Vector3 = _rest[b_fore].origin - _rest[b_upper].origin
-	var elbow: Vector3 = RiderModel.two_bone_joint(shoulder, grip, _upper_len, _elbow_grip_len, hint)
-	var wrist: Vector3 = elbow + RiderModel.arm_frame(shoulder, elbow, grip) * wrist_off
+	# Wrist angle shoulder - wrist - grip that gives this reach, within the bend limit.
+	var cos_a: float = clampf((sw * sw + l3 * l3 - reach * reach) / (2.0 * sw * l3), -1.0, 1.0)
+	var bend: float = deg_to_rad(RiderMotion.WRIST_BEND_MAX_DEG)
+	var alpha: float = clampf(acos(cos_a), _wrist_rest_rad - bend, _wrist_rest_rad + bend)
+	var reach_ok: float = sqrt(sw * sw + l3 * l3 - 2.0 * sw * l3 * cos(alpha))
+	grip = shoulder + (grip - shoulder) * (reach_ok / reach)
+	var wrist: Vector3 = RiderModel.two_bone_joint(shoulder, grip, sw, l3, _rest[b_hand].origin - _rest[b_upper].origin)
+	# Elbow on its circle around shoulder -> wrist, nearest to the rest forearm carried with the
+	# hand (the hand turned from rest): the wrist bends as little as possible out of plane.
+	var hand_rest: Vector3 = _rest[b_grip].origin - _rest[b_hand].origin
+	var turn := Quaternion(hand_rest.normalized(), (grip - wrist).normalized())
+	var elbow_guess: Vector3 = wrist + turn * (_rest[b_fore].origin - _rest[b_hand].origin)
+	var elbow: Vector3 = RiderModel.two_bone_joint(shoulder, wrist, _upper_len, _forearm_len, elbow_guess - shoulder)
 	_pose[b_upper] = Transform3D(RiderModel.bone_basis(elbow - shoulder), shoulder)
 	_pose[b_fore] = Transform3D(RiderModel.bone_basis(wrist - elbow), elbow)
 	_pose[b_hand] = Transform3D(RiderModel.bone_basis(grip - wrist), wrist)
@@ -418,33 +432,15 @@ func _build_skeleton() -> void:
 	_thigh_len = RiderRig.span("thigh.R", "shin.R")
 	_shin_len = RiderRig.span("shin.R", "foot.R")
 	_upper_len = RiderRig.span("upperarm.R", "forearm.R")
-	_elbow_grip_len = RiderRig.span("forearm.R", "grip.R")
-	_wrist_off_r = _wrist_offset(".R")
-	_wrist_off_l = _wrist_offset(".L")
-	_arm_min_reach = _min_reach(".R")
+	_forearm_len = RiderRig.span("forearm.R", "hand.R")
+	_hand_len = RiderRig.span("hand.R", "grip.R")
+	_shoulder_wrist_len = RiderRig.span("upperarm.R", "hand.R")
+	var wr: Vector3 = RiderRig.head("hand.R")
+	_wrist_rest_rad = (RiderRig.head("upperarm.R") - wr).angle_to(RiderRig.head("grip.R") - wr)
 	_sole_rest_rad = RiderRig.rest_sole_pitch_rad()
 	# Поворот вокруг оси «направление кости × X» на + уводит кончик кости к +X.
 	_tail_side_axis_1 = _rest[B_TAIL_1].basis.y.normalized().cross(Vector3.RIGHT).normalized()
 	_tail_side_axis_2 = _rest[B_TAIL_2].basis.y.normalized().cross(Vector3.RIGHT).normalized()
-
-
-## Расстояние «плечо → точка хвата» при угле локтя (плечо — локоть — запястье)
-## `RiderMotion.ELBOW_MIN_DEG`; запястье — в rest звена «локоть → точка хвата».
-func _min_reach(side: String) -> float:
-	var s: Vector3 = RiderRig.head("upperarm" + side)
-	var e: Vector3 = RiderRig.head("forearm" + side)
-	var to_wrist: float = (s - e).angle_to(RiderRig.head("hand" + side) - e)
-	var to_grip: float = (s - e).angle_to(RiderRig.head("grip" + side) - e)
-	var ang: float = deg_to_rad(RiderMotion.ELBOW_MIN_DEG) + to_grip - to_wrist
-	return sqrt(_upper_len * _upper_len + _elbow_grip_len * _elbow_grip_len
-		- 2.0 * _upper_len * _elbow_grip_len * cos(ang))
-
-
-## Запястье в rest в системе звена «локоть → точка хвата» руки `side`.
-func _wrist_offset(side: String) -> Vector3:
-	var frame: Basis = RiderModel.arm_frame(RiderRig.head("upperarm" + side), RiderRig.head("forearm" + side),
-		RiderRig.head("grip" + side))
-	return frame.inverse() * (RiderRig.head("hand" + side) - RiderRig.head("forearm" + side))
 
 
 func _build_model() -> void:
