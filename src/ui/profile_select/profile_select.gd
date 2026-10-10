@@ -36,9 +36,15 @@ const PLUS_GAP: float = 20.0
 const LOGO_MAIN: String = HomeScreen.LOGO_MAIN
 const LOGO_ACCENT: String = HomeScreen.LOGO_ACCENT
 const MENU_DELETE_ID: int = 0
-## Диалог создания: место под заголовок окна, кнопки и поля диалога, lp; минимум для полей.
-const CREATE_DIALOG_RESERVE: float = 190.0
+## Диалог создания: минимум высоты для полей, lp.
 const CREATE_FIELDS_MIN_HEIGHT: float = 120.0
+## Поля окна вокруг формы (`CreateForm`, сверху и снизу), lp, и запас до края безопасной зоны.
+const CREATE_DIALOG_PADDING: float = 48.0
+const CREATE_DIALOG_EDGE_GAP: float = 4.0
+## Зазоры между полями формы: обычный и на низком экране (T-174: на телефоне 1280×590 все четыре
+## поля помещаются без прокрутки; способ по `ui.md` не задан — меньшие зазоры, вопрос game-designer).
+const CREATE_FIELDS_STACK: StringName = &"Stack16"
+const CREATE_FIELDS_STACK_COMPACT: StringName = &"Stack8"
 
 signal profile_chosen(id: String)
 signal profile_created(id: String)
@@ -374,15 +380,33 @@ func _show_error(codes: Array[String], in_form: bool = false) -> void:
 	_screen_error_label.visible = not form and not lines.is_empty()
 
 
-## Высота прокрутки полей формы: всё содержимое, но не выше холста за вычетом заголовка окна,
-## кнопок и полей диалога (телефон — холст ≈ 400 lp: поля прокручиваются, кнопки видны).
+## Высота прокрутки полей формы: всё содержимое, но не выше холста в безопасной зоне за вычетом
+## заголовка окна, кнопок и полей диалога. Если поля не помещаются с обычными зазорами (телефон —
+## холст ≈ 400 lp), зазоры между полями уменьшаются (T-174, UIX-05 п.2): поле не режется краем
+## прокрутки посередине. Не помещаются и так (например, с текстом ошибок) — прокрутка.
 func _fit_create_form() -> void:
 	if not is_inside_tree():
 		return
+	var limit := _create_fields_limit()
+	_fields.theme_type_variation = CREATE_FIELDS_STACK
 	var content := _fields.get_combined_minimum_size().y
-	var limit := get_viewport_rect().size.y - CREATE_DIALOG_RESERVE
+	if content > limit:
+		_fields.theme_type_variation = CREATE_FIELDS_STACK_COMPACT
+		content = _fields.get_combined_minimum_size().y
 	_fields_scroll.custom_minimum_size.y = maxf(minf(content, limit), CREATE_FIELDS_MIN_HEIGHT)
 	_create_dialog.reset_size()
+
+
+## Сколько lp остаётся полям: высота холста в безопасной зоне минус заголовок окна, поля окна,
+## зазор формы и ряд кнопок.
+func _create_fields_limit() -> float:
+	var ui := TouchTarget.default_runtime()
+	var safe: Vector4 = ui.safe_margins() if ui != null else Vector4.ZERO
+	var height: float = get_viewport_rect().size.y - safe.y - safe.w
+	var chrome: float = float(_create_dialog.get_theme_constant(&"title_height")) + CREATE_DIALOG_PADDING \
+		+ float(_create_form.get_theme_constant(&"separation")) + _save_button.get_combined_minimum_size().y \
+		+ CREATE_DIALOG_EDGE_GAP
+	return height - chrome
 
 
 func _update_dialog_texts() -> void:
