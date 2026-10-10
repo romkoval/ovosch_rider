@@ -188,7 +188,9 @@ func test_rejection_is_sticky_on_reconnect_and_reset_for_other_trainer() -> void
 
 
 func test_success_response_marks_supported_when_feature_unknown() -> void:
-	_connect()  # список сервисов неизвестен — 2ACC не читается
+	# 2ACC не заявлена — не читается (пустой список сервисов теперь «нет сервиса», T-161).
+	_bridge.set_device_services(DEV, StubBleBridge.trainer_services())
+	_connect()
 	assert_eq(_t.simulation_support(), TrainerDevice.SimulationSupport.UNKNOWN)
 	_t.set_simulation(1.0)
 	_bridge.pump()

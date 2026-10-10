@@ -25,6 +25,7 @@ func before_each() -> void:
 	_hr = []
 	_fail_remaining = 0
 	_bridge = StubBleBridge.new()
+	_bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	_sensor_services(_bridge)
 	# Подключаемся к write_done ДО создания BleTrainer, чтобы наш обработчик шёл первым
 	# и мог «сломать» повторную запись (сценарий двойного отказа, REQ-NFR-01 крит. 2).

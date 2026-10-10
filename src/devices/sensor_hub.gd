@@ -75,6 +75,7 @@ func _init(trainer_device: TrainerDevice) -> void:
 	trainer.heart_rate.connect(_on_trainer_heart_rate)
 	trainer.connection_state_changed.connect(_forward_state)
 	trainer.error.connect(_forward_error)
+	trainer.capabilities_changed.connect(_forward_capabilities)
 
 
 ## Отключить обработчики сигналов станка и датчиков и забыть их (разрыв циклов
@@ -82,7 +83,8 @@ func _init(trainer_device: TrainerDevice) -> void:
 func dispose() -> void:
 	if trainer != null:
 		for pair in [[trainer.telemetry, _on_trainer_telemetry], [trainer.heart_rate, _on_trainer_heart_rate],
-				[trainer.connection_state_changed, _forward_state], [trainer.error, _forward_error]]:
+				[trainer.connection_state_changed, _forward_state], [trainer.error, _forward_error],
+				[trainer.capabilities_changed, _forward_capabilities]]:
 			var sig: Signal = pair[0]
 			var cb: Callable = pair[1]
 			if sig.is_connected(cb):
@@ -100,6 +102,10 @@ func _forward_state(state: int) -> void:
 
 func _forward_error(code: int, message: String) -> void:
 	error.emit(code, message)
+
+
+func _forward_capabilities() -> void:
+	capabilities_changed.emit()
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +193,14 @@ func inclination_range() -> Vector2:
 
 func has_control() -> bool:
 	return trainer.has_control() if trainer != null else false
+
+
+func target_power_range() -> Dictionary:
+	return trainer.target_power_range() if trainer != null else fallback_power_range()
+
+
+func is_erg_available() -> bool:
+	return trainer.is_erg_available() if trainer != null else false
 
 
 func set_control_allowed(allowed: bool) -> void:

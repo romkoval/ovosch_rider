@@ -23,6 +23,8 @@ func before_each() -> void:
 	_bridge.set_device_services("hrm", {"180D": ["2A37"]})
 	_bridge.set_device_services("csc", {"1816": ["2A5B"]})
 	_bridge.set_device_services("pm", {"1818": ["2A63"]})
+	# Станок тоже отдаёт свой сервис (T-161: пустой список — «нет сервиса», как у датчика).
+	_bridge.set_device_services("neo", StubBleBridge.trainer_services())
 	_remembered = RememberedDevices.new(_dir + "devices/")
 	_repo = ProfileRepository.new(_dir + "profiles/")
 	_profile = _repo.create("Rider")

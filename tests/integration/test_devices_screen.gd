@@ -17,6 +17,7 @@ func before_each() -> void:
 	TranslationServer.set_locale("en")
 	_dir = "user://test_devscreen_%d_%d/" % [Time.get_ticks_usec(), randi() % 100000]
 	_bridge = StubBleBridge.new()
+	_bridge.set_device_services("neo", StubBleBridge.trainer_services())  # станок теста (T-161: пустой список — «нет сервиса»)
 	_remembered = RememberedDevices.new(_dir + "devices/")
 	_repo = ProfileRepository.new(_dir + "profiles/")
 	_profile = _repo.create("Rider")
@@ -49,7 +50,16 @@ func _screen() -> DevicesScreen:
 	return s
 
 
+## Реклама; у устройства без своей фикстуры после подключения — те же сервисы со стандартной
+## характеристикой измерения (T-154, T-161: пустой список сервисов — «нет сервиса»).
 func _adv(id: String, name: String, services: Array, rssi: int = -60) -> void:
+	if not _bridge.device_services.has(id):
+		var chars := {"1826": ["2AD2", "2AD9", "2ADA"], "180D": ["2A37"], "1816": ["2A5B"], "1818": ["2A63"]}
+		var svc: Dictionary = {}
+		for u in services:
+			if chars.has(str(u)):
+				svc[str(u)] = chars[str(u)]
+		_bridge.set_device_services(id, svc)
 	_bridge.emit_device_found(id, name, rssi, PackedStringArray(services))
 
 

@@ -77,9 +77,11 @@ const SOURCE_EMULATOR: String = "emulator"
 const MODE_SMART: String = "smart"
 const MODE_POWER_METER: String = "power_meter"
 
-## Допустимые диапазоны аргументов команд.
+## Допустимые диапазоны аргументов команд. Цель ERG — запасной диапазон (REQ-DEV-10 п.7, Н-61 (а)):
+## действует, только если станок не сообщил свой (`target_power_range()`).
 const MIN_TARGET_POWER_W: int = 0
 const MAX_TARGET_POWER_W: int = 2000
+const TARGET_POWER_INCREMENT_W: int = 1
 const MIN_RESISTANCE_PERCENT: int = 0
 const MAX_RESISTANCE_PERCENT: int = 100
 ## Параметры SIM: пределы — представимые в команде FTMS 0x11 значения (REQ-FRD-04 крит. 1).
@@ -103,6 +105,9 @@ signal telemetry(sample: TrainerSample)
 signal heart_rate(bpm: int)
 ## Ошибка устройства или команды; `code` — значение `ErrorCode`, `message` — текст для журнала/HUD.
 signal error(code: int, message: String)
+## Изменились возможности станка (`is_erg_available()`, `target_power_range()`) — после чтения
+## характеристик или отказа станка (REQ-DEV-10 п.5–7, DEV-11 п.7–8).
+signal capabilities_changed()
 
 
 ## Начать подключение к устройству с идентификатором `id`
@@ -220,6 +225,46 @@ func has_control() -> bool:
 ## По умолчанию разрешено; реализации без автоматических записей могут ничего не делать.
 func set_control_allowed(_allowed: bool) -> void:
 	pass
+
+
+## Диапазон цели ERG `{min_w, max_w, increment_w}` (Вт): от станка (FTMS `0x2AD8`) или запасной
+## `MIN_TARGET_POWER_W..MAX_TARGET_POWER_W` с шагом 1 (REQ-DEV-10 п.6–7).
+func target_power_range() -> Dictionary:
+	return fallback_power_range()
+
+
+## Цель, которую станок фактически получит при запросе `watts` (REQ-DEV-10 п.6, У-26): в диапазоне
+## `target_power_range()`, округлённая к ближайшему min + k × increment. Сессия и HUD показывают её.
+func applied_target_power(watts: int) -> int:
+	return clamp_target_to_range(watts, target_power_range())
+
+
+## Доступен ли ERG (цель мощности) на подключённом станке: канал управления есть, станок заявил
+## поддержку цели мощности и не отверг её (REQ-DEV-10 п.4–5, DEV-11 п.7–8). По умолчанию — как
+## `has_control()`.
+func is_erg_available() -> bool:
+	return has_control()
+
+
+## Запасной диапазон цели ERG (REQ-DEV-10 п.7).
+static func fallback_power_range() -> Dictionary:
+	return {"min_w": MIN_TARGET_POWER_W, "max_w": MAX_TARGET_POWER_W, "increment_w": TARGET_POWER_INCREMENT_W}
+
+
+## Ограничение цели диапазоном `{min_w, max_w, increment_w}`: [min; max], затем ближайшее
+## min + k × increment, не выше max (REQ-DEV-10 п.6).
+static func clamp_target_to_range(watts: int, range: Dictionary) -> int:
+	var lo: int = int(range.get("min_w", MIN_TARGET_POWER_W))
+	var hi: int = int(range.get("max_w", MAX_TARGET_POWER_W))
+	var inc: int = maxi(int(range.get("increment_w", 1)), 1)
+	if hi < lo:
+		return lo
+	var v: int = clampi(watts, lo, hi)
+	var k: int = roundi(float(v - lo) / float(inc))
+	v = lo + k * inc
+	while v > hi:
+		v -= inc
+	return maxi(v, lo)
 
 
 ## Источник станка для метаданных заезда: `SOURCE_EMULATOR` или `SOURCE_BLE` (T-160).

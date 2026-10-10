@@ -120,6 +120,10 @@ func has_control() -> bool:
 	return false
 
 
+func is_erg_available() -> bool:
+	return false
+
+
 ## Разрешение на управление у обёртки не меняется: пока она жива, станок хаба без управления.
 func set_control_allowed(_allowed: bool) -> void:
 	pass

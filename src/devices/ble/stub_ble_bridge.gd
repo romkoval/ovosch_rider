@@ -38,6 +38,9 @@ var connected_ids: Array[String] = []
 var subscriptions: Dictionary = {}
 ## id → {service_uuid: PackedStringArray(char_uuids)}.
 var device_services: Dictionary = {}
+## Сервисы устройств без своей записи в `device_services` (по умолчанию — пустой список: «нет
+## сервисов», T-154, T-161). Тесты станка ставят `trainer_services()`.
+var default_services: Dictionary = {}
 ## Нормализованный char_uuid → байты для `read_characteristic`.
 var read_values: Dictionary = {}
 var auto_connect: bool = true
@@ -95,7 +98,7 @@ func disconnect_peripheral(id: String) -> void:
 
 func discover_services(id: String) -> void:
 	_log("discover_services", id)
-	var services: Dictionary = device_services.get(id, {})
+	var services: Dictionary = device_services.get(id, default_services)
 	pending.append(func() -> void: services_discovered.emit(id, services))
 
 
@@ -178,6 +181,14 @@ func set_adapter_state(state: int) -> void:
 		return
 	adapter_state = state
 	adapter_state_changed.emit(state)
+
+
+## Типовой FTMS-станок для тестов: Indoor Bike Data, Control Point, Status, Supported Resistance
+## Level Range и батарея — то, что станок получал раньше при неизвестном списке сервисов.
+static func trainer_services() -> Dictionary:
+	return {BleUuids.FTMS_SERVICE: PackedStringArray([BleUuids.INDOOR_BIKE_DATA, BleUuids.FTMS_CONTROL_POINT,
+		BleUuids.FTMS_STATUS, BleUuids.SUPPORTED_RESISTANCE_RANGE]),
+		BleUuids.BATTERY_SERVICE: PackedStringArray([BleUuids.BATTERY_LEVEL])}
 
 
 ## Сервисы устройства для `discover_services`: `{service_uuid: PackedStringArray(chars)}`.

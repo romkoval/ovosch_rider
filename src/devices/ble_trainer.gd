@@ -164,6 +164,14 @@ var protocol: int = PROTOCOL_FTMS
 var _fec_speed_kmh: float = -1.0
 ## Управление по FE-C: записи FEC3, подтверждение 0x47, возможности 0x36.
 var _fec: FecControl = null
+## Диапазон цели из `0x2AD8` (`FtmsCodec.decode_supported_power_range`); пустой — не прочитан.
+var power_range: Dictionary = {}
+## Станок ответил `80 05 02` на Set Target Power: ERG недоступен до конца подключения.
+var _erg_rejected: bool = false
+## Ограничение цели диапазоном уже записано в лог в этом подключении.
+var _clamp_logged: bool = false
+## Цель, запрошенная последним `set_target_power` (до ограничения диапазоном).
+var _requested_target_w: int = 0
 
 
 func _init(ble_bridge: BleBridge) -> void:
@@ -213,8 +221,12 @@ func _begin_connecting(id: String) -> void:
 	if id != device_id:
 		battery_percent = -1
 		_forget_simulation_capabilities()
+	if id != device_id:
+		power_range = {}
 	device_id = id
 	_fec.set_device(id)
+	_erg_rejected = false
+	_clamp_logged = false
 	_disconnect_requested = false
 	_failure = SensorDevice.FailureReason.NONE
 	control_granted = false
@@ -265,9 +277,14 @@ func dispose() -> void:
 
 
 func set_target_power(watts: int) -> void:
-	var value: int = clampi(watts, MIN_TARGET_POWER_W, MAX_TARGET_POWER_W)
-	if value != watts:
-		push_warning("BleTrainer.set_target_power: %d вне диапазона, обрезано до %d" % [watts, value])
+	_requested_target_w = watts
+	var value: int = applied_target_power(watts)
+	if value != watts and not _clamp_logged:
+		# Первое ограничение за подключение — одна запись в лог, не ошибка (DEV-10 п.6).
+		_clamp_logged = true
+		var r := target_power_range()
+		push_warning("BleTrainer.set_target_power: %d Вт вне диапазона станка %d..%d (шаг %d), задано %d" % [
+			watts, int(r["min_w"]), int(r["max_w"]), int(r["increment_w"]), value])
 	target_power_w = value
 	if _state != ConnectionState.CONNECTED:
 		return
@@ -335,6 +352,28 @@ func inclination_range() -> Vector2:
 ## Канал управления: нет — после подключения в режиме «только данные».
 func has_control() -> bool:
 	return not data_only
+
+
+## Диапазон цели ERG: FTMS `0x2AD8`, если прочитан; иначе (и у FE-C) — запасной (DEV-10 п.6–7).
+func target_power_range() -> Dictionary:
+	if protocol == PROTOCOL_FTMS and power_range.get("ok", false):
+		return {"min_w": int(power_range["min_w"]), "max_w": int(power_range["max_w"]),
+			"increment_w": int(power_range["increment_w"])}
+	return fallback_power_range()
+
+
+## ERG доступен: канал управления есть; FTMS — бит 3 Target Setting Features (если 2ACC прочитан)
+## и не было `80 05 02`; FE-C — бит 1 страницы 0x36 и не было Not supported (DEV-10 п.5, DEV-11 п.7–8).
+func is_erg_available() -> bool:
+	if data_only:
+		return false
+	if protocol == PROTOCOL_FEC:
+		return _fec.supports_target_power()
+	if _erg_rejected:
+		return false
+	if machine_features.get("ok", false):
+		return bool(machine_features["power_supported"])
+	return true
 
 
 func set_control_allowed(allowed: bool) -> void:
@@ -413,14 +452,18 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 		return
 	services = BleSensorBase.normalized_services(svc)
 	protocol = PROTOCOL_FTMS
-	if not services.is_empty() and not _lists_service(FTMS):
+	if not _lists_service(FTMS):
 		if _lists_service(FEC):
 			# Есть FE-C, нет FTMS — станок по FE-C (DEV-11). Есть оба — FTMS (DEV-11 п.1 (г)).
 			_connect_fec(id)
 			return
-		# Сервисы известны, а станочного сервиса среди них нет: станок не подключится (T-164).
-		# Пустой список — «неизвестен» (как раньше); строгая проверка — T-161.
+		# Станочного сервиса нет, в том числе при пустом списке (нативный мост Apple отдаёт пустой
+		# словарь, когда сервисов нет): станок не подключится — как датчик (T-154, T-161).
 		_fail_connecting("Нет сервиса станка (FTMS или FE-C)", true, SensorDevice.FailureReason.NO_SERVICE)
+		return
+	if not _has_characteristic(FTMS, BleUuids.INDOOR_BIKE_DATA):
+		# Indoor Bike Data обязательна (DEV-10 п.3): ни подписок, ни записей в Control Point.
+		_fail_connecting("У FTMS нет Indoor Bike Data 2AD2", true, SensorDevice.FailureReason.NO_SERVICE)
 		return
 	bridge.subscribe(id, FTMS, BleUuids.INDOOR_BIKE_DATA)
 	var with_control: bool = control_allowed and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT)
@@ -465,6 +508,7 @@ func _connect_fec(id: String) -> void:
 func _on_fec_capabilities() -> void:
 	if protocol != PROTOCOL_FEC or data_only:
 		return
+	capabilities_changed.emit()
 	if _state == ConnectionState.CONNECTING or _state == ConnectionState.RECONNECTING:
 		_reconnect.stop()
 		_set_state(ConnectionState.CONNECTED)
@@ -472,6 +516,8 @@ func _on_fec_capabilities() -> void:
 
 func _on_fec_command_error(code: int, message: String) -> void:
 	error.emit(code, message)
+	if _fec.erg_unsupported:
+		capabilities_changed.emit()
 
 
 ## Подключение без канала управления: CONNECTED с `data_only == true`.
@@ -487,6 +533,9 @@ func _acquire_control(id: String) -> void:
 	_write_control_point(FtmsCodec.encode_request_control())
 	if _has_characteristic(FTMS, BleUuids.SUPPORTED_RESISTANCE_RANGE):
 		bridge.read_characteristic(id, FTMS, BleUuids.SUPPORTED_RESISTANCE_RANGE)
+	# Диапазон цели ERG — от станка, если заявлен (DEV-10 п.6); без него — запасной (п.7).
+	if _declares_characteristic(FTMS, BleUuids.SUPPORTED_POWER_RANGE):
+		bridge.read_characteristic(id, FTMS, BleUuids.SUPPORTED_POWER_RANGE)
 	# Признаки SIM — только если заявлены (REQ-FRD-04 крит. 3, 6): CoreBluetooth отдаёт
 	# полный список характеристик, без него поддержка SIM остаётся UNKNOWN.
 	if _declares_characteristic(FTMS, BleUuids.FITNESS_MACHINE_FEATURE):
@@ -545,6 +594,10 @@ func _on_control_point_response(bytes: PackedByteArray) -> void:
 	if opcode == FtmsCodec.OP_SET_INDOOR_BIKE_SIMULATION:
 		_on_simulation_response(r["success"], r["result"])
 	elif not r["success"]:
+		if opcode == FtmsCodec.OP_SET_TARGET_POWER and int(r["result"]) == FtmsCodec.RESULT_NOT_SUPPORTED:
+			# `80 05 02`: ERG недоступен до конца подключения (DEV-10 п.5), дальше 0x05 не уходит.
+			_erg_rejected = true
+			capabilities_changed.emit()
 		error.emit(ErrorCode.CONTROL_POINT_REJECTED, "Станок отверг команду %s: %s" % [
 			FtmsCodec.opcode_name(opcode), FtmsCodec.result_name(r["result"])])
 	_pump_control_point()
@@ -635,10 +688,21 @@ func _on_characteristic_read(id: String, char_uuid: String, bytes: PackedByteArr
 				if changed and _state == ConnectionState.CONNECTED and not erg_enabled \
 						and not simulation_active:
 					_write_resistance()
+		BleUuids.SUPPORTED_POWER_RANGE:
+			var pr := FtmsCodec.decode_supported_power_range(bytes)
+			if pr["ok"]:
+				power_range = pr
+				capabilities_changed.emit()
+				# Цель могла уйти в запасном диапазоне — переотправить в диапазоне станка.
+				if _requested_target_w > 0 and applied_target_power(_requested_target_w) != target_power_w:
+					set_target_power(_requested_target_w)
+			else:
+				push_warning("BleTrainer: Supported Power Range 2AD8 некорректен, запасной диапазон цели")
 		BleUuids.FITNESS_MACHINE_FEATURE:
 			var f := FtmsCodec.decode_fitness_machine_feature(bytes)
 			if f["ok"]:
 				machine_features = f
+				capabilities_changed.emit()
 			else:
 				push_warning("BleTrainer: Fitness Machine Feature 2ACC короче 8 байт, поддержка SIM не определена")
 		BleUuids.SUPPORTED_INCLINATION_RANGE:
@@ -886,6 +950,8 @@ func _write_target(watts: int) -> void:
 		if _fec_can_write():
 			_fec.write_target_power(watts)
 		return
+	if not is_erg_available():
+		return  # бит 3 2ACC = 0 или `80 05 02` — 0x05 не уходит (DEV-10 п.5)
 	_write_control_point(FtmsCodec.encode_set_target_power(watts))
 
 

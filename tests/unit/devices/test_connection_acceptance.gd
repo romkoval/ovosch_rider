@@ -20,6 +20,7 @@ var _devices_changed: int = 0
 func before_each() -> void:
 	_dir = "user://test_conn_acc_%d_%d/" % [Time.get_ticks_usec(), randi() % 100000]
 	_bridge = StubBleBridge.new()
+	_bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	# Датчики на заглушке отдают свой сервис (T-154: без него и при пустом списке нет CONNECTED).
 	_bridge.set_device_services("hrm", {"180D": ["2A37"]})
 	_bridge.set_device_services("hrm2", {"180D": ["2A37"]})
@@ -470,6 +471,7 @@ func test_req_dev_07_c3_no_battery_service_gives_minus_one_without_error() -> vo
 
 func test_req_dev_02_c1_ble_trainer_reads_and_subscribes_battery_when_180f_present() -> void:
 	var bridge := StubBleBridge.new()
+	bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	var t := BleTrainer.new(bridge)
 	var levels: Array[int] = []
 	t.battery_level.connect(func(p: int) -> void: levels.append(p))
@@ -499,6 +501,7 @@ func test_req_dev_02_c1_ble_trainer_reads_and_subscribes_battery_when_180f_prese
 
 func test_req_dev_02_c1_ble_trainer_without_180f_skips_battery_unknown_services_tolerates_missing() -> void:
 	var bridge := StubBleBridge.new()
+	bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	var t := BleTrainer.new(bridge)
 	var errors: Array[int] = []
 	t.error.connect(func(c: int, _m: String) -> void: errors.append(c))
@@ -511,6 +514,7 @@ func test_req_dev_02_c1_ble_trainer_without_180f_skips_battery_unknown_services_
 	t.dispose()
 	# Список сервисов неизвестен — чтение пробуется, отсутствие характеристики — не ошибка.
 	var bridge2 := StubBleBridge.new()
+	bridge2.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	var t2 := BleTrainer.new(bridge2)
 	t2.error.connect(func(c: int, _m: String) -> void: errors.append(c))
 	t2.connect_device("neo")

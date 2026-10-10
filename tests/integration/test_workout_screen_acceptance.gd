@@ -797,6 +797,7 @@ func test_req_nfr_08_c1_no_untranslated_keys_on_screen_in_en_and_ru() -> void:
 
 func _ble_screen(start: bool = true) -> WorkoutScreen:
 	_bridge = StubBleBridge.new()
+	_bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	_ble = TrainerFactory.create_ble(_bridge)
 	_ble.connect_device(DEV)
 	_bridge.pump()

@@ -18,6 +18,7 @@ func before_each() -> void:
 	_samples = []
 	_hr = []
 	_bridge = StubBleBridge.new()
+	_bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	_t = BleTrainer.new(_bridge)
 	_t.connection_state_changed.connect(func(s: int) -> void: _states.append(s))
 	_t.error.connect(func(c: int, m: String) -> void: _errors.append({"code": c, "message": m}))
@@ -103,6 +104,7 @@ func test_resistance_range_read_from_2ad6_and_skipped_when_absent() -> void:
 	assert_almost_eq(_t.resistance_range["max_level"], 20.0, 1e-9)
 	# Второй станок без 2AD6 в списке сервисов — чтения нет.
 	var b2 := StubBleBridge.new()
+	b2.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	b2.set_device_services("x", {"1826": ["2AD2", "2AD9", "2ADA"]})
 	var t2 := BleTrainer.new(b2)
 	t2.connect_device("x")
@@ -575,6 +577,7 @@ func test_subscribe_failed_and_not_connected_in_connecting_disconnect_with_error
 ## П.5: двойной отказ записи Request Control в CONNECTING срывает подключение.
 func test_request_control_write_failing_twice_in_connecting_disconnects() -> void:
 	var bridge := StubBleBridge.new()
+	bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	var fail_left: Array[int] = [1]
 	# Лямбда держит мост — отключаем в конце, иначе цикл мост → сигнал → лямбда → мост.
 	var break_retry := func(_i: String, _c: String, ok: bool) -> void:

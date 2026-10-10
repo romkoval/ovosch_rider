@@ -408,6 +408,26 @@ static func decode_fitness_machine_feature(bytes: PackedByteArray) -> Dictionary
 	return r
 
 
+## Supported Power Range `0x2AD8` (REQ-DEV-10 п.6): min, max — sint16 LE, Вт; increment — uint16 LE,
+## Вт. `{ok, min_w, max_w, increment_w}`; `ok == false` — короче 6 байт или max ≤ min.
+## `00 00 C4 09 01 00` → 0..2500 Вт, шаг 1; `19 00 DC 05 05 00` → 25..1500 Вт, шаг 5.
+static func decode_supported_power_range(bytes: PackedByteArray) -> Dictionary:
+	var r: Dictionary = {"ok": false, "min_w": 0, "max_w": 0, "increment_w": 1}
+	if bytes.size() < 6:
+		return r
+	r["min_w"] = BleBytes.s16(bytes, 0)
+	r["max_w"] = BleBytes.s16(bytes, 2)
+	r["increment_w"] = maxi(BleBytes.u16(bytes, 4), 1)
+	r["ok"] = int(r["max_w"]) > int(r["min_w"])
+	return r
+
+
+## Цель Set Target Power в диапазоне `0x2AD8` (без него — запасной, DEV-10 п.7).
+static func clamp_target_power(watts: int, power_range: Dictionary = {}) -> int:
+	var range: Dictionary = power_range if power_range.get("ok", false) else TrainerDevice.fallback_power_range()
+	return TrainerDevice.clamp_target_to_range(watts, range)
+
+
 ## Обратная операция для тестов и эмуляторов.
 static func encode_fitness_machine_feature(machine_features: int, target_settings: int) -> PackedByteArray:
 	var out := PackedByteArray()

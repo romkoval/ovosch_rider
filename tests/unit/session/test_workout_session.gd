@@ -480,6 +480,7 @@ func test_start_restores_erg_left_off_by_previous_session_fake() -> void:
 ## П.1 на BLE: без синхронизации режима на Control Point не уходило ни одной команды.
 func test_start_restores_erg_left_off_by_previous_session_ble() -> void:
 	var bridge := StubBleBridge.new()
+	bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	var ble := BleTrainer.new(bridge)
 	ble.connect_device("neo")
 	bridge.pump()
@@ -550,6 +551,7 @@ func test_zero_watt_target_is_sent_and_resent_on_resume() -> void:
 ## error(WRITE_FAILED). Повтор устройства удался — сессия не делает лишней записи.
 func test_legacy_double_write_failure_event_causes_no_session_retry() -> void:
 	var bridge := StubBleBridge.new()
+	bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	bridge.legacy_double_write_failure = true
 	var ble := BleTrainer.new(bridge)
 	ble.connect_device("neo")

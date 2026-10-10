@@ -141,11 +141,11 @@ func test_services_without_ftms_is_no_service_and_bridge_cancelled() -> void:
 	t.dispose()
 
 
-func test_empty_service_list_keeps_legacy_unknown_path() -> void:
+func test_empty_service_list_is_no_service() -> void:
 	_bridge.set_device_services(NEO, {})
 	var t := BleTrainer.new(_bridge)
 	t.connect_device(NEO)
 	_bridge.pump()
 	_bridge.pump()
-	assert_eq(t.last_failure(), SensorDevice.FailureReason.NONE, "пустой список — «неизвестен», не NO_SERVICE (строже — T-161)")
+	assert_eq(t.last_failure(), SensorDevice.FailureReason.NO_SERVICE, "пустой список — «нет сервиса», как у датчика (T-161)")
 	t.dispose()

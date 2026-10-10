@@ -79,6 +79,9 @@ var rider_cadence_rpm: int = 85
 var emit_speed: bool = true
 ## Есть ли у эмулируемого станка канал управления (false — только данные, REQ-WRK-09).
 var controllable: bool = true
+## Эмулируемый диапазон цели ERG `{min_w, max_w, increment_w}` (как FTMS `0x2AD8`, REQ-DEV-10 п.6);
+## по умолчанию — запасной 0..2000 Вт, шаг 1.
+var power_range: Dictionary = TrainerDevice.fallback_power_range()
 
 # --- Журнал и состояние, доступные тестам на чтение ---
 
@@ -161,11 +164,15 @@ func disconnect_device() -> void:
 
 
 func set_target_power(watts: int) -> void:
-	var value: int = clampi(watts, MIN_TARGET_POWER_W, MAX_TARGET_POWER_W)
+	var value: int = applied_target_power(watts)
 	if watts != value:
 		push_warning("FakeTrainer.set_target_power: %d вне диапазона, обрезано до %d" % [watts, value])
 	if _accept_command(CMD_TARGET_POWER, value):
 		target_power_w = value
+
+
+func target_power_range() -> Dictionary:
+	return power_range.duplicate()
 
 
 func set_erg_enabled(enabled: bool) -> void:

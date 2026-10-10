@@ -16,6 +16,7 @@ var _timed_out: Array = []
 func before_each() -> void:
 	_dir = "user://test_cm_%d_%d/" % [Time.get_ticks_usec(), randi() % 100000]
 	_bridge = StubBleBridge.new()
+	_bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	# Датчики на заглушке отдают свой сервис (T-154: без него и при пустом списке нет CONNECTED).
 	_bridge.set_device_services("hrm", {"180D": ["2A37"]})
 	_bridge.set_device_services("hrm-a", {"180D": ["2A37"]})

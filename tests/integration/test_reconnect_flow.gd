@@ -12,6 +12,7 @@ var _hud: HudModel
 
 func before_each() -> void:
 	_bridge = StubBleBridge.new()
+	_bridge.default_services = StubBleBridge.trainer_services()  # станок без своей фикстуры (T-161: пустой список — «нет сервиса»)
 	_trainer = TrainerFactory.create_ble(_bridge)
 	_trainer.connect_device(DEV)
 	_bridge.pump()
