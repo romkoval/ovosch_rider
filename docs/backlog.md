@@ -298,6 +298,7 @@
 | T-168 | `[integration]` | 0.4 (после WRK-09) | Станок по Tacx FE-C over BLE: ERG, сопротивление, SIM | DEV-11 | T-167 | P0 | `done` |
 | T-161 | `[integration]` | 0.4 | Возможности FTMS-станка от самого станка, а не от констант Neo (+ доработка У-35/У-36) | DEV-10, DEV-02, DEV-11, WRK-02, WRK-04, WRK-07, FRD-04, NFR-01, NFR-06, REQ-WRK-09 | Н-61, T-152, Н-77 | P1 | `review` |
 | T-162 | `[game]` (сессия, HUD; отдаёт значение — `[integration]`-часть T-161) | 0.4 | Цель, ограниченная станком: HUD, сэмпл и FIT показывают фактическую (+ доработка У-37, `hud.md` п. 17) | DEV-10, HUD-10, HUD-01, HUD-13, WRK-03, WRK-08, LOC-01, LOC-05, WRK-02, WRK-07, HUD-07, HUD-11, NFR-06 | T-161, Н-77 | P1 | `review` |
+| T-177 | `[game]` (+ native macOS in `native/ble/`) | spike / вне волн | Spike: mini-HUD compact window over other apps on Mac | — (after spike) | — | P1 | `todo` |
 | T-175 | `[game]` | 0.4 | Шкала допуска «выше / ниже цели» в smart при ERG выкл и недоступен (один компонент с T-171) | HUD-02, WRK-09 | T-162, Н-77 | P1 | `todo` |
 | T-176 | `[game]` | 0.4 | Флаг ERG в сэмпле — по факту, а не по выбору игрока | WRK-08, LOC-01 | T-161, T-162, Н-77 | P1 | `todo` |
 
@@ -594,7 +595,7 @@
 - [T-157](tasks/T-157.md) — «Линия FTP» на превью плана: вид и поведение
 - [T-158](tasks/T-158.md) — «Линия FTP» на превью плана: реализация
 - [T-159](tasks/T-159.md) — Разовый длинный кадр в «Замере FPS»: прогрев шейдеров и пайплайнов
-### Путь к MVP — поток А «железо и публикация» (T-116a, T-116b, T-117..T-141, T-151..T-153, T-161, T-162, T-166..T-171, T-175, T-176; T-116a — технический хвост среза 0.3)
+### Путь к MVP — поток А «железо и публикация» (T-116a, T-116b, T-117..T-141, T-151..T-153, T-161, T-162, T-166..T-171, T-175, T-176; спайк T-177; T-116a — технический хвост среза 0.3)
 
 Общие правила. Ручные критерии закрываются протоколами владельца (T-117, T-127, T-137): tester пишет протокол, владелец заполняет, tester сверяет результат с REQ и отчитывается. Задача с ручной частью переходит в `done`, когда tester подтвердил `[авто]` и протокол владельца по её ручным пунктам — ✓ (или владелец явно отложил пункт). Секреты и токены не попадают ни в журнал, ни в CI-логи, ни в репозиторий (NFR-05, INF-03 п.5). Новый нативный код вне `native/ble/` (T-123, T-125, T-139, T-140) — только после ответа requirements на Н-28.
 
@@ -659,6 +660,11 @@ FTMS — REQ-DEV-10 (У-23); FE-C over BLE — REQ-DEV-11 (У-27: в MVP; У-28:
 
 - [T-175](tasks/T-175.md) — Шкала допуска «выше / ниже цели» в smart при ERG выкл и недоступен
 - [T-176](tasks/T-176.md) — Флаг ERG в сэмпле — по факту, а не по выбору игрока
+
+#### Mini-HUD over other apps on Mac — spike (T-177; owner's request 2026-10-10)
+Owner wants a compact training mode on Mac: a small always-on-top, borderless, semi-transparent window with workout metrics only, over a movie or a race stream. Spike first (Godot window flags + native `NSWindow` Spaces/level from the Objective-C++ GDExtension; 3D paused; session keeps running unfocused); requirements formalizes after the result, final look — game-designer later. **Developer queue: right after the T-161 / T-162 rework, before T-176, T-175** (does not write their shared files). Manual check — section 4, "Mini-HUD spike".
+
+- [T-177](tasks/T-177.md) — Spike: mini-HUD compact window over other apps on Mac
 ### Этап 8 — Публикация iOS и macOS (в контейнере — документы и заготовки)
 
 - [T-053](tasks/T-053.md) — Пакет публикации iOS/macOS
@@ -834,6 +840,13 @@ REQ-D3D-05 п.1, 3 (эталон — **MacBook Pro M1 Pro (MacBookPro18,3) вл�
 
 ### «BLE-отладка» (T-165; `done` 2026-10-10 по авто) — P1, Mac, release-сборка CI, Tacx Neo 2T и Quarq
 Частично пройдено владельцем (подключение, дерево сервисов, FE-C запись 0x31 принята станком). Осталось — шаги 2, 4–9 из `docs/tasks/T-165.md` («Приёмка», ручные шаги): скан без фильтра и с фильтром; подписка FEC2 (страницы 0x10/0x19); пресет «FE-C: мощность 150 Вт» — write_done ok и 0x47 «status pass»; «Прочитать 180A»; Quarq — 1818/2A63; «Скопировать журнал»; после «Назад» скан и автоподключение приложения работают как до входа. Вопрос по «Отключить» для устройства, подключённого и приложением, — Н-75.
+
+### Mini-HUD spike (T-177; after the developer hands it over) — P1, owner's Mac, build with T-177
+No REQ-ID yet (spike); results go into `docs/tasks/T-177.md` and to requirements.
+- Start a workout (emulator or Neo), switch to the mini-HUD. The overlay shows power + target, HR, cadence, step timer, next step; pause and skip-step buttons work; "back" restores the full HUD and the 3D world.
+- Overlay stays visible over full-screen video in: Safari, Chrome, Firefox, Apple TV app, QuickTime Player; over a normal (non-full-screen) window; after switching Spaces (Ctrl+←/→, Mission Control) and back. Note for each: visible yes/no.
+- Session keeps running unfocused for 10 minutes with video playing: ERG changes on step boundaries (felt on Neo or seen on the emulator), samples recorded (ride in history has no gaps), timer did not drift. Note whether video stuttered.
+- Send the diagnostic log and one photo/screenshot of the overlay over full-screen video.
 
 ## 5. Блокеры и вопросы к requirements
 
