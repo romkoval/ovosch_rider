@@ -1,7 +1,10 @@
 # ovosch-rider — правила для агентов
 
 Стек: Godot 4.7 (GDScript, статическая типизация), GUT 9.7.1 для тестов, GDExtension для BLE.
-Язык документов и комментариев — русский. Имена в коде — английские.
+Language (owner's decision 2026-10-10):
+- English: code, code comments, test names and assertion messages, commit messages, agent reasoning and agent reports, and every **new** entry in working docs (`docs/requirements.md`, `docs/backlog.md`, `docs/tasks/`, `docs/game/`, `docs/agent-state.md`).
+- Russian: messages to the owner and the user story map (`docs/story-map.md`). User-facing UI text stays localized via `assets/i18n` (ru/en).
+- Existing Russian text is not translated wholesale: translate a comment or doc passage only when you are changing that spot anyway.
 
 ## Команды
 - Тесты: `./scripts/test.sh` (нужен Godot 4.7; локально бинарник `/opt/godot/godot`, в CI качается сам).
