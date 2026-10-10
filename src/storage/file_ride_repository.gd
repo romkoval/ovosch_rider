@@ -487,7 +487,7 @@ func _write_index(profile_id: String, entries: Array[RideSummary]) -> bool:
 
 static func _speed_source_code(source: String) -> int:
 	match source:
-		SampleStream.SPEED_SOURCE_TRAINER:
+		Ride.SPEED_SOURCE_TRAINER_LEGACY:
 			return 1
 		SampleStream.SPEED_SOURCE_MODEL:
 			return 2
@@ -497,7 +497,7 @@ static func _speed_source_code(source: String) -> int:
 static func _speed_source_name(code: int) -> String:
 	match code:
 		1:
-			return SampleStream.SPEED_SOURCE_TRAINER
+			return Ride.SPEED_SOURCE_TRAINER_LEGACY
 		2:
 			return SampleStream.SPEED_SOURCE_MODEL
 	return ""

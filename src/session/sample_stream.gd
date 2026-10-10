@@ -13,8 +13,10 @@ extends RefCounted
 ## старше `STALE_AFTER_SEC` считается «нет данных» (REQ-WRK-08 крит. 4); сам
 ## поток строже — слот без телеметрии уже «нет данных».
 ##
-## Скорость: `speed_source` = "trainer" (поле скорости FTMS) или "model"
-## (`SpeedModel`, решение В-8); выбирается сессией один раз. `distance_m` —
+## Скорость — только расчётная по модели с уклоном (`SpeedModel`, `speed_source` = "model",
+## REQ-WRK-08 п.5, D3D-02 п.6, решение У-30): сессии всегда передают скорость модели, поле
+## скорости станка в их поток не попадает. Старые заезды со `speed_source` = "trainer"
+## (`Ride.SPEED_SOURCE_TRAINER_LEGACY`) читаются как есть, без пересчёта. `distance_m` —
 ## интеграл скорости по секундам.
 ##
 ## Свободная езда (REQ-FRD-07 крит. 4): сэмпл дополнительно несёт позицию на трассе —
@@ -22,7 +24,6 @@ extends RefCounted
 ## интеграл скорости), высоту h(s) `altitude_m` и уклон трассы `grade_pct`. Признак
 ## `has_route[i]`; у заездов по плану он `false`, высота и уклон — 0 (поля отсутствуют).
 
-const SPEED_SOURCE_TRAINER: String = "trainer"
 const SPEED_SOURCE_MODEL: String = "model"
 ## Порог «данные устарели» для HUD, с.
 const STALE_AFTER_SEC: int = 5
@@ -54,7 +55,7 @@ var altitude_m := PackedFloat32Array()
 var grade_pct := PackedFloat32Array()
 ## Сэмпл несёт позицию на трассе (дистанция от трассы, высота, уклон) — свободная езда.
 var has_route: Array[bool] = []
-## "trainer" | "model" | "" (ещё не выбран).
+## "model" у новых потоков; у старых заездов — как записано ("trainer" | "model" | "").
 var speed_source: String = ""
 
 
@@ -63,8 +64,9 @@ func size() -> int:
 
 
 ## Добавить слот секунды `t`. `sample` может быть null (нет телеметрии за секунду);
-## `hr_bpm < 0` — нет пульса. `model_speed_kmh >= 0` — расчётная скорость (источник
-## «модель»), заменяет скорость станка. `ages` — `{power, cadence, heart_rate}` в секундах.
+## `hr_bpm < 0` — нет пульса. `model_speed_kmh >= 0` — расчётная скорость модели (так пишут
+## сессии); < 0 — скорость берётся из `sample` как есть (готовые потоки: фикстуры, импорт).
+## `ages` — `{power, cadence, heart_rate}` в секундах.
 ## `route` — позиция на трассе для свободной езды (REQ-FRD-07 крит. 4):
 ## `{distance_m, altitude_m, grade_pct}`; `distance_m` (накопленная от старта) заменяет
 ## интеграл скорости. Пустой словарь — сэмпл без позиции (тренировка по плану).

@@ -31,8 +31,11 @@ extends RefCounted
 ##
 ## Поток 1 Гц (`samples`): слот секунды t-1 закрывается на `second_elapsed(t)`
 ## последней телеметрией за секунду; без телеметрии — «нет данных» плюс возраст
-## данных по источникам для HUD. Скорость — станка, если первый сэмпл нёс поле
-## скорости, иначе `SpeedModel` по мощности и весу (`speed_source`, решение В-8).
+## данных по источникам для HUD. Скорость — только `SpeedModel` по мощности, весу и уклону
+## g(s) трассы сцены (экран тренировки передаёт трассу сцены, по умолчанию `flat`; без трассы —
+## уклон 0; позиция `position` — интеграл скорости модели):
+## `speed_source` = «модель» у всех заездов, поле скорости станка не используется (У-30,
+## REQ-D3D-02 п.6, D3D-08 п.13, WRK-08 п.5). Станку уклон не передаётся — в плане ERG.
 ## На паузе слоты не пишутся, время паузы не идёт в elapsed.
 ##
 ## Журнал событий `events` (REQ-WRK-05 крит. 2, REQ-WRK-06 крит. 4, LOC-01):
@@ -51,10 +54,9 @@ extends RefCounted
 ## `set_resistance_level` ничего не меняют и событий не пишут; план идёт по таймеру, цель —
 ## плановая (с множителем), переходы и события — как в `smart` (WRK-09 п.3).
 ##
-## Скорость — по модели мощность/вес (D3D-02). Секунда без мощности — тяги нет: мощность в
+## Секунда без мощности — тяги нет: мощность в
 ## сэмпле «нет данных», скорость убывает по модели (`SpeedModel.step_without_power`, D3D-02 п.7,
 ## У-33) до остановки, таймер плана идёт.
-## В режиме `power_meter` источник скорости — всегда модель.
 
 enum State { IDLE, RUNNING, PAUSED, FINISHED }
 
@@ -107,6 +109,9 @@ var weight_kg: float = DEFAULT_WEIGHT_KG
 var started_at_unix: int = 0
 ## Режим сессии (`TrainerDevice.MODE_SMART` | `MODE_POWER_METER`), фиксирован при создании.
 var trainer_mode: String = TrainerDevice.MODE_SMART
+## Позиция на трассе сцены — только для уклона g(s) модели скорости (D3D-08 п.13). В сэмпл
+## плана позиция не пишется (поток и FIT плана — как раньше).
+var position: RoutePosition
 
 var _state: State = State.IDLE
 var _current_target_w: int = 0
@@ -129,14 +134,18 @@ var _cadence_age: int = -1
 var _hr_age: int = -1
 
 
+## `route_id` — трасса сцены (`RouteCatalog`), по её профилю берётся уклон модели скорости;
+## "" — без профиля (уклон 0: процедурная петля сцены, сессия без сцены).
 func _init(workout: Workout, device: TrainerDevice, ftp_w: int, intensity: float = 1.0,
-		rider_weight_kg: float = DEFAULT_WEIGHT_KG) -> void:
+		rider_weight_kg: float = DEFAULT_WEIGHT_KG, route_id: String = "") -> void:
 	trainer = device
 	weight_kg = rider_weight_kg
 	trainer_mode = device.trainer_mode()
+	samples.speed_source = SampleStream.SPEED_SOURCE_MODEL
+	position = RoutePosition.new(RouteCatalog.get_route(RouteCatalog.resolve_id(route_id)).profile \
+		if not route_id.is_empty() else null)
 	if not controls_trainer():
 		erg_enabled = false
-		samples.speed_source = SampleStream.SPEED_SOURCE_MODEL
 	executor = IntervalExecutor.new(workout, ftp_w, intensity)
 	executor.step_changed.connect(_on_step_changed)
 	executor.target_changed.connect(_on_target_changed)
@@ -447,19 +456,18 @@ func _on_target_changed(watts: int) -> void:
 
 func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec: int) -> void:
 	var sample := _latest_sample
-	if samples.speed_source.is_empty() and sample != null:
-		samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER if sample.has_speed else SampleStream.SPEED_SOURCE_MODEL
 	_power_age = 0 if sample != null and sample.has_power else (_power_age + 1 if _power_age >= 0 else -1)
 	_cadence_age = 0 if sample != null and sample.has_cadence else (_cadence_age + 1 if _cadence_age >= 0 else -1)
 	_hr_age = 0 if _latest_hr_bpm >= 0 else (_hr_age + 1 if _hr_age >= 0 else -1)
-	# Пока станок не показал поле скорости (или его нет) — скорость из модели.
-	var model_speed: float = -1.0
-	if samples.speed_source != SampleStream.SPEED_SOURCE_TRAINER:
-		if sample != null and sample.has_power:
-			model_speed = _speed_model.step(float(sample.power_w), weight_kg, 1.0)
-		else:
-			# Источников мощности нет — тяги нет: скорость убывает по модели (D3D-02 п.7, У-33).
-			model_speed = _speed_model.step_without_power(weight_kg, 1.0)
+	# Скорость — только модель с уклоном трассы (У-30); поле скорости станка не используется.
+	var grade: float = position.grade_pct()
+	var model_speed: float
+	if sample != null and sample.has_power:
+		model_speed = _speed_model.step(float(sample.power_w), weight_kg, 1.0, grade)
+	else:
+		# Источников мощности нет — тяги нет: скорость убывает по модели (D3D-02 п.7, У-33).
+		model_speed = _speed_model.step_without_power(weight_kg, 1.0, grade)
+	position.advance(model_speed, 1.0)
 	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, _current_target_w,
 		executor.current_step_index(), erg_enabled, model_speed,
 		{"power": _power_age, "cadence": _cadence_age, "heart_rate": _hr_age})
@@ -471,8 +479,6 @@ func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec:
 ## закрывается так же, как при `stop()` — её время идёт в `paused_total_sec`.
 func _on_executor_finished() -> void:
 	_close_pause()
-	if samples.speed_source.is_empty():
-		samples.speed_source = SampleStream.SPEED_SOURCE_MODEL
 	_log(EVENT_FINISH, executor.elapsed_sec())
 	_set_state(State.FINISHED)
 	session_finished.emit()

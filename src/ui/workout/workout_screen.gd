@@ -192,7 +192,8 @@ func start() -> bool:
 	var ftp: int = _profile.ftp_w if _profile != null else 200
 	var intensity: float = float(_profile.intensity_default) / 100.0 if _profile != null else 1.0
 	var weight: float = _profile.weight_kg if _profile != null else WorkoutSession.DEFAULT_WEIGHT_KG
-	_session = WorkoutSession.new(_workout, _trainer, ftp, intensity, weight)
+	# Уклон модели скорости — по трассе сцены (D3D-08 п.13, У-30).
+	_session = WorkoutSession.new(_workout, _trainer, ftp, intensity, weight, _ride_scene.route_id)
 	if _profile != null:
 		_session.resistance_level = WorkoutSession.snap_resistance(_profile.resistance_level_default)
 	_session.resistance_level_changed.connect(_on_resistance_level_changed)

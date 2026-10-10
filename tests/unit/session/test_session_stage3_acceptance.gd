@@ -636,15 +636,16 @@ func test_req_wrk_08_c4_five_seconds_without_data_is_no_data_and_age_counts() ->
 	assert_true(_session.samples.last_row()["has_power"])
 
 
+## WRK-08 п.5 в редакции У-30 (T-169): поле скорости станка есть — источник всё равно «модель».
 func test_req_wrk_08_c5_speed_source_trainer_when_speed_field_present() -> void:
 	_make([WorkoutStep.percent(20, 100.0)])
 	_session.start()
 	_tick(20)
-	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_TRAINER)
-	assert_eq(_session.metadata()["speed_source"], "trainer")
+	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_MODEL)
+	assert_eq(_session.metadata()["speed_source"], "model")
 	var row := _session.samples.last_row()
 	assert_true(row["has_speed"])
-	assert_almost_eq(float(row["speed_kmh"]), 34.0, 1.0, "скорость станка (эмулятор: 34 км/ч при 200 Вт)")
+	assert_between(float(row["speed_kmh"]), 31.0, 37.0, "скорость — модель (34 ± 3 км/ч при 200 Вт / 75 кг)")
 	assert_gt(float(_session.metadata()["distance_m"]), 0.0)
 
 
@@ -684,7 +685,7 @@ func test_req_wrk_08_sample_stream_dict_roundtrip_and_tolerant_from_dict() -> vo
 	var d := _session.samples.to_dict()
 	var back := SampleStream.from_dict(d)
 	assert_eq(back.to_dict(), d, "to_dict/from_dict без потерь")
-	assert_eq(back.speed_source, "trainer")
+	assert_eq(back.speed_source, "model")
 	# JSON-прогон: числа становятся float
 	var via_json: Dictionary = JSON.parse_string(JSON.stringify(d))
 	var back2 := SampleStream.from_dict(via_json)

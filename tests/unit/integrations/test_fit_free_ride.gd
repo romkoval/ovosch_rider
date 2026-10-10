@@ -80,9 +80,9 @@ func _workout_ride() -> Ride:
 	r.started_at_unix = STARTED
 	r.name = "FIT plan"
 	r.workout = WorkoutSerializer.to_dict(Workout.make("FIT plan", [WorkoutStep.watts(3, 200.0), WorkoutStep.watts(3, 250.0)] as Array[WorkoutStep]))
-	r.metadata = {"ftp_w": 200, "weight_kg": 75.0, "max_hr": 185, "speed_source": SampleStream.SPEED_SOURCE_TRAINER,
+	r.metadata = {"ftp_w": 200, "weight_kg": 75.0, "max_hr": 185, "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY,
 		"stopped_early": false, "elapsed_sec": 6, "paused_total_sec": 0.0, "in_progress": false, "recovered": false}
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in 6:
 		r.samples.append(i, TrainerSample.full(float(i + 1), 200 + i * 10, 85, 36.0), 140, 200, i / 3, true)
 	r.events = [{"type": WorkoutSession.EVENT_START, "at_sec": 0.0, "value": 0}]

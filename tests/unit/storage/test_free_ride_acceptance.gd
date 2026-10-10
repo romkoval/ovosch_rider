@@ -204,7 +204,7 @@ func test_req_frd_07_c3_workout_ride_keeps_type_workout_and_old_fields() -> void
 	r.started_at_unix = STARTED
 	r.name = "Sweet Spot"
 	r.workout = Workout.make("Sweet Spot", [WorkoutStep.watts(5, 200.0)] as Array[WorkoutStep]).to_dict()
-	r.metadata = {"ftp_w": 200, "workout_name": "Sweet Spot", "speed_source": SampleStream.SPEED_SOURCE_TRAINER}
+	r.metadata = {"ftp_w": 200, "workout_name": "Sweet Spot", "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY}
 	for i in 5:
 		r.samples.append(i, TrainerSample.full(float(i), 200, 85, 30.0), 140, 200, 0, true)
 	r.compute_summary()
@@ -361,8 +361,8 @@ func _old_workout_ride(n: int) -> Ride:
 	r.started_at_unix = STARTED - 86400
 	r.name = "Старый заезд"
 	r.workout = Workout.make("Старый заезд", [WorkoutStep.watts(n, 180.0)] as Array[WorkoutStep]).to_dict()
-	r.metadata = {"ftp_w": 200, "workout_name": "Старый заезд", "speed_source": SampleStream.SPEED_SOURCE_TRAINER}
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.metadata = {"ftp_w": 200, "workout_name": "Старый заезд", "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY}
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		var hr: int = -1 if i % 7 == 3 else 130 + i % 10
 		r.samples.append(i, TrainerSample.full(float(i), 170 + i % 20, 80 + i % 9, 28.0 + float(i % 5)), hr, 180, 0, true)
@@ -389,7 +389,7 @@ func test_req_frd_07_c4_v1_samples_written_by_old_format_read_without_errors() -
 		assert_eq(back.samples.has_heart_rate[i], r.samples.has_heart_rate[i], "#%d флаг пульса" % i)
 		assert_almost_eq(back.samples.distance_m[i], r.samples.distance_m[i], 1e-3, "#%d дистанция" % i)
 		assert_false(back.samples.has_route[i], "#%d без позиции на трассе" % i)
-	assert_eq(back.samples.speed_source, SampleStream.SPEED_SOURCE_TRAINER)
+	assert_eq(back.samples.speed_source, Ride.SPEED_SOURCE_TRAINER_LEGACY)
 	assert_eq(back.ride_type(), "workout")
 	assert_almost_eq(back.total_ascent_m(), 0.0, 1e-9, "набор старого заезда — 0")
 	var summary := RideSummary.compute(back.samples, 200, back.power_zones(), back.hr_zones())

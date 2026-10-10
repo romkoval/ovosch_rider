@@ -392,9 +392,9 @@ static func _synthetic_ride(profile: Profile, started: int, index: int) -> Ride:
 		r.workout = WorkoutSerializer.to_dict(Workout.make(r.name, steps, "zwo"))
 		r.metadata = {"workout_name": r.name, "workout_source": "zwo", "started_at_unix": started,
 			"ftp_w": profile.ftp_w, "weight_kg": profile.weight_kg, "max_hr": ACTIVE_MAX_HR, "intensity": 1.0,
-			"stopped_early": false, "speed_source": SampleStream.SPEED_SOURCE_TRAINER, "elapsed_sec": n,
+			"stopped_early": false, "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY, "elapsed_sec": n,
 			"paused_total_sec": 0.0}
-		r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+		r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 		for i in n:
 			var target: int = roundi(profile.ftp_w * (0.6 if i < n / 2 else 0.95))
 			r.samples.append(i, TrainerSample.full(float(i), target, 90, 30.0), 140, target, 0 if i < n / 2 else 1, true)

@@ -96,9 +96,9 @@ func _plan_ride(main: AppMain, started: int, n: int) -> Ride:
 	r.workout = WorkoutSerializer.to_dict(Workout.make("Порог", [WorkoutStep.watts(n, 200.0)] as Array[WorkoutStep], "zwo"))
 	r.metadata = {"workout_name": "Порог", "workout_source": "zwo", "started_at_unix": started, "ftp_w": p.ftp_w,
 		"weight_kg": p.weight_kg, "max_hr": 185, "intensity": 1.0, "stopped_early": false,
-		"speed_source": SampleStream.SPEED_SOURCE_TRAINER, "elapsed_sec": n, "paused_total_sec": 0.0,
+		"speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY, "elapsed_sec": n, "paused_total_sec": 0.0,
 		"in_progress": false, "recovered": false}
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		r.samples.append(i, TrainerSample.full(float(i), 200, 88, 32.0), 140, 200, 0, true)
 	r.events = [{"type": WorkoutSession.EVENT_START, "at_sec": 0.0, "value": 0}]

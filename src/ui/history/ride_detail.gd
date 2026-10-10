@@ -76,6 +76,10 @@ const CADENCE_HEIGHT_COMPACT: float = 96.0
 const ZONE_SWATCH: float = 12.0
 ## Меню «⋯»: отступ панели от правого края (поля AppBar), lp.
 const MENU_RIGHT_INSET: float = 24.0
+## Строка параметров заезда: без источника скорости (новые заезды) и с подписью «скорость: станок»
+## (старые заезды со скоростью станка, Н-72 (е)).
+const KEY_META: String = "ui.history.detail.meta_params"
+const KEY_META_LEGACY_SPEED: String = "ui.history.detail.meta"
 const KEY_ZONE_SHARE: String = "ui.plan.zones.share"
 const KEY_MENU_MORE: String = "ui.history.menu.more"
 const KEY_TARGET: String = "ui.history.detail.target"
@@ -679,10 +683,13 @@ func _render_summary_text(s: RideSummary) -> void:
 	}))
 	lines.append(tr("ui.history.detail.hr").format({"avg": number_text(s.avg_hr), "max": number_text(s.max_hr)}))
 	lines.append(tr("ui.history.detail.cadence").format({"avg": number_text(s.avg_cadence), "max": number_text(s.max_cadence)}))
-	var meta: Array[String] = [tr("ui.history.detail.meta").format({
+	# Подпись «скорость: станок» — только у старых заездов со скоростью станка; у новых скорость
+	# всегда по модели, подписи нет (WRK-08 п.5, У-30, предложение Н-72 (е)).
+	var legacy_speed: bool = _ride.speed_source() == Ride.SPEED_SOURCE_TRAINER_LEGACY
+	var meta: Array[String] = [tr(KEY_META_LEGACY_SPEED if legacy_speed else KEY_META).format({
 		"ftp": _ride.ftp_w(), "weight": "%.1f" % float(_ride.metadata.get("weight_kg", 0.0)),
 		"intensity": roundi(float(_ride.metadata.get("intensity", 1.0)) * 100.0),
-		"speed_source": tr("ui.history.speed_source.trainer") if _ride.speed_source() == SampleStream.SPEED_SOURCE_TRAINER else tr("ui.history.speed_source.model"),
+		"speed_source": tr("ui.history.speed_source.trainer"),
 	})]
 	var target := tr(KEY_TARGET).format({"target": number_text(s.avg_target_w)})
 	if _ride.is_free_ride():

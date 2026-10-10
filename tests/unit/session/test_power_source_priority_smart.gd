@@ -26,8 +26,6 @@ func _trainer() -> FakeTrainer:
 	t.power_noise_w = 0.0
 	t.cadence_noise_rpm = 0.0
 	t.power_tau_sec = 0.001
-	# Скорость станка до T-169 ещё может стать источником скорости плана; здесь — модель.
-	t.emit_speed = false
 	t.set_rider_power(180)
 	t.connect_device("fake")
 	return t

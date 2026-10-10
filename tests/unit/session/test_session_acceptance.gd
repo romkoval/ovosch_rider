@@ -749,7 +749,8 @@ func test_req_wrk_08_c2_silence_gives_no_data_slots_without_repeating_last() -> 
 	for i in range(10, 14):
 		assert_false(s.has_power[i], "слот %d — нет данных" % i)
 		assert_false(s.has_cadence[i])
-		assert_false(s.has_speed[i])
+		# Скорость — модель (У-30): без мощности тяги нет, она убывает, а не повторяется (У-33).
+		assert_true(s.speed_kmh[i] <= s.speed_kmh[i - 1] + 1e-4, "слот %d: скорость модели не растёт без мощности" % i)
 		assert_ne(s.power_w[i], last_power, "последнее значение не повторяется")
 	assert_true(s.has_power[14], "после тишины данные снова есть")
 	assert_eq(s.count_with_power(), 16)
@@ -770,7 +771,7 @@ func test_req_wrk_08_c3_several_values_in_one_second_keep_last() -> void:
 	var r := _session.samples.row(3)
 	assert_eq(r["power_w"], 333, "в сэмпл попало последнее значение мощности")
 	assert_eq(r["cadence_rpm"], 73)
-	assert_almost_eq(float(r["speed_kmh"]), 23.0, 1e-6)
+	assert_ne(float(r["speed_kmh"]), 23.0, "скорость станка в сэмпл не попадает (У-30) — модель")
 	assert_eq(r["heart_rate_bpm"], 103, "последний пульс")
 	_session.tick(1.0)
 	assert_false(_session.samples.has_power[4], "значение не «перетекает» в следующий слот")
@@ -814,7 +815,7 @@ func test_req_dev_08_c2_dropout_keeps_timer_and_writes_no_data_slots() -> void:
 	for i in range(20, 23):
 		assert_false(s.has_power[i], "слот %d: «нет данных», а не 0 как значение" % i)
 		assert_false(s.has_cadence[i])
-		assert_false(s.has_speed[i])
+		assert_true(s.speed_kmh[i] <= s.speed_kmh[i - 1] + 1e-4, "слот %d: скорость модели убывает без мощности (У-33)" % i)
 	assert_eq(s.target_w[21], 130, "цель и шаг в слоте по-прежнему известны")
 	assert_eq(s.step_index[21], 0)
 	assert_true(s.is_monotonic(), "меток не потеряно")

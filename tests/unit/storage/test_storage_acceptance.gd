@@ -55,7 +55,7 @@ static func _remove_tree(abs_path: String) -> void:
 ## Поток из списков значений; -1 в power/hr/cadence — «нет данных».
 static func _stream(powers: Array, hrs: Array = [], cadences: Array = [], step: int = 0) -> SampleStream:
 	var s := SampleStream.new()
-	s.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	s.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in powers.size():
 		var p: int = int(powers[i])
 		var hr: int = int(hrs[i]) if i < hrs.size() else -1
@@ -190,7 +190,7 @@ func test_req_loc_01_c1_ride_from_session_has_required_metadata_and_samples() ->
 	assert_almost_eq(float(m.get("intensity")), 1.0, 1e-6, "множитель")
 	assert_false(ride.stopped_early(), "не досрочно")
 	assert_almost_eq(ride.paused_total_sec(), 0.0, 1e-6)
-	assert_eq(ride.speed_source(), SampleStream.SPEED_SOURCE_TRAINER, "speed_source = станок (FakeTrainer отдаёт скорость)")
+	assert_eq(ride.speed_source(), SampleStream.SPEED_SOURCE_MODEL, "speed_source = модель, хотя FakeTrainer отдаёт скорость (У-30)")
 	assert_eq(ride.samples.size(), 40, "все сэмплы WRK-08")
 	assert_false(ride.is_in_progress())
 	assert_eq(ride.name, "Acceptance plan")

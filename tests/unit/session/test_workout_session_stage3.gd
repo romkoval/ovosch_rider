@@ -349,14 +349,15 @@ func test_intensity_snaps_and_is_stored_in_metadata_and_events() -> void:
 # REQ-WRK-08 крит. 4, 5: возраст данных и источник скорости
 # ---------------------------------------------------------------------------
 
+## WRK-08 п.5 (У-30, T-169): станок шлёт поле скорости — в сэмпле всё равно модель.
 func test_speed_source_trainer_when_trainer_sends_speed() -> void:
 	_make(_plan_150_250())
 	_session.start()
 	_ticks(5)
-	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_TRAINER, "REQ-WRK-08 крит. 5")
-	assert_eq(_session.metadata()["speed_source"], "trainer")
+	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_MODEL, "REQ-WRK-08 п.5: только модель")
+	assert_eq(_session.metadata()["speed_source"], "model")
 	assert_true(_session.samples.has_speed[3])
-	assert_gt(_session.samples.speed_kmh[3], 20.0, "скорость станка в сэмпле")
+	assert_lt(_session.samples.speed_kmh[3], 20.0, "плавный разгон модели, не скорость станка")
 	assert_gt(_session.samples.total_distance_m(), 0.0)
 
 
@@ -424,7 +425,7 @@ func test_sample_stream_to_dict_from_dict_roundtrip() -> void:
 	var json: Variant = JSON.parse_string(JSON.stringify(d))
 	var copy := SampleStream.from_dict(json)
 	assert_eq(copy.size(), 12)
-	assert_eq(copy.speed_source, "trainer")
+	assert_eq(copy.speed_source, "model")
 	assert_true(copy.is_monotonic())
 	for i in 12:
 		var a := _session.samples.row(i)
@@ -533,7 +534,7 @@ func test_metadata_contains_ride_fields() -> void:
 	assert_eq(m["ftp_w"], FTP)
 	assert_almost_eq(float(m["weight_kg"]), 82.0, 1e-9)
 	assert_almost_eq(float(m["intensity"]), 1.0, 1e-9)
-	assert_eq(m["speed_source"], "trainer")
+	assert_eq(m["speed_source"], "model")
 	assert_eq(m["elapsed_sec"], 20)
 	assert_eq(m["planned_sec"], 20)
 	assert_eq(m["sample_count"], 20)

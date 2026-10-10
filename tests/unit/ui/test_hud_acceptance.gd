@@ -246,12 +246,16 @@ func test_req_hud_05_c1_c3_formats_and_dashes() -> void:
 	var st := _second(150, 87, 33.456, 141)
 	assert_eq(st["hr_text"], "141")
 	assert_eq(st["cadence_text"], "87")
-	assert_eq(st["speed_text"], "33.5", "один знак после точки")
+	# Скорость на HUD — модель (У-30, T-169), поле скорости станка 33.456 не используется.
+	assert_eq(st["speed_text"], "%.1f" % float(_session.samples.last_row()["speed_kmh"]), "один знак после точки")
+	assert_eq(HudModel.format_speed(33.456), "33.5", "один знак после точки")
 	assert_eq(st["elapsed_text"], "00:01")
 	st = _second()
 	assert_eq(st["hr_text"], "—")
 	assert_eq(st["cadence_text"], "—")
-	assert_eq(st["speed_text"], "—")
+	assert_eq(st["speed_text"], "%.1f" % float(_session.samples.last_row()["speed_kmh"]),
+		"скорость модели есть и без мощности — тяги нет, она убывает (У-33)")
+	assert_eq(HudModel.format_speed(-1.0), "—", "нет скорости — прочерк")
 	assert_eq(st["power_text"], "150", "сглаженное ещё держится (1 из 3 слотов)")
 	assert_eq(HudModel.format_elapsed(59), "00:59")
 	assert_eq(HudModel.format_elapsed(3599), "59:59")

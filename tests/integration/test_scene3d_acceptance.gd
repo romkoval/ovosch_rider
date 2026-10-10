@@ -168,18 +168,21 @@ func test_observation_sharp_90deg_corner_dips_camera_distance_but_rider_stays_in
 
 
 # ===========================================================================
-# REQ-D3D-02 — скорость в сцене: станок или модель
+# REQ-D3D-02 — скорость в сцене: только модель (п.6, У-30)
 # ===========================================================================
 
+## D3D-02 п.6 (У-30, T-169): поле скорости станка ни на что не влияет — сцена едет со скоростью
+## модели из потока сессии.
 func test_req_d3d_02_c2_trainer_speed_is_used_when_speed_source_is_trainer() -> void:
+	_trainer.power_noise_w = 0.0
 	var s := _scene()
 	_bind(s, 200.0)
-	for i in 20:
+	for i in 40:
 		_second(s)
-	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_TRAINER)
+	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_MODEL, "источник скорости — модель")
 	var row := _session.samples.last_row()
-	assert_almost_eq(s.speed_kmh, float(row["speed_kmh"]), 1e-6, "скорость сцены = скорость станка из потока")
-	assert_almost_eq(s.speed_kmh, 34.0, 1.0, "эмулятор: 34 км/ч при 200 Вт")
+	assert_almost_eq(s.speed_kmh, float(row["speed_kmh"]), 1e-6, "скорость сцены = скорость модели из потока")
+	assert_almost_eq(s.speed_kmh, 34.0, 3.0, "200 Вт / 75 кг → 34 ± 3 км/ч по модели")
 	var d0 := s.distance_m
 	_second(s)
 	assert_almost_eq(s.distance_m - d0, s.speed_kmh / 3.6, 0.05, "дистанция интегрируется по скорости")

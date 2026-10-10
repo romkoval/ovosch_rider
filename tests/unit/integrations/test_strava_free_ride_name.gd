@@ -104,7 +104,7 @@ func _workout_ride(name: String) -> Ride:
 	r.started_at_unix = STARTED
 	r.name = name
 	r.workout = Workout.make(name, [WorkoutStep.watts(6, 200.0)] as Array[WorkoutStep]).to_dict()
-	r.metadata = {"ftp_w": 200, "speed_source": SampleStream.SPEED_SOURCE_TRAINER, "in_progress": false}
+	r.metadata = {"ftp_w": 200, "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY, "in_progress": false}
 	for i in 6:
 		r.samples.append(i, TrainerSample.full(float(i), 200, 85, 30.0), 140, 200, 0, true)
 	r.compute_summary()

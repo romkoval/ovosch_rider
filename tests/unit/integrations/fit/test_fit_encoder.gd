@@ -17,9 +17,9 @@ func _ride(n: int = 6, hr: bool = true) -> Ride:
 	r.started_at_unix = STARTED
 	r.name = "FIT plan"
 	r.workout = WorkoutSerializer.to_dict(Workout.make("FIT plan", [WorkoutStep.watts(3, 200.0), WorkoutStep.watts(3, 250.0)] as Array[WorkoutStep]))
-	r.metadata = {"ftp_w": FTP, "weight_kg": 75.0, "max_hr": 185, "speed_source": SampleStream.SPEED_SOURCE_TRAINER,
+	r.metadata = {"ftp_w": FTP, "weight_kg": 75.0, "max_hr": 185, "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY,
 		"stopped_early": false, "elapsed_sec": n, "paused_total_sec": 0.0, "in_progress": false, "recovered": false}
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		# Значения держатся в пределах uint8 FIT для пульса и каденса при любой длине потока.
 		var sample: TrainerSample = TrainerSample.full(float(i + 1), 200 + i * 10, 85 + i % 30, 36.0) if i != 2 else null
@@ -342,9 +342,10 @@ func test_session_ride_with_model_speed_has_speed_and_distance_in_records() -> v
 	assert_eq(res.count(D.MSG_EVENT), 4)
 
 
+## У-30 (T-169): поле скорости станка не попадает в заезд — в FIT скорость модели.
 func test_session_ride_with_trainer_speed_uses_trainer_values() -> void:
 	var ride := _session_ride(true)
-	assert_eq(ride.speed_source(), SampleStream.SPEED_SOURCE_TRAINER)
+	assert_eq(ride.speed_source(), SampleStream.SPEED_SOURCE_MODEL)
 	var res := _decode(ride)
 	var records := res.messages_of(D.MSG_RECORD)
 	var i: int = records.size() - 1

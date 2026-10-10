@@ -489,9 +489,9 @@ static func _plan_ride(profile: Profile, started: int, n: int) -> Ride:
 	r.workout = WorkoutSerializer.to_dict(Workout.make(r.name, steps, "zwo"))
 	r.metadata = {"workout_name": r.name, "workout_source": "zwo", "started_at_unix": started, "ftp_w": profile.ftp_w,
 		"weight_kg": 70.0, "max_hr": 185, "intensity": 1.0, "stopped_early": false,
-		"speed_source": SampleStream.SPEED_SOURCE_TRAINER, "elapsed_sec": n, "paused_total_sec": 0.0,
+		"speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY, "elapsed_sec": n, "paused_total_sec": 0.0,
 		"in_progress": false, "recovered": false}
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		var target: int = 150 if i < n / 2 else 250
 		r.samples.append(i, TrainerSample.full(float(i), target, 90, 30.0), 140, target, 0 if i < n / 2 else 1, true)

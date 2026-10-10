@@ -6,8 +6,8 @@ extends Node3D
 ## бордюром и отбойником, рельеф с холмами, деревья и трава, небо с облаками.
 ##
 ## Привязка к телеметрии — `bind(session, profile)`: на каждом закрытом слоте потока
-## (`second_elapsed`) читается последняя строка `samples`: скорость — станка, если
-## `speed_source == "trainer"`, иначе `SpeedModel.step(power, weight, 1 с)`; каденс → `Rider`.
+## (`second_elapsed`) читается последняя строка `samples`: скорость — из сэмпла (её считает модель
+## сессии с уклоном трассы, У-30; скорость станка не используется); каденс → `Rider`.
 ## Дистанция интегрируется в кадре по текущей скорости и переводится в позицию через
 ## `Track.sample_into` (без аллокаций в `_process`, REQ-D3D-05 крит. 4). Всё «тяжёлое»
 ## (дорога, обочина, рельеф, растительность, свет, небо) строится в `set_track()`/`_ready()`.
@@ -15,8 +15,8 @@ extends Node3D
 ## Трасса и окружение подменяются через интерфейсы `Track`/`EnvironmentSet` — цикл и
 ## привязка не знают конкретной сцены (REQ-D3D-06). Трасса каталога — `set_route(id)`
 ## (`RouteWorld`: план-схема + профиль + набор окружения); по умолчанию — `flat`, поэтому
-## тренировка по плану идёт на равнине (REQ-D3D-08 п.13). Скорость от уклона не зависит
-## (модель — ровная дорога, D3D-02), высота и продольный наклон велосипедиста — по профилю.
+## тренировка по плану идёт на равнине (REQ-D3D-08 п.13). Скорость — модель с уклоном g(s) трассы
+## в сессии (D3D-02, D3D-08 п.13, У-30), высота и продольный наклон велосипедиста — по профилю.
 
 const DEFAULT_ENVIRONMENT: String = "res://src/scene3d/default_environment.tres"
 const RIDER_SCENE: String = "res://src/scene3d/rider.tscn"
@@ -266,11 +266,13 @@ func is_bound() -> bool:
 	return _session != null
 
 
-## Прямое задание телеметрии (тесты, экран разработчика): скорость станка или модель.
+## Прямое задание телеметрии: `use_given_speed` — скорость `given_speed_kmh` (так сцену ведёт сессия:
+## скорость сэмпла — модель с уклоном трассы, У-30; так же — тесты и снимки); иначе — собственная
+## модель сцены для ровной дороги (D3D-02 п.1–4; тесты и экран разработчика без сессии).
 func apply_telemetry(power_w: int, has_power: bool, cadence: int, has_cadence: bool,
-		trainer_speed_kmh: float, use_trainer_speed: bool) -> void:
-	if use_trainer_speed:
-		speed_kmh = maxf(trainer_speed_kmh, 0.0)
+		given_speed_kmh: float, use_given_speed: bool) -> void:
+	if use_given_speed:
+		speed_kmh = maxf(given_speed_kmh, 0.0)
 	else:
 		speed_kmh = _speed_model.step(float(power_w), weight_kg, 1.0) if has_power \
 			else _speed_model.step_without_power(weight_kg, 1.0)
@@ -365,9 +367,9 @@ func _on_second_elapsed(_elapsed: int, _offset: int, _remaining: int) -> void:
 	if _session.get_state() == WorkoutSession.State.PAUSED:
 		return
 	var row: Dictionary = _session.samples.last_row()
-	var use_trainer: bool = _session.samples.speed_source == SampleStream.SPEED_SOURCE_TRAINER and bool(row["has_speed"])
+	# Скорость сэмпла — модель сессии с уклоном трассы (У-30): сцена не считает свою.
 	apply_telemetry(int(row["power_w"]), bool(row["has_power"]), int(row["cadence_rpm"]), bool(row["has_cadence"]),
-		float(row["speed_kmh"]), use_trainer)
+		float(row["speed_kmh"]) if bool(row["has_speed"]) else 0.0, true)
 
 
 ## Пауза: велосипедист останавливается (скорость и каденс — 0, дистанция не растёт);

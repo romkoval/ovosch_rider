@@ -263,6 +263,7 @@ ui.history.detail.power,Мощность: средняя {avg} Вт · NP {np} �
 ui.history.detail.hr,Пульс: средний {avg} · макс {max},Heart rate: avg {avg} · max {max}
 ui.history.detail.cadence,Каденс: средний {avg} · макс {max},Cadence: avg {avg} · max {max}
 ui.history.detail.meta,FTP {ftp} Вт · вес {weight} кг · интенсивность {intensity} % · скорость: {speed_source},FTP {ftp} W · weight {weight} kg · intensity {intensity} % · speed: {speed_source}
+ui.history.detail.meta_params,FTP {ftp} Вт · вес {weight} кг · интенсивность {intensity} %,FTP {ftp} W · weight {weight} kg · intensity {intensity} %
 ui.history.detail.strava,Strava: {status},Strava: {status}
 ui.history.detail.stopped_early,(завершён досрочно),(ended early)
 ui.history.detail.recovered,(восстановлен после сбоя),(recovered after a crash)
@@ -270,7 +271,6 @@ ui.history.detail.zones_power,Время в зонах мощности,Time in 
 ui.history.detail.zones_hr,Время в зонах пульса,Time in heart-rate zones
 ui.history.chart.cadence,Каденс,Cadence
 ui.history.speed_source.trainer,станок,trainer
-ui.history.speed_source.model,модель,model
 ui.history.export,Экспорт FIT,Export FIT
 ui.history.export.dialog_title,Сохранить FIT-файл,Save FIT file
 ui.history.export.save,Сохранить,Save

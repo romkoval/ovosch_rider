@@ -214,7 +214,7 @@ static func decode(bytes: PackedByteArray) -> MiniFit:
 
 static func _stream(powers: Array, hrs: Array = [], cadences: Array = [], speeds: Array = [], steps: Array = []) -> SampleStream:
 	var s := SampleStream.new()
-	s.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	s.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in powers.size():
 		var p: int = int(powers[i])
 		var hr: int = int(hrs[i]) if i < hrs.size() else -1
@@ -499,19 +499,21 @@ func test_req_loc_05_c2_two_pauses() -> void:
 	assert_eq(MiniFit.field(rec[99], F_TIMESTAMP) + FIT_EPOCH, START_UNIX + 99 + 12, "последний сэмпл сдвинут на обе паузы")
 
 
+## LOC-05 п.2 в редакции У-30 (T-169): станок шлёт поле скорости — в FIT всё равно скорость модели.
 func test_req_loc_05_c2_speed_follows_speed_source_trainer_vs_model() -> void:
 	var plan := Workout.make("Speed", [WorkoutStep.watts(10, 150.0)], "zwo")
 	var trainer_ride := _session_ride(plan, 150, true)
 	assert_not_null(trainer_ride)
+	var with_field: PackedFloat32Array = PackedFloat32Array()
 	if trainer_ride != null:
-		assert_eq(trainer_ride.speed_source(), SampleStream.SPEED_SOURCE_TRAINER)
+		assert_eq(trainer_ride.speed_source(), SampleStream.SPEED_SOURCE_MODEL, "поле скорости станка не используется")
 		var fit := decode(FitEncoder.encode(trainer_ride))
 		assert_true(fit.ok, fit.error)
 		var rec := fit.of(G_RECORD)
 		assert_eq(rec.size(), 10)
 		for i in rec.size():
-			assert_eq(MiniFit.field(rec[i], REC_SPEED), roundi(trainer_ride.samples.speed_kmh[i] / 3.6 * 1000.0), "скорость станка в record %d" % i)
-			assert_gt(MiniFit.field(rec[i], REC_SPEED), 0)
+			assert_eq(MiniFit.field(rec[i], REC_SPEED), roundi(trainer_ride.samples.speed_kmh[i] / 3.6 * 1000.0), "скорость модели в record %d" % i)
+		with_field = trainer_ride.samples.speed_kmh
 	_recorder.dispose()
 	_recorder = null
 	_repo = FileRideRepository.new(_dir + "model/")
@@ -530,6 +532,9 @@ func test_req_loc_05_c2_speed_follows_speed_source_trainer_vs_model() -> void:
 				any_speed = true
 		assert_true(any_speed, "модель даёт ненулевую скорость при 150 Вт")
 		assert_eq(MiniFit.field(rec[9], REC_DISTANCE), roundi(model_ride.samples.total_distance_m() * 100.0), "дистанция = интеграл скорости модели")
+		if with_field.size() == model_ride.samples.size():
+			for i in with_field.size():
+				assert_almost_eq(with_field[i], model_ride.samples.speed_kmh[i], 0.01, "с полем скорости и без — одно и то же (%d)" % i)
 
 
 func test_req_loc_05_c2_laps_per_plan_step_from_session() -> void:

@@ -110,11 +110,11 @@ func _ride(profile_id: String, name: String, started: int, source: String, n: in
 	r.started_at_unix = started
 	r.name = name
 	r.workout = Workout.make(name, [WorkoutStep.watts(n, 200.0)] as Array[WorkoutStep]).to_dict()
-	r.metadata = {"ftp_w": 200, "weight_kg": 75.0, "max_hr": 185, "speed_source": SampleStream.SPEED_SOURCE_TRAINER,
+	r.metadata = {"ftp_w": 200, "weight_kg": 75.0, "max_hr": 185, "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY,
 		"stopped_early": false, "elapsed_sec": n, "paused_total_sec": 0.0, "in_progress": false, "recovered": false}
 	if not source.is_empty():
 		r.metadata[Ride.KEY_TRAINER_SOURCE] = source
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		r.samples.append(i, TrainerSample.full(float(i + 1), 200, 88, 36.0), 140, 200, 0, true)
 	r.events = [{"type": WorkoutSession.EVENT_START, "at_sec": 0.0, "value": 0}]

@@ -73,9 +73,9 @@ func _ride(name: String = "Sweet Spot", n: int = 6, started: int = STARTED, in_p
 	r.name = name
 	r.description = "3x10 sweet spot" if not name.is_empty() else ""
 	r.workout = Workout.make(name, [WorkoutStep.watts(3, 200.0), WorkoutStep.watts(3, 250.0)] as Array[WorkoutStep]).to_dict()
-	r.metadata = {"ftp_w": 200, "weight_kg": 75.0, "max_hr": 185, "speed_source": SampleStream.SPEED_SOURCE_TRAINER,
+	r.metadata = {"ftp_w": 200, "weight_kg": 75.0, "max_hr": 185, "speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY,
 		"stopped_early": false, "elapsed_sec": n, "paused_total_sec": 0.0, "in_progress": in_progress, "recovered": false}
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		r.samples.append(i, TrainerSample.full(float(i + 1), 200 + i * 10, 85 + i % 30, 36.0), 140 + i % 40, 200, i / 3, true)
 	r.events = [{"type": WorkoutSession.EVENT_START, "at_sec": 0.0, "value": 0}]

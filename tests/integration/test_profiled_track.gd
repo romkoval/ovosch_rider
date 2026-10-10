@@ -374,22 +374,37 @@ func test_d3d_02_04_speed_model_and_cadence_on_each_route() -> void:
 		assert_false(s.rider().is_pedaling(), "%s: каденс 0 — накат" % id)
 
 
-func test_d3d_08_13_speed_does_not_depend_on_grade_on_flat_route() -> void:
-	var s := _scene(RouteCatalog.FLAT)
+## D3D-08 п.13 в редакции У-30 (T-169): план на `flat` — скорость модели с уклоном g(s) этой трассы;
+## на участке с наибольшим уклоном установившаяся скорость ниже, чем на участке с наименьшим, и на
+## каждом участке равна модели для его g(s). Станку уклон не уходит (в плане — ERG).
+func test_d3d_08_13_plan_on_flat_speed_follows_route_grade() -> void:
 	var t := _track(RouteCatalog.FLAT)
 	var pts := _special_points(t)
 	var speeds := PackedFloat64Array()
 	for at in [pts[0], pts[1]]:
-		s.distance_m = at
-		s.apply_telemetry(0, false, 0, true, 0.0, true)
-		s.apply_telemetry(180, true, 90, true, 0.0, false)
-		for i in 90:
-			s.apply_telemetry(180, true, 90, true, 0.0, false)
-		speeds.append(s.speed_kmh)
-		s.advance(1e-4)
-		var h: float = t.profile.height_at(s.distance_m)
-		assert_almost_eq(s.rider_position().y, h, 0.05, "высота велосипедиста по профилю на s=%.0f" % at)
-	assert_almost_eq(speeds[0], speeds[1], 0.1, "скорость на макс. (%.1f %%) и мин. уклоне одинакова" % t.profile.grade_at(pts[0]))
+		var trainer := FakeTrainer.new(3)
+		trainer.connect_delay_sec = 0.0
+		trainer.power_noise_w = 0.0
+		trainer.power_tau_sec = 0.001
+		trainer.connect_device("fake")
+		var s := WorkoutSession.new(Workout.make("flat", [WorkoutStep.watts(120, 180.0)] as Array[WorkoutStep]),
+			trainer, 200, 1.0, 75.0, RouteCatalog.FLAT)
+		# Старт чуть раньше точки: к ней модель успевает установиться.
+		s.position.reset(at - 60.0)
+		s.start()
+		var ref := SpeedModel.new()
+		for i in 30:
+			var g: float = s.position.grade_pct()
+			s.tick(1.0)
+			var row := s.samples.last_row()
+			var want: float = ref.step(float(row["power_w"]), 75.0, 1.0, g) if row["has_power"] \
+				else ref.step_without_power(75.0, 1.0, g)
+			assert_almost_eq(float(row["speed_kmh"]), want, 0.1, "s=%.0f, сэмпл %d: модель для g(s)=%.2f %%" % [at, i, g])
+		speeds.append(float(s.samples.last_row()["speed_kmh"]))
+		for c in trainer.commands:
+			assert_ne(str(c.get("type", "")), "simulation", "станку уклон не уходит")
+	assert_lt(speeds[0], speeds[1], "на макс. уклоне (%.1f %%) скорость ниже, чем на мин. (%.1f %%)"
+		% [t.profile.grade_at(pts[0]), t.profile.grade_at(pts[1])])
 
 
 func test_d3d_07_c2_feet_on_pedals_and_c3_lean_in_tightest_turn_on_each_route() -> void:

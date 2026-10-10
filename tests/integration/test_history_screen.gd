@@ -66,9 +66,9 @@ func _ride(profile: Profile, started_at: int, n: int, name: String, power: int =
 	r.workout = WorkoutSerializer.to_dict(Workout.make(name, [WorkoutStep.watts(n, float(power))] as Array[WorkoutStep], "zwo"))
 	r.metadata = {"workout_name": name, "workout_source": "zwo", "started_at_unix": started_at, "ftp_w": profile.ftp_w,
 		"weight_kg": profile.weight_kg, "max_hr": profile.max_hr, "intensity": 1.0, "stopped_early": false,
-		"speed_source": SampleStream.SPEED_SOURCE_TRAINER, "elapsed_sec": n, "paused_total_sec": 0.0,
+		"speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY, "elapsed_sec": n, "paused_total_sec": 0.0,
 		"in_progress": false, "recovered": false}
-	r.samples.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	r.samples.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		var sample: TrainerSample = TrainerSample.full(float(i + 1), power, 90, 36.0) if i != 2 else null
 		r.samples.append(i, sample, 150, power, 0, true)

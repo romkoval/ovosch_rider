@@ -71,7 +71,7 @@ func test_atomic_file_unopenable_tmp_keeps_previous_content() -> void:
 
 func _stream(n: int) -> SampleStream:
 	var s := SampleStream.new()
-	s.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	s.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		s.append(i, TrainerSample.full(float(i + 1), 200 + i, 90, 30.0), 140, 210, 0, true, -1.0, {})
 	return s

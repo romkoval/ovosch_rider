@@ -281,7 +281,7 @@ static func _code_lines(path: String) -> Array[String]:
 ## Минимальный заезд с сэмплами для `FitEncoder.encode` (REQ-STR-02 крит. 2).
 func _ride_with_samples(n: int) -> Ride:
 	var s := SampleStream.new()
-	s.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	s.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		var smp := TrainerSample.new()
 		smp.has_power = true

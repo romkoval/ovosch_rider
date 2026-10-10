@@ -5,7 +5,7 @@ extends RefCounted
 ## Собирается из `WorkoutSession` и `Profile` (`from_session`): план в виде
 ## словаря `WorkoutSerializer.to_dict` (название и источник плана — LOC-01 крит. 1),
 ## метаданные сессии (`WorkoutSession.metadata()`: FTP, вес, множитель,
-## `speed_source` по В-8, досрочность) плюс `max_hr` и границы зон профиля на
+## `speed_source` — модель, У-30; досрочность) плюс `max_hr` и границы зон профиля на
 ## момент заезда (чтобы сводка и восстановление считали зоны «как тогда»,
 ## LOC-04 крит. 5), журнал событий (пауза/пропуск/ERG/обрыв — LOC-01 крит. 4),
 ## поток сэмплов и сводка.
@@ -23,6 +23,9 @@ extends RefCounted
 ## `total_ascent_m` (набор — по сэмплам, `SampleStream.total_ascent_m`). Заезды,
 ## записанные до появления типа, читаются как `workout` (миграция не нужна).
 ##
+## Источник скорости `metadata.speed_source`: у новых заездов всегда `model` (У-30, WRK-08 п.5);
+## старые заезды с `trainer` (`SPEED_SOURCE_TRAINER_LEGACY`) читаются как есть, без пересчёта.
+##
 ## Источник станка `metadata.trainer_source` (T-160, Н-59): `ble` — реальное устройство,
 ## `emulator` — эмулятор станка; пишет сессия по `TrainerDevice.trainer_source()`.
 ## Это ось «откуда данные»; режим сессии `trainer_mode` — отдельное поле. Заезды без поля (записанные до T-160) и с неизвестным значением — `ble`: угадывать
@@ -38,6 +41,8 @@ extends RefCounted
 ## `started_at_unix: int` и метод `metadata() -> Dictionary` (для свободной езды — с
 ## `ride_type = free_ride`, `route_id`, `sim_steepness_start_pct`; см. `free_ride_metadata`).
 
+## Источник скорости старых заездов «станок» (до У-30): только чтение и подпись в истории.
+const SPEED_SOURCE_TRAINER_LEGACY: String = "trainer"
 const SCHEMA_VERSION: int = 1
 
 const RIDE_TYPE_WORKOUT: String = "workout"

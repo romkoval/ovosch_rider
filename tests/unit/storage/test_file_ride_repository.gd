@@ -49,7 +49,7 @@ func _abs(rel: String) -> String:
 ## Поток с данными и пропусками: слот 2 без телеметрии, слот 3 без пульса.
 func _stream(n: int = 6) -> SampleStream:
 	var s := SampleStream.new()
-	s.speed_source = SampleStream.SPEED_SOURCE_TRAINER
+	s.speed_source = Ride.SPEED_SOURCE_TRAINER_LEGACY
 	for i in n:
 		var sample: TrainerSample = TrainerSample.full(float(i + 1), 200 + i, 90, 30.0 + i) if i != 2 else null
 		var hr: int = 140 + i if i != 3 else -1
@@ -68,7 +68,7 @@ func _ride(profile_id: String = PROFILE_A, started_at: int = 1700000000, n: int 
 	r.metadata = {
 		"workout_name": name, "workout_source": "zwo", "started_at_unix": started_at,
 		"ftp_w": FTP, "weight_kg": 75.5, "max_hr": 185, "intensity": 1.05, "stopped_early": true,
-		"speed_source": SampleStream.SPEED_SOURCE_TRAINER, "elapsed_sec": n, "paused_total_sec": 3.0,
+		"speed_source": Ride.SPEED_SOURCE_TRAINER_LEGACY, "elapsed_sec": n, "paused_total_sec": 3.0,
 		"in_progress": false, "recovered": false,
 	}
 	r.events = [
@@ -107,7 +107,7 @@ func test_save_and_get_ride_round_trip_metadata_events_and_samples() -> void:
 	assert_eq(back.max_hr(), 185)
 	assert_almost_eq(float(back.metadata["intensity"]), 1.05, 1e-6)
 	assert_true(back.stopped_early())
-	assert_eq(back.speed_source(), SampleStream.SPEED_SOURCE_TRAINER, "speed_source (В-8)")
+	assert_eq(back.speed_source(), Ride.SPEED_SOURCE_TRAINER_LEGACY, "speed_source (В-8)")
 	# План
 	assert_eq(back.workout["name"], "Test ride")
 	assert_eq((back.workout["steps"] as Array).size(), 1)
@@ -118,7 +118,7 @@ func test_save_and_get_ride_round_trip_metadata_events_and_samples() -> void:
 	assert_eq(back.events[5]["value"], "RECONNECTING")
 	# Сэмплы LOC-01 крит. 2
 	assert_eq(back.samples.size(), 6)
-	assert_eq(back.samples.speed_source, SampleStream.SPEED_SOURCE_TRAINER)
+	assert_eq(back.samples.speed_source, Ride.SPEED_SOURCE_TRAINER_LEGACY)
 	for i in 6:
 		assert_eq_deep(back.samples.row(i), ride.samples.row(i))
 
@@ -340,7 +340,7 @@ func test_append_samples_incrementally_equals_full_save() -> void:
 	assert_eq(back.samples.size(), 25)
 	for i in 25:
 		assert_eq_deep(back.samples.row(i), full.row(i))
-	assert_eq(back.samples.speed_source, SampleStream.SPEED_SOURCE_TRAINER)
+	assert_eq(back.samples.speed_source, Ride.SPEED_SOURCE_TRAINER_LEGACY)
 
 
 func test_append_with_mismatched_offset_rewrites_whole_stream() -> void:

@@ -146,10 +146,10 @@ func test_60s_at_200w_trainer_speed_gives_distance_v_t_within_10pct() -> void:
 	var start := s.rider_position()
 	for i in 60:
 		_second(s)
-	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_TRAINER)
-	assert_almost_eq(s.speed_kmh, 34.0, 1.0, "скорость станка 34 км/ч при 200 Вт")
-	var expected := 34.0 / 3.6 * 60.0
-	assert_almost_eq(s.distance_m, expected, expected * 0.10, "дистанция ≈ v·t ± 10 %%: %.1f" % s.distance_m)
+	assert_eq(_session.samples.speed_source, SampleStream.SPEED_SOURCE_MODEL, "скорость станка не используется (У-30)")
+	assert_almost_eq(s.speed_kmh, 34.0, 3.0, "модель: 34 ± 3 км/ч при 200 Вт")
+	var expected := _session.samples.total_distance_m()
+	assert_almost_eq(s.distance_m, expected, expected * 0.10, "дистанция сцены ≈ дистанции потока ± 10 %%: %.1f" % s.distance_m)
 	assert_gt(s.rider_position().distance_to(start), 100.0, "позиция на трассе изменилась")
 
 
