@@ -39,6 +39,9 @@ if platform in ("macos", "ios"):
         has_platform_backend = True
         env.Append(CPPDEFINES=["OVOSCH_BLE_HAS_PLATFORM_BACKEND"])
         env.Append(LINKFLAGS=["-framework", "CoreBluetooth", "-framework", "Foundation"])
+        if platform == "macos":
+            # Mini-HUD overlay window (T-177): NSWindow level and Spaces behaviour.
+            env.Append(LINKFLAGS=["-framework", "AppKit"])
         # ARC — только для Objective-C++ единиц трансляции; чистый C++ собирается без него.
         objc_env = env.Clone()
         objc_env.Append(CCFLAGS=["-fobjc-arc"])

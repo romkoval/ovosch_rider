@@ -102,6 +102,11 @@ ui.workout.erg_off,ERG выкл,ERG off
 ui.workout.erg_unavailable,ERG недоступен: станок не принимает цель мощности,ERG unavailable: the trainer does not accept a power target
 ui.workout.notice.erg_unavailable,"Станок не поддерживает ERG — фиксированное сопротивление, цель держите сами","Trainer does not support ERG — fixed resistance, hold the target yourself"
 ui.workout.notice.erg_unavailable_short,Нет ERG: держите цель сами,No ERG: hold the target yourself
+ui.workout.mini_hud.enter,Мини,Mini
+ui.workout.mini_hud.enter_hint,"Компактное окно поверх других приложений","Compact window over other apps"
+ui.workout.mini_hud.exit,Полный экран,Full screen
+ui.workout.mini_hud.target,цель {value} Вт,target {value} W
+ui.workout.mini_hud.next,Далее: {line},Next: {line}
 ui.workout.finished,Тренировка завершена,Workout finished
 ui.workout.summary,{name} · {time} · {distance} км · сэмплов {samples} {early},{name} · {time} · {distance} km · samples {samples} {early}
 ui.workout.stopped_early,(завершена досрочно),(ended early)

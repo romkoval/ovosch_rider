@@ -19,6 +19,11 @@ native/
     src/ble_backend.h         — чистый C++ интерфейс платформенного backend'а
     src/null_backend.{h,cpp}  — заглушка (is_available() == false), собирается везде
     src/platform/apple/apple_backend.{h,mm} — CoreBluetooth-backend (T-022, Objective-C++, ARC)
+    src/ovosch_window.{h,cpp}  — class OvoschWindow: mini-HUD overlay window (T-177 spike):
+                                 set_overlay(handle, enabled), begin_activity(reason), end_activity()
+    src/window_overlay.h       — its plain C++ platform interface; window_overlay_null.cpp — no-op
+    src/platform/apple/window_overlay.mm — macOS: NSWindow canJoinAllSpaces | fullScreenAuxiliary,
+                                 NSStatusWindowLevel; App Nap guard (NSProcessInfo activity)
 ```
 
 ## Зависимости

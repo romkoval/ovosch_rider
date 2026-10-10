@@ -5,6 +5,7 @@
 #include <godot_cpp/godot.hpp>
 
 #include "ovosch_ble.h"
+#include "ovosch_window.h"
 
 using namespace godot;
 
@@ -13,6 +14,7 @@ void initialize_ovosch_ble_module(ModuleInitializationLevel p_level) {
 		return;
 	}
 	GDREGISTER_CLASS(ovosch::OvoschBle);
+	GDREGISTER_CLASS(ovosch::OvoschWindow);
 }
 
 void uninitialize_ovosch_ble_module(ModuleInitializationLevel p_level) {

@@ -45,6 +45,13 @@ extends Control
 ## Режим сессии без управляемого станка (`power_meter`, REQ-WRK-09 п.5 (д), (е)): на панели
 ## инструментов нет ERG и сопротивления, E без действия (`HudToolbar.set_controls_trainer`);
 ## фишка режима вместо «ERG» — «БЕЗ СТАНКА» (точка `hud.text2`).
+##
+## Mini-HUD (T-177 spike): `enter_mini_hud()` turns the app window into a small always-on-top
+## overlay (`OverlayWindow`) with `MiniHud` — the same `HudModel` numbers, pause, skip, "back to
+## full"; the 3D world stops rendering, the session and the ticker keep running. `exit_mini_hud()`
+## restores the window and the full HUD. The switch button left of the pause button is shown where
+## the overlay is supported (`mini_hud_supported`: the native helper is loaded and available —
+## macOS builds with the extension).
 
 const UNIT_KEY: String = "ui.workout.unit_w"
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
@@ -55,6 +62,8 @@ const LIST_REMAINING_KEY: String = "ui.hud.interval_list.remaining"
 const LIST_STEP_OF_KEY: String = "ui.hud.interval_list.step_of"
 const CHART_LEGEND_POWER_KEY: String = "ui.hud.chart.legend_power"
 const CHART_LEGEND_HR_KEY: String = "ui.hud.chart.legend_hr"
+## Gap between the mini-HUD switch and the pause button, lp HUD (T-177).
+const MINI_BUTTON_GAP: float = 8.0
 
 ## Сессия создана и сейчас стартует — владелец подключает запись заезда (`RideRecorder`, REQ-LOC-07).
 signal session_created(session: WorkoutSession)
@@ -97,6 +106,14 @@ var _ride_id: String = ""
 var _frame: HudScreenFrame
 ## Статистика кадров заезда в журнал (T-116a): от старта сессии до FINISHED.
 var _frame_probe: FrameStatsProbe
+## Mini-HUD (T-177): button on the full HUD, the plate, the window mode, saved 3D state.
+var mini_hud_supported: bool = OverlayWindow.native_available()
+## Window turned into the overlay (null — this screen's window; tests pass an embedded window).
+var mini_hud_window: Window = null
+var _mini_button: Button
+var _mini_hud: MiniHud
+var _overlay: OverlayWindow
+var _mini_saved: Dictionary = {}
 
 @onready var _ride_scene: RideScene = %RideScene
 @onready var _viewport_container: SubViewportContainer = %ViewportContainer
@@ -168,6 +185,7 @@ func _ready() -> void:
 	visibility_changed.connect(_update_hotkeys)
 	get_viewport().size_changed.connect(_on_resized)
 	_pause_button.pressed.connect(toggle_pause)
+	_build_mini_hud()
 	# Итог: кнопки — цель `touch_hud` (их цепляет `RideSummaryCard`), узлы — `%HomeButton`, `%HistoryButton`.
 	_summary_root.share_unique_names(self)
 	_summary_root.setup_stats(SUMMARY_STATS)
@@ -588,6 +606,8 @@ func refresh() -> void:
 		_stop_pending = false
 		_pause_overlay.hide_overlay()
 		_toolbar.set_paused(true)
+		if is_mini_hud():
+			exit_mini_hud()  # the summary is shown in the full window
 		_render_summary()
 	else:
 		_render()
@@ -615,6 +635,7 @@ func _render() -> void:
 	_render_toolbar(s, paused)
 	_render_pause(paused)
 	_layout_hud()
+	_render_mini(s, segments)
 
 
 ## Состояние для панели цифр: `HudModel.state()` + доля шага, зона цели, каденс шага.
@@ -801,6 +822,122 @@ func _layout_hud() -> void:
 
 func _place_next_chip() -> void:
 	_frame.place_next_chip(_next_chip)
+	_place_mini_button()
+
+
+# ---------------------------------------------------------------------------
+# Mini-HUD (T-177 spike)
+# ---------------------------------------------------------------------------
+
+func _build_mini_hud() -> void:
+	_mini_button = Button.new()
+	_mini_button.name = "MiniHudButton"
+	_mini_button.theme_type_variation = &"HudButton"
+	_mini_button.text = "ui.workout.mini_hud.enter"
+	_mini_button.tooltip_text = "ui.workout.mini_hud.enter_hint"
+	_mini_button.focus_mode = Control.FOCUS_NONE
+	_mini_button.visible = mini_hud_supported
+	_hud_root.add_child(_mini_button)
+	_mini_button.pressed.connect(_on_mini_button_pressed)
+	_mini_hud = MiniHud.new()
+	_mini_hud.visible = false
+	add_child(_mini_hud)
+	_mini_hud.pause_requested.connect(toggle_pause)
+	_mini_hud.skip_requested.connect(skip_step)
+	_mini_hud.exit_requested.connect(exit_mini_hud)
+
+
+func mini_hud() -> MiniHud:
+	return _mini_hud
+
+
+func mini_hud_button() -> Button:
+	return _mini_button
+
+
+## Window mode of the current mini-HUD (null — full HUD).
+func overlay_window() -> OverlayWindow:
+	return _overlay
+
+
+func is_mini_hud() -> bool:
+	return _overlay != null and _overlay.is_active()
+
+
+## Switch to the mini-HUD: overlay window, 3D world not rendered, session untouched.
+## `native_helper` — the platform helper (null — `OvoschWindow` if the extension is loaded).
+func enter_mini_hud(native_helper: Object = null) -> bool:
+	if is_mini_hud() or not _is_live():
+		return false
+	_mini_saved = {
+		"update_mode": _viewport.render_target_update_mode,
+		"process_mode": _ride_scene.process_mode,
+	}
+	_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_ride_scene.process_mode = Node.PROCESS_MODE_DISABLED
+	_overlay = OverlayWindow.new(native_helper if native_helper != null else OverlayWindow.create_native())
+	_overlay.enter(mini_hud_window if mini_hud_window != null else get_window(), MiniHud.SIZE_LP, Rect2(Vector2.ZERO, Vector2(MiniHud.SIZE_LP)))
+	_mini_hud.visible = true
+	_mini_hud.position = Vector2.ZERO
+	_mini_hud.size = Vector2(MiniHud.SIZE_LP)
+	refresh()
+	return true
+
+
+## Back to the full HUD: window, 3D world and HUD restored; the session was never interrupted.
+func exit_mini_hud() -> void:
+	if not is_mini_hud():
+		return
+	_overlay.exit()
+	_overlay = null
+	_viewport.render_target_update_mode = _mini_saved.get("update_mode", SubViewport.UPDATE_ALWAYS)
+	_ride_scene.process_mode = _mini_saved.get("process_mode", Node.PROCESS_MODE_INHERIT)
+	_mini_saved = {}
+	_mini_hud.visible = false
+	_viewport_container.visible = true
+	_pause_overlay.visible = _pause_overlay.view() != PauseOverlay.View.HIDDEN
+	_on_resized()
+	refresh()
+
+
+func _on_mini_button_pressed() -> void:
+	enter_mini_hud()
+
+
+## Mini-HUD numbers from the same `HudModel` state; the full HUD stays hidden meanwhile.
+func _render_mini(s: Dictionary, segments: Array[Dictionary]) -> void:
+	_mini_button.visible = mini_hud_supported and not is_mini_hud()
+	if not is_mini_hud():
+		_place_mini_button()
+		return
+	_viewport_container.visible = false
+	_hud_root.visible = false
+	_pause_overlay.visible = false
+	_summary_root.visible = false
+	_mini_hud.set_values(s, _next_step_line(s, segments))
+
+
+## "Next" line of the mini-HUD — the NEXT chip text for the following step ("" — last step).
+func _next_step_line(s: Dictionary, segments: Array[Dictionary]) -> String:
+	var steps := _session.executor.workout.steps
+	var next_index: int = int(s["step_index"]) + 1
+	if next_index <= 0 or next_index >= steps.size():
+		return ""
+	var step: WorkoutStep = steps[next_index]
+	var seg: Dictionary = segments[next_index] if next_index < segments.size() else {}
+	var target: String = NextChip.format_target(-1) if step.is_free_ride() or seg.is_empty() \
+		else NextChip.format_target(int(seg["start_watts"]), int(seg["end_watts"]))
+	return tr(NextChip.KEY + "next.line").format({"duration": NextChip.format_duration(step.duration_sec), "target": target})
+
+
+## The switch sits left of the pause button, same height.
+func _place_mini_button() -> void:
+	if _mini_button == null or not _mini_button.visible:
+		return
+	var w: float = _mini_button.get_combined_minimum_size().x
+	var h: float = _pause_button.size.y
+	_mini_button.size = Vector2(w, h)
+	_mini_button.position = Vector2(_pause_button.position.x - MINI_BUTTON_GAP - w, _pause_button.position.y)
 
 
 func _ui_scale() -> UiScale:
@@ -859,6 +996,7 @@ func _on_resistance_level_changed(percent: int) -> void:
 
 
 func _teardown_session() -> void:
+	exit_mini_hud()
 	if _ticker != null:
 		_ticker.stop()
 		_ticker.queue_free()
@@ -884,4 +1022,5 @@ func _teardown() -> void:
 
 
 func _exit_tree() -> void:
+	exit_mini_hud()
 	on_screen_exited()
