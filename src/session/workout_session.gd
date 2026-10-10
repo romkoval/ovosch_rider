@@ -18,10 +18,11 @@ extends RefCounted
 ## - `target_changed(w)` исполнителя при действующем ERG → `set_target_power(w)`,
 ##   в том числе 0 Вт (иначе станок держал бы прежнюю цель);
 ## - шаг FreeRide при включённом пользователем ERG (решение В-10, REQ-WRK-02 крит. 5):
-##   ERG на станке приостанавливается — `set_erg_enabled(false)` + `set_resistance_level(level)`;
+##   ERG на станке приостанавливается — `set_fixed_resistance(level)` (ERG off + level in one
+##   call: the first resistance command carries the level, REQ-WRK-04 p.6);
 ##   на следующем шаге с целью — `set_erg_enabled(true)` + цель. Флаг пользователя
 ##   `erg_enabled` при этом не меняется (это режим шага, не выбор пользователя);
-## - `set_erg_enabled(false)` пользователем → `erg=false` + уровень; `true` → `erg=true` + цель
+## - `set_erg_enabled(false)` пользователем → `set_fixed_resistance(level)` (REQ-WRK-04 p.6); `true` → `erg=true` + цель
 ##   (REQ-WRK-03 крит. 2, 3); уровень при включённом ERG только запоминается (REQ-WRK-04 крит. 3);
 ## - на паузе не шлётся ничего (В-4, REQ-WRK-05 крит. 5); переключения ERG, смена цели,
 ##   интенсивности и уровня на паузе откладываются и уходят при `resume()`;
@@ -187,8 +188,7 @@ func start() -> void:
 	if controls_trainer() and not _erg_available:
 		_log_erg_unavailable()
 	if not erg_enabled and controls_trainer():
-		trainer.set_erg_enabled(false)
-		trainer.set_resistance_level(resistance_level)
+		_switch_to_resistance()
 	executor.start()
 	# Не подключён — режим и цель уйдут при CONNECTED (_on_connection_state_changed).
 	if _state == State.RUNNING and controls_trainer() and trainer.get_connection_state() == TrainerDevice.ConnectionState.CONNECTED \
@@ -466,12 +466,22 @@ func _resend(with_erg: bool) -> void:
 	if not controls_trainer():
 		return
 	var erg_now: bool = _effective_erg()
+	if not erg_now:
+		if with_erg:
+			_switch_to_resistance()
+		else:
+			trainer.set_resistance_level(resistance_level)
+		return
 	if with_erg:
-		trainer.set_erg_enabled(erg_now)
-	if erg_now:
-		trainer.set_target_power(_current_target_w)
-	else:
-		trainer.set_resistance_level(resistance_level)
+		trainer.set_erg_enabled(true)
+	trainer.set_target_power(_current_target_w)
+
+
+## Switch the trainer to fixed resistance at the user's level (REQ-WRK-04 p.6): one device call,
+## so the first resistance command of the switch (FTMS `0x04`, FE-C page 0x30) already carries
+## the level — never the trainer's previous level, 0 or a default.
+func _switch_to_resistance() -> void:
+	trainer.set_fixed_resistance(resistance_level)
 
 
 ## Смена шага: режим FreeRide по В-10 — приостановить/вернуть ERG на станке.
@@ -489,8 +499,7 @@ func _on_step_changed(_index: int, step: WorkoutStep) -> void:
 	match _state:
 		State.RUNNING:
 			if want_suspended:
-				trainer.set_erg_enabled(false)
-				trainer.set_resistance_level(resistance_level)
+				_switch_to_resistance()
 			else:
 				trainer.set_erg_enabled(true)
 				# Цель уйдёт следом из target_changed той же секунды.

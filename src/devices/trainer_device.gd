@@ -154,6 +154,16 @@ func set_resistance_level(_percent: int) -> void:
 	push_error("TrainerDevice.set_resistance_level: not implemented")
 
 
+## Switch to fixed resistance at `percent` in one step: ERG (and SIM) off and the level applied
+## (REQ-WRK-04 p.6). The first resistance command the trainer receives on the switch must already
+## carry `percent` — never the previous level, 0 or a default. Default: `set_erg_enabled(false)`,
+## then `set_resistance_level(percent)`; a device whose ERG-off itself writes a resistance command
+## overrides it so that write carries `percent`.
+func set_fixed_resistance(percent: int) -> void:
+	set_erg_enabled(false)
+	set_resistance_level(percent)
+
+
 ## Включить SIM-режим и передать станку параметры симуляции: уклон, %
 ## (округляется до 0.01), ветер, м/с, Crr, Cw, кг/м (FTMS Set Indoor Bike
 ## Simulation Parameters 0x11, REQ-FRD-04 крит. 1). Значения вне пределов

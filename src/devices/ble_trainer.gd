@@ -327,6 +327,15 @@ func set_resistance_level(percent: int) -> void:
 		_write_resistance()
 
 
+## Fixed resistance at `percent` with one command (REQ-WRK-04 p.6): the level is stored first
+## (with ERG on it is only remembered), then ERG off writes it — FTMS `0x04` / FE-C page 0x30
+## carries `percent`, no write with the previous level. Already on resistance or SIM — the level
+## write itself switches, ERG off is then a no-op.
+func set_fixed_resistance(percent: int) -> void:
+	set_resistance_level(percent)
+	set_erg_enabled(false)
+
+
 func set_simulation(grade_pct: float, wind_mps: float = DEFAULT_SIM_WIND_MPS,
 		crr: float = DEFAULT_SIM_CRR, cw: float = DEFAULT_SIM_CW) -> void:
 	simulation_params = clamp_simulation_params("BleTrainer", grade_pct, wind_mps, crr, cw)

@@ -176,6 +176,11 @@ func set_resistance_level(percent: int) -> void:
 		trainer.set_resistance_level(percent)
 
 
+func set_fixed_resistance(percent: int) -> void:
+	if trainer != null:
+		trainer.set_fixed_resistance(percent)
+
+
 func set_simulation(grade_pct: float, wind_mps: float = DEFAULT_SIM_WIND_MPS,
 		crr: float = DEFAULT_SIM_CRR, cw: float = DEFAULT_SIM_CW) -> void:
 	if trainer != null:
