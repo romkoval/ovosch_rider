@@ -82,6 +82,18 @@ func _journal(id: String) -> Array:
 	return out
 
 
+## Ответ станка на запрос возможностей 0x36 (T-168): с FEC3 подключение ждёт его до 2 с.
+func _answer_caps(id: String, bits: int = 0x07) -> void:
+	for c in _bridge.calls_of("write"):
+		var b: PackedByteArray = c.get("bytes", PackedByteArray())
+		if str(c.get("id", "")) == id and b.size() == FecCodec.MESSAGE_LENGTH and b[4] == FecCodec.PAGE_REQUEST \
+				and b[10] == FecCodec.PAGE_CAPABILITIES:
+			_bridge.emit_notification(id, BleUuids.FEC_NOTIFY, FecCodec.encode_message(
+				PackedByteArray([FecCodec.PAGE_CAPABILITIES, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, bits]), FecCodec.ANT_BROADCAST_DATA))
+			_bridge.pump()
+			return
+
+
 func _calls_on(id: String, method: String, char_uuid: String) -> int:
 	var n := 0
 	for c in _bridge.calls_of(method):
@@ -114,6 +126,7 @@ func test_req_dev_11_c1_a_fec_in_advert_is_trainer_regardless_of_name_same_journ
 		assert_eq(_cm.scanner.find(id)["kind"], RememberedDevices.KIND_TRAINER, "«%s» — станок" % names[i])
 		_cm.connect_trainer(id)
 		_bridge.pump()
+		_answer_caps(id)
 		assert_eq(_cm.state_of(id), CONNECTED, "«%s» подключён по FE-C" % names[i])
 		journals.append(_journal(id))
 		_cm.disconnect_device(id)
@@ -130,6 +143,7 @@ func test_req_dev_11_c1_b_cadence_by_advert_becomes_trainer_after_services() -> 
 	assert_eq(_cm.scanner.find(id)["kind"], RememberedDevices.KIND_CADENCE, "по рекламе — каденс")
 	_cm.connect_sensor(id, RememberedDevices.KIND_CADENCE)
 	_bridge.pump()
+	_answer_caps(id)
 	assert_eq(_cm.scanner.find(id)["kind"], RememberedDevices.KIND_TRAINER, "после services_discovered — станок")
 	assert_eq(_cm.trainer_id, id)
 	assert_eq(_trainer().get_connection_state(), CONNECTED, "подключён как станок")
@@ -151,6 +165,7 @@ func test_req_dev_11_c1_b_previously_remembered_as_cadence_is_replaced_by_traine
 	_bridge.set_device_services(id, _services())
 	_cm.connect_sensor(id, RememberedDevices.KIND_CADENCE)
 	_bridge.pump()
+	_answer_caps(id)
 	assert_eq(_cm.remembered.find("p", id).get("kind", ""), RememberedDevices.KIND_TRAINER)
 	assert_eq(_cm.remembered.sensors("p").size(), 0)
 
@@ -163,6 +178,7 @@ func test_req_dev_11_c1_c_other_csc_and_cps_sensors_connect_as_before() -> void:
 	_cm.connect_sensor("csc", RememberedDevices.KIND_CADENCE)
 	_cm.connect_sensor("pm", RememberedDevices.KIND_POWER)
 	_bridge.pump()
+	_answer_caps("neo")
 	assert_eq(_cm.state_of("neo"), CONNECTED)
 	assert_eq(_cm.state_of("csc"), CONNECTED)
 	assert_eq(_cm.state_of("pm"), CONNECTED)
@@ -175,6 +191,7 @@ func test_req_dev_11_c1_g_ftms_and_fec_connects_by_ftms() -> void:
 	_bridge.set_device_services("both", _services([], true))
 	_cm.connect_trainer("both")
 	_bridge.pump()
+	_answer_caps("both")
 	_bridge.pump()
 	assert_eq(_cm.state_of("both"), CONNECTED)
 	assert_eq(_trainer().protocol, BleTrainer.PROTOCOL_FTMS)
@@ -186,6 +203,7 @@ func test_req_dev_11_c1_d_proprietary_service_untouched() -> void:
 	_bridge.set_device_services("neo", _services())
 	_cm.connect_trainer("neo")
 	_bridge.pump()
+	_answer_caps("neo")
 	_bridge.emit_notification("neo", BleUuids.FEC_NOTIFY, _bytes("trainer_data_250w_90rpm"))
 	_cm.tick(2.0)
 	assert_eq(_calls_on_service("neo", PROPRIETARY), 0, "ни одного обращения к фирменному сервису")
@@ -195,17 +213,21 @@ func test_req_dev_11_c1_d_proprietary_service_untouched() -> void:
 # REQ-DEV-11 п.2 — подключение; WRK-09 п.1, п.4
 # ---------------------------------------------------------------------------
 
-func test_req_dev_11_c2_subscribes_fec2_only_no_request_control_no_writes() -> void:
+func test_req_dev_11_c2_subscribes_fec2_only_no_request_control() -> void:
 	_bridge.set_device_services("neo", _services())
 	_cm.connect_trainer("neo")
 	_bridge.pump()
+	_answer_caps("neo")
 	assert_eq(_cm.state_of("neo"), CONNECTED)
 	assert_eq(_trainer().protocol, BleTrainer.PROTOCOL_FEC)
 	var subs := _bridge.calls_of("subscribe")
 	assert_eq(subs.size(), 1, "одна подписка")
 	assert_eq(BleUuids.normalize(str(subs[0]["char"])), BleUuids.FEC_NOTIFY, "на FEC2")
-	assert_eq(_bridge.calls_of("write").size(), 0, "ни одной записи (FTMS Request Control тоже нет)")
-	assert_false(_trainer().has_control(), "управление по FE-C — T-168")
+	var writes := _bridge.calls_of("write")
+	assert_eq(writes.size(), 1, "одна запись — запрос возможностей 0x36 (п.2, п.8); Request Control нет")
+	assert_eq(BleUuids.normalize(str(writes[0]["char"])), BleUuids.FEC_WRITE)
+	assert_eq(writes[0]["bytes"], FecCodec.encode_request_page(FecCodec.PAGE_CAPABILITIES))
+	assert_true(_trainer().has_control(), "с FEC3 — управляемый станок (T-168)")
 
 
 func test_req_dev_11_c2_without_fec2_not_connected_with_error() -> void:
@@ -214,6 +236,7 @@ func test_req_dev_11_c2_without_fec2_not_connected_with_error() -> void:
 	_trainer().error.connect(func(code: int, _m: String) -> void: errors.append(code))
 	_cm.connect_trainer("neo")
 	_bridge.pump()
+	_answer_caps("neo")
 	assert_ne(_cm.state_of("neo"), CONNECTED, "без FEC2 — не «подключено»")
 	assert_has(errors, TrainerDevice.ErrorCode.CONNECTION_FAILED, "ошибка подключения")
 	assert_ne(_cm.failure_of("neo"), SensorDevice.FailureReason.NONE, "причина на экране устройств")
@@ -224,6 +247,7 @@ func test_req_dev_11_c2_wrk_09_c1_without_fec3_data_only_power_meter_session() -
 	_bridge.set_device_services("neo", _services(["6E40FEC3-B5A3-F393-E0A9-E50E24DCCA9E"]))
 	_cm.connect_trainer("neo")
 	_bridge.pump()
+	_answer_caps("neo")
 	assert_eq(_cm.state_of("neo"), CONNECTED, "только данные — подключён")
 	var check := _cm.start_check()
 	assert_true(check["allowed"])
@@ -252,6 +276,7 @@ func _connected_trainer_samples() -> Array[TrainerSample]:
 	_bridge.set_device_services("neo", _services())
 	_cm.connect_trainer("neo")
 	_bridge.pump()
+	_answer_caps("neo")
 	var got: Array[TrainerSample] = []
 	_trainer().telemetry.connect(func(s: TrainerSample) -> void: got.append(s))
 	return got
@@ -274,6 +299,7 @@ func test_req_dev_11_c3_invalid_messages_dropped_session_goes_on() -> void:
 	_bridge.set_device_services("neo", _services())
 	_cm.connect_trainer("neo")
 	_bridge.pump()
+	_answer_caps("neo")
 	var dev := _cm.session_device()
 	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(30, 200.0)] as Array[WorkoutStep]), dev, 200)
 	var errors: Array[int] = []

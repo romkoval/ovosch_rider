@@ -32,6 +32,8 @@ const PAGE_GENERAL_SETTINGS: int = 0x11
 const PAGE_TRAINER_DATA: int = 0x19
 const PAGE_BASIC_RESISTANCE: int = 0x30
 const PAGE_TARGET_POWER: int = 0x31
+const PAGE_WIND_RESISTANCE: int = 0x32
+const PAGE_TRACK_RESISTANCE: int = 0x33
 const PAGE_CAPABILITIES: int = 0x36
 const PAGE_REQUEST: int = 0x46
 const PAGE_COMMAND_STATUS: int = 0x47
@@ -39,6 +41,18 @@ const PAGE_MANUFACTURER: int = 0x50
 const PAGE_PRODUCT: int = 0x51
 ## Страницы, которые станок обрабатывает (п.3); остальные игнорируются без ошибки.
 const HANDLED_PAGES: Array[int] = [PAGE_GENERAL_FE, PAGE_TRAINER_DATA, PAGE_CAPABILITIES, PAGE_COMMAND_STATUS]
+
+## Статусы страницы 0x47 (байт 3).
+const COMMAND_PASS: int = 0
+const COMMAND_FAIL: int = 1
+const COMMAND_NOT_SUPPORTED: int = 2
+const COMMAND_REJECTED: int = 3
+const COMMAND_PENDING: int = 4
+## Байты 5 и 7 страницы 0x46: передать один раз; команда «запрос страницы данных».
+const REQUEST_TRANSMIT_ONCE: int = 0x01
+const REQUEST_COMMAND_DATA_PAGE: int = 0x01
+## Предел уклона страницы 0x33, %.
+const MAX_GRADE_PCT: float = 200.0
 
 ## «Нет данных» в полях страниц.
 const NO_POWER: int = 0xFFF
@@ -69,6 +83,67 @@ static func encode_message(page: PackedByteArray, msg_id: int = ANT_ACKNOWLEDGED
 static func encode_target_power(watts: int) -> PackedByteArray:
 	var v: int = clampi(watts * 4, 0, 0xFFFF)
 	return encode_message(PackedByteArray([PAGE_TARGET_POWER, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, v & 0xFF, (v >> 8) & 0xFF]))
+
+
+## Страница 0x30 Basic Resistance (п.9 (а)): байты 1–6 `FF`, байт 7 — уровень в 0.5 % (0–100 % → 0–200).
+## 50 % → `A4 09 4F 05 30 FF FF FF FF FF FF 64 B3`.
+static func encode_basic_resistance(percent: int) -> PackedByteArray:
+	var v: int = clampi(percent, 0, 100) * 2
+	return encode_message(PackedByteArray([PAGE_BASIC_RESISTANCE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, v]))
+
+
+## Страница 0x32 Wind Resistance (п.9 (б)): байт 5 — коэффициент сопротивления ветру, 0.01 кг/м;
+## байт 6 — встречный ветер, км/ч со смещением 127; байт 7 — драфтинг, 0.01. По умолчанию
+## (Cw 0.20, ветер 0, драфтинг 1.00) — страница `32 FF FF FF FF 14 7F 64`.
+static func encode_wind_resistance(cw_kg_m: float, wind_mps: float, drafting: float = 1.0) -> PackedByteArray:
+	var cw: int = clampi(roundi(cw_kg_m * 100.0), 0, 0xFE)
+	var wind: int = clampi(roundi(wind_mps * 3.6) + 127, 0, 254)
+	var draft: int = clampi(roundi(drafting * 100.0), 0, 100)
+	return encode_message(PackedByteArray([PAGE_WIND_RESISTANCE, 0xFF, 0xFF, 0xFF, 0xFF, cw, wind, draft]))
+
+
+## Страница 0x33 Track Resistance (п.9 (б)): байты 1–4 `FF`; байты 5–6 — уклон, uint16 LE, код =
+## (уклон + 200.00) × 100; байт 7 — Crr в единицах 5·10⁻⁵. Уклон вне −200.00 … +200.00 % —
+## пустой массив (отклонено). 5.00 % → `A4 09 4F 05 33 FF FF FF FF 14 50 50 C0`.
+static func encode_track_resistance(grade_pct: float, crr: float) -> PackedByteArray:
+	if not is_finite(grade_pct) or grade_pct < -MAX_GRADE_PCT or grade_pct > MAX_GRADE_PCT:
+		return PackedByteArray()
+	var code: int = clampi(roundi((grade_pct + MAX_GRADE_PCT) * 100.0), 0, 0xFFFF)
+	var c: int = clampi(roundi(crr / 0.00005), 0, 0xFE)
+	return encode_message(PackedByteArray([PAGE_TRACK_RESISTANCE, 0xFF, 0xFF, 0xFF, 0xFF, code & 0xFF, (code >> 8) & 0xFF, c]))
+
+
+## Страница 0x46 Request Data Page (п.7 (б), п.8): байты 1–2 — серийный номер ведомого (`FF FF`),
+## 3–4 — дескрипторы (`FF FF`), байт 5 — сколько раз передать (1), байт 6 — номер запрашиваемой
+## страницы, байт 7 — тип команды «запрос страницы» (`01`).
+static func encode_request_page(page_number: int) -> PackedByteArray:
+	return encode_message(PackedByteArray([PAGE_REQUEST, 0xFF, 0xFF, 0xFF, 0xFF, REQUEST_TRANSMIT_ONCE,
+		page_number & 0xFF, REQUEST_COMMAND_DATA_PAGE]))
+
+
+## Страница 0x36 FE Capabilities: байт 7 — биты 0 Basic Resistance, 1 Target Power, 2 Simulation.
+## `{ok, basic_resistance, target_power, simulation}`.
+static func decode_capabilities(page: PackedByteArray) -> Dictionary:
+	var r: Dictionary = {"ok": false, "basic_resistance": true, "target_power": true, "simulation": true}
+	if page.size() < PAGE_LENGTH or page[0] != PAGE_CAPABILITIES:
+		return r
+	r["ok"] = true
+	r["basic_resistance"] = (page[7] & 0x01) != 0
+	r["target_power"] = (page[7] & 0x02) != 0
+	r["simulation"] = (page[7] & 0x04) != 0
+	return r
+
+
+## Страница 0x47 Command Status: байт 1 — номер последней полученной команды, байт 3 — статус
+## (`COMMAND_*`). `{ok, last_command, status}`.
+static func decode_command_status(page: PackedByteArray) -> Dictionary:
+	var r: Dictionary = {"ok": false, "last_command": -1, "status": -1}
+	if page.size() < PAGE_LENGTH or page[0] != PAGE_COMMAND_STATUS:
+		return r
+	r["ok"] = true
+	r["last_command"] = page[1]
+	r["status"] = page[3]
+	return r
 
 
 ## `{ok, msg_id, channel, page_number, page}`; `ok == false` — сообщение отброшено (п.3).

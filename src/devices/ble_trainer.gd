@@ -162,6 +162,8 @@ var _failure: int = SensorDevice.FailureReason.NONE
 var protocol: int = PROTOCOL_FTMS
 ## Последняя скорость станка из FE-C 0x10, км/ч; -1 — нет данных.
 var _fec_speed_kmh: float = -1.0
+## Управление по FE-C: записи FEC3, подтверждение 0x47, возможности 0x36.
+var _fec: FecControl = null
 
 
 func _init(ble_bridge: BleBridge) -> void:
@@ -173,6 +175,9 @@ func _init(ble_bridge: BleBridge) -> void:
 	bridge.characteristic_read.connect(_on_characteristic_read)
 	bridge.write_done.connect(_on_write_done)
 	bridge.error.connect(_on_bridge_error)
+	_fec = FecControl.new(bridge)
+	_fec.command_error.connect(_on_fec_command_error)
+	_fec.capabilities_resolved.connect(_on_fec_capabilities)
 
 
 func get_time_sec() -> float:
@@ -209,6 +214,7 @@ func _begin_connecting(id: String) -> void:
 		battery_percent = -1
 		_forget_simulation_capabilities()
 	device_id = id
+	_fec.set_device(id)
 	_disconnect_requested = false
 	_failure = SensorDevice.FailureReason.NONE
 	control_granted = false
@@ -246,6 +252,12 @@ func dispose() -> void:
 			sig.disconnect(cb)
 	if bridge is StubBleBridge:
 		(bridge as StubBleBridge).dispose()
+	if _fec != null:
+		if _fec.command_error.is_connected(_on_fec_command_error):
+			_fec.command_error.disconnect(_on_fec_command_error)
+		if _fec.capabilities_resolved.is_connected(_on_fec_capabilities):
+			_fec.capabilities_resolved.disconnect(_on_fec_capabilities)
+		_fec.bridge = null
 	_reconnect.stop()
 	_reset_control_point()
 	_state = ConnectionState.DISCONNECTED
@@ -260,7 +272,7 @@ func set_target_power(watts: int) -> void:
 	if _state != ConnectionState.CONNECTED:
 		return
 	if erg_enabled:
-		_write_control_point(FtmsCodec.encode_set_target_power(value))
+		_write_target(value)
 
 
 func set_erg_enabled(enabled: bool) -> void:
@@ -299,6 +311,8 @@ func set_simulation(grade_pct: float, wind_mps: float = DEFAULT_SIM_WIND_MPS,
 
 
 func simulation_support() -> int:
+	if protocol == PROTOCOL_FEC and not _fec.capabilities.is_empty():
+		return SimulationSupport.SUPPORTED if _fec.supports_simulation() else SimulationSupport.UNSUPPORTED
 	if _simulation_rejected:
 		return SimulationSupport.UNSUPPORTED
 	if machine_features.get("ok", false):
@@ -328,6 +342,11 @@ func set_control_allowed(allowed: bool) -> void:
 		return
 	control_allowed = allowed
 	if allowed and _state == ConnectionState.CONNECTED and data_only and bridge != null \
+			and protocol == PROTOCOL_FEC and _has_characteristic(FEC, BleUuids.FEC_WRITE):
+		data_only = false
+		_fec.request_capabilities()
+		return
+	if allowed and _state == ConnectionState.CONNECTED and data_only and bridge != null \
 			and protocol == PROTOCOL_FTMS and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT):
 		data_only = false
 		_acquire_control(device_id)
@@ -348,6 +367,7 @@ func tick(delta_sec: float) -> void:
 	_time_sec += delta_sec
 	if bridge == null:
 		return
+	_fec.tick(_time_sec)
 	if _state == ConnectionState.RECONNECTING and _reconnect.due(_time_sec):
 		bridge.connect_peripheral(device_id)
 	if _state == ConnectionState.CONNECTING \
@@ -431,7 +451,27 @@ func _connect_fec(id: String) -> void:
 	if services.has(BleUuids.BATTERY_SERVICE):
 		bridge.read_characteristic(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
 		bridge.subscribe(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
-	_finish_data_only()
+	# Без FEC3 или с запретом управления (сессия power_meter) — только данные, ни одной записи.
+	if not control_allowed or not _has_characteristic(FEC, BleUuids.FEC_WRITE):
+		_finish_data_only()
+		return
+	data_only = false
+	_fec.reset_link()
+	# CONNECTED — после ответа 0x36 или 2 с без него (п.8); известные возможности — сразу.
+	_fec.request_capabilities()
+
+
+## Возможности FE-C определены: подключение завершено (команды режима сессия шлёт по CONNECTED).
+func _on_fec_capabilities() -> void:
+	if protocol != PROTOCOL_FEC or data_only:
+		return
+	if _state == ConnectionState.CONNECTING or _state == ConnectionState.RECONNECTING:
+		_reconnect.stop()
+		_set_state(ConnectionState.CONNECTED)
+
+
+func _on_fec_command_error(code: int, message: String) -> void:
+	error.emit(code, message)
 
 
 ## Подключение без канала управления: CONNECTED с `data_only == true`.
@@ -564,8 +604,10 @@ func _on_fec_message(bytes: PackedByteArray) -> void:
 			_fec_speed_kmh = g["speed_kmh"] if g["has_speed"] else -1.0
 			if g["has_heart_rate"] and int(g["heart_rate_bpm"]) > 0:
 				heart_rate.emit(g["heart_rate_bpm"])
+		FecCodec.PAGE_CAPABILITIES, FecCodec.PAGE_COMMAND_STATUS:
+			_fec.on_page(int(m["page_number"]), page)
 		_:
-			pass  # 0x36, 0x47 — управление (T-168); прочие страницы игнорируются (п.3)
+			pass  # прочие страницы игнорируются (п.3)
 
 
 func _on_machine_status(bytes: PackedByteArray) -> void:
@@ -617,7 +659,13 @@ func _on_battery(bytes: PackedByteArray) -> void:
 
 
 func _on_write_done(id: String, char_uuid: String, ok: bool) -> void:
-	if id != device_id or BleUuids.normalize(char_uuid) != BleUuids.FTMS_CONTROL_POINT:
+	if id != device_id:
+		return
+	if protocol == PROTOCOL_FEC and BleUuids.normalize(char_uuid) == BleUuids.FEC_WRITE:
+		_write_failure_seen = not ok
+		_fec.on_write_done(ok)
+		return
+	if BleUuids.normalize(char_uuid) != BleUuids.FTMS_CONTROL_POINT:
 		return
 	_write_failure_seen = not ok
 	if ok or _cp_inflight.is_empty():
@@ -689,6 +737,8 @@ func _on_bridge_error(id: String, code: int, message: String) -> void:
 				# Мост сообщает отказ только сигналом error; ожидающая запись у станка
 				# одна — команда Control Point в полёте.
 				_handle_write_failure(message)
+			elif protocol == PROTOCOL_FEC and _fec.on_write_error(message):
+				pass  # повтор записи FE-C (или ошибка после второго отказа) — в FecControl
 			else:
 				error.emit(ErrorCode.WRITE_FAILED, message)
 		BleBridge.ErrorCode.SUBSCRIBE_FAILED, BleBridge.ErrorCode.SERVICE_NOT_FOUND, \
@@ -751,6 +801,8 @@ func _fail_connecting(message: String, cancel_in_bridge: bool = true,
 
 
 func _reset_control_point() -> void:
+	if _fec != null:
+		_fec.reset_link()
 	_cp_inflight = {}
 	_cp_queue.clear()
 	_write_failure_seen = false
@@ -823,19 +875,41 @@ func _write_current_mode() -> void:
 		_write_simulation()
 	elif erg_enabled:
 		if target_power_w > 0:
-			_write_control_point(FtmsCodec.encode_set_target_power(target_power_w))
+			_write_target(target_power_w)
 	else:
 		_write_resistance()
 
 
+## Цель ERG: FTMS `05` в Control Point или FE-C 0x31 (+ запрос 0x47).
+func _write_target(watts: int) -> void:
+	if protocol == PROTOCOL_FEC:
+		if _fec_can_write():
+			_fec.write_target_power(watts)
+		return
+	_write_control_point(FtmsCodec.encode_set_target_power(watts))
+
+
 func _write_simulation() -> void:
+	if protocol == PROTOCOL_FEC:
+		if _fec_can_write():
+			_fec.write_simulation(simulation_params[0], simulation_params[1], simulation_params[2], simulation_params[3])
+		return
 	_write_control_point(FtmsCodec.encode_indoor_bike_simulation(
 		simulation_params[1], simulation_params[0], simulation_params[2], simulation_params[3]))
 
 
 func _write_resistance() -> void:
+	if protocol == PROTOCOL_FEC:
+		if _fec_can_write():
+			_fec.write_resistance(resistance_percent)
+		return
 	var level: float = FtmsCodec.percent_to_resistance_level(resistance_percent, resistance_range)
 	_write_control_point(FtmsCodec.encode_set_resistance_level(level))
+
+
+## Запись на FEC3 разрешена: канал управления есть и управление не запрещено (WRK-09 п.4).
+func _fec_can_write() -> bool:
+	return bridge != null and not data_only and control_allowed
 
 
 ## Есть ли характеристика в списке сервисов; при неизвестном списке — пробуем.
