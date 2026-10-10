@@ -6,6 +6,21 @@
 
 ## Чекпоинт
 
+### Checkpoint 2026-10-10, evening (manager; `main` = ea8516e; supersedes the queues below)
+- `done`: T-160, T-108, T-113, T-115 (tester verdicts in `main`: 304f63a, 65d3c72, cad3845, 3ddb4bb).
+- `review` (acceptance running in other worktrees — do not edit their task files): T-161, T-162 (rework), T-173, T-174, T-175, T-176, T-177, T-106a2 (elbow fix), T-106a3.
+- T-177 spike result (developer cannot edit task files; recorded here and in backlog section 4 "Mini-HUD spike"): window level `NSStatusWindowLevel`; collection behavior `canJoinAllSpaces | fullScreenAuxiliary`; App Nap guard while in mini-HUD; the Objective-C++ part is not compiled in the container — owner builds on the Mac and runs the checklist (over full-screen video, across Spaces, 10 min unfocused); fallback if it does not show over full-screen video — `NSPanel` or the accessory activation policy. Copy into T-177 History once acceptance is done there.
+- Release 0.4 additions (REQ-D3D-11, STR-06, STR-07, LOC-08 — requirements ea8516e; У-39..У-43). New tasks T-178..T-191 (backlog section 2, "Release 0.4 — real-world routes"):
+  - real routes, separate part "0.4 routes" (coordinator's proposal to the owner — does not hold the Neo exit criteria): T-178 spec, T-191 route shortlist, T-179 mockup (game-designer); T-180 catalog, T-181 session, T-182 GPS/FIT/Strava, T-183 route cards, T-186 route data (developer); T-184 road, T-185 scenery/streaming (technical-artist).
+  - Н-80 answered by the owner: South China and islands, spectacular routes; game-designer proposes (T-191), owner confirms → T-186.
+  - screenshots: T-187 guard (STR-07 p.6, 9) — `todo` now; T-188, T-189, T-190 — `blocked` until Strava partner access. Owner update: auto screenshot at a random moment around the middle of the workout, gameplay frame with full HUD, on by default — requirements is writing it into LOC-08 (T-189 points there).
+- Queues:
+  - developer — acceptance defects of the `review` batch → T-116b → T-180 → T-181 → T-182, T-183; T-187 as a filler; T-186 after T-191 is confirmed;
+  - technical-artist — acceptance defects of T-106a2 / T-106a3 → T-106a4 → T-109 → T-184 → T-185;
+  - game-designer — T-178 → T-191 → T-179 (and verdicts);
+  - tester — acceptance of the `review` batch;
+  - owner — confirm "0.4 routes as a separate part", confirm T-191 shortlist, apply for Strava partner status; Н-78 (в)–(ж), Н-79 (е), (з).
+
 ### Checkpoint 2026-10-10 (manager; supersedes the queues below where they differ)
 - **3D stream pause (2026-10-05) lifted by the owner on 2026-10-10.** technical-artist is back at work.
 - Closed 2026-10-10: T-106a1 (tester 2dce864), T-112 (tester 4cd73ea, game-designer cc37459), T-107 (tester de7f24e, game-designer after e19734e) — `done`. T-107 owner manual is in backlog section 4 (P8 / needles in Forward+, draw calls on «Mountain Pass», FPS).

@@ -298,13 +298,36 @@
 | T-168 | `[integration]` | 0.4 (после WRK-09) | Станок по Tacx FE-C over BLE: ERG, сопротивление, SIM | DEV-11 | T-167 | P0 | `done` |
 | T-161 | `[integration]` | 0.4 | Возможности FTMS-станка от самого станка, а не от констант Neo (+ доработка У-35/У-36) | DEV-10, DEV-02, DEV-11, WRK-02, WRK-04, WRK-07, FRD-04, NFR-01, NFR-06, REQ-WRK-09 | Н-61, T-152, Н-77 | P1 | `review` |
 | T-162 | `[game]` (сессия, HUD; отдаёт значение — `[integration]`-часть T-161) | 0.4 | Цель, ограниченная станком: HUD, сэмпл и FIT показывают фактическую (+ доработка У-37, `hud.md` п. 17) | DEV-10, HUD-10, HUD-01, HUD-13, WRK-03, WRK-08, LOC-01, LOC-05, WRK-02, WRK-07, HUD-07, HUD-11, NFR-06 | T-161, Н-77 | P1 | `review` |
-| T-177 | `[game]` (+ native macOS in `native/ble/`) | spike / вне волн | Spike: mini-HUD compact window over other apps on Mac | — (after spike) | — | P1 | `todo` |
-| T-175 | `[game]` | 0.4 | Шкала допуска «выше / ниже цели» в smart при ERG выкл и недоступен (один компонент с T-171) | HUD-02, WRK-09 | T-162, Н-77 | P1 | `todo` |
-| T-176 | `[game]` | 0.4 | Флаг ERG в сэмпле — по факту, а не по выбору игрока | WRK-08, LOC-01 | T-161, T-162, Н-77 | P1 | `todo` |
+| T-177 | `[game]` (+ native macOS in `native/ble/`) | spike / вне волн | Spike: mini-HUD compact window over other apps on Mac (result — section 4, "Mini-HUD spike") | — (after spike) | — | P1 | `review` |
+| T-175 | `[game]` | 0.4 | Шкала допуска «выше / ниже цели» в smart при ERG выкл и недоступен (один компонент с T-171) | HUD-02, WRK-09 | T-162, Н-77 | P1 | `review` |
+| T-176 | `[game]` | 0.4 | Флаг ERG в сэмпле — по факту, а не по выбору игрока | WRK-08, LOC-01 | T-161, T-162, Н-77 | P1 | `review` |
 
 Волны потока А: 0.3 — developer T-116a (технический хвост; сдана dc8c68c, `review`, приёмка tester — текущая волна); tester — повторная приёмка T-098, T-099, T-100, T-102, T-103 (сделана; дефекты T-103 → T-142). Подготовка 0.4 без железа — в паузах 0.3: developer T-161 (возможности станка от FTMS — DEV-10, У-23) → T-162 (ограниченная цель — Н-61 (б)), затем T-116b (после T-108 и T-161: журнал пишет и `0x2AD8`), tester T-117 (после T-116b; в протокол — DEV-10 п.9). 0.4 — (сессия владельца на Neo по T-117) → developer T-118, T-119; T-120 — как только есть ключ Intervals.icu (станок не нужен, можно раньше, если владелец даст ключ). 0.5 — developer T-121 и T-123 параллельно (разные каталоги `native/`), затем T-122, T-124, T-125, T-126; tester — T-127. 0.6 — T-128 → T-129; T-130, T-131, T-132, T-134 параллельно (разные файлы); game-designer — T-133; tester — T-137.
 Владение общими файлами потока А: `.github/workflows/ci.yml` — T-148 (срез 0.3, дымовой прогон release), затем T-121, T-123, T-122, T-134, T-131 (по порядку, каждый добавляет свой job/шаг); `scripts/ci/make_export_presets.py` — T-148 (пресет Linux, если в этом файле), затем T-122, затем T-134, T-125 (типы документов), T-132 (privacy manifest); `src/storage/secure_store.gd` — T-124, затем T-140; `src/ui/settings/**` — T-116a (кнопка журнала), затем T-129, T-130; модуль журнала — T-116a, затем T-116b; `src/integrations/strava/strava_oauth.gd` — T-125 (приём кода), затем T-131; `src/devices/ble_trainer.gd`, `src/devices/trainer_device.gd`, `src/session/workout_session.gd` — с 2026-10-07 первой T-152 (WRK-09, У-29), затем T-153, T-170 (`sensor_hub.gd`, настройки), T-169 (`sample_stream.gd`, `ride_scene.gd`, `ride_detail.gd`), затем T-167 → T-168 (FE-C); `src/devices/ble_trainer.gd`, `src/devices/ble/codecs/ftms_codec.gd`, `src/devices/trainer_device.gd` — T-161 → T-162 (отдача фактической цели), затем T-116b (точки записи журнала), T-118, T-152; `src/session/workout_session.gd`, `src/ui/hud/hud_model.gd`, `src/integrations/fit/fit_encoder.gd` — T-162 (после T-160 в `workout_session.gd`) (`trainer_device.gd` и `fake_trainer.gd` до T-161 правит T-160 — только признак эмулятора).
 Подготовка владельца, которую нужно начать сразу (сроки не наши): вступить в Apple Developer Program; написать разработчику Intervals.icu о регистрации OAuth-приложения; зарегистрировать API-приложение Strava.
+
+### Release 0.4 — real-world routes and Strava screenshots (separate part, 2026-10-10)
+
+Source: owner request 2026-10-10 (У-39), decisions У-40 (own built-in catalog), У-41 (road shape as in real life), У-42 (Strava photos wait for partner access), У-43 (auto + manual screenshots with HUD); REQ-D3D-11, REQ-STR-06, REQ-STR-07, REQ-LOC-08 (requirements ea8516e). Open: Н-78 (в)–(ж), Н-79 (е), (з). Н-80 answered by the owner 2026-10-10: first routes — spectacular "unreal-looking" routes in South China and on some islands; game-designer proposes concrete routes (T-191), the owner confirms. Screenshots, owner 2026-10-10 (requirements is updating LOC-08): auto at a random moment around the middle of the workout, gameplay frame with full HUD, on by default — still blocked with STR-07.
+**Separate part (coordinator's proposal to the owner, to confirm):** real routes ship as their own part of 0.4 and do not hold the "Neo on Mac" exit criteria (T-117 protocol, tag v0.4.0); none of these tasks is in the 0.4 exit list. Everything is buildable on fixtures (`tests/fixtures/routes/`); real content (T-186) starts from the owner-confirmed T-191 shortlist. Screenshots (T-188..T-190) are `blocked` until Strava partner access; only the guard T-187 is done now.
+Order: developer T-180 → T-181 → T-182, T-183 (after Neo work: T-176, T-175, T-116b come first), T-186 after T-191; game-designer T-178 → T-191 → T-179 (T-178 first — TA waits for it; T-191 can run in parallel if the designer has room); technical-artist T-184 → T-185 after the 0.3 rider chain (T-106a3 → T-106a4 → T-109). Shared files: `src/session/sample_stream.gd`, `src/integrations/fit/fit_encoder.gd` — after T-162, T-176 (T-182 last); `src/scene3d/road_builder.gd`, `route_world.gd` — T-184, then T-185.
+
+| ID | Зона | Срез | Задача | REQ-ID | Зависит от | Приоритет | Статус |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T-178 | `[design]` | 0.4 routes | Real-route road and world: spec | D3D-11, D3D-05, D3D-08 | — | P1 | `todo` |
+| T-179 | `[design]` | 0.4 routes | Route card and route choice: mockup | D3D-11, UIX-05 | — | P2 | `todo` |
+| T-180 | `[game]` | 0.4 routes | Route catalog: data format, loading, validation, licensing and attribution | D3D-11, NFR-07 | — | P1 | `todo` |
+| T-181 | `[game]` | 0.4 routes | Catalog route in the session: profile, grade, coordinate by distance, end of route | D3D-11, D3D-02, FRD-04, FRD-05 | T-180 | P1 | `todo` |
+| T-182 | `[integration]` | 0.4 routes | GPS track of a route ride: samples, FIT position fields, Strava name | STR-06, D3D-11, LOC-05 | T-181 | P1 | `todo` |
+| T-183 | `[game]` | 0.4 routes | Route cards on track selection and route for plan workouts | D3D-11, FRD-02, FRD-03 | T-181, T-179 | P2 | `todo` |
+| T-184 | `[visual]` | 0.4 routes | Road along the real route shape: projection, smoothing, curvature, height | D3D-11, D3D-08 | T-178, T-181 | P1 | `todo` |
+| T-185 | `[visual]` | 0.4 routes | Scenery along the route, overlapping sections, chunk streaming | D3D-11, D3D-05, D3D-08 | T-184 | P1 | `todo` |
+| T-191 | `[design]` | 0.4 routes | Propose first catalog routes (South China, islands) with OSM data and ODbL check | D3D-11, NFR-07 | — | P1 | `todo` |
+| T-186 | `[integration]` | 0.4 routes | First real routes in the catalog (OSM geometry, DEM elevation) | D3D-11, STR-06 | T-180, T-191 | P1 | `todo` |
+| T-187 | `[integration]` | 0.4 | Strava: no images sent before partner access (guard) and checklist record | STR-07 | — | P2 | `todo` |
+| T-188 | `[design]` | 0.4 screenshots | Screenshot button on the HUD and screenshot status in the ride card: mockup | LOC-08, STR-07 | Strava partner access | P2 | `blocked: Strava partner access (У-42)` |
+| T-189 | `[game]` | 0.4 screenshots | Ride screenshots: capture and storage | LOC-08 | T-188, Strava partner access | P2 | `blocked: Strava partner access (У-42)` |
+| T-190 | `[integration]` | 0.4 screenshots | Screenshot upload to the Strava activity (partner API) | STR-07 | T-189, Strava partner access | P2 | `blocked: Strava partner access (У-42)` |
 
 ### Релиз 0.3 — Качество мира и персонажа (поток Б + технические хвосты; следующий релиз с 2026-10-04)
 
@@ -336,28 +359,28 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | T-105 | `[design]` | 1 | Арт-спека хвойных | D3D-10, D3D-07, D3D-08, D3D-05 | — | P0 | `review` |
 | T-112 | `[visual]` | 1 | Общие материалы: туман и свет своей сцены, запас критерия подъёма | D3D-07, D3D-08, HUD-13 | — | P1 | `done` |
-| T-115 | `[game]` | 1 | Изоляция `user://` для параллельных прогонов тестов | INF-01 | — | P2 | `review` |
+| T-115 | `[game]` | 1 | Изоляция `user://` для параллельных прогонов тестов | INF-01 | — | P2 | `done` |
 | T-114 | `[game]` | 1 | Диалог восстановления: «удалить» — опасная кнопка | LOC-07, UIX-01 | — | P1 | `done` |
-| T-113 | `[integration]` | 1 | Повторы: цвет свёрнутой строки, `repeat_blocks` у ZWO | HUD-13, IMP-01, NFR-09 | — | P2 | `review` |
+| T-113 | `[integration]` | 1 | Повторы: цвет свёрнутой строки, `repeat_blocks` у ZWO | HUD-13, IMP-01, NFR-09 | — | P2 | `done` |
 | T-104 | `[design]` | 1 (после T-105) | Арт-спека персонажа | D3D-09, AVT-01, D3D-01, D3D-04, D3D-07, D3D-05 | T-105 | P0 | `review` |
 | T-142 | `[game]` | 2 | Дефекты повторной приёмки T-103 | UIX-01, UIX-04, UIX-05 | T-103 | P1 | `done` |
 | T-144 | `[game]` | 0.3.0-preview.1 (вне волн) | Форма ключа Intervals.icu при первом открытии помещается в окно | UIX-05, INT-01 | T-142 | P1 | `done` |
 | T-145 | `[game]` | 0.3.0-preview.1 (вне волн) | Диалоги меню по `ui.md` п. 6 | UIX-01, UIX-04, UIX-05, LOC-07 | T-142, T-144 | P1 | `done` |
 | T-172 | `[game]` | вне волн (после Н-76 (а)) | Диалог выбора станка: 480 lp, «На эмуляторе» под текстом (`ui.md` 13.4 п.4) | UIX-01, UIX-05, DEV-09 | T-145, Н-76 | P3 | `todo` |
-| T-173 | `[game]` | вне волн | Дата в диалоге восстановления — как в истории | LOC-07, NFR-08 | T-114, Н-76 | P3 | `todo` |
-| T-174 | `[game]` | вне волн | Форма «Новый профиль» на compact: поля не срезаны краем прокрутки | UIX-05, PRF-01 | T-145, Н-76 | P2 | `todo` |
+| T-173 | `[game]` | вне волн | Дата в диалоге восстановления — как в истории | LOC-07, NFR-08 | T-114, Н-76 | P3 | `review` |
+| T-174 | `[game]` | вне волн | Форма «Новый профиль» на compact: поля не срезаны краем прокрутки | UIX-05, PRF-01 | T-145, Н-76 | P2 | `review` |
 | T-107 | `[visual]` | 3 (сейчас) | Хвойные по спеке | D3D-10, D3D-07, D3D-08, D3D-05 | T-105, T-112 | P0 | `done` |
 | T-106 | `[visual]` | 0.3 | Гонщик по спеке (разрезана на T-106a1..T-106a4, T-106b′/c′, T-106b/c, T-143) | REQ-D3D-09 | — | P0 | `split` |
 | T-106a1 | `[visual]` | 3 (сейчас) | Велосипед под контракт скелета и пакет эталонов | D3D-09, D3D-01, D3D-04, D3D-07 | T-104 | P0 | `done` |
-| T-106a2 | `[visual]` | 4 | Скелет, манекен двух фигур, IK на позы костей, пружина хвоста | D3D-09, D3D-07, D3D-04, D3D-01, D3D-05 | T-106a1, Н-39 | P0 | `in-progress` |
-| T-106a3 | `[visual]` | 5 | Регионы цвета, палитра, контур и ободок, тень гонщика | D3D-09, D3D-07, D3D-05, AVT-02 | T-106a2 | P0 | `in-progress` |
+| T-106a2 | `[visual]` | 4 | Скелет, манекен двух фигур, IK на позы костей, пружина хвоста | D3D-09, D3D-07, D3D-04, D3D-01, D3D-05 | T-106a1, Н-39 | P0 | `review` |
+| T-106a3 | `[visual]` | 5 | Регионы цвета, палитра, контур и ободок, тень гонщика | D3D-09, D3D-07, D3D-05, AVT-02 | T-106a2 | P0 | `review` |
 | T-106a4 | `[visual]` | 5 | Импорт `rider.glb` и проверки Т1–Т8 | D3D-09 | T-106a3 | P0 | `todo` |
 | T-143 | `[visual]` | 4 | Конвейер доводки ИИ-модели в Blender | D3D-09 | T-106a1, T-106a4, T-106b′ | P0 | `done` |
 | T-106b′ | `[visual]` | по сырью владельца | Сырьё и блокинг TA (вариант Г) | D3D-09 | T-143, T-106a4 | P0 | `blocked: ждёт сырые GLB владельца` |
 | T-106c′ | `[visual]` | после T-106b′ | Чистовая TA (вариант Г) | D3D-09, D3D-07, D3D-05, AVT-02 | T-106b′, T-109, Н-45, Н-46, Н-47 | P0 | `todo` |
 | T-106b | `[visual]` | запасной путь: по сдаче этапа 1 художником | Приёмка блокинга художника (этап 1 брифа) | D3D-09 | T-106a4 | P0 | `blocked: только при отказе от варианта Г` |
 | T-106c | `[visual]` | запасной путь: по сдаче этапов 2–3 художником | Чистовая модель художника в игре (этапы 2–3 брифа) | D3D-09, D3D-07, D3D-05, AVT-02 | T-106b, T-109, Н-30, Н-31 | P0 | `blocked: только при отказе от варианта Г` |
-| T-108 | `[game]` | 2 | `RiderLook`: данные внешности в профиле | AVT-01, PRF-01, PRF-04 | T-104 | P1 | `review` |
+| T-108 | `[game]` | 2 | `RiderLook`: данные внешности в профиле | AVT-01, PRF-01, PRF-04 | T-104 | P1 | `done` |
 | T-109 | `[visual]` | 6 | Применение внешности без пересборки сцены | AVT-02, D3D-05, D3D-07, D3D-09 | T-106a3, T-108 | P1 | `todo` |
 | T-163 | `[game]` | вне волн | Контраст тёмных пресетов внешности | AVT-01 | T-108 | P1 | `todo` |
 | T-110 | `[design]` | позже | Макет экрана «Гардероб» | UIX-01, UIX-05, AVT-03 | T-104, T-108 | P3 | `todo` |
@@ -369,7 +392,7 @@
 | T-154 | `[game]` (+ `[native-ble]`, если причина в бэкенде) | вне волн | Пульсометр после подключения сразу «не подключён», причина не показана | DEV-07, DEV-03, DEV-08 | T-116a | P1 | `done` |
 | T-164 | `[game]` | вне волн (после T-154) | Причина отказа подключения станка на экране устройств | REQ-DEV-07 | T-154 | P1 | `done` |
 | T-165 | `[game]` | вне волн (срочно, владелец) | Экран «BLE-отладка»: сырые данные устройств на Mac (Tacx Neo 2T, Quarq) | REQ-DEV-01, REQ-DEV-02, REQ-DEV-03, REQ-DEV-07 | — | P0 | `done` |
-| T-160 | `[game]` | вне волн | Заезды на эмуляторе: метка в истории, без автовыгрузки в Strava | LOC-01, STR-04, UIX-04, STR-05, LOC-02, LOC-06, DEV-09, NFR-06, NFR-08 | T-150, Н-52, Н-59 | P1 | `review` |
+| T-160 | `[game]` | вне волн | Заезды на эмуляторе: метка в истории, без автовыгрузки в Strava | LOC-01, STR-04, UIX-04, STR-05, LOC-02, LOC-06, DEV-09, NFR-06, NFR-08 | T-150, Н-52, Н-59 | P1 | `done` |
 | T-155 | `[design]` | вне волн | Подсказка интервала на превью плана: вид и поведение | UIX-03, INT-05 | — | P2 | `review` |
 | T-156 | `[game]` | после T-155 | Подсказка интервала на превью плана: реализация | UIX-03, INT-05, UIX-05, NFR-08 | T-155, Н-68 | P2 | `todo` |
 | T-157 | `[design]` | после T-155 | «Линия FTP» на превью плана: вид и поведение | UIX-03, PRF-02 | T-155 | P2 | `review` |
@@ -393,6 +416,7 @@
 
 Состояние TA-волн 3–4 на 2026-10-05 (`main` = 80cf008): T-107 — `review` (повторная сверка дефектов e19734e), T-106a1 — `review` (подтвердить приёмку до слияния), T-106a2 — `review` (ждёт tester), T-143 — `review`, не влита (`wt-143r`, повторная приёмка прервана). Следующая TA-1 — **T-106a3** (после приёмки T-106a2; с кадрами фото-референса Ф6–Ф12); TA-2 — доводка T-143 по приёмке, затем T-159. Кадры — `docs/game/shots/2026-10-04-t105`, `-t106a1`, `-t106a2`, `-t107`, `-t112`.
 State on 2026-10-10 (3D stream pause lifted by the owner): T-106a1, T-107, T-112 — `done` (tester + game-designer). T-106a2 — back to `in-progress`: one defect, REQ-D3D-09 p.15 (elbow swings 5.05° per crank revolution, spec ≤ 2°; tester test 58c5c0b, red until the fix). technical-artist fixes it first, then continues T-106a3 (`in-progress` since 2026-10-10).
+Later on 2026-10-10: T-106a2 (elbow fix) and T-106a3 handed over — both `review`, acceptance running; T-160, T-108, T-113, T-115 — `done` (tester verdicts in `main`: 304f63a, 65d3c72, cad3845, 3ddb4bb). Next TA-1 — T-106a4 → T-109; real-route TA tasks T-184, T-185 come after that chain.
 
 Обратная связь владельца (2026-10-04). На 0.3.0-preview.1 release-сборка падала при запуске на MacBook (T-147, исправлено в 0.3.0-preview.2). Чтобы такие падения ловились до владельца, предложен дымовой прогон release-экспорта в CI (T-148): GUT и `--import` идут в редакторном режиме и узлы, потерянные экспортом, не видят. На 0.3.0-preview.2 владелец нашёл дефект импорта (T-149: `.zwo` из Intervals.icu не грузится, тот же план в `.mrc` — грузится) и спросил, можно ли тренироваться без станка, например только с измерителем мощности («многие так тренируются»). Сейчас в release запустить план без станка нельзя: диалог «Станок не подключён…», эмулятор есть только в отладочной сборке, а CI собирает только release. Ответ — две ветки: T-150 (эмулятор в release через скрытые строки разработчика, 0.3, чтобы владелец мог проверять без железа уже сейчас) и фича T-151..T-153 «Тренировка без умного станка» (новый REQ — Н-53, срез и приоритет — Н-54; карточки — «Путь к MVP»).
 **0.3.0-preview.3** (8eb3dd0): CI зелёный, артефакт выдан владельцу 2026-10-04; вошли T-149 (ZWO), T-150 (эмулятор в release), T-154 (причина отказа пульсометра). Ждёт от владельца: проверка `.zwo` из Intervals.icu, тренировка и свободная езда на эмуляторе, пульсометр по шагам раздела 4 «на сборке с T-154» (журнал прислать); до T-160 не привязывать Strava, тестовые заезды на эмуляторе удалить.
@@ -666,6 +690,24 @@ FTMS — REQ-DEV-10 (У-23); FE-C over BLE — REQ-DEV-11 (У-27: в MVP; У-28:
 Owner wants a compact training mode on Mac: a small always-on-top, borderless, semi-transparent window with workout metrics only, over a movie or a race stream. Spike first (Godot window flags + native `NSWindow` Spaces/level from the Objective-C++ GDExtension; 3D paused; session keeps running unfocused); requirements formalizes after the result, final look — game-designer later. **Developer queue: right after the T-161 / T-162 rework, before T-176, T-175** (does not write their shared files). Manual check — section 4, "Mini-HUD spike".
 
 - [T-177](tasks/T-177.md) — Spike: mini-HUD compact window over other apps on Mac
+
+### Release 0.4 — real-world routes and Strava screenshots (T-178..T-191; separate part, owner request 2026-10-10)
+REQ-D3D-11, REQ-STR-06 (real routes from the built-in catalog — У-40, У-41), REQ-STR-07, REQ-LOC-08 (screenshots — blocked until Strava partner access, У-42; schedule and HUD — У-43). Split 2026-10-10: data and session layer (developer) → GPS track in FIT and Strava (developer) → road and world along the real geometry (technical-artist, after the game-designer spec) → route cards (developer, after the mockup); real content — game-designer shortlist (T-191: South China, islands — owner's answer to Н-80), owner confirms, then T-186. Whether real routes are in MVP — Н-78 (ж). Order and file ownership — section 2, "Release 0.4 — real-world routes".
+
+- [T-178](tasks/T-178.md) — Real-route road and world: spec
+- [T-179](tasks/T-179.md) — Route card and route choice: mockup
+- [T-180](tasks/T-180.md) — Route catalog: data format, loading, validation, licensing and attribution
+- [T-181](tasks/T-181.md) — Catalog route in the session: profile, grade, coordinate by distance, end of route
+- [T-182](tasks/T-182.md) — GPS track of a route ride: samples, FIT position fields, Strava name
+- [T-183](tasks/T-183.md) — Route cards on track selection and route for plan workouts
+- [T-184](tasks/T-184.md) — Road along the real route shape: projection, smoothing, curvature, height
+- [T-185](tasks/T-185.md) — Scenery along the route, overlapping sections, chunk streaming
+- [T-191](tasks/T-191.md) — Propose first catalog routes (South China, islands) with OSM data and ODbL check
+- [T-186](tasks/T-186.md) — First real routes in the catalog (OSM geometry, DEM elevation)
+- [T-187](tasks/T-187.md) — Strava: no images sent before partner access (guard) and checklist record
+- [T-188](tasks/T-188.md) — Screenshot button on the HUD and screenshot status in the ride card: mockup
+- [T-189](tasks/T-189.md) — Ride screenshots: capture and storage
+- [T-190](tasks/T-190.md) — Screenshot upload to the Strava activity (partner API)
 ### Этап 8 — Публикация iOS и macOS (в контейнере — документы и заготовки)
 
 - [T-053](tasks/T-053.md) — Пакет публикации iOS/macOS
@@ -845,10 +887,17 @@ REQ-D3D-05 п.1, 3 (эталон — **MacBook Pro M1 Pro (MacBookPro18,3) вл�
 
 ### Mini-HUD spike (T-177; after the developer hands it over) — P1, owner's Mac, build with T-177
 No REQ-ID yet (spike); results go into `docs/tasks/T-177.md` and to requirements.
+Spike result (developer hand-over 2026-10-10): window level `NSStatusWindowLevel`; collection behavior `canJoinAllSpaces | fullScreenAuxiliary`; App Nap guard while the mini-HUD is on. The Objective-C++ part is not compiled in the container — the owner builds on the Mac and runs the checklist below. Fallback if the overlay does not show over full-screen video: `NSPanel` or the accessory activation policy.
 - Start a workout (emulator or Neo), switch to the mini-HUD. The overlay shows power + target, HR, cadence, step timer, next step; pause and skip-step buttons work; "back" restores the full HUD and the 3D world.
 - Overlay stays visible over full-screen video in: Safari, Chrome, Firefox, Apple TV app, QuickTime Player; over a normal (non-full-screen) window; after switching Spaces (Ctrl+←/→, Mission Control) and back. Note for each: visible yes/no.
 - Session keeps running unfocused for 10 minutes with video playing: ERG changes on step boundaries (felt on Neo or seen on the emulator), samples recorded (ride in history has no gaps), timer did not drift. Note whether video stuttered.
 - Send the diagnostic log and one photo/screenshot of the overlay over full-screen video.
+
+### Release 0.4 — real routes and screenshots (T-182..T-186, T-189..T-191) — P1, owner's Mac, Neo, real Strava
+- Confirm the T-191 route shortlist (South China, islands).
+- After T-182..T-186: free ride on a catalog route on the Neo — harder uphill, easier downhill; order and direction of the major turns match the map; no hitch when chunks stream in; 60 FPS by the D3D-05 p.1 method (D3D-11 p.13). Upload to Strava: Virtual Ride with a map that follows the real route; distance and gain ±1 % (STR-06 p.7).
+- OSM / DEM attribution and licenses — legal adequacy is the owner's call (D3D-11 p.3, `[вне контейнера]`).
+- After Strava partner access only: screenshots visible on the activity in session-second order, web and mobile (STR-07 p.8); no hitch > 100 ms on capture, screenshots in the ride card after restart on iOS (LOC-08 p.9). Partner application status — `docs/publishing/strava_api_checklist.md` (STR-07 p.9, T-187).
 
 ## 5. Блокеры и вопросы к requirements
 
@@ -1048,6 +1097,8 @@ No REQ-ID yet (spike); results go into `docs/tasks/T-177.md` and to requirements
 | STR-03 | T-047, T-049 |
 | STR-04 | T-048 (п.2–4, 6), T-049 (п.1 — автопостановка в `StravaService`, п.5 — UI); 0.3 — T-160 (п.1 — без автовыгрузки заездов на эмуляторе, п.5 — подтверждение; Н-52 (а), Н-59) |
 | STR-05 | T-048, T-049; регрессия — T-160 |
+| STR-06 (route GPS track; У-39) | 0.4 routes — T-182 (p.1–6); p.7 — manual (after T-186) |
+| STR-07 (screenshots to Strava, partner API; У-42) | T-187 (p.6 guard, p.9 checklist — now); T-190 (p.1–5, 7 — blocked until partner access), T-188 (p.5 mockup); p.8 — manual |
 | DEV-01 | T-019, T-021, T-022; 0.3 — T-147 (экран устройств в release-сборке, `[editable]`); T-165 (инструмент «BLE-отладка»); путь к MVP — T-116b (журнал BLE), T-118 (п.5, 6 — macOS на Neo), T-121 (п.6 — iOS-сборка), T-122 (п.6 — модуль в iOS-приложении), T-139 (Android) |
 | DEV-02 | T-016, T-017, T-022; путь к MVP — T-118 (п.6, 7 на Neo), T-119 (п.2 — реальные фикстуры), T-161 (п.1 — подписка и Request Control только при `0x2AD9`) |
 | DEV-10 (совместимость: любой FTMS-станок, У-23; станки без FTMS — после MVP, Н-62) | путь к MVP — T-161 (п.3, 5–8; п.6 — значение команды; п.4 — T-152, WRK-09), T-162 (п.6 — HUD, сэмпл, FIT показывают фактическую цель; решение владельца 2026-10-04, Н-61 (б); доработка У-37 — цели по станку везде; п.5 (б) — HUD и событие, У-36), доработка T-161 (п.5 (а), (г), (д) — сопротивление при недоступном ERG, переподключение, У-36; п.7 — У-35), T-117 (п.9 — протокол на эталонном Neo), T-116b (журнал: чтение `0x2AD8` и др.); п.1, 2 — регрессия в T-161 |
@@ -1084,6 +1135,7 @@ No REQ-ID yet (spike); results go into `docs/tasks/T-177.md` and to requirements
 | D3D-08 | T-062 (п.1–3), T-066 (п.6 — бюджет), T-070 (п.2, 4, 5, 7), T-080 (п.1 — названия), T-083 (п.6, 8, 12 — `flat`, `hills`), T-087 (п.6, 8, 10, 12 — `mountains`), T-088 (п.6, 8 — вода), T-090 (п.3, 6, 8 — мост), T-091 (п.12 — дизайн ориентиров), T-092 (п.12 — данные), T-102 (п.8 — подъём на «Перевале»); 0.3 — T-107 (п.6, 8 — растительность), T-112 (п.8 — запас критерия подъёма); сейчас — T-169 (п.13 — скорость в плане на `flat` по модели с уклоном, У-30); п.9 — ручная |
 | D3D-09 (проработанный гонщик; было Н-18) | 0.3 — T-104 (спека ред. 2–4, числа — У-21; ред. 4 — вариант Г); T-106a1 (геометрия седла и ручек, ракурсы — инструмент п.11, 19), T-106a2 (п.1–5 для обеих фигур, п.7 — кости и аллокации, п.8; п.14–18, визуально п.13, 19 — на манекене), T-106a3 (п.6, 7, `[авто]`-часть п.12 — тень), T-106a4 (п.7, 9 — механизм проверки; инструмент Т1–Т8), T-143 (п.7, 9 — механизм конвейера доводки; п.1–5 — проверка на синтетике), T-106b′ (промежуточно, блокинг TA по сырью владельца); T-106c′ (все пункты на итоговой модели; п.9 (а) — записи с полями (1)–(7), п.10, 11 — только здесь) — 0.3 или 0.3.1 (Н-33); запасной путь (при отказе от варианта Г) — T-106b, T-106c, п.9 (б); п.12 — ручная (MacBook Pro M1 Pro, У-25); вид сзади по фото-референсу 2026-10-04 (a07517f, спека ред. 4.6): п.20 — T-106a3 (`work`, `volga_union`), T-109 и T-106c′ (целиком, каждый пресет); п.21 — T-109, T-106c′; п.22 — T-106a3 (Ф6–Ф12), T-106b′ (Ф1–Ф5, `rear_low`), T-109 (Ф6–Ф12 полным пресетом), T-106c′ (Ф1–Ф12); Н-35, Н-36 закрыты (3f1a5a4 и ранее); открыто — Н-39 (k), Н-41, Н-42, Н-45..Н-47, Н-64..Н-67 |
 | D3D-10 (проработанные хвойные; было Н-19) | 0.3 — T-105 (спека, числа — У-21), T-107 (реализация) |
+| D3D-11 (real-world routes; У-39..У-41) | 0.4 routes — T-180 (p.1–3, p.11 load), T-181 (p.4–7, p.11 accuracy), T-182 (p.9), T-183 (p.3 card, p.8), T-178 (spec p.10, 12), T-184 (p.10 (а)–(д), p.12 road), T-185 (p.10 (е), (ж), p.12), T-179 (mockup p.8), T-191 (p.1, 3 — route shortlist, Н-80 answered), T-186 (real content); p.13 — manual (after T-186) |
 | AVT-01 (внешность гонщика в профиле; было Н-20) | 0.3 — T-104 (28 слотов, 6 пресетов — ред. 2, `volga_union` — ред. 4), T-108 (данные: 28 слотов, 6 пресетов с `volga_union`; d0fa933, `review`); Н-34 закрыт (3f1a5a4); открыто у владельца — Н-43 (название), Н-44 (внешность по умолчанию), Н-48 (цвета `volga_union`; дополнение по фото — Н-66) — критерии не меняют; п.5 — правило контраста тёмных пресетов (a07517f, фото-референс 2026-10-04) — T-163 |
 | AVT-02 (применение внешности без пересборки сцены; было Н-20) | 0.3 — T-106a3 (механизм палитры), T-109 (на манекене, 6 пресетов; п.5 — правило шлема D3D-09 п.20 и тёмные пресеты п.21, a07517f); T-106c′ (п.3–5 на итоговой модели; запасной путь — T-106c) |
 | AVT-03 (будущий, «Гардероб» — после MVP; У-20, было Н-21) | 1.2 — T-110 (макет), T-111 (экран) |
@@ -1106,6 +1158,7 @@ No REQ-ID yet (spike); results go into `docs/tasks/T-177.md` and to requirements
 | LOC-05 | T-044, T-045; путь к MVP — T-126 (п.6 — экспорт на iOS); регрессия п.2 — T-169 (скорость модели); п.5 — ручная (0.4, T-117) |
 | LOC-06 | T-045, T-048 |
 | LOC-07 | T-042; T-101 (п.4 — стабильность теста); 0.3 — T-114 (п.3 — «удалить» в диалоге восстановления), T-145 (п.3), T-173 (п.3 — дата в диалоге восстановления, Н-76 (б)); п.5 — ручная (P0 среза 0.4, протокол T-117) |
+| LOC-08 (ride screenshots; У-42, У-43) | T-189 (p.1–8 — blocked until Strava partner access), T-188 (p.2 mockup); p.9 — manual |
 | NFR-01 | T-025; путь к MVP — T-116b (задержка из журнала), T-119; п.3 — ручная (0.4, T-117) |
 | NFR-02 | T-006, T-013, T-023; путь к MVP — T-116a (ограничение FPS 15, срез 0.3); п.3 — ручная (0.4, T-117) |
 | NFR-03 | T-032, T-036, T-048; п.4 — ручная (0.4, T-117) |
