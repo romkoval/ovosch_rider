@@ -44,7 +44,8 @@ skills:
 1. Снимки «до» и «после» на одних дистанциях (`./scripts/screenshot.sh`), чек-лист
    `ride-visual-review` по кадрам «после» — в отчёт.
 2. `godot --headless --path . --import` без ошибок.
-3. `./scripts/test.sh` — полностью зелёный (особенно `test_ride_scene`, `test_scene3d_acceptance`).
+3. Во время работы — `./scripts/test_changed.sh`; полный `./scripts/test.sh` — один раз, на последнем коммите
+   сдачи, зелёный (особенно `test_ride_scene`, `test_scene3d_acceptance`); в отчёте — хэш и строка итога.
 4. Новые `.gd` — вместе с `.uid`.
 
 ## Формат отчёта

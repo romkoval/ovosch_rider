@@ -28,3 +28,4 @@ screenshots/
 
 # Python (скрипты Blender, scripts/blender)
 __pycache__/
+.gutconfig.changed.json
