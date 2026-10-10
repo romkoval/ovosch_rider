@@ -21,15 +21,10 @@ extends RefCounted
 ## сэмпл ограничено `MAX_DELTA_KMH_PER_SEC`; при 0 Вт с 30 км/ч на ровном или в подъём
 ## останавливается не более чем за 30 с (D3D-02 крит. 3, 4; FRD-04 крит. 7).
 ##
-## Нет ни одного источника мощности (D3D-02 п.7, DEV-05 п.2 (г), решение У-33) — `step_without_power()`:
-## тяги нет, в модель идёт 0 Вт, скорость меняется по модели с уклоном (воздух, качение, g(s)),
-## не мгновенным нулём, не больше 5 км/ч за секунду. На ровном и в подъём модель сама сводит
-## скорость к 0 (D3D-02 п.7 (а)). На спуске при 0 Вт модель дала бы накат; накат допускается не
-## дольше `coast_limit_sec` без источника, затем скорость не растёт и убывает на
-## `MAX_DELTA_KMH_PER_SEC` в секунду до 0 (с любой скорости до `MAX_SPEED_KMH` — за 30 с).
-## До ответа владельца Н-74 предел 0: наката нет, на спуске скорость сразу убывает на 5 км/ч в
-## секунду (правило У-32 «нет мощности — аватар не едет»); предложение реестра — 30 с (п.7 (б)).
-## Пришла мощность (`step()`) — счёт секунд без источника обнуляется.
+## Нет ни одного источника мощности (D3D-02 п.7, DEV-05 п.2 (г), решения У-33, У-34) —
+## `step_without_power()`: тяги нет, это ровно шаг модели при 0 Вт с уклоном (воздух, качение, g(s),
+## масса) — без принудительной остановки и без своих пределов. На ровном и в подъём модель сама
+## сводит скорость к 0 (п.3), на спуске катится накатом к установившейся скорости без срока.
 
 const AIR_DENSITY: float = 1.225      # кг/м³
 const CDA_M2: float = 0.32            # м²
@@ -45,16 +40,8 @@ const MAX_DELTA_KMH_PER_SEC: float = 5.0
 ## считаем, что всадник остановился.
 const STOP_THRESHOLD_KMH: float = 0.1
 
-## Сколько секунд без источника мощности модель допускает накат на спуске: 0 — до ответа Н-74
-## (наката нет); предложение реестра для D3D-02 п.7 (б) — 30.
-const COAST_LIMIT_SEC: float = 0.0
-
 ## Текущая сглаженная скорость экземпляра, км/ч.
 var speed_kmh: float = 0.0
-## Секунд подряд без источника мощности (`step_without_power`); 0 — мощность есть.
-var seconds_without_power: float = 0.0
-## Предел наката на спуске без источника мощности, с (по умолчанию `COAST_LIMIT_SEC`).
-var coast_limit_sec: float = COAST_LIMIT_SEC
 
 
 ## Установившаяся скорость, км/ч, для мощности `power_w`, массы всадника `weight_kg`
@@ -101,7 +88,6 @@ static func _slope_force_n(total_mass_kg: float, grade_pct: float) -> float:
 ## Сбросить сглаженную скорость.
 func reset(initial_kmh: float = 0.0) -> void:
 	speed_kmh = maxf(initial_kmh, 0.0)
-	seconds_without_power = 0.0
 
 
 ## Продвинуть модель на `dt_sec` при мощности `power_w`, массе `weight_kg` и полном
@@ -109,25 +95,13 @@ func reset(initial_kmh: float = 0.0) -> void:
 func step(power_w: float, weight_kg: float, dt_sec: float = 1.0, grade_pct: float = 0.0) -> float:
 	if dt_sec <= 0.0:
 		return speed_kmh
-	seconds_without_power = 0.0
 	return _advance(power_w, weight_kg, dt_sec, grade_pct)
 
 
-## Продвинуть модель на `dt_sec`, когда нет ни одного источника мощности (D3D-02 п.7, У-33):
-## тяга 0 Вт, скорость — по модели с уклоном. Там, где модель при 0 Вт дала бы накат (спуск), после
-## `coast_limit_sec` без источника скорость не растёт и убывает на `MAX_DELTA_KMH_PER_SEC` в секунду
-## до 0 (Н-74). Возвращает скорость, км/ч.
+## Продвинуть модель на `dt_sec`, когда нет ни одного источника мощности (D3D-02 п.7, У-33, У-34):
+## тяги нет — шаг модели при 0 Вт с уклоном `grade_pct`. Возвращает скорость, км/ч.
 func step_without_power(weight_kg: float, dt_sec: float = 1.0, grade_pct: float = 0.0) -> float:
-	if dt_sec <= 0.0:
-		return speed_kmh
-	seconds_without_power += dt_sec
-	var coasting: bool = steady_speed_kmh(0.0, weight_kg, grade_pct) > 0.0
-	if not coasting or seconds_without_power <= coast_limit_sec + 1e-6:
-		return _advance(0.0, weight_kg, dt_sec, grade_pct)
-	speed_kmh = maxf(speed_kmh - MAX_DELTA_KMH_PER_SEC * dt_sec, 0.0)
-	if speed_kmh < STOP_THRESHOLD_KMH:
-		speed_kmh = 0.0
-	return speed_kmh
+	return step(0.0, weight_kg, dt_sec, grade_pct)
 
 
 func _advance(power_w: float, weight_kg: float, dt_sec: float, grade_pct: float) -> float:

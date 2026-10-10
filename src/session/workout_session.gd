@@ -55,8 +55,8 @@ extends RefCounted
 ## плановая (с множителем), переходы и события — как в `smart` (WRK-09 п.3).
 ##
 ## Секунда без мощности — тяги нет: мощность в
-## сэмпле «нет данных», скорость убывает по модели (`SpeedModel.step_without_power`, D3D-02 п.7,
-## У-33) до остановки, таймер плана идёт.
+## сэмпле «нет данных», скорость — шаг модели при 0 Вт (`SpeedModel.step_without_power`, D3D-02 п.7,
+## У-33, У-34: на ровном остановка, на спуске накат), таймер плана идёт.
 
 enum State { IDLE, RUNNING, PAUSED, FINISHED }
 
@@ -465,7 +465,7 @@ func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec:
 	if sample != null and sample.has_power:
 		model_speed = _speed_model.step(float(sample.power_w), weight_kg, 1.0, grade)
 	else:
-		# Источников мощности нет — тяги нет: скорость убывает по модели (D3D-02 п.7, У-33).
+		# Источников мощности нет — тяги нет: скорость — шаг модели при 0 Вт (D3D-02 п.7, У-33, У-34).
 		model_speed = _speed_model.step_without_power(weight_kg, 1.0, grade)
 	position.advance(model_speed, 1.0)
 	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, _current_target_w,

@@ -1,6 +1,6 @@
 extends GutTest
 ## T-170: приоритет источника мощности в режиме `smart` (REQ-DEV-05 п.2, У-32) и плавная остановка
-## без источника мощности (REQ-D3D-02 п.7, У-33; спуск — до ответа Н-74 без наката).
+## без источника мощности (REQ-D3D-02 п.7, У-33, У-34: шаг модели при 0 Вт, на спуске накат без срока).
 ## План с ERG на `FakeTrainer` + симулятор CPS через `SensorHub`; свободная езда (SIM) — тот же хаб.
 
 const FTP: int = 200
@@ -197,46 +197,21 @@ func test_req_d3d_02_c7_uphill_stops_by_model() -> void:
 	assert_eq(m.speed_kmh, 0.0, "подъём: модель сводит скорость к 0")
 
 
-## До ответа Н-74 наката нет: на спуске скорость не растёт и убывает ≤ 5 км/ч за сэмпл до 0
-## не позже 30 с (правило У-32, приёмка T-153).
-func test_req_d3d_02_c7b_descent_without_power_no_coasting_until_n74() -> void:
+## У-34: на спуске без источника — накат по модели при 0 Вт без срока остановки.
+func test_req_d3d_02_c7b_descent_coasts_by_model_without_time_limit() -> void:
 	var m := SpeedModel.new()
-	assert_eq(m.coast_limit_sec, 0.0, "по умолчанию наката нет (Н-74 не решён)")
-	m.reset(30.0)
-	var prev: float = m.speed_kmh
-	var zero_at: int = -1
-	for n in range(1, 41):
-		var v: float = m.step_without_power(WEIGHT, 1.0, -5.0)
-		assert_true(v <= prev + 1e-6 and prev - v <= 5.0 + 1e-6, "сэмпл %d: не растёт, ≤ 5 км/ч" % n)
-		if v == 0.0 and zero_at < 0:
-			zero_at = n
-		prev = v
-	assert_true(zero_at > 0 and zero_at <= 30, "0 не позже 30-го сэмпла (%d)" % zero_at)
-
-
-## Предложение реестра Н-74 (D3D-02 п.7 (б), тест 2) — при пределе наката 30 с.
-func test_req_d3d_02_c7b_test2_proposal_descent_coasts_30s_then_stops_by_60th_sample() -> void:
-	var m := SpeedModel.new()
-	m.coast_limit_sec = 30.0
 	m.reset(30.0)
 	var ref := SpeedModel.new()
 	ref.reset(30.0)
-	for n in range(1, 31):
+	for n in range(1, 121):
 		var v: float = m.step_without_power(WEIGHT, 1.0, -5.0)
-		assert_almost_eq(v, ref.step(0.0, WEIGHT, 1.0, -5.0), 0.1, "сэмпл %d: накат по модели при 0 Вт" % n)
-	assert_gt(m.speed_kmh, 30.0, "на спуске накат разгоняет")
-	var prev: float = m.speed_kmh
-	var zero_at: int = -1
-	for n in range(31, 71):
-		var v: float = m.step_without_power(WEIGHT, 1.0, -5.0)
-		assert_true(v <= prev + 1e-6 and prev - v <= 5.0 + 1e-6, "сэмпл %d: не растёт, ≤ 5 км/ч" % n)
-		if v == 0.0 and zero_at < 0:
-			zero_at = n
-		prev = v
-	assert_true(zero_at > 0 and zero_at <= 60, "0 не позже 60-го сэмпла (%d)" % zero_at)
-	assert_eq(m.speed_kmh, 0.0, "до конца молчания стоит")
+		assert_almost_eq(v, ref.step(0.0, WEIGHT, 1.0, -5.0), 0.1, "сэмпл %d: шаг модели при 0 Вт" % n)
+	assert_almost_eq(m.speed_kmh, SpeedModel.steady_speed_kmh(0.0, WEIGHT, -5.0), 0.5,
+		"накат до установившейся скорости, без принудительной остановки")
 
 
+## Свободная езда без источника: скорость каждого сэмпла — шаг модели при 0 Вт от предыдущей с уклоном
+## этого сэмпла (У-34); дистанция растёт, пока скорость > 0, и стоит при 0.
 func test_req_d3d_02_c7b_free_ride_descent_distance_stops_growing() -> void:
 	var t := _trainer()
 	var hub := _hub(t)
@@ -252,5 +227,14 @@ func test_req_d3d_02_c7b_free_ride_descent_distance_stops_growing() -> void:
 	var st := s.samples
 	var last := st.size() - 1
 	assert_false(st.has_power[last])
-	assert_eq(st.speed_kmh[last], 0.0, "без источника аватар остановился")
-	assert_almost_eq(st.distance_m[last], st.distance_m[last - 15], 0.01, "дистанция не растёт")
+	var ref := SpeedModel.new()
+	var first: int = st.has_power.find(false, 10)
+	assert_gt(first, 10, "после удержания 5 с — «нет данных»")
+	for i in range(first, st.size()):
+		ref.reset(st.speed_kmh[i - 1])
+		# Уклон шага — в позиции до продвижения, то есть уклон предыдущего сэмпла.
+		assert_almost_eq(st.speed_kmh[i], ref.step(0.0, WEIGHT, 1.0, st.grade_pct[i - 1]), 0.1, "сэмпл %d: шаг модели при 0 Вт" % i)
+		if st.speed_kmh[i] == 0.0:
+			assert_almost_eq(st.distance_m[i], st.distance_m[i - 1], 0.01, "сэмпл %d: стоит — дистанция не растёт" % i)
+		else:
+			assert_gt(st.distance_m[i], st.distance_m[i - 1], "сэмпл %d: едет — дистанция растёт" % i)
