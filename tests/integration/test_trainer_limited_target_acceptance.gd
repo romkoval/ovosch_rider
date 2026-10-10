@@ -193,41 +193,56 @@ func test_dev_10_c6_regression_in_range_target_equals_plan_and_fallback_range() 
 	assert_true(_targets_05().has("05d007"))
 
 
-## DEV-10 п.5: бит 3 = 0 — ERG недоступен «как в п.4»: 0x05 не уходит, кнопка ERG неактивна.
+## DEV-10 p.5, WRK-03 p.6 (a), (b) (U-36, rework 2026-10-10): bit 3 = 0 — ERG unavailable: 0x05 is
+## never sent, the ERG button is hidden (not just disabled), the chip reads "RES.", E creates no command.
 func test_req_dev_10_c5_bit3_zero_erg_unavailable_no_05_on_screen() -> void:
 	var t := _ble_trainer(["2ACC"], {"2ACC": "00 00 00 00 04 20 00 00"})
 	assert_false(t.is_erg_available())
 	var s := _screen(_plan_3(), t)
 	for i in 3:
 		_second(s, 150)
-	assert_eq(_targets_05(), [] as Array[String], "0x05 не уходит")
-	assert_true(s.toolbar().button(&"erg").disabled, "кнопка ERG неактивна")
+	assert_eq(_targets_05(), [] as Array[String], "0x05 is not sent")
+	assert_false(s.toolbar().button(&"erg").visible, "WRK-03 p.6 (b): ERG button hidden")
+	assert_eq(s.mode_chip_text(), "RES.", "WRK-03 p.6 (a): chip RES.")
 	s.toolbar().trigger(&"erg")
 	_second(s, 150)
-	assert_eq(_targets_05(), [] as Array[String], "«включить ERG» команд не создаёт")
+	assert_eq(_targets_05(), [] as Array[String], "«turn ERG on» creates no command")
 
 
-## DEV-10 п.5: ответ `80 05 02` на Set Target Power — ERG недоступен до конца подключения
-## «с сообщением пользователю (DEV-02.3)»: сообщение должно быть видно на экране тренировки.
-func test_req_dev_10_c5_80_05_02_visible_message_to_user() -> void:
-	var t := _ble_trainer([], {})
-	_bridge.fail_next_control_point(FtmsCodec.RESULT_NOT_SUPPORTED)
-	var s := _screen(_plan_3(), t)
-	for i in 3:
-		_second(s, 150)
-	assert_eq(_targets_05().size(), 1, "одна 0x05 и ответ 80 05 02")
-	assert_false(s.session().erg_available(), "ERG недоступен")
-	for i in 10:
-		_second(s, 150)
-	assert_eq(_targets_05().size(), 1, "дальше 0x05 не уходит")
+const NOTICE_LONG_EN: String = "Trainer does not support ERG — fixed resistance, hold the target yourself"
+
+
+## Visible label texts of the screen.
+static func _visible_texts(s: WorkoutScreen) -> Array[String]:
 	var texts: Array[String] = []
 	for n in s.find_children("*", "Label", true, false):
 		var l := n as Label
 		if l.is_visible_in_tree() and not l.text.is_empty():
 			texts.append(l.text)
-	var shown := false
-	for x in texts:
-		if x.containsn("unavailable") or x.containsn("not supported") or x.containsn("rejected") or x.containsn("does not accept"):
-			shown = true
-	gut.p("видимые надписи: %s" % str(texts))
-	assert_true(shown, "DEV-10 п.5 / DEV-02 п.3: сообщение об отказе ERG видно на экране (сейчас только tooltip фишки ERG)")
+	return texts
+
+
+## DEV-10 p.5 (b) → WRK-03 p.6 (c): after `80 05 02` the user sees the notice — the text of the
+## requirement in the HUD hint slot, from the second of the refusal, 8 s (±0.5 s), then gone.
+## (Rewritten 2026-10-10: the first version predates U-36 and checked "unavailable / not
+## supported" 10 s after the refusal; the requirement now fixes the text and the 8 s.)
+func test_req_dev_10_c5_80_05_02_visible_message_to_user() -> void:
+	var t := _ble_trainer([], {})
+	_bridge.fail_next_control_point(FtmsCodec.RESULT_NOT_SUPPORTED)
+	var s := _screen(_plan_3(), t)
+	var shown: Array[int] = []
+	for i in 14:
+		_second(s, 150)
+		if i == 0:
+			assert_eq(_targets_05().size(), 1, "one 0x05 answered with 80 05 02")
+			assert_false(s.session().erg_available(), "ERG unavailable")
+		if _visible_texts(s).has(NOTICE_LONG_EN):
+			shown.append(s.session().executor.elapsed_sec())
+	gut.p("notice visible at seconds: %s" % str(shown))
+	assert_eq(_targets_05().size(), 1, "no further 0x05")
+	assert_false(shown.is_empty(), "the notice is visible on the screen")
+	if not shown.is_empty():
+		assert_lte(shown[0], 1, "from the second of the refusal")
+		assert_eq(shown.size(), shown[shown.size() - 1] - shown[0] + 1, "continuous")
+		assert_between(shown.size(), 7, 8, "8 s (seconds sampled after each tick: 7–8 of them)")
+	assert_false(_visible_texts(s).has(NOTICE_LONG_EN), "gone after 8 s")
