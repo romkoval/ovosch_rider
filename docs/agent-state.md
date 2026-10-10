@@ -6,7 +6,18 @@
 
 ## Чекпоинт
 
-### Пауза по просьбе владельца (2026-10-05, запись оркестратора)
+### Checkpoint 2026-10-10 (manager; supersedes the queues below where they differ)
+- **3D stream pause (2026-10-05) lifted by the owner on 2026-10-10.** technical-artist is back at work.
+- Closed 2026-10-10: T-106a1 (tester 2dce864), T-112 (tester 4cd73ea, game-designer cc37459), T-107 (tester de7f24e, game-designer after e19734e) — `done`. T-107 owner manual is in backlog section 4 (P8 / needles in Forward+, draw calls on «Mountain Pass», FPS).
+- T-106a2 — back to `in-progress`: REQ-D3D-09 p.15, elbow swings 5.05° per revolution (spec ≤ 2°); tester test 58c5c0b not in `main` yet (red until the fix). T-106a3 — `in-progress` (started 2026-10-10).
+- Queues:
+  - developer — T-174 → T-173 → T-161 / T-162 rework → T-177 (mini-HUD spike) → T-176 → T-175;
+  - technical-artist — T-106a2 elbow fix → T-106a3;
+  - tester — idle (next: re-check T-106a2 p.15 after the fix);
+  - game-designer — verdicts on demand.
+- Process rules (new): one full test run per hand-off (not per commit); English language policy for new entries in docs (story-map stays Russian).
+
+### Пауза по просьбе владельца (2026-10-05, запись оркестратора; снята 2026-10-10)
 Агенты остановлены. **Бэклог разделён (2026-10-05):** `docs/backlog.md` — индекс (таблица раздела 2: статус только здесь), описание и критерии каждой задачи — `docs/tasks/<ID>.md`; правила — `CLAUDE.md`, `.claude/agents/*.md`, тест `tests/unit/arch/test_backlog_tasks.gd`. Статусы после приёмки 2026-10-05: T-149 `done`, T-150/T-154/T-143 `in-progress` (дефекты), T-160 `review`, новая T-164 `in-progress`. `main` = 2ec4ca6 (T-160 влита, полный GUT 3637/3637). Незаконченная работа сохранена WIP-коммитами в локальных ветках контейнера (на GitHub не запушены — при закрытии контейнера пропадут):
 - `work/fix-150-154` (worktree `wt-fix`): fc018b4 — приёмочные тесты tester T-149/T-150/T-154 (5 красных по дефектам); 8551e45 — WIP developer: дефекты T-150 (п.2 «Режим разработки» в release, п.3 метка «Эмулятор» на HUD), T-154 (пустой список сервисов и отказ подписки → не «подключено»), T-164 (причина отказа станка на экране устройств, REQ-DEV-07 п.1). Полный прогон не делался.
 - `work/t-143-r` (worktree `wt-143r`): 4f2ac07 — повторная приёмка tester T-143 (2 красных: макушка шага 3 впереди 0.0421 м при спеке 0.02–0.04; номиналы ред. 4.6 — шорты 70 %, джерси 0.24 м); 436def1 — WIP technical-artist по обоим дефектам, тесты не прогонялись. Решение координатора: конвейер берёт номиналы спеки (У-21).
