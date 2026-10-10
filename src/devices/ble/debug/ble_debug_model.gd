@@ -77,7 +77,7 @@ const SERVICE_NAMES: Dictionary = {
 	"1801": "Generic Attribute",
 	"FE59": "Nordic Semiconductor (DFU)",
 	"FE51": "SRAM",
-	FEC_SERVICE: "Tacx FE-C over BLE",
+	FEC_SERVICE: "FE-C over BLE",
 }
 
 const CHAR_NAMES: Dictionary = {

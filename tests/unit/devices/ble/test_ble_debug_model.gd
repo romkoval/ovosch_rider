@@ -141,7 +141,7 @@ func test_connect_discovers_services_and_builds_named_tree() -> void:
 	assert_eq(by_uuid["180A"]["name"], "Device Information")
 	assert_eq(by_uuid["1818"]["name"], "Cycling Power")
 	assert_eq(by_uuid["1816"]["name"], "Cycling Speed and Cadence")
-	assert_eq(by_uuid[FEC_SERVICE]["name"], "Tacx FE-C over BLE")
+	assert_eq(by_uuid[FEC_SERVICE]["name"], "FE-C over BLE")
 	assert_eq(by_uuid["669AA501-0C08-969E-E211-86AD5062675F"]["name"], "", "неизвестный — как есть")
 	var fec_chars: Array = by_uuid[FEC_SERVICE]["chars"]
 	assert_eq(fec_chars[0]["uuid"], FEC_NOTIFY)
