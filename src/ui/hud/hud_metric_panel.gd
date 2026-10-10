@@ -113,6 +113,17 @@ const WEDGE_FULL_GRADE_PCT: float = 8.0
 const WEDGE_MIN_HEIGHT: float = 2.0
 ## Альфа значений на паузе (`hud.md` п. 10.2).
 const DIMMED_ALPHA: float = 0.6
+## Tolerance scale in place of the zone bar (`hud.md` p. 16.2, T-175): track, band, marker, triangles.
+const SCALE_TRACK_HEIGHT: float = 10.0
+const SCALE_TRACK_RADIUS: float = 5.0
+const SCALE_TRACK_COLOR: Color = Color(1, 1, 1, 0.14)
+const SCALE_BAND_COLOR: Color = Color(UiTokens.HUD_DEV_ON, 0.30)
+const SCALE_BAND_EDGE: float = 1.5
+const SCALE_MARKER_SIZE: Vector2 = Vector2(4, 16)
+const SCALE_MARKER_OUTLINE: float = 1.0
+const SCALE_TRIANGLE: float = 10.0
+## Marker glide to the new position (ease-out).
+const SCALE_MOVE_SEC: float = 0.3
 
 var _mode: Mode = Mode.PLAN
 var _state: Dictionary = {}
@@ -124,6 +135,12 @@ var _power_zone_color: Color = Color.TRANSPARENT
 var _grade: float = NAN
 var _deviation: String = HudModel.DEVIATION_HIDDEN
 var _delta_text: String = ""
+## Tolerance scale of `HudModel.state()["tolerance_scale"]` (empty — zone bar) and the drawn marker.
+var _scale: Dictionary = {}
+var _marker_fraction: float = 0.5
+var _marker_tween: Tween = null
+var _marker_goal: float = 0.5
+var _scale_track_box: StyleBoxFlat
 var _unit_texts: Array[String] = []
 ## Фишка → есть ли у неё зона (заливка) — для отрисовки подложки.
 var _chip_filled: Dictionary = {}
@@ -510,6 +527,7 @@ func _apply_state() -> void:
 	if _deviation != HudModel.DEVIATION_HIDDEN:
 		var diff := int(s.get("smoothed_power_w", 0)) - int(s.get("target_w", 0))
 		_delta_text = ("+%d" % diff) if diff > 0 else (("%s%d" % [MINUS, -diff]) if diff < 0 else "0")
+	_apply_scale(s.get("tolerance_scale", {}) if not free_mode else {})
 	_zone_row.queue_redraw()
 	# Пульс и каденс.
 	_hr_label.text = str(s.get("hr_text", HudModel.NO_DATA_TEXT))
@@ -728,13 +746,94 @@ func _draw_grade_wedge() -> void:
 	]), color)
 
 
-## Строка зоны под героем: полоса цвета зоны факта (скрыта без данных), справа значок
-## отклонения и разница факт − цель (цифры `tnum`) цветом токена отклонения.
+## Tolerance scale shown in place of the zone bar (T-175).
+func is_tolerance_scale_shown() -> bool:
+	return not _scale.is_empty()
+
+
+## Where the marker goes, share of the scale width (the drawn marker glides there in 300 ms).
+func scale_marker_fraction() -> float:
+	return float(_scale.get("fraction", 0.5))
+
+
+## Marker visible (power has data and is within the scale).
+func is_scale_marker_shown() -> bool:
+	return not _scale.is_empty() and bool(_scale.get("marker", false)) and int(_scale.get("edge", 0)) == 0
+
+
+## −1 / 1 — triangle at the left / right edge, 0 — none.
+func scale_edge() -> int:
+	return int(_scale.get("edge", 0)) if not _scale.is_empty() and bool(_scale.get("marker", false)) else 0
+
+
+## Marker colour = deviation glyph colour; `hud.text` in the acclimatisation window.
+func scale_marker_color() -> Color:
+	var state := str(_scale.get("state", ""))
+	return DEVIATION_COLORS.get(state, UiTokens.HUD_TEXT)
+
+
+func _apply_scale(scale: Dictionary) -> void:
+	var was_shown := not _scale.is_empty()
+	_scale = scale
+	if _scale.is_empty():
+		return
+	var to := float(_scale.get("fraction", 0.5))
+	if not was_shown or not is_inside_tree():
+		_marker_goal = to
+		_set_marker_fraction(to)
+		return
+	if is_equal_approx(to, _marker_goal):
+		return  # refresh without a new sample: the glide in progress continues
+	_marker_goal = to
+	if _marker_tween != null:
+		_marker_tween.kill()
+	_marker_tween = create_tween()
+	_marker_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	_marker_tween.tween_method(_set_marker_fraction, _marker_fraction, to, SCALE_MOVE_SEC)
+
+
+func _set_marker_fraction(value: float) -> void:
+	_marker_fraction = value
+	_zone_row.queue_redraw()
+
+
+## Tolerance scale (`hud.md` p. 16.2): track, the band ±tol in the middle third, the marker of the
+## smoothed power (or ◀ / ▶ beyond the range); "no data" — track and band only.
+func _draw_scale(x: float, width: float, h: float) -> void:
+	var cy := h * 0.5
+	var track := Rect2(x, cy - SCALE_TRACK_HEIGHT * 0.5, width, SCALE_TRACK_HEIGHT)
+	_zone_row.draw_style_box(_scale_track_box, track)
+	var b: Vector2 = _scale.get("band", ToleranceScale.band())
+	var band := Rect2(x + width * b.x, track.position.y, width * (b.y - b.x), SCALE_TRACK_HEIGHT)
+	_zone_row.draw_rect(band, SCALE_BAND_COLOR)
+	_zone_row.draw_line(Vector2(band.position.x, band.position.y), Vector2(band.position.x, band.end.y), UiTokens.HUD_DEV_ON, SCALE_BAND_EDGE)
+	_zone_row.draw_line(Vector2(band.end.x, band.position.y), Vector2(band.end.x, band.end.y), UiTokens.HUD_DEV_ON, SCALE_BAND_EDGE)
+	if not bool(_scale.get("marker", false)):
+		return
+	var color := scale_marker_color()
+	var t := SCALE_TRIANGLE
+	match scale_edge():
+		-1:
+			_zone_row.draw_colored_polygon(PackedVector2Array([Vector2(x, cy), Vector2(x + t, cy - t * 0.5), Vector2(x + t, cy + t * 0.5)]), color)
+		1:
+			var r := x + width
+			_zone_row.draw_colored_polygon(PackedVector2Array([Vector2(r, cy), Vector2(r - t, cy - t * 0.5), Vector2(r - t, cy + t * 0.5)]), color)
+		_:
+			var mx := x + width * clampf(_marker_fraction, 0.0, 1.0)
+			var marker := Rect2(mx - SCALE_MARKER_SIZE.x * 0.5, cy - SCALE_MARKER_SIZE.y * 0.5, SCALE_MARKER_SIZE.x, SCALE_MARKER_SIZE.y)
+			_zone_row.draw_rect(marker.grow(SCALE_MARKER_OUTLINE), UiTokens.HUD_INK)
+			_zone_row.draw_rect(marker, color)
+
+
+## Строка зоны под героем: полоса цвета зоны факта (скрыта без данных) или шкала допуска (T-175),
+## справа значок отклонения и разница факт − цель (цифры `tnum`) цветом токена отклонения.
 func _draw_zone_row() -> void:
 	var h := _zone_row.size.y
 	var bar_x := CHIP_SIZE.x + ICON_GAP
 	var bar_end := _zone_row.size.x - DELTA_AREA_WIDTH
-	if _power_zone_color.a > 0.0:
+	if not _scale.is_empty():
+		_draw_scale(bar_x, bar_end - bar_x, h)
+	elif _power_zone_color.a > 0.0:
 		_zone_row.draw_rect(Rect2(bar_x, (h - ZONE_BAR_HEIGHT) * 0.5, bar_end - bar_x, ZONE_BAR_HEIGHT), _power_zone_color)
 	if _deviation == HudModel.DEVIATION_HIDDEN:
 		return
@@ -766,6 +865,7 @@ func _draw_chip_fill(chip: Label, fill: Control) -> void:
 
 func _make_boxes() -> void:
 	_bar_box = _flat_box(STEP_BAR_TRACK, STEP_BAR_RADIUS)
+	_scale_track_box = _flat_box(SCALE_TRACK_COLOR, SCALE_TRACK_RADIUS)
 	_stripe_box = _flat_box(UiTokens.HUD_FREE, 0)
 	_chip_fill_box = _flat_box(Color.WHITE, UiTokens.HUD_ZONE_CHIP_RADIUS)
 	_chip_empty_box = _flat_box(Color.TRANSPARENT, UiTokens.HUD_ZONE_CHIP_RADIUS)

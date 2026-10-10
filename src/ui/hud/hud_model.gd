@@ -60,6 +60,13 @@ var _erg_notice_until_sec: int = -1
 var _erg_notice_shown: bool = false
 ## A plan cue that came while the notice was on screen — shown right after it (hud.md p. 17.2).
 var _pending_cue: String = ""
+## Tolerance scale (T-175, HUD-02 p.6, WRK-09 p.5 (б)–(г)): on while a step with a target goes
+## without ERG acting on the trainer; the state machine advances once per sample.
+var _scale := ToleranceScale.new()
+var _scale_on: bool = false
+var _scale_state: String = DEVIATION_HIDDEN
+## The current second is in the acclimatisation window of the step (samples 1…5).
+var _in_window: bool = true
 var _state: Dictionary = {}
 
 
@@ -111,6 +118,18 @@ func _compute() -> Dictionary:
 	var cadence: int = int(row["cadence_rpm"]) if row.get("has_cadence", false) else NO_DATA
 	var speed: float = float(row["speed_kmh"]) if row.get("has_speed", false) else float(NO_DATA)
 	var power_zone: int = _power_zone(smoothed) if has_power else 0
+	_eval_scale(false)
+	var deviation: String = deviation_state(smoothed if has_power else NO_DATA, target if has_target else NO_DATA)
+	var scale: Dictionary = {}
+	if _scale_on:
+		deviation = DEVIATION_HIDDEN if _scale_state == ToleranceScale.STATE_WINDOW else _scale_state
+		scale = {
+			"state": _scale_state,
+			"marker": has_power,
+			"fraction": ToleranceScale.marker_fraction(float(smoothed), float(target)) if has_power else 0.5,
+			"edge": ToleranceScale.edge(float(smoothed), float(target)) if has_power else 0,
+			"band": ToleranceScale.band(),
+		}
 	var hr_zone: int = _hr_zone(hr) if hr >= 0 else 0
 	var remaining: int = ex.step_remaining_sec()
 	var total_steps: int = ex.workout.steps.size()
@@ -123,7 +142,8 @@ func _compute() -> Dictionary:
 		"target_text": ("%d" % target) if has_target else NO_DATA_TEXT,
 		"smoothed_power_w": smoothed if has_power else NO_DATA,
 		"power_text": ("%d" % smoothed) if has_power else NO_DATA_TEXT,
-		"power_deviation": deviation_state(smoothed if has_power else NO_DATA, target if has_target else NO_DATA),
+		"power_deviation": deviation,
+		"tolerance_scale": scale,
 		"power_zone": power_zone,
 		"power_zone_text": ("Z%d" % power_zone) if power_zone > 0 else NO_DATA_TEXT,
 		"power_zone_token": ZonePalette.power_token(power_zone),
@@ -281,13 +301,15 @@ func _hr_zone(bpm: int) -> int:
 	return profile.hr_zone_of(bpm)
 
 
-func _on_second_elapsed(elapsed_sec: int, _offset: int, _remaining: int) -> void:
+func _on_second_elapsed(elapsed_sec: int, offset: int, _remaining: int) -> void:
 	# Сессия (подписана раньше) уже закрыла слот — читаем его.
 	var row: Dictionary = session.samples.last_row()
 	if row.get("has_power", false):
 		_smoother.push(int(row["power_w"]))
 	else:
 		_smoother.push_missing()
+	_in_window = offset <= ToleranceScale.WINDOW_SEC
+	_eval_scale(true)
 	if _cue_until_sec >= 0 and elapsed_sec >= _cue_until_sec:
 		_clear_cue()
 	if _erg_notice_until_sec >= 0 and elapsed_sec >= _erg_notice_until_sec:
@@ -303,6 +325,11 @@ func _on_step_changed(_index: int, _step: WorkoutStep) -> void:
 	# Подсказка исчезает при смене шага (HUD-08 крит. 2); подсказка нового шага
 	# с offset 0 придёт следом в ту же секунду.
 	_clear_cue()
+	# A new step (also after a skip) opens the acclimatisation window of the scale.
+	_in_window = true
+	if _scale_on:
+		_scale.reset()
+		_scale_state = ToleranceScale.STATE_WINDOW
 	refresh()
 
 
@@ -345,6 +372,32 @@ func _on_erg_availability(available: bool) -> void:
 func _on_trainer_state(state: int) -> void:
 	if state == TrainerDevice.ConnectionState.RECONNECTING or state == TrainerDevice.ConnectionState.DISCONNECTED:
 		_erg_notice_shown = false
+
+
+## Whether the tolerance scale replaces the zone bar now (HUD-02 p.6): a step with a target and
+## ERG not acting on the trainer (WRK-08 p.7) — ERG off, unavailable, or `power_meter`.
+func scale_applies() -> bool:
+	var step := session.executor.current_step()
+	return step != null and not step.is_free_ride() and session.current_target_watts() > 0 \
+		and not session.is_erg_active_on_trainer() and session.get_state() != WorkoutSession.State.FINISHED
+
+
+## Advance the scale state: once per sample (`per_sample`), or right away when the scale has just
+## switched on (first state without hysteresis; the switch does not open the window).
+func _eval_scale(per_sample: bool) -> void:
+	if not scale_applies():
+		_scale_on = false
+		_scale_state = DEVIATION_HIDDEN
+		return
+	if not _scale_on:
+		_scale_on = true
+		_scale.reset()
+		per_sample = true
+	if not per_sample:
+		return
+	var smoothed: int = _smoother.value()
+	_scale_state = _scale.update(float(smoothed), float(session.current_target_watts()),
+		smoothed != PowerSmoother.NO_VALUE, _in_window)
 
 
 func _clear_cue() -> void:

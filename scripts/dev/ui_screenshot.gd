@@ -81,6 +81,11 @@ const KIND_RIDE_DETAIL: String = "ride_detail"
 ## emulator that reports ERG unavailable from the start; then advance to `at_sec`, optionally
 ## open the toolbar (`toolbar`), shoot.
 const KIND_ERG_UNAVAILABLE: String = "erg_unavailable"
+## Tolerance scale (T-175, REQ-HUD-02 p.7): a fresh plan "10 min at 200 W" on the emulator with ERG
+## `erg` = "off" (player), "unavailable" (trainer) or "on" (zone bar, same frame for comparison),
+## rider power `power_w`, shot at `at_sec`.
+const KIND_TOLERANCE_SCALE: String = "tolerance_scale"
+const SCALE_PLAN_WATTS: float = 200.0
 const KIND_FREE_RIDE_AT: String = "free_ride_at"
 const KIND_FREE_RIDE_PAUSED: String = "free_ride_paused"
 const KIND_FREE_RIDE_FINISH: String = "free_ride_finish"
@@ -133,6 +138,11 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "hud_summary_paused", "kind": KIND_WORKOUT_SUMMARY_PAUSED, "pause_sec": 75},
 	{"id": "hud_erg_unavailable_notice", "kind": KIND_ERG_UNAVAILABLE, "fresh": true, "at_sec": 3},
 	{"id": "hud_erg_unavailable", "kind": KIND_ERG_UNAVAILABLE, "at_sec": 60, "toolbar": true},
+	{"id": "hud_erg_off_scale", "kind": KIND_TOLERANCE_SCALE, "erg": "off", "power_w": 200, "at_sec": 30},
+	{"id": "hud_erg_off_scale_above", "kind": KIND_TOLERANCE_SCALE, "erg": "off", "power_w": 230, "at_sec": 30},
+	{"id": "hud_erg_unavailable_scale", "kind": KIND_TOLERANCE_SCALE, "erg": "unavailable", "power_w": 200, "at_sec": 30},
+	{"id": "hud_erg_unavailable_scale_above", "kind": KIND_TOLERANCE_SCALE, "erg": "unavailable", "power_w": 230, "at_sec": 30},
+	{"id": "hud_erg_on_bar", "kind": KIND_TOLERANCE_SCALE, "erg": "on", "power_w": 230, "at_sec": 30},
 ]
 
 var _out_dir: String = "screenshots/ui"
@@ -268,6 +278,9 @@ func _run_scenario(scenario: Dictionary) -> void:
 		return
 	if kind == KIND_ERG_UNAVAILABLE:
 		await _run_erg_unavailable_scenario(id, scenario)
+		return
+	if kind == KIND_TOLERANCE_SCALE:
+		await _run_tolerance_scale_scenario(id, scenario)
 		return
 	if kind.begins_with("workout_"):
 		if not _ensure_workout():
@@ -517,6 +530,29 @@ func _run_erg_unavailable_scenario(id: String, scenario: Dictionary) -> void:
 		_main.workout_screen().toolbar().poke()
 		# The toolbar fades in over 200 ms — shoot after it is shown.
 		await create_timer(HudToolbar.FADE_SEC + 0.1).timeout
+	await _shoot(id)
+
+
+## Tolerance scale: a fresh "200 W" plan on the emulator, ERG off / unavailable / on, rider power.
+func _run_tolerance_scale_scenario(id: String, scenario: Dictionary) -> void:
+	var screen: WorkoutScreen = _main.workout_screen()
+	screen.clock_usec = _virtual_clock
+	screen.keep_awake_setter = _ignore_keep_awake
+	var plan := Workout.make("Tolerance 200 W", [WorkoutStep.watts(600, SCALE_PLAN_WATTS)] as Array[WorkoutStep])
+	if not _main.start_workout_on_emulator(plan) or _session() == null:
+		_fail("%s: workout on the emulator did not start" % id)
+		return
+	var trainer := _main.emulator_trainer() as FakeTrainer
+	if trainer == null:
+		_fail("%s: no emulator" % id)
+		return
+	trainer.set_rider_power(int(scenario.get("power_w", 200)))
+	match str(scenario.get("erg", "off")):
+		"off":
+			screen.toggle_erg()
+		"unavailable":
+			trainer.set_erg_supported(false)
+	await _advance_to(int(scenario.get("at_sec", 30)))
 	await _shoot(id)
 
 
