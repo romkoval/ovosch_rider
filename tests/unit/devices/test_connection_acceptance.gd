@@ -85,7 +85,8 @@ func test_req_dev_01_c1_start_scan_requests_ftms_hrs_csc_cps() -> void:
 	var calls := _bridge.calls_of("start_scan")
 	assert_eq(calls.size(), 1, "один вызов start_scan")
 	var arg: PackedStringArray = calls[0]["service_uuids"]
-	assert_eq(arg.size(), 4)
+	assert_eq(arg.size(), 5, "DEV-01 п.1 в редакции DEV-11: FTMS, FE-C, HRS, CSC, CPS")
+	assert_true(arg.has(BleUuids.FEC_SERVICE), "в аргументах есть FE-C")
 	for u in SCAN_SERVICES:
 		assert_true(arg.has(u), "в аргументах есть %s" % u)
 	assert_true(_cm.scanner.is_scanning())

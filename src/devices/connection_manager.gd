@@ -21,6 +21,11 @@ extends RefCounted
 ##   причина NO_SERVICE или REFUSED, T-154), запись снимается: такое устройство не подключилось.
 ## - Станок создаётся через `TrainerFactory`: `"ble"` → `BleTrainer` поверх моста,
 ##   иначе (`"fake"`) — эмулятор для режима разработки.
+## - Датчик, который после подключения оказался станком (в сервисах FTMS или FE-C, REQ-DEV-11
+##   п.1 (б), (в); сигнал `BleSensorBase.trainer_detected`): снимается с датчиков профиля, строка
+##   списка становится «станок» (`BleScanner.add_services`), связь забирает станок
+##   (`BleTrainer.adopt_connected`); после CONNECTED устройство запоминается как станок, прежняя
+##   запись датчика с тем же id снимается.
 ## - REQ-DEV-01 крит. 7: при `bridge.is_available() == false` или адаптере не POWERED_ON
 ##   сканирование и автоподключение не стартуют (`start_scan()` → false, `is_ble_available()`).
 ##   Автоподключение, запрошенное до готовности адаптера (на macOS при запуске состояние
@@ -83,7 +88,8 @@ var _deferred_auto_profile: String = ""
 var _auto_connect_deferred: bool = false
 ## id датчиков, впервые запомненных текущим подключением (ещё не было обрыва и ручного отключения).
 var _fresh_remembered: Dictionary = {}
-## kind → [Callable состояния, Callable батареи] — связанные обработчики датчика.
+## kind → [Callable состояния, Callable батареи, Callable «оказался станком» или пустой] —
+## связанные обработчики датчика.
 var _sensor_handlers: Dictionary = {}
 ## Устройство текущей сессии `power_meter` (null — нет или режим `smart`).
 var _session_device: UncontrolledTrainer = null
@@ -140,6 +146,8 @@ func dispose() -> void:
 				s.connection_state_changed.disconnect(cbs[0])
 			if s.battery_level.is_connected(cbs[1]):
 				s.battery_level.disconnect(cbs[1])
+			if s is BleSensorBase and (s as BleSensorBase).trainer_detected.is_connected(cbs[2]):
+				(s as BleSensorBase).trainer_detected.disconnect(cbs[2])
 		if s.has_method("dispose"):
 			s.call("dispose")
 	sensors.clear()
@@ -526,10 +534,33 @@ func _sensor(kind: String) -> SensorDevice:
 	# (цикл менеджер → датчик → сигнал → лямбда → менеджер).
 	var on_state: Callable = _on_sensor_state.bind(kind)
 	var on_battery: Callable = _on_sensor_battery.bind(kind)
-	_sensor_handlers[kind] = [on_state, on_battery]
+	var on_trainer: Callable = _on_sensor_trainer_detected.bind(kind)
+	_sensor_handlers[kind] = [on_state, on_battery, on_trainer]
 	s.connection_state_changed.connect(on_state)
 	s.battery_level.connect(on_battery)
+	if s is BleSensorBase:
+		(s as BleSensorBase).trainer_detected.connect(on_trainer)
 	return s
+
+
+## Датчик `kind` оказался станком (DEV-11 п.1 (б)): снять с датчиков, строка — «станок», связь —
+## станку. Эмулятор (`trainer` не `BleTrainer`) подключается обычной командой.
+func _on_sensor_trainer_detected(id: String, svc: Dictionary, kind: String) -> void:
+	if str(sensor_ids.get(kind, "")) == id:
+		sensor_ids.erase(kind)
+	_fresh_remembered.erase(id)
+	scanner.add_services(id, PackedStringArray(svc.keys()))
+	if trainer_id != id and trainer.get_connection_state() != TrainerDevice.ConnectionState.DISCONNECTED:
+		trainer.disconnect_device()
+	trainer_id = id
+	_auto_pending.erase(id)
+	var ble := trainer as BleTrainer
+	if ble != null:
+		ble.adopt_connected(id, svc)
+	else:
+		trainer.connect_device(id)
+	devices_changed.emit()
+	state_changed.emit(id)
 
 
 func _is_connected_or_connecting(id: String) -> bool:
@@ -560,6 +591,10 @@ func _on_trainer_state(state: int) -> void:
 	if trainer_id.is_empty():
 		return
 	if state == TrainerDevice.ConnectionState.CONNECTED:
+		# Устройство, запомненное раньше как датчик, оказалось станком (DEV-11 п.1 (б)).
+		var existing := remembered.find(profile_id, trainer_id)
+		if not existing.is_empty() and str(existing.get("kind", "")) != RememberedDevices.KIND_TRAINER:
+			remembered.forget(profile_id, trainer_id)
 		_remember_connected(trainer_id, RememberedDevices.KIND_TRAINER)
 		_stop_scan_if_idle()
 	state_changed.emit(trainer_id)

@@ -1,6 +1,6 @@
 class_name BleTrainer
 extends TrainerDevice
-## Станок по FTMS поверх `BleBridge` (REQ-DEV-02, REQ-DEV-07, REQ-DEV-08, REQ-WRK-02/03/04, REQ-NFR-01,
+## Станок по FTMS или FE-C over BLE поверх `BleBridge` (REQ-DEV-02, REQ-DEV-11, REQ-DEV-07, REQ-DEV-08, REQ-WRK-02/03/04, REQ-NFR-01,
 ## REQ-FRD-04 крит. 1, 3, 6).
 ##
 ## Последовательность подключения (REQ-DEV-02 крит. 1):
@@ -80,6 +80,16 @@ extends TrainerDevice
 ## станка в режиме «только данные» с заявленным (или неизвестным) 2AD9 берёт управление:
 ## подписка 2AD9, Request Control и чтения возможностей, как при обычном подключении.
 ##
+## FE-C over BLE (REQ-DEV-11): протокол выбирается по сервисам после `services_discovered` —
+## есть FTMS `0x1826` (или список неизвестен) → FTMS (в том числе при наличии FE-C, п.1 (г)); FTMS нет,
+## есть FEC1 → FE-C; нет ни того, ни другого → срыв NO_SERVICE. FE-C: подписка только на FEC2 (и
+## батарею, если есть 180F), FTMS Request Control не уходит; без FEC2 — срыв подключения. Разбор —
+## `FecCodec`: 0x19 → сэмпл (мощность, каденс; «нет данных» — не 0), 0x10 → скорость станка (в сэмпл
+## сессии не идёт, У-30) и пульс станка. Управление по FEC3 — T-168: сейчас станок по FE-C
+## подключается «только данные» (`data_only`, `has_control() == false`, сессия `power_meter`), на FEC3
+## не пишется ничего. CSC, CPS и фирменные сервисы станка не трогаются (п.1 (в), (д)).
+## `adopt_connected(id, services)` — принять связь от датчика, оказавшегося станком (п.1 (б)).
+##
 ## `set_erg_enabled` с текущим значением — no-op: при повторной отправке режима
 ## сессией (возобновление, реконнект: `erg=true` + цель) цель не дублируется.
 ## `dispose()` отключает обработчики сигналов моста и обнуляет ссылку на него —
@@ -91,6 +101,10 @@ const CONNECT_TIMEOUT_SEC: float = 15.0
 ## Ожидание индикации Control Point по команде в полёте, с; потом уходит следующая.
 const CP_RESPONSE_TIMEOUT_SEC: float = 1.0
 const FTMS: String = BleUuids.FTMS_SERVICE
+const FEC: String = BleUuids.FEC_SERVICE
+## Протокол подключения — по сервисам после `services_discovered`.
+const PROTOCOL_FTMS: int = 0
+const PROTOCOL_FEC: int = 1
 
 ## Заряд батареи станка 0..100 % (если есть Battery Service).
 signal battery_level(percent: int)
@@ -144,6 +158,10 @@ var _simulation_rejected: bool = false
 var _simulation_confirmed: bool = false
 ## Причина последнего срыва подключения (`SensorDevice.FailureReason`, T-164).
 var _failure: int = SensorDevice.FailureReason.NONE
+## Протокол текущего подключения (`PROTOCOL_*`).
+var protocol: int = PROTOCOL_FTMS
+## Последняя скорость станка из FE-C 0x10, км/ч; -1 — нет данных.
+var _fec_speed_kmh: float = -1.0
 
 
 func _init(ble_bridge: BleBridge) -> void:
@@ -170,6 +188,23 @@ func connect_device(id: String) -> void:
 		return
 	if _state == ConnectionState.RECONNECTING and id == device_id:
 		return
+	_begin_connecting(id)
+	bridge.connect_peripheral(id)
+
+
+## Принять уже установленную связь с устройством, которое подключалось как датчик и оказалось
+## станком (REQ-DEV-11 п.1 (б)): без нового `connect_peripheral` — сразу разбор сервисов `svc`,
+## как после `services_discovered` (FTMS или FE-C).
+func adopt_connected(id: String, svc: Dictionary) -> void:
+	if bridge == null or id.is_empty():
+		return
+	if _state != ConnectionState.DISCONNECTED:
+		disconnect_device()
+	_begin_connecting(id)
+	_on_services_discovered(id, svc)
+
+
+func _begin_connecting(id: String) -> void:
 	if id != device_id:
 		battery_percent = -1
 		_forget_simulation_capabilities()
@@ -182,7 +217,6 @@ func connect_device(id: String) -> void:
 	_reconnect.stop()
 	_connecting_since_sec = _time_sec
 	_set_state(ConnectionState.CONNECTING)
-	bridge.connect_peripheral(id)
 
 
 func disconnect_device() -> void:
@@ -294,7 +328,7 @@ func set_control_allowed(allowed: bool) -> void:
 		return
 	control_allowed = allowed
 	if allowed and _state == ConnectionState.CONNECTED and data_only and bridge != null \
-			and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT):
+			and protocol == PROTOCOL_FTMS and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT):
 		data_only = false
 		_acquire_control(device_id)
 
@@ -357,11 +391,16 @@ func _on_connected(id: String) -> void:
 func _on_services_discovered(id: String, svc: Dictionary) -> void:
 	if id != device_id or _disconnect_requested:
 		return
-	services = svc
+	services = BleSensorBase.normalized_services(svc)
+	protocol = PROTOCOL_FTMS
 	if not services.is_empty() and not _lists_service(FTMS):
-		# Сервисы известны, а FTMS 0x1826 среди них нет: станок по FTMS не подключится (T-164).
+		if _lists_service(FEC):
+			# Есть FE-C, нет FTMS — станок по FE-C (DEV-11). Есть оба — FTMS (DEV-11 п.1 (г)).
+			_connect_fec(id)
+			return
+		# Сервисы известны, а станочного сервиса среди них нет: станок не подключится (T-164).
 		# Пустой список — «неизвестен» (как раньше); строгая проверка — T-161.
-		_fail_connecting("Нет сервиса FTMS 0x1826", true, SensorDevice.FailureReason.NO_SERVICE)
+		_fail_connecting("Нет сервиса станка (FTMS или FE-C)", true, SensorDevice.FailureReason.NO_SERVICE)
 		return
 	bridge.subscribe(id, FTMS, BleUuids.INDOOR_BIKE_DATA)
 	var with_control: bool = control_allowed and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT)
@@ -376,6 +415,23 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 	if data_only:
 		# Только данные (DEV-10 п.4, WRK-09): без Request Control — подключён по подпискам.
 		_finish_data_only()
+
+
+## Подключение по FE-C (DEV-11 п.2): подписка на FEC2, без FTMS Request Control. Нет FEC2 —
+## срыв подключения без подписок и записей на FEC1. Управление по FEC3 (страницы 0x30–0x33) —
+## T-168; пока станок по FE-C — только данные (`data_only`, сессия `power_meter`, WRK-09 п.1 (б)):
+## на FEC3 не пишется ничего.
+func _connect_fec(id: String) -> void:
+	protocol = PROTOCOL_FEC
+	if not _has_characteristic(FEC, BleUuids.FEC_NOTIFY):
+		_fail_connecting("Нет характеристики нотификаций FE-C (FEC2)", true, SensorDevice.FailureReason.NO_SERVICE)
+		return
+	_fec_speed_kmh = -1.0
+	bridge.subscribe(id, FEC, BleUuids.FEC_NOTIFY)
+	if services.has(BleUuids.BATTERY_SERVICE):
+		bridge.read_characteristic(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
+		bridge.subscribe(id, BleUuids.BATTERY_SERVICE, BleUuids.BATTERY_LEVEL)
+	_finish_data_only()
 
 
 ## Подключение без канала управления: CONNECTED с `data_only == true`.
@@ -401,6 +457,13 @@ func _acquire_control(id: String) -> void:
 
 func _on_notification(id: String, char_uuid: String, bytes: PackedByteArray) -> void:
 	if id != device_id:
+		return
+	if protocol == PROTOCOL_FEC:
+		var ch := BleUuids.normalize(char_uuid)
+		if ch == BleUuids.FEC_NOTIFY:
+			_on_fec_message(bytes)
+		elif ch == BleUuids.BATTERY_LEVEL:
+			_on_battery(bytes)
 		return
 	match BleUuids.normalize(char_uuid):
 		BleUuids.FTMS_CONTROL_POINT:
@@ -474,6 +537,35 @@ func _on_indoor_bike_data(bytes: PackedByteArray) -> void:
 	telemetry.emit(s)
 	if d["has_heart_rate"]:
 		heart_rate.emit(d["heart_rate_bpm"])
+
+
+## Сообщение FE-C из FEC2 (DEV-11 п.3–5): некорректное и необрабатываемые страницы отбрасываются
+## молча. 0x19 — сэмпл (мощность, каденс; скорость — последняя из 0x10); 0x10 — скорость станка
+## (в сэмпл сессии не идёт, У-30) и пульс станка (ниже HRS в хабе).
+func _on_fec_message(bytes: PackedByteArray) -> void:
+	var m := FecCodec.decode_message(bytes)
+	if not m["ok"]:
+		return
+	var page: PackedByteArray = m["page"]
+	match int(m["page_number"]):
+		FecCodec.PAGE_TRAINER_DATA:
+			var d := FecCodec.decode_trainer_data(page)
+			var s := TrainerSample.new()
+			s.timestamp_sec = _time_sec
+			s.has_power = d["has_power"]
+			s.power_w = d["power_w"]
+			s.has_cadence = d["has_cadence"]
+			s.cadence_rpm = d["cadence_rpm"]
+			s.has_speed = _fec_speed_kmh >= 0.0
+			s.speed_kmh = maxf(_fec_speed_kmh, 0.0)
+			telemetry.emit(s)
+		FecCodec.PAGE_GENERAL_FE:
+			var g := FecCodec.decode_general_fe(page)
+			_fec_speed_kmh = g["speed_kmh"] if g["has_speed"] else -1.0
+			if g["has_heart_rate"] and int(g["heart_rate_bpm"]) > 0:
+				heart_rate.emit(g["heart_rate_bpm"])
+		_:
+			pass  # 0x36, 0x47 — управление (T-168); прочие страницы игнорируются (п.3)
 
 
 func _on_machine_status(bytes: PackedByteArray) -> void:

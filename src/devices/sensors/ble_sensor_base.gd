@@ -38,8 +38,16 @@ extends SensorDevice
 ## первыми символами SHA-256 от id (id на Android — MAC-адрес, в журнал не пишется); id в
 ## сообщениях моста заменяется той же меткой.
 ##
+## Станок вместо датчика (REQ-DEV-11 п.1 (б), (в)): если в `services_discovered` есть сервис станка
+## (FTMS `0x1826` или FE-C FEC1), датчик ни на что не подписывается, без отмены связи в мосте
+## переходит в DISCONNECTED (без причины) и сообщает `trainer_detected(id, services)` — связь
+## забирает станок (`ConnectionManager`, `BleTrainer.adopt_connected`).
+##
 ## Наследники задают `_service_uuid()`, `_measurement_uuid()`, `_on_measurement(bytes)` и при
 ## необходимости `_on_time(now_sec)`.
+
+## Устройство оказалось станком: сервисы после подключения (как пришли от моста).
+signal trainer_detected(id: String, services: Dictionary)
 
 const RECONNECT_INTERVAL_SEC: float = 5.0
 ## Предельная длительность CONNECTING, с (REQ-DEV-07 крит. 1).
@@ -200,6 +208,16 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 	listed.sort()
 	var has_own: bool = services.has(own)
 	_log("sensor_services", {"services": listed, "required": own, "has_required": has_own})
+	if BleUuids.is_trainer_service_set(services):
+		# У устройства сервис станка (FTMS или FE-C): это станок, а не датчик (DEV-11 п.1 (б), (в)).
+		# Ни одной подписки; связь не рвётся — её забирает станок (`trainer_detected`).
+		_log("sensor_is_trainer", {})
+		_disconnect_requested = true
+		_reconnect.stop()
+		_set_state(TrainerDevice.ConnectionState.DISCONNECTED)
+		trainer_detected.emit(id, svc)
+		device_id = ""  # связь теперь у станка: её события датчика не касаются
+		return
 	if not has_own:
 		# REQ-DEV-03 (Н-55 (б)): без своего сервиса датчик не входит в CONNECTED.
 		_fail(FailureReason.NO_SERVICE, "%s: у устройства нет сервиса %s (сервисы: %s)" % [kind(), own, ", ".join(listed)])

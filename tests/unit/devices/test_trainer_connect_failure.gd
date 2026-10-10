@@ -128,7 +128,8 @@ func test_emulator_trainer_has_no_failure_reason() -> void:
 
 
 func test_services_without_ftms_is_no_service_and_bridge_cancelled() -> void:
-	_bridge.set_device_services(NEO, {"180F": ["2A19"], "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E": ["6E40FEC2-B5A3-F393-E0A9-E50E24DCCA9E"]})
+	# Ни FTMS, ни FE-C (станок по FE-C — DEV-11, T-167): только батарея и CPS.
+	_bridge.set_device_services(NEO, {"180F": ["2A19"], "1818": ["2A63"]})
 	var t := BleTrainer.new(_bridge)
 	t.connect_device(NEO)
 	_bridge.pump()

@@ -97,7 +97,7 @@ func test_scan_logs_service_filter_and_device_found_is_scripted() -> void:
 	assert_true(_stub.scanning)
 	var calls := _stub.calls_of("start_scan")
 	assert_eq(calls.size(), 1)
-	assert_eq(calls[0]["service_uuids"], PackedStringArray(["1826", "180D", "1816", "1818"]), "REQ-DEV-01 крит. 1")
+	assert_eq(calls[0]["service_uuids"], PackedStringArray(["1826", "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E", "180D", "1816", "1818"]), "REQ-DEV-01 крит. 1")
 	_stub.emit_device_found(DEV, "Tacx Neo 2T", -60, PackedStringArray(["1826"]))
 	assert_eq(_of("found").size(), 1)
 	assert_eq(_of("found")[0]["rssi"], -60)

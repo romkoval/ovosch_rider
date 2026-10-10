@@ -1,0 +1,17 @@
+{
+	"_comment": "FE-C over BLE (REQ-DEV-11): станок без FTMS. Сервисы рекламы и после подключения — по журналу «BLE-отладки» владельца (T-165, Tacx Neo 11565). Байты сообщений — из критериев DEV-11 п.4, п.5.",
+	"name": "Tacx Neo 11565",
+	"advert_services": ["1818", "1816", "180A", "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E"],
+	"services": {
+		"180A": ["2A29", "2A24", "2A25", "2A27", "2A26", "2A28"],
+		"1816": ["2A5B", "2A5C", "2A55"],
+		"1818": ["2A63", "2A65", "2A5D"],
+		"669AA501-0C08-969E-E211-86AD5062675F": ["669AA605-0C08-969E-E211-86AD5062675F"],
+		"6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E": ["6E40FEC2-B5A3-F393-E0A9-E50E24DCCA9E", "6E40FEC3-B5A3-F393-E0A9-E50E24DCCA9E"]
+	},
+	"trainer_data_250w_90rpm": "A4 09 4E 05 19 01 5A 10 27 FA 00 30 59",
+	"trainer_data_1234w_80rpm": "A4 09 4E 05 19 02 50 00 00 D2 14 30 5B",
+	"trainer_data_no_data_page": "19 03 FF 00 00 FF 0F 30",
+	"general_fe_28_80kmh": "A4 09 4E 05 10 19 00 00 40 1F FF 34 7B",
+	"target_power_150w": "A4 09 4F 05 31 FF FF FF FF FF 58 02 73"
+}

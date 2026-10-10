@@ -16,8 +16,8 @@ func test_constants_match_sig_assigned_numbers() -> void:
 
 
 func test_scan_services_are_ftms_hrs_csc_cps() -> void:
-	assert_eq(BleUuids.SCAN_SERVICES, PackedStringArray(["1826", "180D", "1816", "1818"]),
-		"REQ-DEV-01 крит. 1")
+	assert_eq(BleUuids.SCAN_SERVICES, PackedStringArray(["1826", "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E", "180D", "1816", "1818"]),
+		"REQ-DEV-01 крит. 1 (с FE-C, DEV-11)")
 
 
 func test_normalize_short_full_and_prefixed_forms() -> void:

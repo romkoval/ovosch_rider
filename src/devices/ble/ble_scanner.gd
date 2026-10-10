@@ -14,6 +14,8 @@ extends RefCounted
 ## устройство в секунду, поэтому живое устройство не «протухает». Дополнительно
 ## сканер помнит id, рекламировавшиеся в текущем сеансе (`seen_in_session`, сброс при
 ## `start()`/`stop()`), — для автоподключения это «устройство доступно» (REQ-DEV-06 крит. 2).
+## `add_services(id, uuids)` — сервисы, найденные после подключения: тип строки пересчитывается
+## (датчик каденса с FE-C или FTMS становится станком, REQ-DEV-01 п.2, DEV-11 п.1 (б)).
 
 const UNAVAILABLE_AFTER_SEC: float = 10.0
 const REMOVE_AFTER_SEC: float = 30.0
@@ -112,6 +114,19 @@ func has(id: String) -> bool:
 	return not find(id).is_empty()
 
 
+## Добавить к записи `id` сервисы, найденные после подключения, и пересчитать тип. Записи нет — ничего.
+func add_services(id: String, service_uuids: PackedStringArray) -> void:
+	for d in devices:
+		if d["id"] != id:
+			continue
+		var before: String = d["kind"]
+		_merge_services(d, service_uuids)
+		if d["kind"] != before:
+			_sort()
+			devices_changed.emit()
+		return
+
+
 func clear() -> void:
 	if devices.is_empty():
 		return
@@ -153,6 +168,14 @@ func _on_device_found(id: String, name: String, rssi: int, service_uuids: Packed
 	# на сканирование приходят отдельными событиями): Tacx Neo шлёт пакеты и с FTMS,
 	# и только с CSC/CPS. Тип — по объединению всех сервисов сеанса, иначе последний
 	# пакет без FTMS превращает станок в «датчик каденса».
+	_merge_services(entry, service_uuids)
+	_sort()
+	devices_changed.emit()
+	device_found.emit(entry.duplicate())
+
+
+## Объединить сервисы записи с `service_uuids` и пересчитать тип по объединению.
+static func _merge_services(entry: Dictionary, service_uuids: PackedStringArray) -> void:
 	var seen: PackedStringArray = entry["services"]
 	for s in service_uuids:
 		var u: String = BleUuids.normalize(s)
@@ -162,9 +185,6 @@ func _on_device_found(id: String, name: String, rssi: int, service_uuids: Packed
 	var kind: String = kind_from_services(seen)
 	if kind != KIND_UNKNOWN:
 		entry["kind"] = kind
-	_sort()
-	devices_changed.emit()
-	device_found.emit(entry.duplicate())
 
 
 func _sort() -> void:

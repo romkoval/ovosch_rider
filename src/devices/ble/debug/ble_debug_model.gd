@@ -39,29 +39,20 @@ const MAX_LOG_ENTRIES: int = 5000
 const DEVICE_TAG_LENGTH: int = 8
 
 ## Tacx FE-C over BLE: сервис, нотификации (FEC2) и запись (FEC3) ANT-сообщений.
-const FEC_SERVICE: String = "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E"
-const FEC_NOTIFY: String = "6E40FEC2-B5A3-F393-E0A9-E50E24DCCA9E"
-const FEC_WRITE: String = "6E40FEC3-B5A3-F393-E0A9-E50E24DCCA9E"
+const FEC_SERVICE: String = BleUuids.FEC_SERVICE
+const FEC_NOTIFY: String = BleUuids.FEC_NOTIFY
+const FEC_WRITE: String = BleUuids.FEC_WRITE
 const DEVICE_INFO_SERVICE: String = "180A"
 ## Строковые характеристики Device Information: производитель, модель, серийный номер,
 ## аппаратная, программная ревизии, прошивка.
 const DEVICE_INFO_TEXT_CHARS: Array[String] = ["2A29", "2A24", "2A25", "2A27", "2A26", "2A28", "2A00"]
 
-## ANT: синхробайт, длина данных сообщения, Broadcast / Acknowledged Data, канал FE-C over BLE.
-const ANT_SYNC: int = 0xA4
-const ANT_DATA_LENGTH: int = 0x09
-const ANT_BROADCAST_DATA: int = 0x4E
-const ANT_ACKNOWLEDGED_DATA: int = 0x4F
-const ANT_FEC_CHANNEL: int = 0x05
-## Страницы ANT FE-C.
-const FEC_PAGE_GENERAL_FE: int = 0x10
-const FEC_PAGE_GENERAL_SETTINGS: int = 0x11
-const FEC_PAGE_TRAINER_DATA: int = 0x19
-const FEC_PAGE_BASIC_RESISTANCE: int = 0x30
-const FEC_PAGE_TARGET_POWER: int = 0x31
-const FEC_PAGE_COMMAND_STATUS: int = 0x47
-const FEC_PAGE_MANUFACTURER: int = 0x50
-const FEC_PAGE_PRODUCT: int = 0x51
+## ANT FE-C — константы кодека `FecCodec` (здесь — синонимы для экрана и тестов).
+const ANT_SYNC: int = FecCodec.ANT_SYNC
+const ANT_DATA_LENGTH: int = FecCodec.ANT_DATA_LENGTH
+const ANT_BROADCAST_DATA: int = FecCodec.ANT_BROADCAST_DATA
+const ANT_ACKNOWLEDGED_DATA: int = FecCodec.ANT_ACKNOWLEDGED_DATA
+const ANT_FEC_CHANNEL: int = FecCodec.ANT_CHANNEL
 
 ## Пресеты записи: id → цель. Байты — `preset_bytes(id)`.
 const PRESET_FTMS_REQUEST_CONTROL: String = "ftms_request_control"
@@ -545,140 +536,24 @@ static func describe_write(char_uuid: String, bytes: PackedByteArray) -> String:
 # ANT FE-C over BLE
 # ---------------------------------------------------------------------------
 
-## ANT-сообщение FE-C для FEC3: `A4 09 <msg_id> 05 <8 байт страницы> <XOR всех предыдущих>`.
+## ANT-сообщение FE-C для FEC3 (`FecCodec.encode_message`).
 static func fec_message(page: PackedByteArray, msg_id: int = ANT_ACKNOWLEDGED_DATA) -> PackedByteArray:
-	var out := PackedByteArray([ANT_SYNC, ANT_DATA_LENGTH, msg_id & 0xFF, ANT_FEC_CHANNEL])
-	for i in 8:
-		out.append(page[i] if i < page.size() else 0xFF)
-	out.append(ant_checksum(out))
-	return out
+	return FecCodec.encode_message(page, msg_id)
 
 
-## Контрольная сумма ANT: XOR всех байт сообщения от синхробайта.
+## Контрольная сумма ANT (`FecCodec.checksum`).
 static func ant_checksum(bytes: PackedByteArray) -> int:
-	var x := 0
-	for b in bytes:
-		x ^= b
-	return x
+	return FecCodec.checksum(bytes)
 
 
-## Страница 0x31 Target Power: байты 1–5 зарезервированы (0xFF), 6–7 — мощность в 0.25 Вт.
-## 150 Вт → `A4 09 4F 05 31 FF FF FF FF FF 58 02 73`.
+## Страница 0x31 Target Power (`FecCodec.encode_target_power`).
 static func fec_target_power_message(watts: int) -> PackedByteArray:
-	var v: int = clampi(watts * 4, 0, 4000 * 4)
-	return fec_message(PackedByteArray([FEC_PAGE_TARGET_POWER, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, v & 0xFF, (v >> 8) & 0xFF]))
+	return FecCodec.encode_target_power(watts)
 
 
-## Разбор ANT-сообщения FE-C (или голой 8-байтной страницы): заголовок, контрольная сумма,
-## страницы 0x10, 0x11, 0x19, 0x30, 0x31, 0x47, 0x50, 0x51; остальные — номер страницы.
+## Разбор ANT-сообщения FE-C для журнала (`FecCodec.describe`).
 static func decode_fec(bytes: PackedByteArray) -> String:
-	var page := PackedByteArray()
-	var prefix := ""
-	if bytes.size() >= 13 and bytes[0] == ANT_SYNC:
-		var length: int = bytes[1]
-		var total: int = length + 4
-		if bytes.size() < total or length < 9:
-			return "ANT: short message"
-		var cs_ok := ant_checksum(bytes.slice(0, total - 1)) == bytes[total - 1]
-		var kind := "broadcast" if bytes[2] == ANT_BROADCAST_DATA else ("ack" if bytes[2] == ANT_ACKNOWLEDGED_DATA else "msg 0x%02X" % bytes[2])
-		prefix = "ANT %s ch%d%s, " % [kind, bytes[3], "" if cs_ok else " CHECKSUM BAD"]
-		page = bytes.slice(4, 12)
-	elif bytes.size() == 8:
-		page = bytes
-	else:
-		return ""
-	return prefix + _decode_fec_page(page)
-
-
-static func _decode_fec_page(p: PackedByteArray) -> String:
-	var n: int = p[0]
-	match n:
-		FEC_PAGE_GENERAL_FE:
-			var speed_raw: int = BleBytes.u16(p, 4)
-			var hr: int = p[6]
-			return "page 0x10 General FE: type %s, elapsed %.2f s, distance %d m, speed %.2f km/h, HR %s, state %s" % [
-				_fec_equipment(p[1] & 0x1F), p[2] * 0.25, p[3], speed_raw * 0.001 * 3.6,
-				"n/a" if hr == 0xFF else str(hr), _fec_state((p[7] >> 4) & 0x07)]
-		FEC_PAGE_GENERAL_SETTINGS:
-			return "page 0x11 General Settings: incline %.2f %%, resistance %.1f %%, state %s" % [
-				BleBytes.s16(p, 4) * 0.01, p[6] * 0.5, _fec_state((p[7] >> 4) & 0x07)]
-		FEC_PAGE_TRAINER_DATA:
-			var power: int = p[5] | ((p[6] & 0x0F) << 8)
-			return "page 0x19 Trainer Data: cadence %s rpm, power %s W, accumulated %d W, events %d, status 0x%X, target %s, state %s" % [
-				"n/a" if p[2] == 0xFF else str(p[2]), "n/a" if power == 0xFFF else str(power), BleBytes.u16(p, 3),
-				p[1], (p[6] >> 4) & 0x0F, _fec_target_flag(p[7] & 0x03), _fec_state((p[7] >> 4) & 0x07)]
-		FEC_PAGE_BASIC_RESISTANCE:
-			return "page 0x30 Basic Resistance: %.1f %%" % (p[7] * 0.5)
-		FEC_PAGE_TARGET_POWER:
-			return "page 0x31 Target Power: %.2f W" % (BleBytes.u16(p, 6) * 0.25)
-		FEC_PAGE_COMMAND_STATUS:
-			return "page 0x47 Command Status: last command 0x%02X, sequence %d, status %s, data %s" % [
-				p[1], p[2], _fec_command_status(p[3]), BleBytes.to_hex(p.slice(4, 8))]
-		FEC_PAGE_MANUFACTURER:
-			return "page 0x50 Manufacturer: HW rev %d, manufacturer %d, model %d" % [p[3], BleBytes.u16(p, 4), BleBytes.u16(p, 6)]
-		FEC_PAGE_PRODUCT:
-			return "page 0x51 Product: SW rev %d.%d, serial %d" % [p[3], p[2], BleBytes.u32(p, 4)]
-	return "page 0x%02X" % n
-
-
-static func _fec_equipment(t: int) -> String:
-	match t:
-		16:
-			return "general"
-		19:
-			return "treadmill"
-		20:
-			return "elliptical"
-		22:
-			return "rower"
-		23:
-			return "climber"
-		24:
-			return "nordic_skier"
-		25:
-			return "trainer"
-	return str(t)
-
-
-static func _fec_state(s: int) -> String:
-	match s:
-		1:
-			return "asleep"
-		2:
-			return "ready"
-		3:
-			return "in_use"
-		4:
-			return "finished"
-	return "reserved_%d" % s
-
-
-static func _fec_target_flag(f: int) -> String:
-	match f:
-		0:
-			return "at_target"
-		1:
-			return "speed_too_low"
-		2:
-			return "speed_too_high"
-	return "limit_reached"
-
-
-static func _fec_command_status(s: int) -> String:
-	match s:
-		0:
-			return "pass"
-		1:
-			return "fail"
-		2:
-			return "not_supported"
-		3:
-			return "rejected"
-		4:
-			return "pending"
-		0xFF:
-			return "uninitialized"
-	return "0x%02X" % s
+	return FecCodec.describe(bytes)
 
 
 # ---------------------------------------------------------------------------

@@ -63,8 +63,9 @@ func _hex_of(bytes: PackedByteArray) -> String:
 # ---------------------------------------------------------------------------
 
 func test_req_dev_01_c1_scan_filter_is_ftms_hrs_csc_cps() -> void:
-	var expected := ["1826", "180D", "1816", "1818"]
-	assert_eq(BleUuids.SCAN_SERVICES.size(), 4, "ровно четыре сервиса")
+	# DEV-01 п.1 в редакции DEV-11: FTMS, FE-C, HRS, CSC, CPS.
+	var expected := ["1826", "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E", "180D", "1816", "1818"]
+	assert_eq(BleUuids.SCAN_SERVICES.size(), 5, "ровно пять сервисов")
 	for u in expected:
 		assert_true(BleUuids.SCAN_SERVICES.has(u), "в фильтре сканирования есть %s" % u)
 	# Аргументы вызова моста журналируются заглушкой.
@@ -72,7 +73,7 @@ func test_req_dev_01_c1_scan_filter_is_ftms_hrs_csc_cps() -> void:
 	var calls := _stub.calls_of("start_scan")
 	assert_eq(calls.size(), 1)
 	var arg: PackedStringArray = calls[0]["service_uuids"]
-	assert_eq(arg.size(), 4)
+	assert_eq(arg.size(), 5)
 	for u in expected:
 		assert_true(arg.has(u), "мост получил %s" % u)
 	assert_true(_stub.scanning)

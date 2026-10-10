@@ -25,7 +25,7 @@ func test_start_scans_required_services_and_stop_stops() -> void:
 	assert_true(_scanner.is_scanning())
 	var calls := _bridge.calls_of("start_scan")
 	assert_eq(calls.size(), 1)
-	assert_eq(calls[0]["service_uuids"], PackedStringArray(["1826", "180D", "1816", "1818"]), "REQ-DEV-01 крит. 1")
+	assert_eq(calls[0]["service_uuids"], PackedStringArray(["1826", "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E", "180D", "1816", "1818"]), "REQ-DEV-01 крит. 1")
 	_scanner.start()
 	assert_eq(_bridge.calls_of("start_scan").size(), 1, "повторный start — без второго вызова")
 	_scanner.stop()

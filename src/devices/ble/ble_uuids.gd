@@ -30,9 +30,14 @@ const CYCLING_POWER_MEASUREMENT: String = "2A63"
 ## Battery Service.
 const BATTERY_SERVICE: String = "180F"
 const BATTERY_LEVEL: String = "2A19"
+## FE-C over BLE (REQ-DEV-11): сервис FEC1, нотификации станка FEC2, запись на станок FEC3 —
+## 128-битные UUID, хранятся полной формой в верхнем регистре.
+const FEC_SERVICE: String = "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E"
+const FEC_NOTIFY: String = "6E40FEC2-B5A3-F393-E0A9-E50E24DCCA9E"
+const FEC_WRITE: String = "6E40FEC3-B5A3-F393-E0A9-E50E24DCCA9E"
 
-## Сервисы, по которым идёт сканирование (REQ-DEV-01 крит. 1).
-const SCAN_SERVICES: PackedStringArray = ["1826", "180D", "1816", "1818"]
+## Сервисы, по которым идёт сканирование (REQ-DEV-01 крит. 1): FTMS, FE-C, HRS, CSC, CPS.
+const SCAN_SERVICES: PackedStringArray = ["1826", "6E40FEC1-B5A3-F393-E0A9-E50E24DCCA9E", "180D", "1816", "1818"]
 
 const BASE_UUID_SUFFIX: String = "-0000-1000-8000-00805F9B34FB"
 
@@ -63,12 +68,13 @@ static func equals(a: String, b: String) -> bool:
 
 
 ## Тип устройства по списку сервисов рекламы: "trainer" | "heart_rate" |
-## "cadence" | "power" | "unknown" (первый подходящий в этом порядке).
+## "cadence" | "power" | "unknown" (первый подходящий в этом порядке). «Станок» — FTMS или
+## FE-C (REQ-DEV-10 п.1, DEV-11 п.1 (а)); CSC и CPS станка в тип не входят.
 static func device_kind(service_uuids: PackedStringArray) -> String:
 	var set: Dictionary = {}
 	for s in service_uuids:
 		set[normalize(s)] = true
-	if set.has(FTMS_SERVICE):
+	if is_trainer_service_set(set):
 		return "trainer"
 	if set.has(HRS_SERVICE):
 		return "heart_rate"
@@ -77,3 +83,8 @@ static func device_kind(service_uuids: PackedStringArray) -> String:
 	if set.has(CPS_SERVICE):
 		return "power"
 	return "unknown"
+
+
+## В наборе сервисов (ключи — нормализованные UUID) есть сервис станка: FTMS или FE-C.
+static func is_trainer_service_set(normalized: Dictionary) -> bool:
+	return normalized.has(FTMS_SERVICE) or normalized.has(FEC_SERVICE)
