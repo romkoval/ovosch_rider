@@ -296,9 +296,9 @@
 | T-166 | `[docs]` | сейчас (У-29) | Протокол ручной сессии владельца: тренировка по Quarq на Mac | WRK-09 | T-152, T-153 | P0 | `in-progress` |
 | T-167 | `[integration]` | 0.4 (после WRK-09) | Станок по Tacx FE-C over BLE: определение, подключение, данные | DEV-11, WRK-09 | T-152 | P0 | `done` |
 | T-168 | `[integration]` | 0.4 (после WRK-09) | Станок по Tacx FE-C over BLE: ERG, сопротивление, SIM | DEV-11 | T-167 | P0 | `done` |
-| T-161 | `[integration]` | 0.4 | Возможности FTMS-станка от самого станка, а не от констант Neo (+ доработка У-35/У-36) | DEV-10, DEV-02, DEV-11, WRK-02, WRK-04, WRK-07, FRD-04, NFR-01, NFR-06, REQ-WRK-09 | Н-61, T-152, Н-77 | P1 | `review` |
-| T-162 | `[game]` (сессия, HUD; отдаёт значение — `[integration]`-часть T-161) | 0.4 | Цель, ограниченная станком: HUD, сэмпл и FIT показывают фактическую (+ доработка У-37, `hud.md` п. 17) | DEV-10, HUD-10, HUD-01, HUD-13, WRK-03, WRK-08, LOC-01, LOC-05, WRK-02, WRK-07, HUD-07, HUD-11, NFR-06 | T-161, Н-77 | P1 | `review` |
-| T-177 | `[game]` (+ native macOS in `native/ble/`) | spike / вне волн | Spike: mini-HUD compact window over other apps on Mac (result — section 4, "Mini-HUD spike") | — (after spike) | — | P1 | `review` |
+| T-161 | `[integration]` | 0.4 | Возможности FTMS-станка от самого станка, а не от констант Neo (+ доработка У-35/У-36) | DEV-10, DEV-02, DEV-11, WRK-02, WRK-04, WRK-07, FRD-04, NFR-01, NFR-06, REQ-WRK-09 | Н-61, T-152, Н-77 | P1 | `in-progress` |
+| T-162 | `[game]` (сессия, HUD; отдаёт значение — `[integration]`-часть T-161) | 0.4 | Цель, ограниченная станком: HUD, сэмпл и FIT показывают фактическую (+ доработка У-37, `hud.md` п. 17) | DEV-10, HUD-10, HUD-01, HUD-13, WRK-03, WRK-08, LOC-01, LOC-05, WRK-02, WRK-07, HUD-07, HUD-11, NFR-06 | T-161, Н-77 | P1 | `in-progress` |
+| T-177 | `[game]` (+ native macOS in `native/ble/`) | spike / вне волн | Spike: mini-HUD compact window over other apps on Mac (result — section 4, "Mini-HUD spike") | — (after spike; U-47) | — | P1 | `review` |
 | T-175 | `[game]` | 0.4 | Шкала допуска «выше / ниже цели» в smart при ERG выкл и недоступен (один компонент с T-171) | HUD-02, WRK-09 | T-162, Н-77 | P1 | `review` |
 | T-176 | `[game]` | 0.4 | Флаг ERG в сэмпле — по факту, а не по выбору игрока | WRK-08, LOC-01 | T-161, T-162, Н-77 | P1 | `review` |
 
@@ -316,7 +316,7 @@ Order: developer T-180 → T-181 → T-182, T-183 (after Neo work: T-176, T-175,
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | T-178 | `[design]` | 0.4 routes | Real-route road and world: spec | D3D-11, D3D-05, D3D-08 | — | P1 | `todo` |
 | T-179 | `[design]` | 0.4 routes | Route card and route choice: mockup | D3D-11, UIX-05 | — | P2 | `todo` |
-| T-180 | `[game]` | 0.4 routes | Route catalog: data format, loading, validation, licensing and attribution | D3D-11, NFR-07 | — | P1 | `todo` |
+| T-180 | `[game]` | 0.4 routes | Route catalog: data format, loading, validation, licensing and attribution | D3D-11, NFR-07 | — | P1 | `in-progress` |
 | T-181 | `[game]` | 0.4 routes | Catalog route in the session: profile, grade, coordinate by distance, end of route | D3D-11, D3D-02, FRD-04, FRD-05 | T-180 | P1 | `todo` |
 | T-182 | `[integration]` | 0.4 routes | GPS track of a route ride: samples, FIT position fields, Strava name | STR-06, D3D-11, LOC-05 | T-181 | P1 | `todo` |
 | T-183 | `[game]` | 0.4 routes | Route cards on track selection and route for plan workouts | D3D-11, FRD-02, FRD-03 | T-181, T-179 | P2 | `todo` |
@@ -324,7 +324,7 @@ Order: developer T-180 → T-181 → T-182, T-183 (after Neo work: T-176, T-175,
 | T-185 | `[visual]` | 0.4 routes | Scenery along the route, overlapping sections, chunk streaming | D3D-11, D3D-05, D3D-08 | T-184 | P1 | `todo` |
 | T-191 | `[design]` | 0.4 routes | Propose first catalog routes (South China, islands) with OSM data and ODbL check | D3D-11, NFR-07 | — | P1 | `todo` |
 | T-186 | `[integration]` | 0.4 routes | First real routes in the catalog (OSM geometry, DEM elevation) | D3D-11, STR-06 | T-180, T-191 | P1 | `todo` |
-| T-187 | `[integration]` | 0.4 | Strava: no images sent before partner access (guard) and checklist record | STR-07 | — | P2 | `todo` |
+| T-187 | `[integration]` | 0.4 | Strava: no images sent before partner access (guard) and checklist record | STR-07 | — | P2 | `in-progress` |
 | T-188 | `[design]` | 0.4 screenshots | Screenshot button on the HUD and screenshot status in the ride card: mockup | LOC-08, STR-07 | Strava partner access | P2 | `blocked: Strava partner access (У-42)` |
 | T-189 | `[game]` | 0.4 screenshots | Ride screenshots: capture and storage | LOC-08 | T-188, Strava partner access | P2 | `blocked: Strava partner access (У-42)` |
 | T-190 | `[integration]` | 0.4 screenshots | Screenshot upload to the Strava activity (partner API) | STR-07 | T-189, Strava partner access | P2 | `blocked: Strava partner access (У-42)` |
@@ -372,9 +372,9 @@ Order: developer T-180 → T-181 → T-182, T-183 (after Neo work: T-176, T-175,
 | T-107 | `[visual]` | 3 (сейчас) | Хвойные по спеке | D3D-10, D3D-07, D3D-08, D3D-05 | T-105, T-112 | P0 | `done` |
 | T-106 | `[visual]` | 0.3 | Гонщик по спеке (разрезана на T-106a1..T-106a4, T-106b′/c′, T-106b/c, T-143) | REQ-D3D-09 | — | P0 | `split` |
 | T-106a1 | `[visual]` | 3 (сейчас) | Велосипед под контракт скелета и пакет эталонов | D3D-09, D3D-01, D3D-04, D3D-07 | T-104 | P0 | `done` |
-| T-106a2 | `[visual]` | 4 | Скелет, манекен двух фигур, IK на позы костей, пружина хвоста | D3D-09, D3D-07, D3D-04, D3D-01, D3D-05 | T-106a1, Н-39 | P0 | `review` |
+| T-106a2 | `[visual]` | 4 | Скелет, манекен двух фигур, IK на позы костей, пружина хвоста | D3D-09, D3D-07, D3D-04, D3D-01, D3D-05 | T-106a1, Н-39 | P0 | `done` |
 | T-106a3 | `[visual]` | 5 | Регионы цвета, палитра, контур и ободок, тень гонщика | D3D-09, D3D-07, D3D-05, AVT-02 | T-106a2 | P0 | `review` |
-| T-106a4 | `[visual]` | 5 | Импорт `rider.glb` и проверки Т1–Т8 | D3D-09 | T-106a3 | P0 | `todo` |
+| T-106a4 | `[visual]` | 5 | Импорт `rider.glb` и проверки Т1–Т8 | D3D-09 | T-106a3 | P0 | `in-progress` |
 | T-143 | `[visual]` | 4 | Конвейер доводки ИИ-модели в Blender | D3D-09 | T-106a1, T-106a4, T-106b′ | P0 | `done` |
 | T-106b′ | `[visual]` | по сырью владельца | Сырьё и блокинг TA (вариант Г) | D3D-09 | T-143, T-106a4 | P0 | `blocked: ждёт сырые GLB владельца` |
 | T-106c′ | `[visual]` | после T-106b′ | Чистовая TA (вариант Г) | D3D-09, D3D-07, D3D-05, AVT-02 | T-106b′, T-109, Н-45, Н-46, Н-47 | P0 | `todo` |
@@ -687,7 +687,7 @@ FTMS — REQ-DEV-10 (У-23); FE-C over BLE — REQ-DEV-11 (У-27: в MVP; У-28:
 - [T-176](tasks/T-176.md) — Флаг ERG в сэмпле — по факту, а не по выбору игрока
 
 #### Mini-HUD over other apps on Mac — spike (T-177; owner's request 2026-10-10)
-Owner wants a compact training mode on Mac: a small always-on-top, borderless, semi-transparent window with workout metrics only, over a movie or a race stream. Spike first (Godot window flags + native `NSWindow` Spaces/level from the Objective-C++ GDExtension; 3D paused; session keeps running unfocused); requirements formalizes after the result, final look — game-designer later. **Developer queue: right after the T-161 / T-162 rework, before T-176, T-175** (does not write their shared files). Manual check — section 4, "Mini-HUD spike".
+Owner wants a compact training mode on Mac: a small always-on-top, borderless, semi-transparent window with workout metrics only, over a movie or a race stream. Spike first (Godot window flags + native `NSWindow` Spaces/level from the Objective-C++ GDExtension; 3D paused; session keeps running unfocused); requirements formalizes after the result, final look — game-designer later. **Developer queue: right after the T-161 / T-162 rework, before T-176, T-175** (does not write their shared files). Manual check — section 4, "Mini-HUD spike". **Owner decision 2026-10-10 (U-47):** mini-HUD is outside MVP, planned for a later release; the spike stays as is (code accepted, owner's Mac check pending), REQ after the spike (Н-81).
 
 - [T-177](tasks/T-177.md) — Spike: mini-HUD compact window over other apps on Mac
 

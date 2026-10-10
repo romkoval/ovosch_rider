@@ -6,7 +6,22 @@
 
 ## Чекпоинт
 
-### Checkpoint 2026-10-10, evening (manager; `main` = ea8516e; supersedes the queues below)
+### Checkpoint 2026-10-10, late (manager; HEAD = 64199e7; supersedes the queues below)
+- Merged into `main` (c14736b): T-106a2 elbow fix accepted → `done`. T-106a3 — all auto criteria passed by tester, game-designer asked small fixes (spokes → `rim_carbon`, helmet stripe; art-bible rev. 4.7) → stays `review`, technical-artist fixing; T-106a4 → `in-progress`.
+- Developer batch (accepted by tester, **not merged yet** — one merge together with the T-162 fixes): T-173, T-175, T-176 passed; T-174 auto passed + ru visual accepted (en shot pending); T-177 spike passed (owner's Mac check pending). Statuses stay `review` until the merge (then `done`, except T-174 until the en shot and T-177 until the owner's check per its task file).
+- Returned to `in-progress`: T-161 — rework passed, but new WRK-04 p.6 (U-48: first resistance command carries the user level, no stray 0 / previous level) is a defect; T-162 — rework failed: D-2 FreeRide display rule, D-3 hint-slot priority, D-4 +/- = resistance with ERG off. Developer is fixing both first.
+- Developer started T-187 and T-180 (`in-progress`, paused for the T-161 / T-162 fixes).
+- Owner decisions: U-44 (first routes South China + islands, game-designer proposes T-191), U-45 / U-46 (one auto screenshot per ride around mid-workout, gameplay frame, PNG, on by default), U-47 (mini-HUD outside MVP, later release; T-177 spike stays), U-48 (DEV-11 p.9 (в) capability request in pause allowed; WRK-04 p.6).
+- Requirements commits: HUD rules 61d807f; DEV-11 / WRK-04 eb482a2.
+- Story map rev. 8 (A3.22 moved from 0.4 to "Дальше").
+- Queues:
+  - developer — T-161 (WRK-04 p.6) and T-162 (D-2..D-4) fixes → one merge with T-173..T-177 → T-180, T-187 (resume) → T-116b → T-181 → T-182, T-183;
+  - technical-artist — T-106a3 fixes (art-bible rev. 4.7) → T-106a4 → T-109 → T-184 → T-185;
+  - tester — re-check T-161, T-162 after fixes; T-174 en shot; re-check T-106a3 fixes;
+  - game-designer — T-106a3 re-verdict, T-174 en verdict; T-178 → T-191 → T-179;
+  - owner — T-177 build and checklist on the Mac; confirm T-191 shortlist; "0.4 routes separately"; Strava partner application.
+
+### Checkpoint 2026-10-10, evening (manager; `main` = ea8516e; superseded by the checkpoint above)
 - `done`: T-160, T-108, T-113, T-115 (tester verdicts in `main`: 304f63a, 65d3c72, cad3845, 3ddb4bb).
 - `review` (acceptance running in other worktrees — do not edit their task files): T-161, T-162 (rework), T-173, T-174, T-175, T-176, T-177, T-106a2 (elbow fix), T-106a3.
 - T-177 spike result (developer cannot edit task files; recorded here and in backlog section 4 "Mini-HUD spike"): window level `NSStatusWindowLevel`; collection behavior `canJoinAllSpaces | fullScreenAuxiliary`; App Nap guard while in mini-HUD; the Objective-C++ part is not compiled in the container — owner builds on the Mac and runs the checklist (over full-screen video, across Spaces, 10 min unfocused); fallback if it does not show over full-screen video — `NSPanel` or the accessory activation policy. Copy into T-177 History once acceptance is done there.
