@@ -55,6 +55,8 @@ signal finish_requested
 signal sim_toggle_requested
 ## `+`/`−` или кнопки крутизны (свободная езда в SIM): крутизна ±10 %.
 signal steepness_step_requested(delta_pct: int)
+## The panel appeared or started hiding (п. 10.3): elements shown together with it follow.
+signal shown_changed(shown: bool)
 
 enum Mode { PLAN, FREE_RIDE }
 
@@ -656,6 +658,7 @@ func _set_shown(on: bool) -> void:
 	if _shown == on:
 		return
 	_shown = on
+	shown_changed.emit(on)
 	# Таймер скрытия нужен только пока панель на экране.
 	set_process(on)
 	if _tween != null:

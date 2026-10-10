@@ -49,21 +49,24 @@ extends Control
 ## Mini-HUD (T-177 spike): `enter_mini_hud()` turns the app window into a small always-on-top
 ## overlay (`OverlayWindow`) with `MiniHud` — the same `HudModel` numbers, pause, skip, "back to
 ## full"; the 3D world stops rendering, the session and the ticker keep running. `exit_mini_hud()`
-## restores the window and the full HUD. The switch button left of the pause button is shown where
-## the overlay is supported (`mini_hud_supported`: the native helper is loaded and available —
-## macOS builds with the extension).
+## restores the window and the full HUD. The «Мини» button (hud.md 18.1, option B) sits left of the
+## pause button (12 lp gap) and appears and hides together with the auto-hiding toolbar; it exists
+## only where the overlay works (`mini_hud_available`: the native helper is loaded and available —
+## macOS builds with the extension — and the device is not a phone or tablet). Key M toggles
+## full ↔ mini.
 
 const UNIT_KEY: String = "ui.workout.unit_w"
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
 const ICON_PLAY: Texture2D = preload("res://assets/icons/lucide/play.svg")
+const ICON_MINI: Texture2D = preload("res://assets/icons/lucide/picture-in-picture-2.svg")
 ## Ключи текстов списка интервалов и легенды графика (`strings_hud.csv`).
 const LIST_FREE_KEY: String = "ui.hud.interval_list.free"
 const LIST_REMAINING_KEY: String = "ui.hud.interval_list.remaining"
 const LIST_STEP_OF_KEY: String = "ui.hud.interval_list.step_of"
 const CHART_LEGEND_POWER_KEY: String = "ui.hud.chart.legend_power"
 const CHART_LEGEND_HR_KEY: String = "ui.hud.chart.legend_hr"
-## Gap between the mini-HUD switch and the pause button, lp HUD (T-177).
-const MINI_BUTTON_GAP: float = 8.0
+## Gap between the mini-HUD switch and the pause button, lp HUD (T-177, hud.md 18.1).
+const MINI_BUTTON_GAP: float = 12.0
 
 ## Сессия создана и сейчас стартует — владелец подключает запись заезда (`RideRecorder`, REQ-LOC-07).
 signal session_created(session: WorkoutSession)
@@ -834,10 +837,12 @@ func _build_mini_hud() -> void:
 	_mini_button.theme_type_variation = &"HudButton"
 	_mini_button.text = "ui.workout.mini_hud.enter"
 	_mini_button.tooltip_text = "ui.workout.mini_hud.enter_hint"
+	_mini_button.icon = ICON_MINI
 	_mini_button.focus_mode = Control.FOCUS_NONE
-	_mini_button.visible = mini_hud_supported
+	_mini_button.visible = false
 	_hud_root.add_child(_mini_button)
 	_mini_button.pressed.connect(_on_mini_button_pressed)
+	_toolbar.shown_changed.connect(_on_toolbar_shown_changed)
 	_mini_hud = MiniHud.new()
 	_mini_hud.visible = false
 	add_child(_mini_hud)
@@ -852,6 +857,11 @@ func mini_hud() -> MiniHud:
 
 func mini_hud_button() -> Button:
 	return _mini_button
+
+
+## The always-visible pause button of the full HUD (the «Мини» button sits left of it).
+func pause_button() -> Button:
+	return _pause_button
 
 
 ## Window mode of the current mini-HUD (null — full HUD).
@@ -903,11 +913,46 @@ func _on_mini_button_pressed() -> void:
 	enter_mini_hud()
 
 
+## The mini-HUD is offered here (hud.md 18.1): the overlay capability (`mini_hud_supported`) on a
+## desktop device; hidden — not disabled — on touch devices (phone, tablet).
+func mini_hud_available() -> bool:
+	var ui := _ui_scale()
+	return mini_hud_supported and (ui == null or ui.device == UiScale.Device.DESKTOP)
+
+
+## Key M: full ↔ mini (hud.md 18.1). `true` — the mode changed.
+func toggle_mini_hud() -> bool:
+	if is_mini_hud():
+		exit_mini_hud()
+		return true
+	if not mini_hud_available():
+		return false
+	return enter_mini_hud()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo or not _is_live():
+		return
+	var is_m: bool = key.physical_keycode == KEY_M or (key.physical_keycode == KEY_NONE and key.keycode == KEY_M)
+	if is_m and toggle_mini_hud():
+		get_viewport().set_input_as_handled()
+
+
+func _on_toolbar_shown_changed(_shown: bool) -> void:
+	_update_mini_button()
+
+
+## «Мини» is on screen with the toolbar only, on the full HUD, where the mini-HUD works.
+func _update_mini_button() -> void:
+	_mini_button.visible = mini_hud_available() and not is_mini_hud() and _toolbar.is_shown()
+	_place_mini_button()
+
+
 ## Mini-HUD numbers from the same `HudModel` state; the full HUD stays hidden meanwhile.
 func _render_mini(s: Dictionary, segments: Array[Dictionary]) -> void:
-	_mini_button.visible = mini_hud_supported and not is_mini_hud()
+	_update_mini_button()
 	if not is_mini_hud():
-		_place_mini_button()
 		return
 	_viewport_container.visible = false
 	_hud_root.visible = false

@@ -8,6 +8,8 @@
 Состав — только иконки из `docs/game/ui.md` п. 7, шевроны `chevron-up`/`chevron-down`
 для `SpinBox`/`OptionButton` (п. 9.1) и иконки баннера (п. 6, T-093): `info` — сведения,
 `triangle-alert` — предупреждение, `circle-alert` — ошибка (все три — из Feather, MIT).
+Mini-HUD (T-177, `docs/game/hud.md` 18.1–18.2): `picture-in-picture-2` — the «Мини» / "Mini"
+button, `maximize-2` — "back to the full HUD" on the mini-HUD (both Lucide originals, ISC).
 
 Загружать иконки из кода — через `UiIcons.icon("имя")` (`src/ui/theme/ui_icons.gd`, с кэшем).
 

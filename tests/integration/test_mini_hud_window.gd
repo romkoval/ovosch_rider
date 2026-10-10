@@ -191,6 +191,7 @@ func test_switch_button_shown_when_supported_and_enters() -> void:
 	var s := _start(_fake())
 	s.mini_hud_supported = true
 	_second(s)
+	s.toolbar().poke()  # hud.md 18.1: the button appears with the toolbar
 	assert_true(s.mini_hud_button().is_visible_in_tree(), "button on the full HUD")
 	s.mini_hud_button().pressed.emit()
 	assert_true(s.is_mini_hud(), "button enters the mini-HUD")
@@ -252,3 +253,73 @@ func test_overlay_pause_and_skip_act_like_full_hud() -> void:
 	assert_eq(s.session().executor.current_step_index(), 1, "skip step (WRK-06)")
 	s.exit_mini_hud()
 	assert_true(s.metric_panel().is_visible_in_tree())
+
+
+# ---------------------------------------------------------------------------
+# hud.md 18.1 (game-designer, T-177 follow-up): button with the toolbar, desktop only, key M, icons
+# ---------------------------------------------------------------------------
+
+func _key_m() -> InputEventKey:
+	var k := InputEventKey.new()
+	k.physical_keycode = KEY_M
+	k.keycode = KEY_M
+	k.pressed = true
+	return k
+
+
+func test_mini_button_follows_toolbar_and_sits_12_lp_left_of_pause() -> void:
+	var s := _start(_fake())
+	s.mini_hud_supported = true
+	_second(s)
+	assert_false(s.toolbar().is_shown(), "precondition: toolbar hidden at rest")
+	assert_false(s.mini_hud_button().visible, "HUD at rest: no «Mini» (only Pause is always visible)")
+	s.toolbar().poke()
+	assert_true(s.mini_hud_button().visible, "shown together with the toolbar")
+	var b := s.mini_hud_button()
+	var pause := s.pause_button()
+	assert_almost_eq(pause.position.x - (b.position.x + b.size.x), WorkoutScreen.MINI_BUTTON_GAP, 0.5, "left of Pause")
+	assert_eq(WorkoutScreen.MINI_BUTTON_GAP, 12.0, "12 lp gap")
+	assert_eq(b.icon, WorkoutScreen.ICON_MINI, "Lucide picture-in-picture-2")
+	s.toolbar().tick(HudToolbar.HIDE_AFTER_SEC + 0.1)
+	assert_false(s.mini_hud_button().visible, "hides together with the toolbar")
+
+
+func test_mini_button_hidden_on_phone_and_tablet() -> void:
+	var ui := TouchTarget.default_runtime()
+	if ui == null:
+		pending("no UiScale runtime")
+		return
+	var prev := ui.device
+	var s := _start(_fake())
+	s.mini_hud_supported = true
+	for device in [UiScale.Device.PHONE, UiScale.Device.TABLET]:
+		ui.device = device
+		assert_false(s.mini_hud_available(), "not offered on a touch device (%d)" % device)
+		s.toolbar().poke()
+		_second(s)
+		assert_false(s.mini_hud_button().visible, "hidden, not disabled, on a touch device (%d)" % device)
+		assert_false(s.toggle_mini_hud(), "M does nothing there")
+	ui.device = UiScale.Device.DESKTOP
+	assert_true(s.mini_hud_available(), "desktop with the capability")
+	ui.device = prev
+
+
+func test_key_m_toggles_full_and_mini() -> void:
+	var s := _start(_fake())
+	s.mini_hud_supported = true
+	_second(s)
+	s._unhandled_key_input(_key_m())
+	assert_true(s.is_mini_hud(), "M: full → mini")
+	_second(s)
+	s._unhandled_key_input(_key_m())
+	assert_false(s.is_mini_hud(), "M: mini → full")
+	s.mini_hud_supported = false
+	s._unhandled_key_input(_key_m())
+	assert_false(s.is_mini_hud(), "without the capability M does nothing")
+
+
+func test_mini_hud_back_button_uses_maximize_2() -> void:
+	var s := _start(_fake())
+	var exit := s.mini_hud().button(&"exit")
+	assert_eq(exit.icon, MiniHud.ICON_FULL)
+	assert_eq(MiniHud.ICON_FULL.resource_path, "res://assets/icons/lucide/maximize-2.svg", "no chevron-up (hud.md 18.2)")

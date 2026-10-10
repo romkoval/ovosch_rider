@@ -17,7 +17,8 @@ const SIZE_LP: Vector2i = Vector2i(460, 132)
 const ICON_PAUSE: Texture2D = preload("res://assets/icons/lucide/pause.svg")
 const ICON_PLAY: Texture2D = preload("res://assets/icons/lucide/play.svg")
 const ICON_SKIP: Texture2D = preload("res://assets/icons/lucide/skip-forward.svg")
-const ICON_FULL: Texture2D = preload("res://assets/icons/lucide/chevron-up.svg")
+## Back to the full HUD — Lucide `maximize-2` (hud.md 18.2: no `chevron-up`).
+const ICON_FULL: Texture2D = preload("res://assets/icons/lucide/maximize-2.svg")
 const BUTTON_SIZE: Vector2 = Vector2(40, 40)
 const NO_DATA: String = HudModel.NO_DATA_TEXT
 
