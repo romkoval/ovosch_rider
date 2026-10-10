@@ -447,3 +447,47 @@ func _func_body(text: String, fn: String) -> String:
 			break
 		out.append(l)
 	return "\n".join(out)
+
+
+## Re-check of the p.15 fix (7cf9220) away from the nominal run: the elbow holds its rest angle
+## (swing ≤ 2° per revolution), the wrist stays ≤ 5° from its rest angle and the grip ≤ 0.015 m
+## from the hood (spec «What to code in T-106a2» p.8, rev. 4.3; table p.5) — at k at the upper
+## bound (P = 1.5 FTP) and in the cadence-only branch (no power), cadence 60 and 120 rpm, lean
+## held at ±0.45 rad, long frames (dt 1/30 s and 0.1 s), both figures.
+func test_p5_p15_arm_holds_under_long_frames_held_lean_and_cadence_branch(src = use_parameters(RiderContract.POSE_SOURCES)) -> void:
+	for has_power in [true, false]:
+		for rpm in [60, 120]:
+			for lean in [-0.45, 0.45]:
+				for dt in [1.0 / 30.0, 0.1]:
+					var r := _rider(src)
+					var arm := _rest_arm_angles(r)
+					r.set_power(FTP * 3 / 2 if has_power else 0, has_power, FTP if has_power else 0)
+					r.set_cadence(rpm)
+					r.set_lean(lean)
+					var frames: int = int(ceil(8.0 / dt))
+					var rev_frames: int = int(ceil(60.0 / float(rpm) / dt))
+					var lo := {".R": INF, ".L": INF}
+					var hi := {".R": -INF, ".L": -INF}
+					var wrist_dev: float = 0.0
+					var grip_off: float = 0.0
+					for i in frames:
+						r.advance(dt)
+						for side in [".R", ".L"]:
+							var sh := _p(r, "upperarm" + side)
+							var el := _p(r, "forearm" + side)
+							var wr := _p(r, "hand" + side)
+							var gr := _p(r, "grip" + side)
+							var hood := Vector3(GRIP_R.x * (1.0 if side == ".R" else -1.0), GRIP_R.y, GRIP_R.z)
+							grip_off = maxf(grip_off, gr.distance_to(hood))
+							wrist_dev = maxf(wrist_dev, absf(rad_to_deg((wr - el).angle_to(gr - wr)) - float(arm[1][side])))
+							if i >= frames - rev_frames:
+								var e := _angle_at(sh, el, wr)
+								lo[side] = minf(lo[side], e)
+								hi[side] = maxf(hi[side], e)
+					var tag := "%s power %s %d rpm lean %.2f dt %.3f" % [src["name"], has_power, rpm, lean, dt]
+					for side in [".R", ".L"]:
+						assert_lte(hi[side] - lo[side], 2.0, "%s: elbow %s swing %.2f° (spec ≤ 2°)" % [tag, side, hi[side] - lo[side]])
+						assert_between(lo[side], 140.0, 165.0, "%s: elbow %s angle %.2f° (spec 140–165°)" % [tag, side, lo[side]])
+					assert_lte(wrist_dev, 5.0, "%s: wrist off rest %.2f° (spec ≤ 5°)" % [tag, wrist_dev])
+					assert_lte(grip_off, 0.015, "%s: grip %.4f m from the hood (spec ≤ 0.015 m)" % [tag, grip_off])
+					gut.p("%s: wrist dev %.2f°, grip off %.4f m" % [tag, wrist_dev, grip_off])
