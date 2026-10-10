@@ -199,6 +199,15 @@ MIT). SVG, сетка 24, штрих 2, цвет задаётся модуляц
   Последняя карточка — «Новый профиль»: рамка 1.5 lp пунктиром `line_strong`, иконка `plus`.
 - **Создание и правка** — диалог, а не встроенная форма: поля «Имя», «FTP, Вт», «Вес, кг»,
   «Макс. пульс (необязательно)», подписи над полями, «Сохранить» / «Отмена».
+- **Form rhythm on compact (decision 2026-10-10, T-174).** All four fields fit without
+  scrolling by **tighter vertical gaps**, not by a new row layout. Rows stay: «Имя» — full
+  width; «FTP · Вес» — two columns; «Макс. пульс» — full width. Gaps on compact: label →
+  its field 4 lp, field → next label 8 lp, last field → button row 12 lp; regular keeps
+  8 / 16 / 24. The label is always closer to its own field than to the field above
+  (grouping by proximity, U6). "FTP · Вес · Пульс" in one row is rejected: the heart-rate
+  label «Максимальный пульс (0 — не задан)» does not fit a third of 432 lp, and three
+  spin boxes with arrows get narrower than a comfortable touch target. Scrolling stays only
+  as a fallback (larger system text); a field cut by the scroll edge is a defect.
 - **Удаление:** меню «⋯» в углу карточки → «Удалить профиль» → диалог с опасной кнопкой.
   Кнопки «Выбрать / Создать / Удалить» под списком исчезают: нажатие на карточку = выбор.
 - **Фокус:** стрелки по сетке, Enter — выбрать.
@@ -1328,3 +1337,16 @@ Game-designer:
 - Старт без станка: A + B (рекомендация), всегда диалог (B) или отдельная кнопка (C).
 - Скорость в свободной езде без станка на подъёмах: по модели с уклоном (рекомендация) или
   как на равнине.
+
+### 13.7. Decisions on T-174 (2026-10-10)
+
+Checked against the developer's shots `dialog_profile_create_1280x590_ru_safe_phone`
+before/after (scratch, not kept): before — the fourth field «Максимальный пульс» cut by the
+scroll edge, value «0» unreadable; after — all four fields whole, no scroll bar, window
+inside the safe area.
+
+Game-designer:
+1. Layout method for the profile form on compact — tighter vertical gaps (п. 8.1, "Form
+   rhythm on compact"); the one-row "FTP · Вес · Пульс" variant is rejected.
+2. The same rhythm applies to any dialog-form (п. 6 «Диалог-форма») that does not fit on
+   compact, before any scrolling is accepted.

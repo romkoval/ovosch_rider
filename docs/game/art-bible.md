@@ -512,7 +512,7 @@ FPS на базовом M1 (T-116a).
 - Hand-painted хвойные со «рваным» краем на альфа-текстуре: зубчатый край яруса делаем
   геометрией, а не текстурой, потому что новый материал в бюджет не входит.
 
-## Гонщик (арт-спека T-104, ред. 4.6; REQ-D3D-09, REQ-AVT-01, REQ-AVT-02)
+## Гонщик (арт-спека T-104, ред. 4.7; REQ-D3D-09, REQ-AVT-01, REQ-AVT-02)
 
 Числа этого раздела — источник для критериев REQ-D3D-09 и таблица слотов для REQ-AVT-01/02
 (правило У-21, подтверждено владельцем 2026-10-04). Исполнители (ред. 4): модель — сервис
@@ -1313,6 +1313,14 @@ D3D-05 п.4):
   прорезей — 2–3 px, и без сплошного края шлем читается тёмным, а не красным. Правило
   действует для обеих моделей и всех пресетов: шлем — второй акцент силуэта сзади после
   носков. `[визуальная проверка]`
+- **Accent stripe seen from behind (ред. 4.7, 2026-10-10, T-106a3 review).** A centre
+  stripe of `helmet_accent` either runs with a constant width and ends with a straight or
+  rounded edge on the top of the solid main-colour band of the lower rear edge, or stops at
+  the crown and is not visible from `work` and `rear_low`. It must not end as a wider dark
+  blob with stepped edges: at ≈ 35 px helmet width such a blob reads as a hole or a dirt
+  spot, not as a stripe (T-106a3 mannequin: ≈ 7 × 12 px dark shape at the top back).
+  Region boundaries on the shell follow the stripe edges, not the triangle edges of the
+  shell (Г11). `[визуальная проверка]`
 - Не больше 1600 треугольников на модель.
 
 **Очки** — спортивные, обтекают лицо от виска до виска, линза на 1–1.5 см от лица (без
@@ -1491,12 +1499,21 @@ D3D-05 п.4):
 | 9 | `shorts_gripper` | `shorts.gripper` | 1 | 25 | `rim_decal` | `bike.rim_decal` | 0 |
 | 10 | `socks_main` | `socks.main` | 1 | 26 | `bar_tape` лента руля | `bike.bar_tape` | 1 |
 | 11 | `socks_cuff` | `socks.cuff` | 1 | 27 | `tire` покрышки | фикс. (0.10, 0.10, 0.11) | 1 |
-| 12 | `shoe_main` | `shoes.main` | 1 | 28 | `rim_carbon` обод | фикс. (0.13, 0.13, 0.15) | 0 |
-| 13 | `shoe_accent` застёжки | `shoes.accent` | 1 | 29 | `metal` втулки, кассета, спицы, цепь, рычаги тормоза (ред. 4.1) | фикс. (0.70, 0.71, 0.74) | 0 |
+| 12 | `shoe_main` | `shoes.main` | 1 | 28 | `rim_carbon` обод, спицы (ред. 4.7) | фикс. (0.13, 0.13, 0.15) | 0 |
+| 13 | `shoe_accent` застёжки | `shoes.accent` | 1 | 29 | `metal` втулки, кассета, цепь, рычаги тормоза (ред. 4.1; спицы — в 28, ред. 4.7) | фикс. (0.70, 0.71, 0.74) | 0 |
 | 14 | `shoe_sole` подошва | фикс. (0.14, 0.14, 0.16) | 1 | 30 | `component` седло, вынос, шатуны, корпуса тормозных ручек (ред. 4.1) | фикс. (0.09, 0.09, 0.10) | 1 |
 | 15 | `cleat` шип | фикс. (0.82, 0.18, 0.16) | 1 | 31 | `bottle` фляга | = `jersey.accent2` | 1 |
 
 Регионы 23–31 — велосипед (делает TA), художник их не использует.
+
+**Spokes are dark (ред. 4.7, 2026-10-10, T-106a3 review).** Spokes belong to `rim_carbon`
+(28), not `metal` (29). With silver spokes (0.70) the rear wheel seen edge-on from the
+working camera turns into a light grey spindle: median V of the wheel below the socks rose
+from 0.09 to 0.32 (`work` φ 90, `flat`), the wheel stops reading dark (Ф11) and puts a
+second light shape right under the socks (Ф7). Deep carbon wheels of the photo reference
+have black spokes. Rotation stays readable through the rim decal (25) and the dark spokes
+against the asphalt on `rear34_l` and `side_r`. Hubs, cassette, chain and brake levers stay
+`metal`: they are small light points, not a surface.
 
 **Палитра формы** (ключ → sRGB). Ред. 2: **тёмная основная расцветка джерси разрешена**
 (решение владельца 2026-10-04) — любой ключ годится для `jersey.main`. Правило ред. 1

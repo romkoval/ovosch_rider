@@ -512,6 +512,8 @@ ParaType; наличие `tnum` проверить тестом HUD-14.2 до в
 | п. 14 — чек-лист H1–H12 | HUD-13.7 и пункты `[визуальная проверка]` HUD-01, 10–14, FRD-06 |
 | п. 16 — HUD без управления станком: шкала допуска, гистерезис, фишка «БЕЗ СТАНКА», подсказка режима | REQ-WRK-09 (предложение Н-53), HUD-02 п. 2, 3; критерии — `ui.md` п. 8.9.6 |
 | п. 17 — станок без ERG: фишка «СОПР.», сообщение, скрытая кнопка ERG; цель, ограниченная станком, на всём HUD | REQ-DEV-10 п.5–6 (предложение; толкование У-26 — подтвердить), HUD-01, HUD-10, HUD-13.2 |
+| п. 17.2 — hint slot priority (NEXT > notice > step hint); п. 17.3 — FreeRide step keeps the ERG-mode rule (2026-10-10) | proposed: WRK-03 п.6 (в), HUD-01 п.7, HUD-10 п.1 (requirements to reword) |
+| п. 18 — mini-HUD over other apps, «Мини» button (2026-10-10, interim) | none yet (T-177 spike); criteria M1–M4 for requirements |
 
 Без отдельного REQ остались детали анимаций п. 10.1 (длительности, вспышка карточки) и
 горячие клавиши п. 10.3, кроме Esc: Esc → подтверждение завершения закреплено в UIX-04
@@ -774,6 +776,19 @@ Set Target Power или «не поддерживается» у FE-C. В пла
   которые до конца подключения нечем включить, скрываются, а не гасятся. Если станок после
   переподключения снова принимает цель (`erg_availability_changed(true)`), кнопка
   возвращается, фишка — «ERG».
+- **`+`/`−` keys (confirmed 2026-10-10, T-162 developer question 3).** The table row
+  "ERG off (player's choice) → `+`/`−` change resistance" is intended, not a typo. Rule for
+  plan mode: the keys change what the trainer does now — intensity while the ERG toggle is
+  on, resistance level while ERG is off by the player **or** unavailable. It is the same rule
+  as the phone toolbar pair (п. 10.3, decision ред. 2) and the key list in п. 10.3; with ERG
+  off, intensity only rescales on-screen targets, while resistance is what the legs feel.
+  Intensity stays reachable by its own toolbar buttons (computer, tablet). The rule keys on
+  the ERG toggle, not on the step: on a FreeRide step with ERG on the keys stay intensity
+  (no silent mode switch at a step boundary). Current code (ERG off → intensity) deviates
+  from this document; hot keys have no REQ (п. 12), so the fix is a design correction, not
+  an owner decision. Proposed criterion `[авто]`: plan, ERG toggled off, `+` → resistance
+  level +5 % and Set Target Resistance Level within 1 s (WRK-04 п.2), intensity unchanged;
+  ERG on again, `+` → intensity +5 %.
 
 ### 17.2. Сообщение «станок не поддерживает ERG»
 
@@ -791,6 +806,25 @@ Set Target Power или «не поддерживается» у FE-C. В пла
 |---|---|---|
 | Компьютер, планшет | Станок не поддерживает ERG — фиксированное сопротивление, цель держите сами | Trainer does not support ERG — fixed resistance, hold the target yourself |
 | Телефон (одна строка) | Нет ERG: держите цель сами | No ERG: hold the target yourself |
+
+**Hint slot priority (decision 2026-10-10, T-162 developer question 1).** The slot shows one
+item at a time. Priority, highest first: (1) the NEXT chip (T − 5 s … T, п. 10.1); (2) the
+ERG-unavailable notice (this section) and the mode hint п. 16.4; (3) the step hint HUD-08.
+- The NEXT chip wins over the notice. The chip is time-critical and recurs every interval
+  (interval loop, pillar 1); the notice explains a state that is already shown permanently
+  by the «СОПР.» / "RES." chip and the missing ERG button, so it can wait 5 s.
+- If the notice is due while the chip is visible, it starts when the chip disappears (at
+  T = 0). If the chip appears while the notice is visible, the notice is hidden (200 ms fade,
+  п. 10.1) and is shown again from the start for a full 8 s after the chip disappears.
+  This still counts as the one showing per connection (WRK-03 п.6 (в)).
+- After T = 0 the order is: notice (8 s), then the step hint (10 s), as above.
+- Proposed criteria for requirements (WRK-03 п.6 (в)):
+  (a) plan "60 s 150 W, 6 s 250 W, 60 s 200 W", trainer refuses the 250 W target at second
+  60–61 → NEXT chip of step 3 visible 61–66, notice not visible before 66, notice 66–74
+  (± 0.5 s), step hint of step 3 after it, from 74; `[авто]`
+  (b) ERG unavailable from connection, plan "6 s 150 W, 60 s 250 W" → notice 0–1, hidden
+  1–6 while the chip is visible, notice again 6–14 (full 8 s), then the step hint; no other
+  showing in this connection. `[авто]`
 
 ### 17.3. Цель, ограниченная станком (DEV-10 п.6, У-26)
 
@@ -813,6 +847,28 @@ Set Target Power или «не поддерживается» у FE-C. В пла
 Рекомендация — A. Это решение о толковании У-26 (HUD-10 уже помечен «подтвердить»), поэтому
 вопрос владельцу через requirements. Пометки «ограничено станком» нет до ответа по
 Н-61 (д).
+
+**FreeRide step under variant A (accepted by the owner as У-37; game-designer position
+2026-10-10, T-162 developer question 4).** The display rule must key on the **ERG mode**
+(smart, ERG available, toggle on), not on "ERG acts this second" (WRK-08 п.7). With the
+per-second rule every FreeRide step flips all other targets from trainer-limited to plan
+values and back: on the 25..1500 W / step 5 example the list row jumps 130 → 132 → 130, the
+1600 W bar jumps 1500 → 1600 → 1500 and y_max rescales the whole chart twice. That is the
+exact "one target, two numbers" and the jumps that variant A was chosen to remove
+(pillars 3, 4). So:
+- the FreeRide step itself has no target (card «СВОБОДНО», hatched bar) — unchanged;
+- all other targets on the HUD (rows, NEXT, bars, y_max) stay trainer-limited while the ERG
+  mode is on, including during a FreeRide step: the trainer will apply exactly these values
+  when those steps come;
+- the sample target field and the sample ERG flag keep WRK-08 п.7 (per second) — recording
+  stays truthful, only the display rule differs.
+Not OK as currently written in HUD-01 п.7 ("шаг без цели" among the cases where plan
+targets are used everywhere). This is a reading of У-37 in its own spirit, not a new
+product decision; requirements should reword HUD-01 п.7 / HUD-10 п.1 (case "шаг без цели"
+→ "the FreeRide step itself has no target; other steps keep the ERG-mode rule"). Proposed
+criterion `[авто]`: range 25..1500 W step 5, plan "300 s 132 W, 60 s FreeRide, 300 s
+1600 W", ERG on: during the FreeRide step the list shows «130 Вт» and «1500 Вт», the third
+bar is 1500 and y_max does not change at either FreeRide boundary.
 
 ### 17.4. Шкала допуска при ERG недоступен (предложение, после T-153)
 
@@ -837,3 +893,104 @@ en 1280×590 `--safe-area --phone`. Чек-лист H1–H12 (п. 14) плюс:
 - H19 (если принят вариант A п. 17.3). Диапазон 25..1500 Вт, шаг 5: цель шага 132 Вт —
   «130» в карточке, в строке списка и в «ДАЛЕЕ»; столбик шага 1600 Вт той же высоты (1500) до,
   во время и после шага. `[авто]`
+
+## 18. Mini-HUD: compact window over other apps (T-177 spike, interim decision 2026-10-10)
+
+Owner's request 2026-10-10: on a Mac, a small always-on-top window with workout numbers only,
+over a film or a race stream. T-177 is a spike (does it work over full-screen video); its
+look is a placeholder. This section fixes the look and the entry point so that the follow-up
+task builds it once. Shots of the placeholder: T-177 `mini_hud_ru`, `mini_hud_en_phone`,
+`hud_mini_button_*`, `hud_mini_back_*` (developer scratch, not kept).
+
+What the placeholder gets wrong (by the shots):
+1. Power «85 Вт» and the step countdown «04:30» are the same size, and the target is a
+   12 px grey caption «цель 86 Вт»: power against target cannot be compared at a glance
+   (pillar 1). The unit «Вт» is as big as the number.
+2. No deviation ●▲▼ and no tolerance scale (T-175): the micro loop signal is missing, and
+   it matters most exactly when ERG does not act.
+3. No zone colour anywhere: the current interval and the next one have no identity.
+4. Grey plate (≈ #3A3D42, opaque) is not a HUD token; over a bright video frame grey
+   on grey loses contrast.
+5. The back button is a `chevron-up`: reads as "collapse / scroll up", not "back to the
+   full HUD".
+6. The «Мини» button is always visible next to Pause and is shown on the phone layout,
+   where there is no mini-HUD at all.
+
+### 18.1. Entry point: the «Мини» / "Mini" button
+
+| Option | How | Pros | Cons | Cost |
+|---|---|---|---|---|
+| A. Always visible next to Pause (spike) | `HudToolButton` left of Pause | discoverable | breaks п. 10.3 "only Pause is always visible"; a second large target next to Pause — mis-tap mid-effort | 0 |
+| **B. Same place, shown with the toolbar (recommended)** | left of Pause, gap 12 lp, appears and hides together with the toolbar (п. 10.3: on mouse move, tap, any key; hides after 4 s) | HUD at rest unchanged; on a Mac the mouse move that precedes the click shows it anyway | one more element with the toolbar | S |
+| C. Inside the toolbar column | a row between «Пропустить шаг» and «Завершить» | all actions in one place | on 16:9 with ERG off the column gets 6 rows (≈ 376 lp) and falls into the phone grid | S |
+| D. Pause card only | text button on the card | zero clutter | needs a pause to switch; nobody finds it | S |
+
+Decision: **B**, plus key **M** (full ↔ mini; in mini it works while the window has focus).
+- Button: `HudToolButton`, side `touch_hud·s` (48 on a computer), icon Lucide
+  `picture-in-picture-2`, caption «Мини» / "Mini" 11·s. Tooltip «Компактное окно поверх
+  других программ (M)» / "Compact window over other apps (M)".
+- Shown only where the mini-HUD works: desktop builds whose window can be made borderless,
+  transparent and always on top (today macOS). Hidden — not disabled — on touch devices
+  (phone, tablet) and wherever the capability check fails. The check is a capability of
+  `DisplayServer` / the native extension, not the HUD layout type (NFR-06 п. 1).
+- In free ride the button is hidden until the mini-HUD has a free-ride layout (18.4).
+
+### 18.2. Layout
+
+```
+┌▌────────────────────────────────────────────────────┐
+│▌ 247 W  ▼ −53         TARGET 300 W        00:20     │  row 1 · 52
+│▌ [Z4] ▬▬▬▬▬▬▬▬▬       ♥ 152 bpm   ⟳ 98 rpm          │  row 2 · 24
+│▌ NEXT ● 1:00 · 125 W              [❚❚] [⏭] [⤢]      │  row 3 · 40
+└─────────────────────────────────────────────────────┘
+  ▌ = zone stripe of the current step
+```
+
+All sizes in lp at `s` = 1.0 (desktop; on Retina 1 lp = 1 pt). Starting values — confirm on
+the owner's Mac shots.
+
+| Element | Spec |
+|---|---|
+| Window | 440 × 136, radius 16, padding 12 left/right (after the stripe), 10 top/bottom, row gap 4 |
+| Plate | `hud.ink` (#0B0E13) with alpha **0.88** (not 0.78: the video behind is not our mid-tone world, it can be white), border 1 lp white α 0.12 so the window edge reads on dark frames |
+| Zone stripe | left edge, 6 wide, full height, colour of the current step's target zone; FreeRide — `hud.free`; changes colour in 300 ms like п. 10.1 |
+| Row 1 left — hero | fact power 3 s: 48 / 800 `tnum`, reserve `8888`, right-aligned; «Вт»/"W" 16 / 600 `hud.text2`. Right of it the deviation: ●▲▼ 12 + diff 15 / 700 `tnum`, tokens `hud.dev_on` / `hud.warn` / `hud.dev_below` (HUD-02, same model) |
+| Row 1 middle — target | «ЦЕЛЬ»/"TARGET" 11 / 650 caps `hud.text2`, value 26 / 750 `tnum` + unit 14 `hud.text2`; FreeRide step — «СВОБОДНО»/"FREE" and «—» |
+| Row 1 right — countdown | step remaining `мм:сс` 30 / 700 `tnum`, right-aligned; `hud.warn` from T − 5 s (п. 10.1) |
+| Row 2 left | zone chip of the fact (п. 5, 32 × 18) + bar 120 × 5 in the same zone colour; when ERG does not act — the tolerance scale of T-175 in the same 120 lp (component reused, height 10) |
+| Row 2 right | heart 14 in HR-zone colour + HR 18 / 700 `tnum` + «уд/мин»/"bpm" 11 `hud.text2`; cadence icon `hud.text2` + 18 / 700 + "rpm". No data — «—» `hud.text2` (п. 10.4) |
+| Row 3 left — next / message line | «ДАЛЕЕ»/"NEXT" 11 / 650 caps `hud.text2`, zone dot 8 of the next step, «1:00 · 125 Вт» 15 / 600 `tnum`; T − 5 s … T — seconds `5…1` 15 / 750 `hud.warn` at the end. Last step — «Последний шаг»/"Last step". The same line shows the messages of the hint slot (ERG unavailable, mode hint, step hint) as one line 14 / 600 with "…" for plan text, with the priority of п. 17.2: NEXT countdown first |
+| Row 3 right — buttons | Pause/Resume (`pause` / `play`), Skip step (`skip-forward`), Back to full (`maximize-2`); 40 × 40 each (`touch_ui` computer), gap 8; ghost style: no fill, icon 20 `hud.text2`; hover — fill white α 0.10, icon `hud.text`; pressed — α 0.16. Tooltips with the key (Space, N, M). No `chevron-up` |
+| Paused | values α 0.6 (п. 10.2); the next line shows «Пауза — время и запись остановлены» / "Paused — time and recording stopped" 14 / 600; the Pause button becomes Resume with `accent` fill (the one main action in that state) |
+
+Rules:
+- Only the HUD colour tokens of п. 11 and `ZonePalette`; no new colours.
+- No 3D, no chart, no interval list: this is a glance view; the full HUD is one click away.
+- Window position: default top-right of the screen the app is on, 24 lp from the visible
+  frame edges (below the menu bar); the user can drag it by any non-button point; the last
+  position is kept for the session. Video players put controls and subtitles at the
+  bottom, so the top-right corner covers the least.
+- Nothing blinks; the only motion is the 300 ms colour change and the countdown (pillar 4).
+
+### 18.3. Checks (for requirements, follow-up task after the spike)
+
+- M1. `[визуальная проверка]` Shots `mini_hud_{ru,en}` at 1.0 over a white and over a black
+  backdrop, plus `mini_hud_paused`, `mini_hud_next` (T − 3 s), `mini_hud_erg_off_scale`:
+  power is the largest number; target, countdown and deviation readable in 0.5 s; text not
+  clipped in ru/en; zone stripe and NEXT dot present; contrast ≥ 4.5:1 for all text on
+  both backdrops (HUD-14.4).
+- M2. `[визуальная проверка]` Full HUD shots `hud_mini_button_1280x720_{ru,en}`: «Мини» left
+  of Pause only while the toolbar is shown; at rest only Pause. `[авто]`: the button node
+  is hidden at rest and after 4 s without input; hidden (`visible = false`) on the phone and
+  tablet layouts and when the capability check fails.
+- M3. `[авто]` Values in the mini-HUD equal the full HUD model for the same tick (power,
+  target, deviation state, countdown, next step, HR, cadence); M switches modes; the
+  priority of the message line follows п. 17.2.
+- M4. `[ручная проверка]` On the owner's Mac over full-screen video: readable from the
+  bike at 1.5–2 m (the owner's call).
+
+### 18.4. Open (not blocking the spike)
+
+- Free-ride mini layout (power, speed, grade instead of target and next): after the spike
+  result; until then the button is hidden in free ride.
+- Size presets (small / large) and opacity setting: only if the owner asks after trying it.
