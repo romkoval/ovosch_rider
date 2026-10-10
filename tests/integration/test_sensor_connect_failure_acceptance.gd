@@ -280,3 +280,68 @@ func test_dev_07_c1_trainer_connect_failure_shows_message_on_devices_screen() ->
 	assert_ne(slot.empty_text(), tr("ui.devices.slot.not_connected"),
 		"REQ-DEV-07 п.1 «возвращает в „не подключено“ с сообщением»: у станка под статусом голое «Not connected»")
 	assert_ne(s.failure_text(TRAINER), "", "причина отказа станка в строке списка")
+
+
+# ---------------------------------------------------------------------------
+# Повтор приёмки после 772df37 (T-164): станок — причина ru/en в слоте и строке, сброс,
+# FTMS без 0x1826, регрессия DEV-06 п.1 (запоминается только после успешного подключения)
+# ---------------------------------------------------------------------------
+
+func test_t164_trainer_refused_reason_ru_en_same_in_slot_and_row_not_remembered() -> void:
+	var s := _screen()
+	_find(s, TRAINER, "Tacx Neo 2T", ["1826"])
+	_bridge.fail_next_connect()
+	_press_connect(s, TRAINER)
+	_bridge.pump()
+	assert_eq(_cm.failure_of(TRAINER), SensorDevice.FailureReason.REFUSED)
+	for pair: Array in [["en", "The device refused the connection"], ["ru", "Устройство отклонило подключение"]]:
+		TranslationServer.set_locale(str(pair[0]))
+		s.refresh()
+		assert_eq(s.failure_text(TRAINER), str(pair[1]), "%s: причина в строке списка" % pair[0])
+		assert_string_contains(s.slot(RememberedDevices.KIND_TRAINER).empty_text(), str(pair[1]), "%s: та же причина в слоте" % pair[0])
+	assert_false(_remembered.has_trainer(), "DEV-06 п.1: после отказа станок не запомнен")
+
+
+func test_t164_trainer_no_answer_15s_is_no_response_then_success_clears_reason_and_remembers() -> void:
+	var s := _screen()
+	_find(s, TRAINER, "Tacx Neo 2T", ["1826"])
+	_bridge.set_device_services(TRAINER, {BleUuids.FTMS_SERVICE: PackedStringArray([BleUuids.INDOOR_BIKE_DATA,
+		BleUuids.FTMS_STATUS, BleUuids.FTMS_CONTROL_POINT])})
+	_bridge.auto_connect = false
+	_press_connect(s, TRAINER)
+	_bridge.pump()
+	assert_eq(_cm.state_of(TRAINER), TrainerDevice.ConnectionState.CONNECTING)
+	for i in 160:
+		_cm.tick(0.1)
+	_bridge.pump()
+	assert_eq(_cm.state_of(TRAINER), TrainerDevice.ConnectionState.DISCONNECTED, "15 с без ответа — «не подключено»")
+	s.refresh()
+	assert_eq(s.failure_text(TRAINER), "The device did not respond")
+	assert_false(_remembered.has_trainer())
+	# Вторая попытка успешна — причина пропадает, станок запомнен.
+	_bridge.auto_connect = true
+	_press_connect(s, TRAINER)
+	_bridge.pump()
+	for i in 5:
+		_bridge.pump()
+	assert_eq(_cm.state_of(TRAINER), TrainerDevice.ConnectionState.CONNECTED, "вторая попытка — «подключено»")
+	s.refresh()
+	assert_eq(s.failure_text(TRAINER), "", "причина сброшена")
+	assert_false(s.slot(RememberedDevices.KIND_TRAINER).is_failed(), "слот не в состоянии срыва (причины нет)")
+	assert_eq(s.slot(RememberedDevices.KIND_TRAINER).chip_text(), tr(DevicesScreen.state_key(TrainerDevice.ConnectionState.CONNECTED)), "слот — «подключено»")
+	assert_true(_remembered.has_trainer(), "DEV-06 п.1: запомнен после успешного подключения")
+
+
+func test_t164_trainer_without_ftms_service_is_no_service_not_remembered() -> void:
+	var s := _screen()
+	_find(s, TRAINER, "Tacx Neo 2T", ["1826"])
+	_bridge.set_device_services(TRAINER, {"180F": ["2A19"], "180A": ["2A29"]})
+	_press_connect(s, TRAINER)
+	for i in 3:
+		_bridge.pump()
+	assert_eq(_cm.state_of(TRAINER), TrainerDevice.ConnectionState.DISCONNECTED, "без 0x1826 — не «подключено»")
+	assert_eq(_cm.failure_of(TRAINER), SensorDevice.FailureReason.NO_SERVICE)
+	s.refresh()
+	assert_ne(s.failure_text(TRAINER), "", "причина видна")
+	assert_eq(s.failure_text(TRAINER), TranslationServer.translate("ui.devices.reason.no_service"))
+	assert_false(_remembered.has_trainer(), "не запомнен")

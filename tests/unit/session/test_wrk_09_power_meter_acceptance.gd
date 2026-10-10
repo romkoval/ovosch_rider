@@ -1256,3 +1256,67 @@ func test_req_wrk_09_c12_emulator_is_uncontrolled_and_marked_emulator() -> void:
 	assert_true(dev.is_emulator())
 	assert_eq(dev.trainer_source(), TrainerDevice.SOURCE_EMULATOR, "trainer_source = emulator (WRK-09 п.8)")
 	assert_eq(dev.get_connection_state(), CONNECTED, "подключён сразу")
+
+
+# ---------------------------------------------------------------------------
+# Д-4 (T-171, отложено из приёмки T-152; У-33): WRK-09 п.6 (б) → D3D-02 п.7, тест 1 на ровном
+# ---------------------------------------------------------------------------
+
+func test_req_wrk_09_c6b_d3d_02_c7_avatar_slows_down_at_most_5_kmh_per_sample() -> void:
+	# WRK-09 п.6 (б): обрыв единственного CPS → «нет данных», тяги нет, аватар останавливается
+	# плавно (D3D-02 п.7): первый сэмпл без источника > 0 и равен модели при 0 Вт (±0.1 км/ч),
+	# дальше не растёт, ≤ 5 км/ч за сэмпл, 0 не позже 30-го сэмпла, затем дистанция стоит.
+	# План — без трассы (уклон 0 %, ровный участок теста 1); свободная езда — `flat`.
+	var b := _bridge()
+	var dev := _pm_device(b, 250, 90)
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(120, 200.0)] as Array[WorkoutStep]), dev, FTP, 1.0, 75.0)
+	s.start()
+	var cut := -1
+	while s.get_state() != WorkoutSession.State.FINISHED:
+		if s.executor.elapsed_sec() == 40:
+			_pm_of(dev).inject_dropout(100.0)
+			cut = s.samples.size()
+		s.tick(1.0)
+	var st := s.samples
+	assert_true(st.has_power[cut - 1], "до обрыва мощность есть")
+	assert_false(st.has_power[cut], "первый сэмпл после `disconnected` — «нет данных»")
+	var ref := SpeedModel.new()
+	ref.reset(st.speed_kmh[cut - 1])
+	assert_gt(st.speed_kmh[cut], 0.0, "план: не мгновенный ноль (было %.1f → %.1f)" % [st.speed_kmh[cut - 1], st.speed_kmh[cut]])
+	assert_almost_eq(st.speed_kmh[cut], ref.step(0.0, 75.0, 1.0, 0.0), 0.1, "план: первый сэмпл = модель при 0 Вт")
+	var max_drop := 0.0
+	var zero_at := -1
+	for i in range(cut, st.size()):
+		max_drop = maxf(max_drop, st.speed_kmh[i - 1] - st.speed_kmh[i])
+		assert_true(st.speed_kmh[i] <= st.speed_kmh[i - 1] + 1e-4, "план, сэмпл %d без источника: не растёт" % (i - cut + 1))
+		if zero_at < 0 and st.speed_kmh[i] == 0.0:
+			zero_at = i - cut + 1
+	assert_lte(max_drop, 5.0 + 1e-3, "план: падение скорости за сэмпл ≤ 5 км/ч (было %.2f)" % max_drop)
+	assert_true(zero_at > 0 and zero_at <= 30, "план: 0 не позже 30-го сэмпла без источника (%d)" % zero_at)
+	var stop_idx := cut + zero_at - 1
+	for i in range(stop_idx + 1, mini(stop_idx + 31, st.size())):
+		assert_almost_eq(st.distance_m[i], st.distance_m[stop_idx], 0.01, "план: после остановки дистанция стоит")
+	assert_eq(s.get_state(), WorkoutSession.State.FINISHED, "таймер плана шёл")
+	var b2 := _bridge()
+	var dev2 := _pm_device(b2, 250, 90)
+	var fr := FreeRideSession.new(dev2, RouteCatalog.FLAT, 50, 75.0, FTP)
+	_disposables.push_front(fr)
+	fr.start()
+	for i in 60:
+		fr.tick(1.0)
+	var cut2 := fr.samples.size()
+	_pm_of(dev2).inject_dropout(100.0)
+	for i in 40:
+		fr.tick(1.0)
+	var fst := fr.samples
+	assert_false(fst.has_power[cut2], "свободная езда: «нет данных»")
+	assert_gt(fst.speed_kmh[cut2], 0.0, "свободная езда: не мгновенный ноль (было %.1f → %.1f)" % [fst.speed_kmh[cut2 - 1], fst.speed_kmh[cut2]])
+	var max_drop_fr := 0.0
+	var zero_fr := -1
+	for i in range(cut2, fst.size()):
+		max_drop_fr = maxf(max_drop_fr, fst.speed_kmh[i - 1] - fst.speed_kmh[i])
+		if zero_fr < 0 and fst.speed_kmh[i] == 0.0:
+			zero_fr = i - cut2 + 1
+	assert_lte(max_drop_fr, 5.0 + 1e-3, "свободная езда: падение скорости за сэмпл ≤ 5 км/ч (было %.2f)" % max_drop_fr)
+	assert_true(zero_fr > 0 and zero_fr <= 30, "свободная езда: 0 не позже 30-го сэмпла (%d)" % zero_fr)
+	assert_almost_eq(fst.distance_m[fst.size() - 1], fst.distance_m[cut2 + zero_fr - 1], 0.01, "свободная езда: стоит — дистанция не растёт")

@@ -254,3 +254,57 @@ func test_card_p5_switch_texts_ru_en() -> void:
 		var hint := TranslationServer.translate("ui.settings.emulator_hint")
 		assert_ne(hint, "ui.settings.emulator_hint", "%s: пояснение переведено" % pair[0])
 		assert_true(texts.has(hint), "%s: пояснение видно" % pair[0])
+
+
+# ---------------------------------------------------------------------------
+# Повтор приёмки после 33f7d34: п.3 — свободная езда, ru/en, настоящий станок без пометки
+# ---------------------------------------------------------------------------
+
+func test_card_p3_free_ride_hud_shows_emulator_chip_ru_en() -> void:
+	var main := _main()
+	_enable_emulator(main)
+	assert_true(main.start_free_ride_on_emulator(RouteCatalog.FLAT, 50), "свободная езда на эмуляторе стартует")
+	assert_eq(main.app_state.current_screen, AppState.Screen.FREE_RIDE)
+	for pair: Array in [["ru", "ЭМУЛЯТОР"], ["en", "EMULATOR"]]:
+		TranslationServer.set_locale(str(pair[0]))
+		main.free_ride_screen().refresh()
+		await wait_process_frames(2)
+		var texts := _visible_texts(main.free_ride_screen())
+		assert_true(texts.has(str(pair[1])), "%s: на HUD свободной езды видна фишка «%s»: %s" % [pair[0], pair[1], str(texts)])
+		assert_false(texts.has("СТАНОК") or texts.has("TRAINER"), "%s: вместо фишки «СТАНОК», а не рядом" % pair[0])
+
+
+func test_card_p3_workout_hud_emulator_chip_ru_en_and_real_trainer_has_none() -> void:
+	var main := _main()
+	_enable_emulator(main)
+	main.start_emulator_workout()
+	for pair: Array in [["ru", "ЭМУЛЯТОР"], ["en", "EMULATOR"]]:
+		TranslationServer.set_locale(str(pair[0]))
+		main.workout_screen().refresh()
+		await wait_process_frames(2)
+		var texts := _visible_texts(main.workout_screen())
+		assert_true(texts.has(str(pair[1])), "%s: фишка «%s» на HUD тренировки: %s" % [pair[0], pair[1], str(texts)])
+	# Настоящий станок (через менеджер подключений, не эмулятор) — пометки нет.
+	var main2: AppMain = load(MAIN_SCENE).instantiate()
+	main2.data_dir = _dir
+	main2.debug_build = false
+	main2.trainer_kind = TrainerFactory.KIND_BLE
+	main2.transport = MockHttpTransport.new()
+	main2.env_reader = Callable()
+	add_child_autofree(main2)
+	main2.free_ride_screen().clock_usec = _clock
+	main2.free_ride_screen().keep_awake_setter = _ignore
+	var stub := main2.bridge as StubBleBridge
+	stub.set_device_services("real", {BleUuids.FTMS_SERVICE: PackedStringArray([BleUuids.INDOOR_BIKE_DATA,
+		BleUuids.FTMS_STATUS, BleUuids.FTMS_CONTROL_POINT])})
+	main2.connections.connect_trainer("real")
+	stub.pump()
+	assert_true(main2.is_trainer_ready(), "предусловие: станок подключён")
+	assert_false(main2.connections.session_device().is_emulator(), "предусловие: это не эмулятор")
+	assert_true(main2.start_free_ride(RouteCatalog.FLAT, 50))
+	TranslationServer.set_locale("en")
+	main2.free_ride_screen().refresh()
+	await wait_process_frames(2)
+	var texts2 := _visible_texts(main2.free_ride_screen())
+	assert_false(texts2.has("EMULATOR"), "у настоящего станка фишки «EMULATOR» нет: %s" % str(texts2))
+	assert_true(texts2.has("TRAINER"), "фишка «TRAINER» на месте")
