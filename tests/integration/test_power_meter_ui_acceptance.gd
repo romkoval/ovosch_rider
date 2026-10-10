@@ -329,8 +329,15 @@ func test_req_wrk_09_c2a_c5d_smart_after_power_meter_session_gets_erg_back() -> 
 	var erg_before := s2.erg_enabled
 	_key(KEY_E)
 	assert_ne(s2.erg_enabled, erg_before, "smart: E переключает ERG, как прежде")
+	# WRK-03 p.7 (61d807f): with the ERG toggle off `+` is resistance; with it on — intensity.
+	var level_before := s2.resistance_level
 	_key(KEY_EQUAL, 0x2B)
-	assert_almost_eq(s2.intensity(), 1.05, 0.001, "smart: `+` — интенсивность, как прежде")
+	assert_eq(s2.resistance_level, level_before + 5, "smart, ERG off: `+` — resistance (WRK-03 p.7)")
+	assert_almost_eq(s2.intensity(), 1.0, 0.001, "smart, ERG off: intensity unchanged")
+	_key(KEY_E)
+	assert_eq(s2.erg_enabled, erg_before, "E toggles ERG back")
+	_key(KEY_EQUAL, 0x2B)
+	assert_almost_eq(s2.intensity(), 1.05, 0.001, "smart, ERG on: `+` — intensity")
 
 
 # ===========================================================================

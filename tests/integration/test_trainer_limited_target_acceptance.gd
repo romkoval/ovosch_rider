@@ -229,7 +229,9 @@ static func _visible_texts(s: WorkoutScreen) -> Array[String]:
 func test_req_dev_10_c5_80_05_02_visible_message_to_user() -> void:
 	var t := _ble_trainer([], {})
 	_bridge.fail_next_control_point(FtmsCodec.RESULT_NOT_SUPPORTED)
-	var s := _screen(_plan_3(), t)
+	# Steps longer than the notice: the NEXT chip (priority over the notice, WRK-03 p.6 (c)) does
+	# not come up during these 8 s, so the notice is continuous.
+	var s := _screen(Workout.make("long", [WorkoutStep.watts(60, 150.0), WorkoutStep.watts(60, 200.0)] as Array[WorkoutStep]), t)
 	var shown: Array[int] = []
 	for i in 14:
 		_second(s, 150)

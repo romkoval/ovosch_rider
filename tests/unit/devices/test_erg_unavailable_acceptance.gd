@@ -617,3 +617,81 @@ func test_dev_11_c9_c_fact_reconnect_on_pause_fec3_writes() -> void:
 	for h in on_pause:
 		var page := h.substr(12, 2)
 		assert_false(page in ["30", "31", "32", "33"], "no mode page on pause: %s" % h)
+
+
+# ===========================================================================
+# REQ-WRK-04 p.6 (U-48, after observation O-1): every resistance command carries the user level
+# ===========================================================================
+
+static func _in_window(list: Array[Dictionary], a: float, b: float) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for e in list:
+		if float(e["t"]) >= a - 1e-6 and float(e["t"]) <= b + 1e-6:
+			out.append(e)
+	return out
+
+
+func test_req_wrk_04_c6_1_ftms_erg_off_at_30_exactly_one_04_80_no_04_00() -> void:
+	_ftms(FEATURES_ERG)
+	var s := _session(Workout.make("p", [WorkoutStep.watts(120, 150.0)] as Array[WorkoutStep]))
+	s.start()
+	_bridge.pump()
+	_stamp()
+	_run(s, 30.0)
+	s.set_erg_enabled(false)
+	_bridge.pump()
+	_stamp()
+	_run(s, 40.0)
+	var win := _in_window(_cp(0x04), 30.0, 31.0)
+	gut.p("0x04 log: %s" % str(_cp(0x04)))
+	assert_eq(win.size(), 1, "exactly one 0x04 in [30; 31]")
+	if win.size() == 1:
+		assert_eq(win[0]["hex"], "04 80")
+	for e in _cp(0x04):
+		assert_ne(e["hex"], "04 00", "no 04 00 in the whole log")
+
+
+func test_req_wrk_04_c6_2_ftms_bit3_zero_first_04_is_user_level() -> void:
+	_ftms(FEATURES_NO_ERG)
+	var s := _session(Workout.make("p", [WorkoutStep.watts(60, 150.0)] as Array[WorkoutStep]))
+	s.start()
+	_bridge.pump()
+	_stamp()
+	_run(s, 5.0)
+	var res := _cp(0x04)
+	gut.p("0x04 log: %s" % str(res))
+	assert_false(res.is_empty())
+	if not res.is_empty():
+		assert_eq(res[0]["hex"], "04 80", "the first 0x04 (whole log, connection included) is the user level")
+
+
+func test_req_wrk_04_c6_3_fec_without_bit1_first_30_is_user_level() -> void:
+	_fec(0x05)
+	var s := _session(Workout.make("p", [WorkoutStep.watts(60, 150.0)] as Array[WorkoutStep]))
+	s.start()
+	_bridge.pump()
+	_stamp()
+	_run(s, 5.0)
+	var p30 := _pages(0x30)
+	assert_false(p30.is_empty())
+	if not p30.is_empty():
+		assert_eq(int(p30[0]["b7"]), 0x64, "first 0x30 byte 7 = 64 (50 %), none before it")
+
+
+func test_req_wrk_04_c6_4_fec_erg_off_at_30_exactly_one_30() -> void:
+	_fec(0x07)
+	var s := _session(Workout.make("p", [WorkoutStep.watts(120, 150.0)] as Array[WorkoutStep]))
+	s.start()
+	_bridge.pump()
+	_stamp()
+	_run(s, 30.0)
+	s.set_erg_enabled(false)
+	_bridge.pump()
+	_stamp()
+	_run(s, 40.0)
+	var win := _in_window(_pages(0x30), 30.0, 31.0)
+	assert_eq(win.size(), 1, "exactly one 0x30 in [30; 31]")
+	if win.size() == 1:
+		assert_eq(int(win[0]["b7"]), 0x64)
+	for e in _pages(0x30):
+		assert_eq(int(e["b7"]), 0x64, "no 0x30 with another level")
