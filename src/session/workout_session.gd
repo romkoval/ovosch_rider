@@ -337,9 +337,12 @@ func current_target_watts() -> int:
 	return applied_target(_current_target_w)
 
 
-## Цель `watts`, какой её получит станок сейчас (см. `current_target_watts`).
+## Target `watts` as the HUD shows it (HUD-01 p.7, HUD-10 p.1, U-37): in ERG mode
+## (`is_erg_mode`) — limited to the trainer's range, as the trainer gets it on steps with a target;
+## otherwise the plan target as is. Keyed on the ERG mode, not on the step: a FreeRide step does
+## not switch rows, bars and y_max to plan targets (hud.md 17.3).
 func applied_target(watts: int) -> int:
-	if watts <= 0 or not is_erg_active_on_trainer():
+	if watts <= 0 or not is_erg_mode():
 		return watts
 	return trainer.applied_target_power(watts)
 
@@ -361,6 +364,13 @@ func erg_available() -> bool:
 ## lost connection (DEV-08) does not change it.
 func is_erg_active_on_trainer() -> bool:
 	return controls_trainer() and _effective_erg()
+
+
+## ERG mode (HUD-01 p.7, HUD-10 p.1, WRK-03 p.7): `smart`, ERG available on the trainer and the
+## ERG toggle on — regardless of the current step (on a FreeRide step the mode stays, while
+## `is_erg_active_on_trainer` is off). The HUD display rule and the `+`/`−` mapping key on it.
+func is_erg_mode() -> bool:
+	return controls_trainer() and erg_enabled and _erg_available
 
 
 func is_freeride_suspended() -> bool:
@@ -576,11 +586,11 @@ func _log_erg_unavailable() -> void:
 	_log(EVENT_ERG_UNAVAILABLE, executor.elapsed_sec())
 
 
-## Key of the rule that turns plan targets into what HUD shows (DEV-10 p.6, U-37): empty while ERG
-## does not act on the trainer (plan targets everywhere), otherwise the trainer's target range.
+## Key of the rule that turns plan targets into what HUD shows (DEV-10 p.6, U-37): empty outside
+## ERG mode (`is_erg_mode`; plan targets everywhere), otherwise the trainer's target range.
 ## Models rebuild their targets when it changes.
 func target_rule_key() -> String:
-	if not is_erg_active_on_trainer():
+	if not is_erg_mode():
 		return ""
 	return var_to_str(trainer.target_power_range())
 
