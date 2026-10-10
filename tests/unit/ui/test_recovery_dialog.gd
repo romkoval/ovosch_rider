@@ -184,3 +184,19 @@ func test_only_delete_button_deletes() -> void:
 	if _decisions.size() == 2:
 		assert_eq(_decisions[1], [rides[1].id, RecoveryDialog.ACTION_KEEP], "Enter у второго — сохранить")
 	assert_false(_dialog.visible)
+
+
+## T-173 (REQ-LOC-07 п.3, NFR-08): дата старта — как в истории (`HistoryFormat.full_date`), ru и en.
+func test_date_is_history_full_date_in_current_locale() -> void:
+	var before := TranslationServer.get_locale()
+	var ride := _ride("Утро", 600)
+	for loc in ["ru", "en"]:
+		TranslationServer.set_locale(loc)
+		_dialog.show_for([ride] as Array[Ride])
+		await wait_process_frames(2)
+		var expected := HistoryFormat.full_date(ride.started_at_unix)
+		assert_string_contains(_dialog.dialog_text, expected, "%s: дата как в истории" % loc)
+		var machine := RegEx.create_from_string("\\d{4}-\\d{2}-\\d{2}")
+		assert_null(machine.search(_dialog.dialog_text), "%s: без ГГГГ-ММ-ДД" % loc)
+		_dialog.hide()
+	TranslationServer.set_locale(before)

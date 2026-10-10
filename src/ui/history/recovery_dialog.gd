@@ -5,6 +5,7 @@ extends ConfirmationDialog
 ## «сохранить как завершённый досрочно» (OK; заезд уже сохранён восстановленным)
 ## или «удалить» (дополнительная кнопка). Закрытие диалога равносильно «сохранить».
 ## Решение сообщается сигналом `resolved(ride_id, action)`; удаление выполняет владелец.
+## Дата старта — `HistoryFormat.full_date` в текущей локали, как в истории и карточке заезда (T-173).
 ##
 ## Раскладка — общий `DialogLayout` (`ui.md` п. 6, REQ-UIX-01 крит. 8, 9): 480 lp, перенос,
 ## ряд справа: «Удалить» (опасная, `DangerButton`) · «Сохранить досрочно» (основная
@@ -98,7 +99,7 @@ func _show_next(deferred_popup: bool = false) -> void:
 	var ride_name: String = _current.name if not _current.name.is_empty() else tr("ui.history.untitled")
 	dialog_text = tr("ui.history.recovery.text").format({
 		"name": ride_name,
-		"date": HistoryScreen.format_date_time(_current.started_at_unix),
+		"date": HistoryFormat.full_date(_current.started_at_unix),
 		"time": HudModel.format_elapsed(_current.summary.duration_sec),
 	})
 	if not is_inside_tree():
