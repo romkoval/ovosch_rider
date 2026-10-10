@@ -342,9 +342,13 @@ func _update_erg_notice(elapsed_sec: int) -> void:
 ## The NEXT chip is due in the hint slot now: T − 5 s … T − 1 s before the next step (HUD-06 p.2,
 ## HUD-13 p.9; at T the step changes and the chip goes).
 func next_chip_due() -> bool:
+	return _chip_due_at(session.executor.step_remaining_sec())
+
+
+## The NEXT chip with `remaining` seconds left in the current step.
+func _chip_due_at(remaining: int) -> bool:
 	var ex := session.executor
 	var index: int = ex.current_step_index()
-	var remaining: int = ex.step_remaining_sec()
 	return index >= 0 and not ex.is_finished() and index + 1 < ex.workout.steps.size() \
 		and remaining >= 1 and remaining <= ABOUT_TO_CHANGE_SEC
 
@@ -376,15 +380,17 @@ func is_erg_notice_shown() -> bool:
 
 
 ## Show the notice once per connection: at the start of the ride when ERG is unavailable from the
-## connection (`now`), or with the sample of the second in which the trainer refused the target
-## (the refusal answers a command of that second). The NEXT chip may hold it back (slot priority).
-func _start_erg_notice(now: bool) -> void:
+## connection (`at_sample`), or when the trainer refused the target. A refusal answers a command of
+## the current second and arrives between samples: if the NEXT chip is up by the next sample, the
+## notice is due while the chip is visible (±0.5 s) and starts when the chip goes (hud.md 17.2).
+func _start_erg_notice(at_sample: bool) -> void:
 	if _erg_notice_shown or not session.controls_trainer():
 		return
 	_erg_notice_shown = true
 	_erg_notice_due = true
-	if now:
-		_update_erg_notice(session.executor.elapsed_sec())
+	var elapsed: int = session.executor.elapsed_sec()
+	if at_sample or not _chip_due_at(session.executor.step_remaining_sec() - 1):
+		_update_erg_notice(elapsed)
 	refresh()
 
 
