@@ -166,24 +166,6 @@ layout_mode = 2
 size_flags_vertical = 4
 max_value = 300.0
 
-[node name="PowerSourceRow" type="HBoxContainer" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
-custom_minimum_size = Vector2(0, 56)
-layout_mode = 2
-theme_type_variation = &"Row16"
-
-[node name="PowerSourceLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/PowerSourceRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 4
-text = "ui.settings.power_source"
-autowrap_mode = 3
-
-[node name="PowerSourceOption" type="OptionButton" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows/PowerSourceRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 0)
-layout_mode = 2
-size_flags_vertical = 4
-
 [node name="ProfileErrorLabel" type="Label" parent="Root/Margin/Body/Scroll/Content/ProfileSection/Card/Rows"]
 unique_name_in_owner = true
 visible = false

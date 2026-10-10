@@ -272,7 +272,8 @@ func apply_telemetry(power_w: int, has_power: bool, cadence: int, has_cadence: b
 	if use_trainer_speed:
 		speed_kmh = maxf(trainer_speed_kmh, 0.0)
 	else:
-		speed_kmh = _speed_model.step(float(power_w) if has_power else 0.0, weight_kg, 1.0)
+		speed_kmh = _speed_model.step(float(power_w), weight_kg, 1.0) if has_power \
+			else _speed_model.step_without_power(weight_kg, 1.0)
 	cadence_rpm = cadence if has_cadence else 0
 	_rider.set_cadence(cadence_rpm)
 	_rider.set_power(power_w, has_power, ftp_w)

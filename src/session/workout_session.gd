@@ -51,8 +51,9 @@ extends RefCounted
 ## `set_resistance_level` ничего не меняют и событий не пишут; план идёт по таймеру, цель —
 ## плановая (с множителем), переходы и события — как в `smart` (WRK-09 п.3).
 ##
-## Скорость — по модели мощность/вес (D3D-02). Секунда без мощности — аватар стоит: скорость
-## модели 0, мощность в сэмпле «нет данных», таймер плана идёт (решение владельца по WRK-09).
+## Скорость — по модели мощность/вес (D3D-02). Секунда без мощности — тяги нет: мощность в
+## сэмпле «нет данных», скорость убывает по модели (`SpeedModel.step_without_power`, D3D-02 п.7,
+## У-33) до остановки, таймер плана идёт.
 ## В режиме `power_meter` источник скорости — всегда модель.
 
 enum State { IDLE, RUNNING, PAUSED, FINISHED }
@@ -457,9 +458,8 @@ func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec:
 		if sample != null and sample.has_power:
 			model_speed = _speed_model.step(float(sample.power_w), weight_kg, 1.0)
 		else:
-			# Источников мощности нет — аватар стоит (решение владельца по WRK-09).
-			_speed_model.reset(0.0)
-			model_speed = 0.0
+			# Источников мощности нет — тяги нет: скорость убывает по модели (D3D-02 п.7, У-33).
+			model_speed = _speed_model.step_without_power(weight_kg, 1.0)
 	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, _current_target_w,
 		executor.current_step_index(), erg_enabled, model_speed,
 		{"power": _power_age, "cadence": _cadence_age, "heart_rate": _hr_age})

@@ -124,7 +124,6 @@ func test_req_wrk_09_c2_dev_05_c5_plan_starts_in_power_meter_mode_without_dialog
 	assert_eq(ride.trainer_source(), Ride.TRAINER_SOURCE_BLE, "источник мощности — реальный датчик")
 	assert_eq(ride.samples.power_w[ride.samples.size() - 1], 160)
 	assert_true(main.strava.queue.has(ride.id), "автовыгрузка: задача Strava поставлена как обычно")
-	assert_eq(main.connections.hub.power_source, SensorHub.SOURCE_TRAINER, "после сессии хабу возвращён выбор профиля")
 
 
 func test_req_wrk_09_c7_frd_01_c4_free_ride_starts_with_power_meter_only() -> void:

@@ -1,21 +1,19 @@
 extends GutTest
-## Тесты источника мощности профиля (REQ-DEV-05 крит. 2, Н-8) и сброса источника FTP/зон
+## Старое поле источника мощности профиля (REQ-WRK-09 п.14 (г)) и сброс источника FTP/зон
 ## в `local` при ручной правке (REQ-INT-06 крит. 4).
 
 
-func test_power_source_default_validation_and_roundtrip() -> void:
+## WRK-09 п.14 (г), У-32 (T-170): выбора источника мощности в профиле нет; старые профили с полем
+## «power_source» читаются без ошибок, поле больше не пишется.
+func test_legacy_power_source_field_is_ignored() -> void:
 	var p := Profile.create("A")
-	assert_eq(p.power_source, Profile.POWER_SOURCE_TRAINER, "по умолчанию — станок")
-	assert_true(p.is_valid())
-	p.power_source = Profile.POWER_SOURCE_POWER_METER
-	assert_true(p.is_valid())
-	var again := Profile.from_dict(p.to_dict())
-	assert_eq(again.power_source, Profile.POWER_SOURCE_POWER_METER, "to_dict/from_dict сохраняют источник")
-	p.power_source = "bananas"
-	assert_has(p.validate(), Profile.ERR_POWER_SOURCE_INVALID)
-	var legacy := Profile.from_dict({"id": "x", "name": "Old", "ftp_w": 200, "weight_kg": 70.0})
-	assert_eq(legacy.power_source, Profile.POWER_SOURCE_TRAINER, "старые записи без поля — станок")
-	assert_eq(Profile.from_dict({"id": "x", "name": "Old", "power_source": ""}).power_source, Profile.POWER_SOURCE_TRAINER)
+	assert_false("power_source" in p, "поля нет")
+	assert_false(p.to_dict().has("power_source"))
+	for value: Variant in ["power_meter", "trainer", "", "bananas", 5]:
+		var legacy := Profile.from_dict({"id": "x", "name": "Old", "ftp_w": 200, "weight_kg": 70.0, "power_source": value})
+		assert_not_null(legacy)
+		assert_eq(legacy.validate(), [] as Array[String], "старый профиль с power_source=%s валиден" % str(value))
+		assert_eq(legacy.ftp_w, 200)
 
 
 func test_set_ftp_local_resets_source_after_sync() -> void:

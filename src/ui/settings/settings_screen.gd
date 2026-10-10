@@ -13,10 +13,10 @@ extends Control
 ##
 ## Функции экрана (как до T-086):
 ## - язык (REQ-NFR-08 крит. 3, 4) — через `AppState.set_locale`, без перезапуска;
-## - профиль (REQ-PRF-02 крит. 1, REQ-DEV-05 крит. 2): имя, FTP, вес, макс. пульс, источник
-##   мощности; «Сохранить профиль» активна только при изменениях; FTP пишется через
-##   `Profile.set_ftp_local()` (источник — «локально», REQ-INT-06 крит. 4); ошибки — по кодам
-##   `error.profile.<code>`; источник мощности уходит в `ConnectionManager.hub`;
+## - профиль (REQ-PRF-02 крит. 1): имя, FTP, вес, макс. пульс; «Сохранить профиль» активна
+##   только при изменениях; FTP пишется через `Profile.set_ftp_local()` (источник — «локально»,
+##   REQ-INT-06 крит. 4); ошибки — по кодам `error.profile.<code>`. Выбора источника мощности
+##   нет — приоритет «измеритель > станок» автоматический (REQ-DEV-05 п.2, WRK-09 п.14 (г));
 ## - тренировка (REQ-WRK-04 крит. 1): сопротивление вне ERG, интенсивность по умолчанию,
 ##   крутизна SIM по умолчанию (`Profile.sim_steepness_pct`, T-061) — сохраняются сразу при
 ##   изменении (в форме профиля они тоже сохраняются);
@@ -42,15 +42,10 @@ const LICENSES_DOC: String = "docs/publishing/licenses.md"
 ## релизом; до этого на экране — путь к документу.
 const PRIVACY_POLICY_DOC: String = "docs/publishing/privacy_policy.md"
 const LOCALE_IDS: Array[String] = AppState.SUPPORTED_LOCALES
-const POWER_SOURCE_IDS: Array[String] = [Profile.POWER_SOURCE_TRAINER, Profile.POWER_SOURCE_POWER_METER]
 ## Full translation keys per id (no key concatenation: the i18n inventory scans literals).
 const LOCALE_KEYS: Dictionary = {
 	"en": "ui.settings.lang_en",
 	"ru": "ui.settings.lang_ru",
-}
-const POWER_SOURCE_KEYS: Dictionary = {
-	Profile.POWER_SOURCE_TRAINER: "ui.settings.power_source_trainer",
-	Profile.POWER_SOURCE_POWER_METER: "ui.settings.power_source_power_meter",
 }
 ## Human-readable texts for `ApiResult` failure codes (REQ-NFR-08 crit. 1: no raw codes in UI).
 const API_ERROR_KEYS: Dictionary = {
@@ -146,7 +141,6 @@ const STATIC_TEXTS: Dictionary = {
 	_C + "ProfileSection/Card/Rows/FtpRow/FtpLabel": "ui.settings.ftp",
 	_C + "ProfileSection/Card/Rows/WeightRow/WeightLabel": "ui.settings.weight",
 	_C + "ProfileSection/Card/Rows/MaxHrRow/MaxHrLabel": "ui.settings.max_hr",
-	_C + "ProfileSection/Card/Rows/PowerSourceRow/PowerSourceLabel": "ui.settings.power_source",
 	_C + "ProfileSection/Card/Rows/Footer/SaveProfileButton": "ui.settings.save_profile",
 	_C + "TrainingSection/Card/Rows/ResistanceRow/Texts/Label": "ui.settings.resistance",
 	_C + "ZonesSection/Card/Rows/OverrideCheck": "ui.settings.intervals_override",
@@ -221,7 +215,6 @@ var _ble_debug: BleDebugScreen = null
 @onready var _steepness_slider: HSlider = %SteepnessSlider
 @onready var _steepness_value: Label = %SteepnessValue
 @onready var _training_error_label: Label = %TrainingErrorLabel
-@onready var _power_source_option: OptionButton = %PowerSourceOption
 @onready var _save_button: Button = %SaveProfileButton
 @onready var _profile_error_label: Label = %ProfileErrorLabel
 @onready var _profile_status_label: Label = %ProfileStatusLabel
@@ -280,9 +273,6 @@ func _ready() -> void:
 	_locale_option.clear()
 	for i in LOCALE_IDS.size():
 		_locale_option.add_item(LOCALE_IDS[i], i)
-	_power_source_option.clear()
-	for i in POWER_SOURCE_IDS.size():
-		_power_source_option.add_item(POWER_SOURCE_IDS[i], i)
 	_steepness_slider.min_value = Profile.MIN_SIM_STEEPNESS_PCT
 	_steepness_slider.max_value = Profile.MAX_SIM_STEEPNESS_PCT
 	_steepness_slider.step = Profile.SIM_STEEPNESS_STEP_PCT
@@ -293,7 +283,6 @@ func _ready() -> void:
 	_name_edit.text_changed.connect(_on_form_text_changed)
 	for spin: SpinBox in [_ftp_spin, _weight_spin, _max_hr_spin]:
 		spin.value_changed.connect(_on_form_value_changed)
-	_power_source_option.item_selected.connect(_on_form_item_selected)
 	_resistance_spin.value_changed.connect(_on_training_value_changed)
 	_intensity_spin.value_changed.connect(_on_training_value_changed)
 	_steepness_slider.value_changed.connect(_on_steepness_changed)
@@ -405,7 +394,6 @@ func refresh_texts() -> void:
 	_render_store_warning()
 	_render_notice()
 	_render_locale()
-	_render_power_source_items()
 	_render_profile_status()
 	_render_profile_chip()
 	_render_sources()
@@ -441,11 +429,6 @@ func _render_locale() -> void:
 		_locale_option.select(idx)
 
 
-func _render_power_source_items() -> void:
-	for i in POWER_SOURCE_IDS.size():
-		_power_source_option.set_item_text(i, tr(str(POWER_SOURCE_KEYS.get(POWER_SOURCE_IDS[i], POWER_SOURCE_IDS[i]))))
-
-
 func _render_profile_status() -> void:
 	var p := _active()
 	_profile_status_label.text = tr("ui.settings.no_profile") if p == null else tr("ui.settings.profile_title").format({"name": p.name})
@@ -465,7 +448,6 @@ func _render_profile_form() -> void:
 		_resistance_spin.value = p.resistance_level_default
 		_intensity_spin.value = p.intensity_default
 		_steepness_slider.value = p.sim_steepness_pct
-		_power_source_option.select(maxi(POWER_SOURCE_IDS.find(p.power_source), 0))
 		_override_check.set_pressed_no_signal(p.intervals_override_local)
 	_rendering = false
 	_apply_steepness_text()
@@ -686,11 +668,11 @@ func _on_locale_selected(index: int) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Profile (REQ-PRF-02 crit. 1, REQ-WRK-04 crit. 1, REQ-DEV-05 crit. 2)
+# Profile (REQ-PRF-02 crit. 1, REQ-WRK-04 crit. 1)
 # ---------------------------------------------------------------------------
 
 func fill_profile_form(profile_name: String, ftp_w: int, weight_kg: float, max_hr: int,
-		resistance_pct: int = -1, power_source: String = "") -> void:
+		resistance_pct: int = -1) -> void:
 	_rendering = true
 	_name_edit.text = profile_name
 	_ftp_spin.value = ftp_w
@@ -698,8 +680,6 @@ func fill_profile_form(profile_name: String, ftp_w: int, weight_kg: float, max_h
 	_max_hr_spin.value = max_hr
 	if resistance_pct >= 0:
 		_resistance_spin.value = resistance_pct
-	if not power_source.is_empty():
-		_power_source_option.select(maxi(POWER_SOURCE_IDS.find(power_source), 0))
 	_rendering = false
 	_update_save_enabled()
 
@@ -717,11 +697,9 @@ func save_profile() -> Array[String]:
 		p.set_ftp_local(new_ftp)
 	p.weight_kg = _weight_spin.value
 	p.max_hr = int(_max_hr_spin.value)
-	p.power_source = POWER_SOURCE_IDS[clampi(_power_source_option.selected, 0, POWER_SOURCE_IDS.size() - 1)]
 	_apply_training_fields(p)
 	var errors := _repo.save(p)
 	if errors.is_empty():
-		_apply_power_source(p)
 		refresh()
 		_profile_status_label.text = tr("ui.settings.profile_saved").format({"name": p.name})
 	else:
@@ -737,8 +715,7 @@ func is_profile_form_dirty() -> bool:
 	return _name_edit.text != p.name \
 		or int(_ftp_spin.value) != p.ftp_w \
 		or not is_equal_approx(_weight_spin.value, p.weight_kg) \
-		or int(_max_hr_spin.value) != p.max_hr \
-		or POWER_SOURCE_IDS[clampi(_power_source_option.selected, 0, POWER_SOURCE_IDS.size() - 1)] != p.power_source
+		or int(_max_hr_spin.value) != p.max_hr
 
 
 ## Сохранить раздел «Тренировка» (сопротивление вне ERG, интенсивность, крутизна SIM) в
@@ -811,11 +788,6 @@ func _apply_training_fields(p: Profile) -> void:
 	p.sim_steepness_pct = Profile.snap_sim_steepness(_steepness_slider.value)
 
 
-func _apply_power_source(p: Profile) -> void:
-	if _connections != null and _connections.hub != null:
-		_connections.hub.set_power_source(p.power_source)
-
-
 func _update_save_enabled() -> void:
 	_save_button.disabled = not is_profile_form_dirty()
 
@@ -825,10 +797,6 @@ func _on_form_text_changed(_text: String) -> void:
 
 
 func _on_form_value_changed(_value: float) -> void:
-	_update_save_enabled()
-
-
-func _on_form_item_selected(_index: int) -> void:
 	_update_save_enabled()
 
 

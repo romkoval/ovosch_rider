@@ -176,7 +176,6 @@ ui.plan.import.error.bad_data_line,ожидались два числа «мин
 ui.plan.import.error.no_course_data,нет секции [COURSE DATA],no [COURSE DATA] section
 ui.plan.import.error.too_few_points,в [COURSE DATA] меньше двух точек,fewer than two points in [COURSE DATA]
 ui.plan.import.error.non_monotonic_time,время в [COURSE DATA] должно не убывать,time in [COURSE DATA] must not decrease
-error.profile.power_source_invalid,Источник мощности должен быть «станок» или «измеритель мощности»,Power source must be “trainer” or “power meter”
 error.profile.source_invalid,Источник FTP или зон задан неверно,FTP or zones source is invalid
 ui.settings.title,Настройки,Settings
 ui.settings.language,Язык интерфейса,Interface language
@@ -190,9 +189,6 @@ ui.settings.ftp,FTP (Вт),FTP (W)
 ui.settings.weight,Вес (кг),Weight (kg)
 ui.settings.max_hr,Максимальный пульс (0 — не задан),Max heart rate (0 = not set)
 ui.settings.resistance,Сопротивление вне ERG (%),Resistance outside ERG (%)
-ui.settings.power_source,Источник мощности,Power source
-ui.settings.power_source_trainer,Станок,Trainer
-ui.settings.power_source_power_meter,Измеритель мощности,Power meter
 ui.settings.save_profile,Сохранить профиль,Save profile
 ui.settings.hr_zones_available,Зоны пульса доступны,Heart-rate zones available
 ui.settings.hr_zones_unavailable,Зоны пульса недоступны: задайте максимальный пульс или синхронизируйте зоны,Heart-rate zones unavailable: set max heart rate or sync zones

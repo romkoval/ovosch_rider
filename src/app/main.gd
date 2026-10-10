@@ -713,8 +713,6 @@ func settings_screen() -> SettingsScreen:
 func _on_profile_selected(id: String) -> void:
 	connections.auto_connect(id)
 	var profile: Profile = repo.get_by_id(id)
-	if profile != null and connections.hub != null:
-		connections.hub.set_power_source(profile.power_source)
 	# Восстановление — до создания сервиса Strava: `recover_in_progress` сохраняет заезды,
 	# и подписанный сервис поставил бы их в очередь до ответа пользователя (REQ-STR-04 крит. 1).
 	_dispose_strava()

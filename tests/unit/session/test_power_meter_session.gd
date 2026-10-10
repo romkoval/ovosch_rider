@@ -338,13 +338,21 @@ func test_req_wrk_09_c6_no_power_source_means_no_data_and_avatar_stops() -> void
 	s.start()
 	for i in 20:
 		s.tick(1.0)
-	assert_gt(s.samples.speed_kmh[s.samples.size() - 1], 10.0, "едет")
+	var riding: float = s.samples.speed_kmh[s.samples.size() - 1]
+	assert_gt(riding, 10.0, "едет")
 	_pm_of(dev).inject_dropout(30.0)
 	s.tick(1.0)
 	s.tick(1.0)
 	var last := s.samples.size() - 1
 	assert_false(s.samples.has_power[last], "источников нет — «нет данных»")
-	assert_eq(s.samples.speed_kmh[last], 0.0, "аватар не едет: скорость модели 0")
+	# Тяги нет — остановка плавная по модели, не мгновенный ноль (D3D-02 п.7, У-33).
+	assert_gt(s.samples.speed_kmh[last], 0.0, "не мгновенный ноль")
+	assert_lt(s.samples.speed_kmh[last], riding, "скорость убывает")
+	for i in 28:
+		s.tick(1.0)
+	last = s.samples.size() - 1
+	assert_false(s.samples.has_power[last])
+	assert_eq(s.samples.speed_kmh[last], 0.0, "аватар остановился не позже 30 с")
 	assert_eq(s.get_state(), WorkoutSession.State.RUNNING, "таймер плана идёт")
 
 

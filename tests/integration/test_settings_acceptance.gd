@@ -286,9 +286,6 @@ func test_req_nfr_08_c3_every_static_settings_text_follows_language_switch() -> 
 				continue
 			var key: String = SettingsScreen.STATIC_TEXTS[path]
 			assert_eq(str(node.get("text")), _csv_text(key, locale), "%s [%s]" % [path, locale])
-		var opt := s.get_node("%PowerSourceOption") as OptionButton
-		assert_eq(opt.get_item_text(0), _csv_text("ui.settings.power_source_trainer", locale))
-		assert_eq(opt.get_item_text(1), _csv_text("ui.settings.power_source_power_meter", locale))
 		assert_eq(s.profile_status_text(), _csv_text("ui.settings.profile_title", locale).format({"name": "Rider"}))
 
 
@@ -745,56 +742,49 @@ func _attach_power_meter() -> BlePowerMeter:
 	return pm
 
 
+## DEV-05 п.2 и WRK-09 п.14 (г) в редакции У-32 (T-170): выбора источника нет, поток мощности
+## хаба — от измерителя, пока он шлёт пакеты; замолчал на 5 с — от станка.
 func test_req_dev_05_c2_choice_saved_in_profile_and_drives_hub_stream() -> void:
 	var trainer := _cm.trainer as FakeTrainer
 	trainer.connect_delay_sec = 0.0
 	trainer.power_noise_w = 0.0
 	trainer.connect_device("fake")
 	trainer.set_rider_power(150)
+	_bridge.set_device_services("pm", {"1818": ["2A63"]})
 	_attach_power_meter()
 	var samples: Array[TrainerSample] = []
 	_cm.hub.telemetry.connect(func(sm: TrainerSample) -> void: samples.append(sm))
 	var s := _screen()
-	var option := s.get_node("%PowerSourceOption") as OptionButton
-	assert_eq(option.selected, Profile.POWER_SOURCES.find(Profile.POWER_SOURCE_TRAINER), "по умолчанию «станок»")
-	option.select(Profile.POWER_SOURCES.find(Profile.POWER_SOURCE_POWER_METER))
-	(s.get_node("%SaveProfileButton") as Button).pressed.emit()
-	assert_eq(ProfileRepository.new(_dir + "profiles/").get_active().power_source, Profile.POWER_SOURCE_POWER_METER,
-		"выбор хранится в профиле на диске (Н-8)")
-	assert_eq(_cm.hub.power_source, SensorHub.SOURCE_POWER_METER, "применён к SensorHub")
+	assert_null(s.get_node_or_null("%PowerSourceOption"), "выбора «Источник мощности» в настройках нет")
 	_bridge.emit_notification("pm", "2A63", BleBytes.from_hex("00 00 2C 01"))  # 300 Вт
 	_cm.hub.tick(1.0)
 	assert_false(samples.is_empty())
 	if not samples.is_empty():
 		assert_eq(samples.back().power_w, 300, "поток мощности — от измерителя")
-	option.select(Profile.POWER_SOURCES.find(Profile.POWER_SOURCE_TRAINER))
-	(s.get_node("%SaveProfileButton") as Button).pressed.emit()
-	_bridge.emit_notification("pm", "2A63", BleBytes.from_hex("00 00 2C 01"))
-	_cm.hub.tick(1.0)
-	assert_eq(_cm.hub.power_source, SensorHub.SOURCE_TRAINER)
-	assert_eq(_cm.hub.power_source_in_use(), SensorHub.SOURCE_TRAINER)
+	assert_eq(_cm.hub.power_source_in_use(), SensorHub.SOURCE_POWER_METER)
+	for i in 5:
+		_cm.hub.tick(1.0)
+	assert_eq(_cm.hub.power_source_in_use(), SensorHub.SOURCE_TRAINER, "измеритель молчит 5 с — станок")
 	if not samples.is_empty():
 		assert_ne(samples.back().power_w, 300, "поток мощности — от станка")
 
 
+## Старый профиль с полем «power_source» загружается; после смены профиля приоритет тот же.
 func test_req_dev_05_c2_restored_on_start_and_follows_profile_switch() -> void:
-	_set_profile(func(p: Profile) -> void: p.power_source = Profile.POWER_SOURCE_POWER_METER)
 	var bob := _repo.create("Bob")
-	assert_eq(bob.power_source, Profile.POWER_SOURCE_TRAINER)
 	var main := _main()
 	assert_eq(main.app_state.current_screen, AppState.Screen.PROFILE_SELECT)
 	assert_true(main.app_state.select_profile(_profile.id))
-	assert_eq(main.connections.hub.power_source, SensorHub.SOURCE_POWER_METER, "профиль A → измеритель")
 	assert_true(main.app_state.navigate(AppState.Screen.SETTINGS))
-	assert_eq((main.settings_screen().get_node("%PowerSourceOption") as OptionButton).selected,
-		Profile.POWER_SOURCES.find(Profile.POWER_SOURCE_POWER_METER))
+	assert_null(main.settings_screen().get_node_or_null("%PowerSourceOption"), "выбора нет")
 	main.app_state.switch_profile()
 	assert_true(main.app_state.select_profile(bob.id))
-	assert_eq(main.connections.hub.power_source, SensorHub.SOURCE_TRAINER, "профиль B → станок")
-	assert_true(main.app_state.navigate(AppState.Screen.SETTINGS))
-	assert_eq((main.settings_screen().get_node("%PowerSourceOption") as OptionButton).selected,
-		Profile.POWER_SOURCES.find(Profile.POWER_SOURCE_TRAINER), "экран показывает выбор профиля B")
+	assert_false("power_source" in main.connections.hub, "у хаба нет выбора источника")
 	_drop_main(main)
+	var legacy := Profile.from_dict({"id": "old", "name": "Old", "power_source": "power_meter"})
+	assert_not_null(legacy, "старый профиль с полем загружается")
+	assert_eq(legacy.validate(), [] as Array[String], "без ошибок")
+	assert_false(legacy.to_dict().has("power_source"), "поле больше не пишется")
 
 
 # ===========================================================================

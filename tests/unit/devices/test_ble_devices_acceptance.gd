@@ -1124,19 +1124,16 @@ func test_req_dev_04_c4_csc_priority_zero_after_3s_then_yields_to_trainer_after_
 	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_CADENCE_SENSOR)
 
 
+## DEV-05 п.2 в редакции У-32 (T-170): выбора источника нет, измеритель мощности главнее станка.
 func test_req_dev_05_c2_power_source_selection_and_fallback() -> void:
 	_make_hub()
 	_hub.set_target_power(150)
 	_pm_in_hub()
+	_hub.tick(1.0)
+	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_TRAINER, "измеритель ещё без пакетов — станок")
 	_bridge.emit_notification("pm", "2A63", _hex("00 00 FA 00"))
 	_hub.tick(1.0)
-	assert_eq(_hub.power_source, SensorHub.SOURCE_TRAINER, "по умолчанию — станок")
-	assert_ne(_hub_samples.back().power_w, 250, "мощность станка, не измерителя")
-	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_TRAINER)
-	_hub.set_power_source(SensorHub.SOURCE_POWER_METER)
-	_bridge.emit_notification("pm", "2A63", _hex("00 00 FA 00"))
-	_hub.tick(1.0)
-	assert_eq(_hub_samples.back().power_w, 250, "выбран измеритель → 250")
+	assert_eq(_hub_samples.back().power_w, 250, "измеритель главнее станка → 250")
 	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_POWER_METER)
 	assert_true(_hub_samples.back().has_speed, "скорость — по-прежнему от станка")
 	# Измеритель замолчал 5 с → запасной источник (станок).

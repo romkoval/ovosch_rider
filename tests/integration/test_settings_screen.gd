@@ -182,7 +182,6 @@ func test_form_prefilled_from_active_profile() -> void:
 	p.weight_kg = 81.5
 	p.max_hr = 185
 	p.resistance_level_default = 35
-	p.power_source = Profile.POWER_SOURCE_POWER_METER
 	_repo.save(p)
 	var s := _screen()
 	assert_eq((s.get_node("%NameEdit") as LineEdit).text, "Rider")
@@ -190,7 +189,6 @@ func test_form_prefilled_from_active_profile() -> void:
 	assert_almost_eq((s.get_node("%WeightSpin") as SpinBox).value, 81.5, 1e-6)
 	assert_eq(int((s.get_node("%MaxHrSpin") as SpinBox).value), 185)
 	assert_eq(int((s.get_node("%ResistanceSpin") as SpinBox).value), 35)
-	assert_eq((s.get_node("%PowerSourceOption") as OptionButton).selected, 1)
 
 
 func test_ftp_601_rejected_with_translated_error_and_nothing_saved() -> void:
@@ -205,7 +203,7 @@ func test_ftp_601_rejected_with_translated_error_and_nothing_saved() -> void:
 
 func test_ftp_250_saved_and_visible_to_new_repository_instance() -> void:
 	var s := _screen()
-	s.fill_profile_form("Rider", 250, 76.3, 180, 40, Profile.POWER_SOURCE_TRAINER)
+	s.fill_profile_form("Rider", 250, 76.3, 180, 40)
 	assert_eq(s.save_profile().size(), 0)
 	assert_eq(s.profile_error_text(), "")
 	assert_eq(s.profile_status_text(), "Profile “Rider” saved")
@@ -249,24 +247,15 @@ func test_max_hr_zero_marks_hr_zones_unavailable() -> void:
 	assert_false(_repo.get_active().has_hr_zones())
 
 
-func test_power_source_saved_and_applied_to_hub() -> void:
+## WRK-09 п.14 (г), DEV-05 п.2 (У-32, T-170): выбора «Источник мощности» в настройках нет.
+func test_no_power_source_choice_in_settings() -> void:
 	var s := _screen()
-	assert_eq(_cm.hub.power_source, SensorHub.SOURCE_TRAINER)
-	s.fill_profile_form("Rider", 200, 75.0, 0, 50, Profile.POWER_SOURCE_POWER_METER)
-	assert_eq(s.save_profile().size(), 0)
-	assert_eq(_cm.hub.power_source, SensorHub.SOURCE_POWER_METER, "REQ-DEV-05 крит. 2 / Н-8: hub.set_power_source")
-	assert_eq(ProfileRepository.new(_dir + "profiles/").get_active().power_source, Profile.POWER_SOURCE_POWER_METER, "сохранено в профиле")
-	s.fill_profile_form("Rider", 200, 75.0, 0, 50, Profile.POWER_SOURCE_TRAINER)
-	s.save_profile()
-	assert_eq(_cm.hub.power_source, SensorHub.SOURCE_TRAINER)
-
-
-func test_main_applies_profile_power_source_on_profile_selection() -> void:
-	var p := _repo.get_active().duplicate_profile()
-	p.power_source = Profile.POWER_SOURCE_POWER_METER
-	_repo.save(p)
-	var main := _main()
-	assert_eq(main.connections.hub.power_source, SensorHub.SOURCE_POWER_METER, "при выборе профиля источник применён к хабу")
+	assert_null(s.get_node_or_null("%PowerSourceOption"), "строки выбора источника мощности нет")
+	var labels: Array[Node] = s.find_children("*", "Label", true, false)
+	assert_gt(labels.size(), 0, "проверка самого теста: надписи есть")
+	for n in labels:
+		var t := (n as Label).text
+		assert_false(t.containsn("power source"), "нет надписи «Power source»: %s" % t)
 
 
 func test_name_and_weight_validation_errors_listed() -> void:

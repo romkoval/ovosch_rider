@@ -59,12 +59,6 @@ const ERR_RESISTANCE_OUT_OF_RANGE: String = "resistance_out_of_range"
 const ERR_POWER_ZONES_INVALID: String = "power_zones_invalid"
 const ERR_HR_ZONES_INVALID: String = "hr_zones_invalid"
 const ERR_SOURCE_INVALID: String = "source_invalid"
-const ERR_POWER_SOURCE_INVALID: String = "power_source_invalid"
-
-## Источник мощности для сессии (REQ-DEV-05 крит. 2, Н-8): станок или измеритель мощности.
-const POWER_SOURCE_TRAINER: String = "trainer"
-const POWER_SOURCE_POWER_METER: String = "power_meter"
-const POWER_SOURCES: Array[String] = [POWER_SOURCE_TRAINER, POWER_SOURCE_POWER_METER]
 
 ## Источник FTP/зон (REQ-INT-06 крит. 6): `"local"` или `"intervals:<YYYY-MM-DD>"`.
 const SOURCE_LOCAL: String = "local"
@@ -100,8 +94,6 @@ var intervals_athlete_id: String = ""
 var intervals_override_local: bool = false
 ## Автовыгрузка завершённых заездов в Strava при наличии привязки (REQ-STR-02 крит. 1, T-049).
 var strava_auto_upload: bool = true
-## Источник мощности по умолчанию: `POWER_SOURCE_TRAINER` | `POWER_SOURCE_POWER_METER`.
-var power_source: String = POWER_SOURCE_TRAINER
 ## Последняя выбранная трасса свободной езды (REQ-FRD-02 крит. 3); "" — не выбиралась,
 ## тогда действует `DEFAULT_ROUTE_ID` (см. `effective_route_id`). Есть ли такая трасса
 ## в каталоге, проверяет экран выбора трассы, не профиль.
@@ -290,8 +282,6 @@ func validate() -> Array[String]:
 			errors.append(ERR_HR_ZONES_INVALID)
 	if not is_valid_source(ftp_source) or not is_valid_source(zones_source):
 		errors.append(ERR_SOURCE_INVALID)
-	if not POWER_SOURCES.has(power_source):
-		errors.append(ERR_POWER_SOURCE_INVALID)
 	return errors
 
 
@@ -325,7 +315,6 @@ func to_dict() -> Dictionary:
 		"intervals_athlete_id": intervals_athlete_id,
 		"intervals_override_local": intervals_override_local,
 		"strava_auto_upload": strava_auto_upload,
-		"power_source": power_source,
 		"last_route_id": last_route_id,
 		"last_workout_id": last_workout_id,
 		"sim_steepness_pct": sim_steepness_pct,
@@ -359,9 +348,8 @@ static func from_dict(data: Dictionary) -> Profile:
 	p.intervals_athlete_id = _to_text(data.get("intervals_athlete_id", ""))
 	p.intervals_override_local = _to_int(data.get("intervals_override_local", null), 0) != 0
 	p.strava_auto_upload = _to_int(data.get("strava_auto_upload", null), 1) != 0
-	p.power_source = _to_text(data.get("power_source", POWER_SOURCE_TRAINER))
-	if p.power_source.is_empty():
-		p.power_source = POWER_SOURCE_TRAINER
+	# Поле «power_source» старых профилей (выбор источника мощности до У-32) не читается: приоритет
+	# «измеритель > станок» автоматический (DEV-05 п.2, WRK-09 п.14 (г)).
 	var route: Variant = data.get("last_route_id", "")
 	p.last_route_id = route if route is String and is_valid_route_id(route) else ""
 	var workout_id: Variant = data.get("last_workout_id", "")

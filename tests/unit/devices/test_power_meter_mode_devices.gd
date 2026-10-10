@@ -327,7 +327,7 @@ func test_req_wrk_09_c1_power_meter_preferred_over_data_only_trainer_with_fallba
 		dev.tick(1.0)
 	assert_false(got.back().has_power, "источников нет → «нет данных», не 0")
 	dev.dispose()
-	assert_eq(hub.power_source, SensorHub.SOURCE_TRAINER, "после сессии хабу возвращён прежний выбор")
+	assert_false("power_source" in hub, "выбора источника у хаба нет: приоритет измерителя постоянный (T-170)")
 
 
 func test_req_wrk_09_c12_factory_power_meter_emulator_is_uncontrolled_emulator() -> void:

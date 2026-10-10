@@ -299,7 +299,7 @@ func forget(for_profile_id: String, id: String) -> bool:
 ## Решение о старте по устройствам в состоянии «подключено» — для «Начать» и «Поехать»:
 ## `{allowed: bool, mode: "smart"|"power_meter"|"", power_source: "trainer"|"power_meter"|"",
 ## reason: START_OK|START_NO_POWER_SOURCE, connecting: bool}`. `power_source` — откуда мощность
-## (в `smart` — выбор хаба, DEV-05 п.2); `connecting` — станок или измеритель мощности сейчас
+## на старте (в `smart` — измеритель, если подключён, иначе станок; DEV-05 п.2); `connecting` — станок или измеритель мощности сейчас
 ## подключается или переподключается (для пояснения в диалоге).
 func start_check() -> Dictionary:
 	var pm: SensorDevice = sensor(RememberedDevices.KIND_POWER) if sensor_ids.has(RememberedDevices.KIND_POWER) else null
@@ -308,8 +308,8 @@ func start_check() -> Dictionary:
 		else TrainerDevice.ConnectionState.DISCONNECTED
 	var trainer_controls: bool = trainer != null and trainer.has_control()
 	var check := start_rule(trainer_state, trainer_controls, pm_state)
-	if check["mode"] == TrainerDevice.MODE_SMART and hub != null:
-		check["power_source"] = hub.power_source
+	if check["mode"] == TrainerDevice.MODE_SMART and pm_state == TrainerDevice.ConnectionState.CONNECTED:
+		check["power_source"] = SensorHub.SOURCE_POWER_METER
 	return check
 
 

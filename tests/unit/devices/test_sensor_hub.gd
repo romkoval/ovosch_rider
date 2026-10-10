@@ -189,7 +189,7 @@ func test_csc_has_priority_over_power_meter_and_trainer_cadence() -> void:
 	assert_eq(s.cadence_rpm, 90, "REQ-DEV-04 крит. 4: CSC > CPS > станок")
 	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_CADENCE_SENSOR)
 	assert_true(s.has_power)
-	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_TRAINER, "мощность по умолчанию со станка")
+	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_POWER_METER, "мощность — измеритель > станок (DEV-05 п.2, У-32)")
 
 
 func test_csc_silent_yields_to_power_meter_cadence_then_trainer() -> void:
@@ -241,41 +241,33 @@ func test_csc_stopped_pedals_with_packets_gives_zero_not_fallback() -> void:
 	assert_eq(_hub.cadence_source_in_use(), SensorHub.SOURCE_CADENCE_SENSOR, "0 — это данные CSC, не станок")
 
 
-func test_power_source_selection_power_meter() -> void:
+## REQ-DEV-05 п.2 (а), У-32: измеритель мощности главнее станка без выбора в настройках.
+func test_power_meter_has_priority_over_trainer() -> void:
+	_tick_n(1)
+	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_TRAINER, "без измерителя — станок")
 	_pm()
-	_hub.set_power_source(SensorHub.SOURCE_POWER_METER)
+	_tick_n(1)
+	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_TRAINER, "измеритель без пакетов — ещё станок")
 	_bridge.emit_notification("pm", "2A63", BleBytes.from_hex("00 00 2C 01"))  # 300 Вт
 	_tick_n(1)
-	assert_eq(_samples.back().power_w, 300, "REQ-DEV-05 крит. 2: выбран измеритель")
+	assert_eq(_samples.back().power_w, 300, "первый пакет измерителя — его мощность")
 	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_POWER_METER)
-	assert_true(_samples.back().has_speed, "скорость всё равно со станка")
-	_hub.set_power_source(SensorHub.SOURCE_TRAINER)
-	_tick_n(1)
-	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_TRAINER)
-	assert_ne(_samples.back().power_w, 300)
+	assert_false("power_source" in _hub, "выбора источника мощности у хаба нет")
 
 
 func test_power_meter_silent_falls_back_to_trainer_and_vice_versa() -> void:
 	_pm()
-	_hub.set_power_source(SensorHub.SOURCE_POWER_METER)
 	_bridge.emit_notification("pm", "2A63", BleBytes.from_hex("00 00 2C 01"))
 	_tick_n(5)
 	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_TRAINER, "измеритель молчит 5 с → станок")
 	_trainer.inject_dropout(30.0)
 	_bridge.emit_notification("pm", "2A63", BleBytes.from_hex("00 00 2C 01"))
 	_tick_n(4)
-	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_POWER_METER, "выбранный измеритель свеж → он")
+	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_POWER_METER, "измеритель свеж → он")
 	assert_eq(_samples.back().power_w, 300)
 	_tick_n(1)
 	assert_false(_samples.back().has_power, "оба молчат 5 с → нет данных")
 	assert_eq(_hub.power_source_in_use(), SensorHub.SOURCE_NONE)
-
-
-func test_set_power_source_rejects_unknown() -> void:
-	assert_false(_hub.set_power_source("bananas"))
-	assert_eq(_hub.power_source, SensorHub.SOURCE_TRAINER)
-	assert_push_warning("неизвестный источник")
-	assert_true(_hub.set_power_source(SensorHub.SOURCE_POWER_METER))
 
 
 func test_replacing_sensor_disconnects_old_handlers() -> void:

@@ -8,7 +8,9 @@ extends TrainerDevice
 ## делегируются станку; телеметрия агрегируется:
 ## - пульс: датчик HRS > пульс станка;
 ## - каденс: датчик CSC > crank data измерителя мощности > станок;
-## - мощность: `power_source` ("trainer" по умолчанию | "power_meter"), затем другой;
+## - мощность: измеритель мощности > станок во всех режимах (DEV-05 п.2 (а), решение У-32; выбора
+##   в настройках нет): измеритель ушёл из CONNECTED или молчит 5 с — со следующего сэмпла мощность
+##   станка; первый пакет измерителя — снова он; нет обоих — «нет данных» (п.2 (б)–(г));
 ## - скорость: только станок.
 ## Источник, молчавший `SOURCE_TIMEOUT_SEC` (5 с), считается «нет данных» и уступает
 ## следующему по приоритету; если никого — `has_* == false`. Для каденса порог
@@ -43,9 +45,6 @@ var trainer: TrainerDevice
 var heart_rate_sensor: SensorDevice = null
 var cadence_sensor: SensorDevice = null
 var power_meter: SensorDevice = null
-## Выбор источника мощности (REQ-DEV-05 крит. 2).
-var power_source: String = SOURCE_TRAINER
-
 var _time_sec: float = 0.0
 var _next_sample_sec: int = 1
 
@@ -122,15 +121,6 @@ func set_power_meter(sensor: SensorDevice) -> void:
 	power_meter = sensor
 	_pm_power_at = -INF
 	_pm_rpm_at = -INF
-
-
-## false — неизвестный источник (предупреждение, выбор не меняется).
-func set_power_source(source: String) -> bool:
-	if source != SOURCE_TRAINER and source != SOURCE_POWER_METER:
-		push_warning("SensorHub.set_power_source: неизвестный источник '%s'" % source)
-		return false
-	power_source = source
-	return true
 
 
 ## Источник, давший значение в последнем объединённом сэмпле.
@@ -288,21 +278,16 @@ func _trainer_fresh() -> bool:
 func _emit_merged(ts_sec: float) -> void:
 	var s := TrainerSample.new()
 	s.timestamp_sec = ts_sec
-	# Мощность: выбранный источник, затем другой.
+	# Мощность: измеритель > станок (DEV-05 п.2).
 	_power_source_in_use = SOURCE_NONE
-	var order: Array[String] = [power_source,
-		SOURCE_POWER_METER if power_source == SOURCE_TRAINER else SOURCE_TRAINER]
-	for src in order:
-		if src == SOURCE_TRAINER and _trainer_fresh() and _trainer_sample.has_power:
-			s.has_power = true
-			s.power_w = _trainer_sample.power_w
-			_power_source_in_use = SOURCE_TRAINER
-			break
-		if src == SOURCE_POWER_METER and power_meter != null and _fresh(_pm_power_at):
-			s.has_power = true
-			s.power_w = _pm_power
-			_power_source_in_use = SOURCE_POWER_METER
-			break
+	if power_meter != null and _fresh(_pm_power_at):
+		s.has_power = true
+		s.power_w = _pm_power
+		_power_source_in_use = SOURCE_POWER_METER
+	elif _trainer_fresh() and _trainer_sample.has_power:
+		s.has_power = true
+		s.power_w = _trainer_sample.power_w
+		_power_source_in_use = SOURCE_TRAINER
 	# Каденс: CSC > CPS > станок; порог свежести 3 с.
 	_cadence_source_in_use = SOURCE_NONE
 	if cadence_sensor != null and _fresh_cadence(_csc_at):
