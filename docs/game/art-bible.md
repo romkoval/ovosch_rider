@@ -2103,6 +2103,9 @@ M1 Pro — только ранний сигнал: если на M1 Pro врем
 - `ui.md` — дизайн-система меню: палитра, Inter, компоненты, экраны, структура темы Godot.
 - `tracks.md` — четыре трассы (равнина, холмы, горы, приморье): профили высот, окружение,
   палитры, превью рельефа.
+- `routes.md` — real-world routes (REQ-D3D-11): road on real geometry, overlaps, scenery
+  zones, streaming, first catalog routes; sets `env_karst`, `env_gorge` — section
+  "Real-route environment sets" below.
 - `assets.md` — реестр внешних ассетов и лицензий.
 - Снимки: `shots/2026-10-03-ui-before/` (текущий UI), `shots/2026-10-03-ui-mockups/` (макеты).
 
@@ -2150,3 +2153,134 @@ M1 Pro — только ранний сигнал: если на M1 Pro врем
   читаются над облаками.
 - На горах подъём читается «средне»: на змейке (8600 м) кадр похож на ровную долину.
   Для ред. 2 этого достаточно, усиление — отдельной задачей `[visual]` (`tracks.md` п. 4.3).
+
+## Real-route environment sets (T-178, REQ-D3D-11; 2026-10-10)
+
+Real routes in South China and on islands (`routes.md`) do not fit the four existing worlds
+(before frames: `shots/2026-10-10-t178/before/`: meadows, spruce, Alpine snow, Mediterranean
+beach). Two new sets are proposed (owner question Q3 in `routes.md` section 10). Every base rule of
+this bible holds: toon light in two tones with cold shadow, ink outline, mid tones, zone
+colors only in the HUD, red accents ≤ 3 % of the frame. The sets add no material: all new
+objects use the world toon material with vertex colors, cliffs and terraces use the terrain
+shader.
+
+### Shared subtropical core (both sets)
+
+| Object | Form | Outline |
+|---|---|---|
+| Bamboo clump | 8–15 thin culms (0.06–0.12 m) bending outward from one base, height 6–12 m; feathery leaf masses as 4–6 flat, drooping lobes at the top third. 3 LODs like conifers (≈ 360 / 90 / 30 triangles) | 0.04 m |
+| Banyan | wide flat crown (2–3 × the height), 3–5 crown masses; aerial roots — 6–12 dark vertical strokes under the crown; trunk thick, buttressed | 0.06 m |
+| Broadleaf evergreen | dense round crown, 2–3 masses, darker and bluer than the stylized "листва"; on slopes it forms a continuous canopy (a "carpet" of crowns at 40–60 % overlap) | 0.06 m |
+| Village house (South China) | 2–3 floors, white or pale ochre walls, grey tile roof with slightly upturned eave ends, dark window holes; groups of 3–12 | 0.06 m |
+| Stone parapet / masonry wall | parapet 0.5 m (karst) / concrete 0.6 m (gorge) on the outside of turns; masonry retaining walls 1–8 m between stacked hairpin legs, block pattern by vertex tone | none |
+| Red steel bridge | arch or truss, accent red, deck as the road | 0.06 m |
+| Chevron board | on the outside of hairpins, black chevrons on white | 0.035 m |
+
+Shared palette (sRGB):
+
+| What | Color |
+|---|---|
+| Bamboo culm / leaves | (0.48, 0.62, 0.30) / (0.36, 0.56, 0.26) |
+| Banyan / evergreen crown | (0.24, 0.44, 0.22) / (0.20, 0.38, 0.22) |
+| Aerial roots, trunks | (0.36, 0.30, 0.24) |
+| House wall / grey roof tile | (0.90, 0.88, 0.82) / (0.40, 0.42, 0.45) |
+| Masonry wall / parapet stone | (0.62, 0.60, 0.55) / (0.72, 0.71, 0.67) |
+| Bridge red (accent) | (0.76, 0.22, 0.17) |
+
+### `env_karst` — South China karst
+
+The image: rows of steep, rounded limestone towers fading into layered haze, as in an ink
+painting; rice paddies and a jade river on the flat valley floor; a village under a banyan.
+
+- **Light and fog**: softer sun, energy 0.7, color (1.0, 0.95, 0.86); ambient
+  (0.58, 0.66, 0.78). **Fog 0.0011**, haze (0.78, 0.84, 0.86), slightly greener than the base.
+  This is denser than the base fog on purpose: each row of towers must be one step lighter
+  than the row in front (at least 4 layers between 300 m and 3 km). Haze hue 170–210°;
+  never yellow-grey "smog". Cloud cover 0.5.
+- **Karst towers** (relief generator, terrain shader): height 40–220 m, height/width
+  1.2–2.5, rounded top, near-vertical flanks. Bare stone flanks in pale grey-green with
+  darker vertical streaks; a vegetation cap of evergreen tone on the top and on ledges
+  (the slope threshold of the terrain shader does it). Arrangement: clusters of 3–9 with
+  valleys between, never a regular row. Towers at least 120 m from the road axis, except
+  in the `cliff` zone. At least 3 towers on the horizon of every frame in `paddy`,
+  `river`, `village` zones (pillar 2: recognizable without a caption).
+- **Zones** (`routes.md` 5.2):
+  - `paddy`: flat plots 20–60 m, earth bunds 0.3 m high, plot color by plot: young rice,
+    water with sky tint, harvest gold;
+  - `river`: water ribbon, bamboo rafts as small props, banyan on the banks;
+  - `village`: houses, banyans, low walls;
+  - `forest_slope`: broadleaf canopy, bamboo at the edges;
+  - `terraces`: stepped contour bands on slopes, 2–4 m steps;
+  - `cliff`: Tianmen. A tower or cliff face right above the road on the uphill side, a
+    masonry wall on stacked legs, few trees, the road clinging to the face.
+- **Palette** (sRGB):
+
+| What | Color |
+|---|---|
+| Karst stone light / dark streak | (0.70, 0.72, 0.66) / (0.48, 0.52, 0.48) |
+| Tower vegetation cap | (0.26, 0.46, 0.26) |
+| Young rice / water plot / harvest | (0.52, 0.70, 0.32) / (0.55, 0.68, 0.72) / (0.84, 0.74, 0.40) |
+| Earth bund, village lane | (0.58, 0.48, 0.36) |
+| River jade / shallow | (0.24, 0.52, 0.48) / (0.40, 0.66, 0.60) |
+
+  Young rice is the most saturated field color allowed: saturation ≤ 0.55, value ≤ 0.70.
+  It must not compete with the HUD zone green.
+- **Road**: lanes 5.5 m, rider offset −1.2 m; gravel edge, no concrete curb outside
+  villages; low stone parapet on the outside of turns R < 50 m and along water. No
+  guardrail in `paddy`/`village` zones.
+- **Density** (per km of road, before the visible-budget thinning): trees (banyan,
+  evergreen) 120, bamboo clumps 90, bushes 160, tufts 700, houses 0 / 25 (`village`).
+- **Generic landmarks** (fill gaps ≤ 1.5 km): stone arch bridge, roadside pavilion,
+  a tower with a natural hole (Moon Hill type), a lone banyan, a pagoda on a tower top.
+
+### `env_gorge` — subtropical marble gorge and mountain forest
+
+The image: the road cut into pale marble walls hundreds of meters high, with half-tunnels,
+a jade-grey river far below, red bridges, forest on the rim. Higher up, cloud forest and an
+alpine ridge.
+
+- **Light and fog**: sun energy 0.8, color (1.0, 0.96, 0.88); ambient (0.56, 0.64, 0.80).
+  Fog 0.0008, haze (0.74, 0.82, 0.90). In the gorge the opposite wall is the far plane.
+  Haze makes it lighter and bluer than the near wall, and the wall must still read as
+  stone with streaks at 300 m.
+- **Gorge walls** (relief generator in `gorge` zones): both sides rise 150–600 m within
+  60–250 m of the road. The near wall on the mountain side starts at the edge of the
+  gallery or parapet. Marble: light warm grey with blue-grey veins and vertical strata
+  (vertex tone streaks every 3–10 m). The rim is capped with evergreen canopy. The sky is a
+  band above the gorge — at least 15 % of the frame height, so the frame does not turn dark.
+- **Rock gallery** (`routes.md` 3.6): overhang of the wall over the road on the mountain side,
+  thickness 3–6 m, open valley side, inner surface one tone darker than the wall (not black),
+  outline on the overhang edge. Portal bands every 200 m on ranges > 400 m.
+- **Zones**: `gorge`; `river` (wider valley floor with pebble banks); `forest_slope`
+  (broadleaf canopy, bamboo); `cloud_forest` (above ~1 500 m: fog +50 %, moss-green trunks,
+  tree ferns); `alpine` (above ~2 500 m: dwarf bamboo grass slopes in olive-yellow,
+  conifers from `ConiferKit` fir/spruce forms, no snow); `coast` (start of Taroko/KOM:
+  pebble beach, grey-blue sea, betel palms).
+- **Palette** (sRGB):
+
+| What | Color |
+|---|---|
+| Marble light / vein / shadow tone | (0.82, 0.81, 0.77) / (0.56, 0.60, 0.66) / (0.60, 0.64, 0.74) |
+| River milky jade / foam | (0.42, 0.66, 0.66) / (0.92, 0.95, 0.95) |
+| Pebble bank | (0.70, 0.69, 0.66) |
+| Dwarf bamboo grass | (0.62, 0.64, 0.36) |
+| Cloud-forest moss | (0.36, 0.50, 0.30) |
+
+- **Road**: 6.5 m, rider offset −1.4 m (as the base bible); concrete parapet 0.6 m on the
+  valley side through the whole gorge zone; chevrons on hairpins; red bridges at the real
+  bridge ranges.
+- **Density** (per km): trees 90 (mostly on rims and the valley floor, few in frame in
+  `gorge`), bamboo 40, bushes 120, tufts 500; `alpine`: conifers 150, tufts 900 (grass).
+- **Generic landmarks**: red bridge, shrine on a cliff with a waterfall, suspension
+  footbridge across the gorge, tunnel portal with a carved name stone, pagoda.
+
+### Frame check for the new sets (adds to `ride-visual-review`)
+
+- K1. The set is recognizable without a caption: `env_karst` — at least 3 towers on the
+  horizon (except the `cliff` zone, where the face above the road is visible);
+  `env_gorge` — a wall rising above the frame top on at least one side (in `gorge`).
+- K2. Layered haze: at least 3 distinct tone layers between the road and the horizon.
+- K3. Inside a bend with R < 50 m, nothing taller than 1 m hides the road ahead.
+- K4. Galleries and gorge: the sky band is at least 15 % of the frame height; the HUD area
+  is not darker than the dark-scene limit of item 8.
+- K5. Red accents (bridges, roofs, shrine) take at most 3 % of the frame.
