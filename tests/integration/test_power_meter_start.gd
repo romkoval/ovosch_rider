@@ -77,6 +77,8 @@ func _stub(main: AppMain) -> StubBleBridge:
 
 ## Измеритель мощности подключён через менеджер подключений приложения.
 func _connect_power_meter(main: AppMain) -> void:
+	# Пустой список сервисов — «нет сервиса» (T-154): у измерителя объявлен CPS.
+	_stub(main).set_device_services("quarq", {BleUuids.CPS_SERVICE: PackedStringArray([BleUuids.CYCLING_POWER_MEASUREMENT])})
 	main.connections.connect_sensor("quarq", RememberedDevices.KIND_POWER)
 	_stub(main).pump()
 

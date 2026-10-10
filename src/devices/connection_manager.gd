@@ -12,11 +12,13 @@ extends RefCounted
 ##   («устройство не найдено», крит. 3). Незапомненные устройства не подключаются.
 ## - `forget(profile_id, id)` — отключение и удаление из реестра (крит. 4).
 ## - `device_states()` — `id → {state, battery, kind, failure}` для UI, `state_changed(id)`.
-## - `failure_of(id)` — причина последнего срыва подключения или обрыва датчика
+## - `failure_of(id)` — причина последнего срыва подключения станка (T-164) или срыва/обрыва датчика
 ##   (`SensorDevice.FailureReason`, REQ-DEV-07 крит. 1, Н-55): хранится у датчика до следующей
 ##   попытки (`connect_sensor`) или ручного отключения; экран показывает её под статусом.
 ##   Датчик запоминается только после CONNECTED (DEV-06 крит. 1): неудачная попытка в реестр
-##   не попадает, имя в слоте — из списка найденных.
+##   не попадает, имя в слоте — из списка найденных. Если датчик, впервые запомненный этим
+##   подключением, сразу срывается из CONNECTED без данных (подписка на измерение не удалась —
+##   причина NO_SERVICE или REFUSED, T-154), запись снимается: такое устройство не подключилось.
 ## - Станок создаётся через `TrainerFactory`: `"ble"` → `BleTrainer` поверх моста,
 ##   иначе (`"fake"`) — эмулятор для режима разработки.
 ## - REQ-DEV-01 крит. 7: при `bridge.is_available() == false` или адаптере не POWERED_ON
@@ -79,6 +81,8 @@ var _battery: Dictionary = {}
 ## Профиль, автоподключение которого ждёт POWERED_ON ("" — не ждёт).
 var _deferred_auto_profile: String = ""
 var _auto_connect_deferred: bool = false
+## id датчиков, впервые запомненных текущим подключением (ещё не было обрыва и ручного отключения).
+var _fresh_remembered: Dictionary = {}
 ## kind → [Callable состояния, Callable батареи] — связанные обработчики датчика.
 var _sensor_handlers: Dictionary = {}
 ## Устройство текущей сессии `power_meter` (null — нет или режим `smart`).
@@ -182,6 +186,7 @@ func set_profile(id: String) -> void:
 	if id == profile_id:
 		return
 	profile_id = id
+	_fresh_remembered.clear()
 	cancel_auto_connect()
 	devices_changed.emit()
 
@@ -451,7 +456,7 @@ func device_states() -> Dictionary:
 	var out: Dictionary = {}
 	if not trainer_id.is_empty():
 		out[trainer_id] = {"state": trainer.get_connection_state(), "battery": battery_of(trainer_id),
-			"kind": RememberedDevices.KIND_TRAINER, "failure": SensorDevice.FailureReason.NONE}
+			"kind": RememberedDevices.KIND_TRAINER, "failure": _trainer_failure()}
 	for kind in sensor_ids:
 		var id: String = str(sensor_ids[kind])
 		var s: SensorDevice = sensors[kind]
@@ -460,8 +465,15 @@ func device_states() -> Dictionary:
 	return out
 
 
+## Причина срыва подключения станка (T-164): `BleTrainer.last_failure()`; у эмулятора — NONE.
+## Реализацию здесь знать можно — это `src/devices/`.
+func _trainer_failure() -> int:
+	var ble := trainer as BleTrainer
+	return ble.last_failure() if ble != null else SensorDevice.FailureReason.NONE
+
+
 ## Причина последнего срыва подключения или обрыва устройства (`SensorDevice.FailureReason`);
-## NONE — не было, идёт новая попытка или устройство не датчик.
+## NONE — не было или идёт новая попытка.
 func failure_of(id: String) -> int:
 	var states := device_states()
 	return int(states[id]["failure"]) if states.has(id) else SensorDevice.FailureReason.NONE
@@ -561,10 +573,32 @@ func _on_sensor_state(state: int, kind: String) -> void:
 	var id: String = str(sensor_ids.get(kind, ""))
 	if id.is_empty():
 		return
-	if state == TrainerDevice.ConnectionState.CONNECTED:
-		_remember_connected(id, kind)
-		_stop_scan_if_idle()
+	match state:
+		TrainerDevice.ConnectionState.CONNECTED:
+			if remembered.find(profile_id, id).is_empty():
+				_fresh_remembered[id] = true
+			_remember_connected(id, kind)
+			_stop_scan_if_idle()
+		TrainerDevice.ConnectionState.RECONNECTING:
+			_fresh_remembered.erase(id)  # связь была рабочей — это обрыв, а не отказ
+		TrainerDevice.ConnectionState.DISCONNECTED:
+			_forget_if_failed_fresh(id, kind)
 	state_changed.emit(id)
+
+
+## Датчик, впервые запомненный этим подключением, сорвался из CONNECTED из-за подписки на
+## измерение (NO_SERVICE, REFUSED): снять запись — устройство так и не дало данных (T-154).
+func _forget_if_failed_fresh(id: String, kind: String) -> void:
+	if not _fresh_remembered.has(id):
+		return
+	_fresh_remembered.erase(id)
+	var sensor := sensors.get(kind) as SensorDevice
+	if sensor == null:
+		return
+	var why: int = sensor.last_failure()
+	if why == SensorDevice.FailureReason.NO_SERVICE or why == SensorDevice.FailureReason.REFUSED:
+		if remembered.forget(profile_id, id):
+			devices_changed.emit()
 
 
 func _on_battery(id: String, percent: int) -> void:

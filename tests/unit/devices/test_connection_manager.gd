@@ -16,6 +16,10 @@ var _timed_out: Array = []
 func before_each() -> void:
 	_dir = "user://test_cm_%d_%d/" % [Time.get_ticks_usec(), randi() % 100000]
 	_bridge = StubBleBridge.new()
+	# Датчики на заглушке отдают свой сервис (T-154: без него и при пустом списке нет CONNECTED).
+	_bridge.set_device_services("hrm", {"180D": ["2A37"]})
+	_bridge.set_device_services("hrm-a", {"180D": ["2A37"]})
+	_bridge.set_device_services("hrm-b", {"180D": ["2A37"]})
 	_remembered = RememberedDevices.new(_dir)
 	_cm = ConnectionManager.new(_bridge, _remembered)
 	_state_events = []
@@ -112,6 +116,7 @@ func test_trainer_without_battery_service_shows_minus_one() -> void:
 
 
 func test_sensor_battery_exposed() -> void:
+	_bridge.set_device_services("hrm", {"180D": ["2A37"], "180F": ["2A19"]})
 	_bridge.set_read_value("2A19", BatteryCodec.encode_level(90))
 	_cm.connect_sensor("hrm", RememberedDevices.KIND_HR)
 	_bridge.pump()

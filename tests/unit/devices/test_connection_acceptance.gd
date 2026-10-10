@@ -20,6 +20,11 @@ var _devices_changed: int = 0
 func before_each() -> void:
 	_dir = "user://test_conn_acc_%d_%d/" % [Time.get_ticks_usec(), randi() % 100000]
 	_bridge = StubBleBridge.new()
+	# Датчики на заглушке отдают свой сервис (T-154: без него и при пустом списке нет CONNECTED).
+	_bridge.set_device_services("hrm", {"180D": ["2A37"]})
+	_bridge.set_device_services("hrm2", {"180D": ["2A37"]})
+	_bridge.set_device_services("csc", {"1816": ["2A5B"]})
+	_bridge.set_device_services("pm", {"1818": ["2A63"]})
 	_remembered = RememberedDevices.new(_dir)
 	_cm = ConnectionManager.new(_bridge, _remembered)
 	_state_events = []

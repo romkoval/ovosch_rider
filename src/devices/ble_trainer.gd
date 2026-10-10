@@ -16,6 +16,11 @@ extends TrainerDevice
 ## `SUBSCRIBE_FAILED`, `SERVICE_NOT_FOUND`, `NOT_CONNECTED` или двойном отказе записи
 ## Request Control в CONNECTING — `disconnect_peripheral` (отмена подключения в мосте),
 ## DISCONNECTED и `error(CONNECTION_FAILED)`.
+## Причина срыва — `last_failure()` (`SensorDevice.FailureReason`, как у датчиков; T-164,
+## REQ-DEV-07 крит. 1): `CONNECTION_FAILED`, `SUBSCRIBE_FAILED`, двойной отказ записи и отказ
+## в Request Control → REFUSED; тайм-аут, `TIMEOUT`, `DEVICE_NOT_FOUND` → NO_RESPONSE;
+## `ADAPTER_UNAVAILABLE` → BLUETOOTH_OFF; `SERVICE_NOT_FOUND` → NO_SERVICE; `NOT_CONNECTED` →
+## LINK_LOST. Хранится до следующей попытки, ручного отключения или CONNECTED.
 ##
 ## Control Point — очередь (FTMS: новая процедура только после ответа на предыдущую).
 ## В полёте не больше одной команды; следующая уходит после индикации `80 <opcode> …`
@@ -137,6 +142,8 @@ var supported_inclination: Dictionary = {}
 var _simulation_rejected: bool = false
 ## Станок принял команду SIM.
 var _simulation_confirmed: bool = false
+## Причина последнего срыва подключения (`SensorDevice.FailureReason`, T-164).
+var _failure: int = SensorDevice.FailureReason.NONE
 
 
 func _init(ble_bridge: BleBridge) -> void:
@@ -168,6 +175,7 @@ func connect_device(id: String) -> void:
 		_forget_simulation_capabilities()
 	device_id = id
 	_disconnect_requested = false
+	_failure = SensorDevice.FailureReason.NONE
 	control_granted = false
 	data_only = false
 	_reset_control_point()
@@ -179,6 +187,7 @@ func connect_device(id: String) -> void:
 
 func disconnect_device() -> void:
 	_disconnect_requested = true
+	_failure = SensorDevice.FailureReason.NONE
 	_reconnect.stop()
 	_reset_control_point()
 	control_granted = false
@@ -309,7 +318,8 @@ func tick(delta_sec: float) -> void:
 		bridge.connect_peripheral(device_id)
 	if _state == ConnectionState.CONNECTING \
 			and _time_sec - _connecting_since_sec >= CONNECT_TIMEOUT_SEC - BleReconnectPolicy.TIME_EPSILON:
-		_fail_connecting("Станок не подключился за %d с" % int(CONNECT_TIMEOUT_SEC))
+		_fail_connecting("Станок не подключился за %d с" % int(CONNECT_TIMEOUT_SEC), true,
+			SensorDevice.FailureReason.NO_RESPONSE)
 		return
 	if not _cp_inflight.is_empty() \
 			and _time_sec - float(_cp_inflight["sent_at"]) >= CP_RESPONSE_TIMEOUT_SEC - BleReconnectPolicy.TIME_EPSILON:
@@ -348,6 +358,11 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 	if id != device_id or _disconnect_requested:
 		return
 	services = svc
+	if not services.is_empty() and not _lists_service(FTMS):
+		# Сервисы известны, а FTMS 0x1826 среди них нет: станок по FTMS не подключится (T-164).
+		# Пустой список — «неизвестен» (как раньше); строгая проверка — T-161.
+		_fail_connecting("Нет сервиса FTMS 0x1826", true, SensorDevice.FailureReason.NO_SERVICE)
+		return
 	bridge.subscribe(id, FTMS, BleUuids.INDOOR_BIKE_DATA)
 	var with_control: bool = control_allowed and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT)
 	if with_control or _has_characteristic(FTMS, BleUuids.FTMS_STATUS):
@@ -421,6 +436,7 @@ func _on_control_point_response(bytes: PackedByteArray) -> void:
 				"Станок не передал управление (Request Control: %s)" % FtmsCodec.result_name(r["result"]))
 			if _state != ConnectionState.CONNECTED:
 				disconnect_device()
+				_failure = SensorDevice.FailureReason.REFUSED
 		_pump_control_point()
 		return
 	if opcode == FtmsCodec.OP_SET_INDOOR_BIKE_SIMULATION:
@@ -568,7 +584,7 @@ func _on_bridge_error(id: String, code: int, message: String) -> void:
 		BleBridge.ErrorCode.CONNECTION_FAILED, BleBridge.ErrorCode.DEVICE_NOT_FOUND, \
 		BleBridge.ErrorCode.TIMEOUT, BleBridge.ErrorCode.ADAPTER_UNAVAILABLE:
 			if _state == ConnectionState.CONNECTING:
-				_fail_connecting(message, false)  # попытка в мосте уже завершилась
+				_fail_connecting(message, false, failure_for_bridge_error(code))  # попытка в мосте уже завершилась
 			# В RECONNECTING — следующая попытка по таймеру.
 		BleBridge.ErrorCode.READ_FAILED, BleBridge.ErrorCode.CHARACTERISTIC_NOT_FOUND:
 			push_warning("BleTrainer: необязательное чтение не удалось: %s" % message)
@@ -586,7 +602,7 @@ func _on_bridge_error(id: String, code: int, message: String) -> void:
 		BleBridge.ErrorCode.SUBSCRIBE_FAILED, BleBridge.ErrorCode.SERVICE_NOT_FOUND, \
 		BleBridge.ErrorCode.NOT_CONNECTED:
 			if _state == ConnectionState.CONNECTING:
-				_fail_connecting(message)
+				_fail_connecting(message, true, failure_for_bridge_error(code))
 			elif code == BleBridge.ErrorCode.NOT_CONNECTED:
 				push_warning("BleTrainer: %s" % message)
 			else:
@@ -603,12 +619,37 @@ func _set_state(state: int) -> void:
 	if state == _state:
 		return
 	_state = state
+	if state == ConnectionState.CONNECTED:
+		_failure = SensorDevice.FailureReason.NONE
 	connection_state_changed.emit(state)
 
 
-## Срыв подключения в CONNECTING: отмена в мосте, DISCONNECTED, `error(CONNECTION_FAILED)`.
-func _fail_connecting(message: String, cancel_in_bridge: bool = true) -> void:
+## Причина последнего срыва подключения (`SensorDevice.FailureReason`; NONE — не было,
+## идёт новая попытка, станок подключён или отключён вручную). T-164, REQ-DEV-07 крит. 1.
+func last_failure() -> int:
+	return _failure
+
+
+## Причина срыва по коду ошибки моста в CONNECTING (как у датчиков, `BleSensorBase`).
+static func failure_for_bridge_error(code: int) -> int:
+	match code:
+		BleBridge.ErrorCode.DEVICE_NOT_FOUND, BleBridge.ErrorCode.TIMEOUT:
+			return SensorDevice.FailureReason.NO_RESPONSE
+		BleBridge.ErrorCode.ADAPTER_UNAVAILABLE:
+			return SensorDevice.FailureReason.BLUETOOTH_OFF
+		BleBridge.ErrorCode.SERVICE_NOT_FOUND:
+			return SensorDevice.FailureReason.NO_SERVICE
+		BleBridge.ErrorCode.NOT_CONNECTED:
+			return SensorDevice.FailureReason.LINK_LOST
+	return SensorDevice.FailureReason.REFUSED
+
+
+## Срыв подключения в CONNECTING: причина, отмена в мосте, DISCONNECTED, `error(CONNECTION_FAILED)`.
+## Причина ставится до смены состояния — подписчики `connection_state_changed` её уже видят.
+func _fail_connecting(message: String, cancel_in_bridge: bool = true,
+		reason: int = SensorDevice.FailureReason.REFUSED) -> void:
 	_disconnect_requested = true
+	_failure = reason
 	control_granted = false
 	_reset_control_point()
 	if cancel_in_bridge and bridge != null and device_id != "":
@@ -715,6 +756,15 @@ func _has_characteristic(service_uuid: String, char_uuid: String) -> bool:
 	var ch := BleUuids.normalize(char_uuid)
 	for c in services[svc]:
 		if BleUuids.normalize(c) == ch:
+			return true
+	return false
+
+
+## Сервис `service_uuid` есть в найденных (ключи сравниваются в нормальной форме).
+func _lists_service(service_uuid: String) -> bool:
+	var want := BleUuids.normalize(service_uuid)
+	for key: Variant in services:
+		if BleUuids.normalize(str(key)) == want:
 			return true
 	return false
 

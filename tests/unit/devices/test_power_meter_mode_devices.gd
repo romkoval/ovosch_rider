@@ -152,6 +152,8 @@ func test_req_wrk_09_c1_c2_only_hrs_and_csc_or_nothing_no_session() -> void:
 func test_req_wrk_09_c2_g_connecting_or_reconnecting_source_counts_as_not_connected() -> void:
 	_manager()
 	_bridge.auto_connect = false
+	# Пустой список сервисов — «нет сервиса» (T-154): у измерителя объявлен CPS.
+	_bridge.set_device_services("pm", {BleUuids.CPS_SERVICE: PackedStringArray([BleUuids.CYCLING_POWER_MEASUREMENT])})
 	_cm.connect_sensor("pm", RememberedDevices.KIND_POWER)
 	_bridge.pump()
 	var check := _cm.start_check()

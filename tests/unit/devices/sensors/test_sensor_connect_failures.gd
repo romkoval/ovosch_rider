@@ -311,11 +311,42 @@ func test_c_service_not_found_error_while_connecting_means_no_service() -> void:
 	assert_eq(s.last_failure(), SensorDevice.FailureReason.NO_SERVICE)
 
 
-func test_c_empty_service_list_is_unknown_and_still_connects() -> void:
+## T-154 (дефект приёмки): нативный мост Apple отдаёт пустой словарь, когда у устройства нет
+## сервисов, — это «нет 0x180D», а не «неизвестно».
+func test_c_empty_service_list_means_no_service() -> void:
 	var s := _hr()
+	_bridge.set_device_services(ID, {})
 	s.connect_device(ID)
 	_bridge.pump()
-	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED, "список не получен — не повод отказать")
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED, "пустой список — не CONNECTED")
+	assert_eq(s.last_failure(), SensorDevice.FailureReason.NO_SERVICE)
+	assert_eq(_bridge.calls_of("disconnect_peripheral").size(), 1, "отмена в мосте")
+	assert_eq(_bridge.calls_of("subscribe").size(), 0, "подписок нет")
+
+
+func test_c_measurement_subscribe_error_in_connected_fails_with_reason() -> void:
+	var s := _hr()
+	_bridge.set_device_services(ID, {"180D": ["2A37"], "180F": ["2A19"]})
+	s.connect_device(ID)
+	_bridge.pump()
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED)
+	_bridge.emit_error(ID, BleBridge.ErrorCode.SUBSCRIBE_FAILED, "CoreBluetooth: setNotifyValue 2A19 failed")
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED, "отказ подписки на батарею не роняет подключение")
+	_bridge.emit_error(ID, BleBridge.ErrorCode.SUBSCRIBE_FAILED, "CoreBluetooth: setNotifyValue failed")
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED, "без UUID в сообщении — как раньше")
+	_bridge.emit_error(ID, BleBridge.ErrorCode.SERVICE_NOT_FOUND, "CoreBluetooth: service 180D not found (call discover_services first)")
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED, "нет 0x180D при подписке — срыв")
+	assert_eq(s.last_failure(), SensorDevice.FailureReason.NO_SERVICE)
+
+
+func test_c_measurement_subscribe_failed_naming_char_is_refused() -> void:
+	var s := _hr()
+	_bridge.set_device_services(ID, {"180D": ["2A37"]})
+	s.connect_device(ID)
+	_bridge.pump()
+	_bridge.emit_error(ID, BleBridge.ErrorCode.SUBSCRIBE_FAILED, "setNotifyValue 00002a37-0000-1000-8000-00805f9b34fb: not permitted")
+	assert_eq(s.get_connection_state(), TrainerDevice.ConnectionState.DISCONNECTED)
+	assert_eq(s.last_failure(), SensorDevice.FailureReason.REFUSED)
 
 
 # ---------------------------------------------------------------------------

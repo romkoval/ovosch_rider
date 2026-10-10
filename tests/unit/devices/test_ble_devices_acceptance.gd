@@ -25,6 +25,7 @@ func before_each() -> void:
 	_hr = []
 	_fail_remaining = 0
 	_bridge = StubBleBridge.new()
+	_sensor_services(_bridge)
 	# Подключаемся к write_done ДО создания BleTrainer, чтобы наш обработчик шёл первым
 	# и мог «сломать» повторную запись (сценарий двойного отказа, REQ-NFR-01 крит. 2).
 	_bridge.write_done.connect(func(_id: String, _c: String, ok: bool) -> void:
@@ -36,6 +37,16 @@ func before_each() -> void:
 	_t.error.connect(func(c: int, m: String) -> void: _errors.append({"code": c, "message": m}))
 	_t.telemetry.connect(func(s: TrainerSample) -> void: _samples.append(s))
 	_t.heart_rate.connect(func(b: int) -> void: _hr.append(b))
+
+
+## Сервисы датчиков на заглушке (T-154): без своего сервиса (и при пустом списке — так нативный
+## мост Apple отдаёт устройство без сервисов) датчик не входит в CONNECTED. Тесты, где нужен другой
+## набор, задают его сами. Battery Service заявлен только у измерителя мощности (без значения 2A19).
+static func _sensor_services(bridge: StubBleBridge) -> void:
+	bridge.set_device_services("hrs", {"180D": ["2A37"]})
+	bridge.set_device_services("csc", {"1816": ["2A5B"]})
+	bridge.set_device_services("csc2", {"1816": ["2A5B"]})
+	bridge.set_device_services("pm", {"1818": ["2A63"], "180F": ["2A19"]})
 
 
 ## Разрыв циклов станок ↔ мост ↔ замыкания очереди заглушки (иначе утечка ObjectDB).
@@ -848,7 +859,7 @@ func test_req_dev_07_c3_sensor_without_battery_service_is_dash_not_error() -> vo
 	assert_eq(_bridge.calls_of("read_characteristic").size(), 0, "Battery Service нет — чтение не запрашивается")
 	assert_eq(s.get_battery_level(), -1, "«—»")
 	assert_eq(errs.size(), 0, "не ошибка")
-	# Список сервисов неизвестен: чтение пробуется, отсутствие характеристики — тоже не ошибка.
+	# Battery Service заявлен, а значения 2A19 нет: чтение пробуется, отсутствие — тоже не ошибка.
 	var s2 := BlePowerMeter.new(_bridge)
 	var errs2: Array[int] = []
 	s2.error.connect(func(c: int, _m: String) -> void: errs2.append(c))

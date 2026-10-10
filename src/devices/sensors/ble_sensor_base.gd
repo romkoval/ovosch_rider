@@ -4,7 +4,7 @@ extends SensorDevice
 ##
 ## `connect_device(id)` → `connect_peripheral` → `connected` → `discover_services` →
 ## проверка сервиса датчика → подписка на характеристику измерения → при наличии Battery
-## Service 180F (или неизвестном списке сервисов) чтение 2A19 и подписка на него → CONNECTED.
+## Service 180F чтение 2A19 и подписка на него → CONNECTED.
 ##
 ## Срыв подключения (REQ-DEV-07 крит. 1, Н-55) — DISCONNECTED, `error(CONNECTION_FAILED)` и
 ## причина `last_failure()` (`SensorDevice.FailureReason`), которая хранится до следующей
@@ -13,10 +13,17 @@ extends SensorDevice
 ##   NO_RESPONSE; `ADAPTER_UNAVAILABLE` → BLUETOOTH_OFF; `SUBSCRIBE_FAILED` → REFUSED,
 ##   `SERVICE_NOT_FOUND` → NO_SERVICE, `NOT_CONNECTED` → LINK_LOST (последние три — с отменой
 ##   подключения в мосте, `disconnect_peripheral`);
+## - ошибка подписки на измерение в CONNECTED (подписка уходит вместе с переходом в CONNECTED,
+##   ответ моста — позже): `SERVICE_NOT_FOUND` → NO_SERVICE, `SUBSCRIBE_FAILED` с UUID сервиса
+##   или характеристики датчика в сообщении → REFUSED; срыв с отменой в мосте (T-154). Ошибка,
+##   в сообщении которой есть Battery Service 180F / 2A19, подключение не роняет: батареи может
+##   не быть (REQ-DEV-07 крит. 3). `SUBSCRIBE_FAILED` без UUID в сообщении (CoreBluetooth
+##   `setNotifyValue` его не называет) — как раньше, `error(SUBSCRIBE_FAILED)` без срыва;
 ## - `disconnected` не по запросу в CONNECTING (до `services_discovered`) → LINK_LOST
 ##   (`TIMEOUT` → NO_RESPONSE): устройство ещё ни разу не подключилось, переподключения нет;
 ## - в `services_discovered` нет сервиса датчика (у пульсометра — `0x180D`, REQ-DEV-03) →
-##   NO_SERVICE, отмена в мосте; пустой список сервисов — «неизвестен», подключение идёт;
+##   NO_SERVICE, отмена в мосте; пустой список сервисов — тоже «нет сервиса» (нативный мост Apple
+##   отдаёт пустой словарь, когда сервисов нет; T-154);
 ## - CONNECTING дольше `CONNECT_TIMEOUT_SEC` по часам `tick` → NO_RESPONSE, отмена в мосте.
 ## Обрыв из CONNECTED → RECONNECTING (REQ-DEV-08 крит. 1) с причиной LINK_LOST, попытки сразу
 ## и каждые 5 с через `tick` (`BleReconnectPolicy`); CONNECTED сбрасывает причину.
@@ -191,7 +198,7 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 	var own: String = BleUuids.normalize(_service_uuid())
 	var listed := PackedStringArray(services.keys())
 	listed.sort()
-	var has_own: bool = services.is_empty() or services.has(own)
+	var has_own: bool = services.has(own)
 	_log("sensor_services", {"services": listed, "required": own, "has_required": has_own})
 	if not has_own:
 		# REQ-DEV-03 (Н-55 (б)): без своего сервиса датчик не входит в CONNECTED.
@@ -280,9 +287,13 @@ func _on_bridge_error(id: String, code: int, message: String) -> void:
 			# Батареи может не быть — это «—», не ошибка (REQ-DEV-07 крит. 3).
 			pass
 		BleBridge.ErrorCode.SUBSCRIBE_FAILED, BleBridge.ErrorCode.SERVICE_NOT_FOUND:
+			var why: int = FailureReason.NO_SERVICE if code == BleBridge.ErrorCode.SERVICE_NOT_FOUND \
+				else FailureReason.REFUSED
 			if connecting:
-				_fail(FailureReason.NO_SERVICE if code == BleBridge.ErrorCode.SERVICE_NOT_FOUND \
-					else FailureReason.REFUSED, message)
+				_fail(why, message)
+			elif _state == TrainerDevice.ConnectionState.CONNECTED and _is_measurement_error(code, message):
+				# Подписка на измерение не удалась: «подключено» без данных хуже, чем срыв с причиной.
+				_fail(why, message)
 			else:
 				error.emit(ErrorCode.SUBSCRIBE_FAILED, message)
 		BleBridge.ErrorCode.NOT_CONNECTED:
@@ -365,9 +376,27 @@ func _clear_failure() -> void:
 
 
 func _has_service(service_uuid: String) -> bool:
-	if services.is_empty():
-		return true
 	return services.has(BleUuids.normalize(service_uuid))
+
+
+## Ошибка моста относится к подписке на измерение датчика (а не к батарее): `SERVICE_NOT_FOUND`,
+## если сообщение не называет Battery Service; `SUBSCRIBE_FAILED` — только если сообщение называет
+## сервис или характеристику датчика.
+func _is_measurement_error(code: int, message: String) -> bool:
+	var text := message.to_upper()
+	if _mentions(text, BleUuids.BATTERY_SERVICE) or _mentions(text, BleUuids.BATTERY_LEVEL):
+		return false
+	if code == BleBridge.ErrorCode.SERVICE_NOT_FOUND:
+		return true
+	return _mentions(text, _service_uuid()) or _mentions(text, _measurement_uuid())
+
+
+## Упоминание UUID в сообщении (верхний регистр): короткая форма или полная 128-битная.
+static func _mentions(upper_text: String, uuid: String) -> bool:
+	var short := BleUuids.normalize(uuid).to_upper()
+	if upper_text.contains(short):
+		return true
+	return short.length() == 4 and upper_text.contains("0000%s-" % short)
 
 
 func _log(event_name: String, data: Dictionary) -> void:

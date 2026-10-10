@@ -70,7 +70,9 @@ func test_sensor_without_battery_service_shows_dash_not_error() -> void:
 	assert_eq(errors.size(), 0)
 
 
-func test_sensor_unknown_services_tries_battery_and_tolerates_missing() -> void:
+## Пустой список сервисов теперь «нет сервиса» (T-154): Battery Service заявлен, значения 2A19 нет.
+func test_sensor_declared_battery_without_value_tries_and_tolerates_missing() -> void:
+	_bridge.set_device_services(ID, {"1816": ["2A5B"], "180F": ["2A19"]})
 	var s := BleCadenceSensor.new(_bridge)
 	var errors: Array[int] = []
 	s.error.connect(func(c: int, _m: String) -> void: errors.append(c))
@@ -82,6 +84,7 @@ func test_sensor_unknown_services_tries_battery_and_tolerates_missing() -> void:
 
 
 func test_sensor_connection_failed_and_disconnect() -> void:
+	_bridge.set_device_services(ID, {"180D": ["2A37"]})
 	var s := BleHeartRateSensor.new(_bridge)
 	var errors: Array[int] = []
 	s.error.connect(func(c: int, _m: String) -> void: errors.append(c))
@@ -99,6 +102,7 @@ func test_sensor_connection_failed_and_disconnect() -> void:
 
 
 func test_sensor_link_loss_reconnects_every_5s_and_resubscribes() -> void:
+	_bridge.set_device_services(ID, {"1818": ["2A63"]})
 	var s := BlePowerMeter.new(_bridge)
 	_connect(s)
 	_bridge.auto_connect = false
