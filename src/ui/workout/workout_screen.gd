@@ -689,9 +689,20 @@ func mode_chip_text() -> String:
 	return _mode_label.text
 
 
-## Фишки статусов (`hud.md` п. 10.3): станок, пульс, ERG (без станка — «БЕЗ СТАНКА»),
+## Заезд идёт на эмуляторе станка (T-150 п.3): признак интерфейса `TrainerDevice`, без
+## проверки класса реализации.
+func is_emulator_ride() -> bool:
+	return _trainer != null and _trainer.is_emulator()
+
+
+## Фишки статусов (`hud.md` п. 10.3): станок (у эмулятора — «ЭМУЛЯТОР»), пульс, ERG
+## (без станка — «БЕЗ СТАНКА»),
 ## интенсивность ≠ 100 %.
 func _render_status(s: Dictionary) -> void:
+	# Заезд на эмуляторе: фишка станка подписана «ЭМУЛЯТОР», чтобы фиктивный заезд не приняли
+	# за настоящий (T-150 п.3); место и вид фишки те же.
+	var emulator := is_emulator_ride()
+	_connection_label.text = tr(HudScreenFrame.KEY_STATUS_EMULATOR if emulator else HudScreenFrame.KEY_STATUS_TRAINER)
 	_trainer_chip.tooltip_text = tr(s["connection_key"])
 	_frame.set_dot(_trainer_chip, HudScreenFrame.connection_dot(int(s["connection_state"])))
 	var has_hr: bool = int(s["hr_bpm"]) >= 0

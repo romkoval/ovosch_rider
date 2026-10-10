@@ -125,8 +125,13 @@ func _records(ev: String) -> Array[Dictionary]:
 
 func _assert_emulator_everywhere(main: AppMain, shown: bool, what: String) -> void:
 	assert_eq(main.emulator_enabled(), shown, "%s: признак оболочки" % what)
-	assert_eq(main.home_screen().dev_tools_enabled, shown, "%s: главный — «На эмуляторе»/«Режим разработки»" % what)
+	var home := main.home_screen()
+	assert_eq(home.emulator_enabled, shown, "%s: главный — «На эмуляторе»" % what)
+	# Карточка T-150 п.2: «Режим разработки» — только в отладочной сборке, эмулятор его не включает.
+	assert_eq(home.dev_tools_enabled, main.debug_build, "%s: главный — «Режим разработки» только в отладке" % what)
 	assert_eq(_home_dev_shown(main), shown, "%s: кнопки разработки главного" % what)
+	assert_eq((home.get_node("%DevButton") as Control).visible, main.debug_build,
+		"%s: «Режим разработки» на главном только в отладке" % what)
 	var plan := main.plan_screen()
 	assert_eq(plan.dev_tools_enabled, shown, "%s: экран выбора тренировки" % what)
 	assert_eq(plan.emulator_start_button().visible, shown, "%s: «На эмуляторе» на плане" % what)
@@ -264,3 +269,65 @@ func test_debug_build_emulator_always_on_and_switch_locked() -> void:
 	var check := _unlock(main).emulator_check()
 	assert_true(check.button_pressed, "в отладке включён")
 	assert_true(check.disabled, "в отладке выключить нельзя")
+
+
+# ---------------------------------------------------------------------------
+# Дефекты приёмки T-150: п.2 — «Режим разработки» только в отладке; п.3 — метка на HUD
+# ---------------------------------------------------------------------------
+
+## Двойник реального станка: эмулятор с источником «реальное устройство» (T-160).
+class RealTrainer extends FakeTrainer:
+	func is_emulator() -> bool:
+		return false
+
+
+func test_release_emulator_shows_only_emulator_button_without_dev_screen() -> void:
+	var main := _main()
+	_unlock(main).emulator_check().button_pressed = true
+	main.app_state.navigate(AppState.Screen.HOME)
+	var home := main.home_screen()
+	assert_true(home.emulator_enabled, "эмулятор включён на главном")
+	assert_false(home.dev_tools_enabled, "инструменты разработчика — нет")
+	assert_true((home.get_node("%EmulatorWorkoutButton") as Control).visible, "«Тренировка на эмуляторе» есть")
+	assert_false((home.get_node("%DevButton") as Control).visible, "«Режима разработки» нет")
+	var menu := home.get_node("%DevMenu") as PopupMenu
+	assert_eq(menu.get_item_index(HomeScreen.MENU_DEV_SCREEN), -1, "в меню «⋯» нет «Режима разработки»")
+	assert_ne(menu.get_item_index(HomeScreen.MENU_DEV_EMULATOR), -1, "в меню «⋯» есть эмулятор")
+	menu.id_pressed.emit(HomeScreen.MENU_DEV_SCREEN)
+	assert_ne(main.app_state.current_screen, AppState.Screen.DEV, "экран «Режим разработки» не открывается")
+	(home.get_node("%DevButton") as Button).pressed.emit()
+	assert_ne(main.app_state.current_screen, AppState.Screen.DEV)
+
+
+func test_debug_build_keeps_dev_screen_on_home() -> void:
+	var main := _main(true)
+	var home := main.home_screen()
+	assert_true(home.dev_tools_enabled)
+	assert_true((home.get_node("%DevButton") as Control).visible, "в отладке «Режим разработки» есть")
+	assert_ne((home.get_node("%DevMenu") as PopupMenu).get_item_index(HomeScreen.MENU_DEV_SCREEN), -1)
+
+
+func test_hud_trainer_chip_reads_emulator_during_emulator_ride_ru_en() -> void:
+	for pair: Array in [["ru", "ЭМУЛЯТОР", "СТАНОК"], ["en", "EMULATOR", "TRAINER"]]:
+		var main := _main()
+		TranslationServer.set_locale(str(pair[0]))  # после запуска: оболочка ставит язык из настроек
+		_unlock(main).emulator_check().button_pressed = true
+		main.start_emulator_workout()
+		var ws := main.workout_screen()
+		assert_true(ws.is_emulator_ride(), "станок сессии — эмулятор (по интерфейсу)")
+		_now_usec += 1_000_000
+		ws.ticker().poll()
+		var chip_label := ws.get_node("%ConnectionLabel") as Label
+		assert_eq(chip_label.text, str(pair[1]), "%s: фишка станка подписана «%s»" % [pair[0], pair[1]])
+		var real := RealTrainer.new()
+		real.connect_delay_sec = 0.0
+		real.connect_device("real")
+		main.launch_free_ride(real, RouteCatalog.FLAT, 50)
+		var fr := main.free_ride_screen()
+		assert_false(fr.is_emulator_ride(), "заезд на реальном станке")
+		_now_usec += 1_000_000
+		fr.ticker().poll()
+		var fr_label := (fr.get_node("%TrainerChip") as Control).get_child(0) as Label
+		assert_eq(fr_label.text, str(pair[2]), "%s: у реального станка — «%s»" % [pair[0], pair[2]])
+		main.queue_free()
+		await wait_process_frames(1)

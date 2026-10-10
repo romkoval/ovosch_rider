@@ -23,6 +23,9 @@ const CHIP_DOT_RADIUS: float = 4.0
 const CHIP_PAD_LEFT: float = 22.0
 const CHIP_PAD_RIGHT: float = 10.0
 const CHIP_GAP: float = 6.0
+## Подпись фишки станка; у заезда на эмуляторе — «ЭМУЛЯТОР» (T-150 п.3).
+const KEY_STATUS_TRAINER: String = "ui.hud.status.trainer"
+const KEY_STATUS_EMULATOR: String = "ui.hud.status.emulator"
 ## Подсказка в слоте подсказки: обычная вариация и телефонная (кегль 14, одна строка).
 const HINT_VARIATION: StringName = &"BodyStrongLabel"
 const HINT_VARIATION_COMPACT: StringName = &"HudHintCompact"

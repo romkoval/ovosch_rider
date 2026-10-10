@@ -15,8 +15,9 @@ extends Control
 ##   `RoutePreview`, круг, набор, макс. уклон; «Поехать» (`free_ride_requested(route_id)`) и
 ##   «Сменить трассу» (→ ROUTE_SELECT).
 ## Ниже — плитки «История», «Устройства», «Настройки» (одно нажатие); на compact (ширина
-## холста < 1100 lp) — три кнопки-иконки в панели. Кнопки «Тренировка на эмуляторе» и
-## «Режим разработки» — только при `dev_tools_enabled` (оболочка включает их в отладочной
+## холста < 1100 lp) — три кнопки-иконки в панели. Кнопка «Тренировка на эмуляторе» — при
+## `dev_tools_enabled` или `emulator_enabled` (эмулятор, включённый в release, T-150 п.2);
+## «Режим разработки» — только при `dev_tools_enabled` (оболочка включает его в отладочной
 ## сборке); на compact — за кнопкой «⋯».
 ##
 ## Раскладка: контент не шире 1216 lp по центру, поля `ScreenMargin` (compact —
@@ -81,7 +82,15 @@ var dev_tools_enabled: bool = false:
 	set(value):
 		dev_tools_enabled = value
 		if is_node_ready():
-			_update_layout()
+			_apply_dev_tools()
+
+## Только «Тренировка на эмуляторе», без «Режима разработки» (T-150 п.2): оболочка включает при
+## доступном эмуляторе — в release после строки «Эмулятор станка» в «О программе».
+var emulator_enabled: bool = false:
+	set(value):
+		emulator_enabled = value
+		if is_node_ready():
+			_apply_dev_tools()
 
 ## Дата «сегодня» для кэша плана (YYYY-MM-DD); пусто — локальная дата. Для тестов.
 var today: String = ""
@@ -201,13 +210,11 @@ func _ready() -> void:
 	(%HistoryIconButton as Button).pressed.connect(_navigate.bind(AppState.Screen.HISTORY))
 	(%DevicesIconButton as Button).pressed.connect(_navigate.bind(AppState.Screen.DEVICES))
 	(%SettingsIconButton as Button).pressed.connect(_navigate.bind(AppState.Screen.SETTINGS))
-	_dev_button.pressed.connect(_navigate.bind(AppState.Screen.DEV))
+	_dev_button.pressed.connect(_on_dev_screen_pressed)
 	_emulator_button.pressed.connect(_on_emulator_pressed)
 	_dev_menu_button.pressed.connect(_on_dev_menu_pressed)
 	_profile_menu.add_item("ui.home.switch_profile", MENU_SWITCH_PROFILE)
 	_profile_menu.id_pressed.connect(_on_profile_menu_id)
-	_dev_menu.add_item("ui.home.workout_emulator", MENU_DEV_EMULATOR)
-	_dev_menu.add_item("ui.home.dev", MENU_DEV_SCREEN)
 	_dev_menu.id_pressed.connect(_on_dev_menu_id)
 	for button: Button in [_start_button, _workout_button, _import_button, _ride_button, _route_button]:
 		TouchTarget.attach(button, TouchTarget.Kind.BUTTON)
@@ -224,6 +231,7 @@ func _ready() -> void:
 	if runtime != null:
 		runtime.scale_changed.connect(_on_scale_changed)
 	_apply_card_insets()
+	_apply_dev_tools(false)  # раскладку делает `refresh()`
 	refresh()
 
 
@@ -673,8 +681,9 @@ func _update_layout() -> void:
 	_bar.custom_minimum_size.y = BAR_HEIGHT_COMPACT if compact else BAR_HEIGHT
 	_tiles.visible = not compact
 	_nav_icons.visible = compact
-	_dev_row.visible = dev_tools_enabled and not compact
-	_dev_menu_button.visible = dev_tools_enabled and compact
+	var any_dev: bool = _emulator_shown()
+	_dev_row.visible = any_dev and not compact
+	_dev_menu_button.visible = any_dev and compact
 	_plan_title.theme_type_variation = &"H2Label" if compact else &"H1Label"
 	_ride_title.theme_type_variation = &"H2Label" if compact else &"H1Label"
 	_plan_steps.visible = not compact
@@ -991,6 +1000,28 @@ func _on_profile_menu_id(id: int) -> void:
 		switch_profile()
 
 
+## Кнопка эмулятора видна: отладочные инструменты или включённый эмулятор.
+func _emulator_shown() -> bool:
+	return dev_tools_enabled or emulator_enabled
+
+
+## Состав отладочных кнопок и меню «⋯» по флагам: «Режим разработки» — только `dev_tools_enabled`.
+func _apply_dev_tools(relayout: bool = true) -> void:
+	_emulator_button.visible = _emulator_shown()
+	_dev_button.visible = dev_tools_enabled
+	_dev_menu.clear()
+	_dev_menu.add_item("ui.home.workout_emulator", MENU_DEV_EMULATOR)
+	if dev_tools_enabled:
+		_dev_menu.add_item("ui.home.dev", MENU_DEV_SCREEN)
+	if relayout:
+		_update_layout()
+
+
+func _on_dev_screen_pressed() -> void:
+	if dev_tools_enabled:
+		_navigate(AppState.Screen.DEV)
+
+
 func _on_dev_menu_pressed() -> void:
 	_popup_below(_dev_menu, _dev_menu_button)
 
@@ -1000,7 +1031,7 @@ func _on_dev_menu_id(id: int) -> void:
 		MENU_DEV_EMULATOR:
 			_on_emulator_pressed()
 		MENU_DEV_SCREEN:
-			_navigate(AppState.Screen.DEV)
+			_on_dev_screen_pressed()
 
 
 func _popup_below(menu: PopupMenu, anchor: Control) -> void:

@@ -26,3 +26,4 @@ ui.hud.chart.legend_hr,пульс,heart rate
 ui.summary.work,Работа,Work
 ui.summary.paused,Паузы: {paused},Paused: {paused}
 ui.summary.stopped_early,завершена досрочно,ended early
+ui.hud.status.emulator,ЭМУЛЯТОР,EMULATOR

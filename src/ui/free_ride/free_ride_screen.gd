@@ -513,8 +513,18 @@ func _render() -> void:
 	_layout_hud()
 
 
-## Фишки статусов: станок, пульс, режим нагрузки (SIM / СОПР.).
+## Заезд идёт на эмуляторе станка (T-150 п.3): признак интерфейса `TrainerDevice`, без
+## проверки класса реализации.
+func is_emulator_ride() -> bool:
+	return _trainer != null and _trainer.is_emulator()
+
+
+## Фишки статусов: станок (у эмулятора — «ЭМУЛЯТОР»), пульс, режим нагрузки (SIM / СОПР.).
 func _render_status(s: Dictionary) -> void:
+	# Заезд на эмуляторе: фишка станка подписана «ЭМУЛЯТОР», чтобы фиктивный заезд не приняли
+	# за настоящий (T-150 п.3); место и вид фишки те же.
+	var emulator := is_emulator_ride()
+	(_trainer_chip.get_child(0) as Label).text = tr(HudScreenFrame.KEY_STATUS_EMULATOR if emulator else HudScreenFrame.KEY_STATUS_TRAINER)
 	_trainer_chip.tooltip_text = tr(s["connection_key"])
 	_frame.set_dot(_trainer_chip, HudScreenFrame.connection_dot(int(s["connection_state"])))
 	var has_hr: bool = int(s["hr_bpm"]) >= 0

@@ -128,7 +128,8 @@ func _build_screens() -> void:
 	_add_screen(AppState.Screen.PROFILE_SELECT, select)
 	var home: HomeScreen = load(HOME_SCENE).instantiate()
 	home.setup(repo, app_state, connections, plan_cache, workout_library, ride_repository)
-	home.dev_tools_enabled = emulator_enabled()
+	home.dev_tools_enabled = debug_build
+	home.emulator_enabled = emulator_enabled()
 	home.emulator_workout_requested.connect(start_emulator_workout)
 	home.workout_start_requested.connect(_on_home_workout_start)
 	home.import_requested.connect(_on_home_import)
@@ -216,8 +217,9 @@ static func _mark_debug(probe: Array[bool]) -> bool:
 
 ## Эмулятор станка доступен (REQ-DEV-09 крит. 6, FRD-01 крит. 4): в отладочной сборке — всегда,
 ## в release — после включения скрытой строкой «Эмулятор станка» в «О программе». Единственный
-## признак для «Режима разработки» и «На эмуляторе» главного, «На эмуляторе» и «Эмулятора»
-## экрана выбора тренировки и «Эмулятора» диалога свободной езды.
+## признак для «На эмуляторе» главного, «На эмуляторе» и «Эмулятора»
+## экрана выбора тренировки и «Эмулятора» диалога свободной езды. «Режим разработки» главного —
+## только в отладочной сборке (`debug_build`), включённый эмулятор его не открывает (T-150 п.2).
 func emulator_enabled() -> bool:
 	return debug_build or _emulator_unlocked
 
@@ -236,7 +238,8 @@ func _apply_emulator_access() -> void:
 	var enabled := emulator_enabled()
 	var home := home_screen()
 	if home != null:
-		home.dev_tools_enabled = enabled
+		home.dev_tools_enabled = debug_build
+		home.emulator_enabled = enabled
 	var plan := plan_screen()
 	if plan != null:
 		plan.dev_tools_enabled = enabled
