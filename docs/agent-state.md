@@ -6,7 +6,19 @@
 
 ## Чекпоинт
 
-### Checkpoint 2026-10-10, late (manager; HEAD = 64199e7; supersedes the queues below)
+### Checkpoint 2026-10-10, night (manager; `main` = a32d942; supersedes the queues below)
+- Merged into `main` a32d942 (developer batch + re-acceptance; full GUT on 62e4d2a: 4115/4116, 0 failed): T-161, T-162, T-173, T-174, T-175, T-176 → `done`. T-177 stays `review` (owner's Mac build and checklist; mini-HUD itself post-MVP, U-47). Story map A1.11, A3.18–A3.21, A4.2 (date row), A4.5 (T-174) → done; manual checks kept (Neo, T-117 macOS crash recovery).
+- Requirements 52bde0b: REQ-D3D-09 p.23 (frame accent), p.24 (glasses frame) — traced to the T-106a3 / T-106a4 review follow-ups (technical-artist, branch `work/t-109`, before T-109); REQ-AVT-02 p.6 (jersey pattern regions on the mannequin) — traced to T-109 (backlog section 6).
+- Status changes: T-116b → `in-progress` (developer); T-109 → `in-progress` (technical-artist, follow-ups first); T-106a4 → `review`, T-106a3 stays `review` (tester acceptance); T-180, T-187 → `review` (tester acceptance).
+- Task files not touched in this cycle (History entries for the merge to be added when their worktrees are free).
+- Queues:
+  - developer — T-116b → T-181 → T-182, T-183 (T-186 after T-191 is confirmed);
+  - technical-artist — D3D-09 p.23, p.24 follow-ups → T-109 (incl. AVT-02 p.6) → T-184 → T-185;
+  - tester — T-106a3 / T-106a4 acceptance, T-180 / T-187 acceptance;
+  - game-designer — verdicts on T-106a3 / T-106a4 follow-ups (p.23, p.24 are `[визуальная проверка]`); T-178 → T-191 → T-179;
+  - owner — T-177 build and checklist on the Mac; confirm T-191 shortlist; Strava partner application.
+
+### Checkpoint 2026-10-10, late (manager; HEAD = 64199e7; superseded by the checkpoint above)
 - Merged into `main` (c14736b): T-106a2 elbow fix accepted → `done`. T-106a3 — all auto criteria passed by tester, game-designer asked small fixes (spokes → `rim_carbon`, helmet stripe; art-bible rev. 4.7) → stays `review`, technical-artist fixing; T-106a4 → `in-progress`.
 - Developer batch (accepted by tester, **not merged yet** — one merge together with the T-162 fixes): T-173, T-175, T-176 passed; T-174 auto passed + ru visual accepted (en shot pending); T-177 spike passed (owner's Mac check pending). Statuses stay `review` until the merge (then `done`, except T-174 until the en shot and T-177 until the owner's check per its task file).
 - Returned to `in-progress`: T-161 — rework passed, but new WRK-04 p.6 (U-48: first resistance command carries the user level, no stray 0 / previous level) is a defect; T-162 — rework failed: D-2 FreeRide display rule, D-3 hint-slot priority, D-4 +/- = resistance with ERG off. Developer is fixing both first.
