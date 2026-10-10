@@ -339,7 +339,7 @@ func current_target_watts() -> int:
 
 ## Цель `watts`, какой её получит станок сейчас (см. `current_target_watts`).
 func applied_target(watts: int) -> int:
-	if watts <= 0 or not controls_trainer() or not _effective_erg():
+	if watts <= 0 or not is_erg_active_on_trainer():
 		return watts
 	return trainer.applied_target_power(watts)
 
@@ -355,9 +355,12 @@ func erg_available() -> bool:
 	return controls_trainer() and trainer.is_erg_available()
 
 
-## Действует ли ERG на станке сейчас: выбор пользователя минус режим шага FreeRide (В-10).
+## "ERG acts" — the single project-wide definition (WRK-08 p.7): `smart` mode, ERG available on the
+## trainer (DEV-10 p.5), the ERG toggle on and the current step has a target (not FreeRide, В-10).
+## The sample flag, the trainer-limited target (DEV-10 p.6), the HUD and the saved ride use it; a
+## lost connection (DEV-08) does not change it.
 func is_erg_active_on_trainer() -> bool:
-	return _effective_erg()
+	return controls_trainer() and _effective_erg()
 
 
 func is_freeride_suspended() -> bool:
@@ -393,7 +396,9 @@ func metadata() -> Dictionary:
 		"ftp_w": executor.ftp_w,
 		"weight_kg": weight_kg,
 		"intensity": executor.intensity,
-		"erg_enabled": erg_enabled,
+		# The ride's "ERG" mark comes from the sample flags (LOC-01 p.4, WRK-08 p.7), never from the
+		# toggle: ERG acted in at least one sample; before the first sample — whether it acts now.
+		"erg_enabled": samples.erg_enabled.has(true) if samples.size() > 0 else is_erg_active_on_trainer(),
 		"resistance_level": resistance_level,
 		"speed_source": samples.speed_source,
 		"stopped_early": executor.stopped_early,
@@ -508,7 +513,7 @@ func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec:
 		model_speed = _speed_model.step_without_power(weight_kg, 1.0, grade)
 	position.advance(model_speed, 1.0)
 	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, current_target_watts(),
-		executor.current_step_index(), erg_enabled, model_speed,
+		executor.current_step_index(), is_erg_active_on_trainer(), model_speed,
 		{"power": _power_age, "cadence": _cadence_age, "heart_rate": _hr_age})
 	_latest_sample = null
 	_latest_hr_bpm = -1
@@ -575,7 +580,7 @@ func _log_erg_unavailable() -> void:
 ## does not act on the trainer (plan targets everywhere), otherwise the trainer's target range.
 ## Models rebuild their targets when it changes.
 func target_rule_key() -> String:
-	if not controls_trainer() or not _effective_erg():
+	if not is_erg_active_on_trainer():
 		return ""
 	return var_to_str(trainer.target_power_range())
 

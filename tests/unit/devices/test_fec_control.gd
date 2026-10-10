@@ -452,6 +452,20 @@ func test_req_dev_11_c8_no_target_power_bit_session_uses_basic_resistance() -> v
 	assert_eq(_pages(0x31).size(), 0, "no 0x31 during the ride")
 
 
+## T-176, REQ-WRK-08 p.7: FE-C without bit 1 of page 0x36 — ERG never acts, the sample flag is off
+## in every sample with the toggle on.
+func test_req_wrk_08_c7_fec_without_target_power_bit_sample_flag_off() -> void:
+	_connect(0x05)
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(60, 150.0), WorkoutStep.free_ride(60),
+		WorkoutStep.watts(60, 200.0)] as Array[WorkoutStep]), _t, 200)
+	s.start()
+	for i in 180:
+		s.tick(1.0)
+	assert_eq(s.samples.size(), 180)
+	assert_false(s.samples.erg_enabled.has(true), "off in all 180")
+	assert_true(s.erg_enabled, "toggle untouched")
+
+
 func test_req_dev_11_c7_b_not_supported_mid_ride_switches_to_basic_resistance() -> void:
 	_connect()
 	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(60, 150.0), WorkoutStep.watts(60, 250.0)] as Array[WorkoutStep]), _t, 200)

@@ -42,6 +42,8 @@ var has_heart_rate: Array[bool] = []
 var target_w := PackedInt32Array()
 ## Номер шага плана (-1 — вне плана).
 var step_index := PackedInt32Array()
+## ERG acted on the trainer in this second (WRK-08 p.7, `WorkoutSession.is_erg_active_on_trainer`),
+## not the player's toggle; the name is kept for stored rides.
 var erg_enabled: Array[bool] = []
 ## Возраст данных по источникам, с (0 — свежие, -1 — ещё не было).
 var power_age_sec := PackedInt32Array()
