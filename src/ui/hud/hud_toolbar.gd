@@ -90,6 +90,7 @@ var hotkeys_enabled: bool = true
 var _mode: Mode = Mode.PLAN
 var _compact: bool = false
 var _erg_enabled: bool = true
+var _erg_available: bool = true
 var _sim_enabled: bool = true
 ## Сессия управляет станком (`smart`); false — `power_meter`: органов управления станком нет.
 var _controls_trainer: bool = true
@@ -196,6 +197,17 @@ func set_erg_enabled(enabled: bool) -> void:
 
 func is_erg_enabled() -> bool:
 	return _erg_enabled
+
+
+## ERG доступен на станке (REQ-DEV-10 п.5): нет — кнопка ERG неактивна, клавиша E без действия.
+func set_erg_available(available: bool) -> void:
+	_erg_available = available
+	if _erg_button != null:
+		_erg_button.disabled = not available
+
+
+func is_erg_available() -> bool:
+	return _erg_available
 
 
 ## SIM включён (свободная езда): крутизна или сопротивление.
@@ -373,6 +385,8 @@ func trigger(action: StringName) -> bool:
 			if not _controls_trainer:
 				return false
 			if _mode == Mode.PLAN:
+				if not _erg_available:
+					return false
 				erg_toggle_requested.emit()
 			else:
 				sim_toggle_requested.emit()
@@ -653,7 +667,8 @@ static func _tree_order(a: Node, b: Node) -> bool:
 # ---------------------------------------------------------------------------
 
 func _on_erg_pressed() -> void:
-	erg_toggle_requested.emit()
+	if _erg_available:
+		erg_toggle_requested.emit()
 
 
 func _on_sim_pressed() -> void:

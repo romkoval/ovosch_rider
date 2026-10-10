@@ -93,6 +93,8 @@ signal resistance_level_changed(percent: int)
 signal intensity_changed(factor: float)
 ## Добавлено событие в журнал.
 signal event_logged(event: Dictionary)
+## Доступность ERG на станке изменилась (`erg_available()`) — для HUD.
+signal erg_availability_changed(available: bool)
 
 var executor: IntervalExecutor
 var trainer: TrainerDevice
@@ -132,6 +134,8 @@ var _paused_total_sec: float = 0.0
 var _power_age: int = -1
 var _cadence_age: int = -1
 var _hr_age: int = -1
+## ERG доступен на станке (по последнему `capabilities_changed`).
+var _erg_available: bool = true
 
 
 ## `route_id` — трасса сцены (`RouteCatalog`), по её профилю берётся уклон модели скорости;
@@ -155,6 +159,8 @@ func _init(workout: Workout, device: TrainerDevice, ftp_w: int, intensity: float
 	trainer.heart_rate.connect(_on_heart_rate)
 	trainer.connection_state_changed.connect(_on_connection_state_changed)
 	trainer.error.connect(_on_trainer_error)
+	trainer.capabilities_changed.connect(_on_trainer_capabilities)
+	_erg_available = trainer.is_erg_available() if controls_trainer() else false
 
 
 # ---------------------------------------------------------------------------
@@ -316,8 +322,30 @@ func controls_trainer() -> bool:
 	return trainer_mode == TrainerDevice.MODE_SMART
 
 
+## Текущая цель, Вт — фактически заданная станку (REQ-DEV-10 п.6, У-26): пока ERG действует на
+## станке, цель плана (с множителем WRK-07) приводится к диапазону станка
+## (`TrainerDevice.applied_target_power`); иначе (ERG выключен или недоступен, FreeRide, режим
+## `power_meter`) — цель плана как есть. Её показывает HUD и пишет сэмпл.
 func current_target_watts() -> int:
+	return applied_target(_current_target_w)
+
+
+## Цель `watts`, какой её получит станок сейчас (см. `current_target_watts`).
+func applied_target(watts: int) -> int:
+	if watts <= 0 or not controls_trainer() or not _effective_erg():
+		return watts
+	return trainer.applied_target_power(watts)
+
+
+## Цель плана (с множителем WRK-07) без ограничения станком.
+func planned_target_watts() -> int:
 	return _current_target_w
+
+
+## ERG доступен на станке (REQ-DEV-10 п.4–5, DEV-11 п.7–8): управляемый станок принимает цель
+## мощности. Недоступен — ERG на станке не действует (режим — фиксированное сопротивление).
+func erg_available() -> bool:
+	return controls_trainer() and trainer.is_erg_available()
 
 
 ## Действует ли ERG на станке сейчас: выбор пользователя минус режим шага FreeRide (В-10).
@@ -402,7 +430,7 @@ func _close_pause() -> void:
 
 
 func _effective_erg() -> bool:
-	return erg_enabled and not _freeride_suspended
+	return erg_enabled and not _freeride_suspended and _erg_available
 
 
 func _current_step_is_free_ride() -> bool:
@@ -468,7 +496,7 @@ func _on_second_elapsed(elapsed_sec: int, _step_offset_sec: int, _remaining_sec:
 		# Источников мощности нет — тяги нет: скорость — шаг модели при 0 Вт (D3D-02 п.7, У-33, У-34).
 		model_speed = _speed_model.step_without_power(weight_kg, 1.0, grade)
 	position.advance(model_speed, 1.0)
-	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, _current_target_w,
+	samples.append(elapsed_sec - 1, sample, _latest_hr_bpm, current_target_watts(),
 		executor.current_step_index(), erg_enabled, model_speed,
 		{"power": _power_age, "cadence": _cadence_age, "heart_rate": _hr_age})
 	_latest_sample = null
@@ -505,6 +533,20 @@ func _on_connection_state_changed(state: int) -> void:
 			# На паузе — ничего: цель уйдёт при resume() (уточнение DEV-08.3, приоритет В-4).
 			if _state == State.RUNNING:
 				_resend(true)
+
+
+## Возможности станка изменились: ERG стал недоступен (или снова доступен) — режим станка
+## переотправляется (без ERG — уровень сопротивления), HUD узнаёт сигналом.
+func _on_trainer_capabilities() -> void:
+	var available: bool = erg_available()
+	if available == _erg_available:
+		return
+	_erg_available = available
+	erg_availability_changed.emit(available)
+	if _state == State.RUNNING and controls_trainer():
+		_resend(true)
+	elif _state == State.PAUSED:
+		_erg_pending = true
 
 
 ## Ошибка записи на станок: один повтор текущей цели/уровня, не чаще раза в секунду (REQ-NFR-01 крит. 2).

@@ -136,6 +136,7 @@ func _compute() -> Dictionary:
 		"step_text": ("%d/%d" % [step_index + 1, total_steps]) if step_index >= 0 else ("%d/%d" % [total_steps, total_steps] if ex.is_finished() else NO_DATA_TEXT),
 		"erg_enabled": session.erg_enabled,
 		"erg_active_on_trainer": session.is_erg_active_on_trainer(),
+		"erg_available": session.erg_available(),
 		"intensity": ex.intensity,
 		"intensity_pct": roundi(ex.intensity * 100.0),
 		"cue_text": _cue_text,

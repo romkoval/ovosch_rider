@@ -664,7 +664,9 @@ func _render_hint(s: Dictionary, segments: Array[Dictionary]) -> void:
 
 ## Панель инструментов: ERG, множитель, сопротивление; на паузе молчит (паузой ведает карточка).
 func _render_toolbar(s: Dictionary, paused: bool) -> void:
-	_toolbar.set_erg_enabled(bool(s["erg_enabled"]))
+	# ERG недоступен на станке (DEV-10 п.5) — панель как при выключенном ERG, кнопка ERG неактивна.
+	_toolbar.set_erg_available(bool(s["erg_available"]))
+	_toolbar.set_erg_enabled(bool(s["erg_enabled"]) and bool(s["erg_available"]))
 	_toolbar.set_intensity_pct(int(s["intensity_pct"]))
 	_toolbar.set_resistance_pct(_session.resistance_level)
 	_toolbar.set_paused(paused)
@@ -715,6 +717,10 @@ func _render_status(s: Dictionary) -> void:
 	if not _session.controls_trainer():
 		_mode_label.text = tr("ui.hud.status.no_trainer")
 		_mode_chip.tooltip_text = tr("ui.hud.status.no_trainer_hint")
+		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
+	elif not bool(s["erg_available"]):
+		# ERG недоступен — отдельное состояние, не ошибка команды (DEV-10 п.5, T-162).
+		_mode_chip.tooltip_text = tr("ui.workout.erg_unavailable")
 		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
 	elif not erg_on:
 		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)

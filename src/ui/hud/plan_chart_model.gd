@@ -66,6 +66,8 @@ var _time_shift_sec: int = 0
 var _shift_from := PackedInt32Array()
 var _shift_value := PackedInt32Array()
 var _revision: int = 0
+## Столбик текущего шага по цели станка: `{index, start_watts, end_watts}`; пустой — нет ограничения.
+var _limit_override: Dictionary = {}
 
 
 func _init(plan: Workout, ftp: int, intensity_factor: float = 1.0, power_zones: PowerZones = null) -> void:
@@ -103,10 +105,33 @@ func sync(session: WorkoutSession) -> bool:
 	else:
 		cursor = 0.0
 	changed = set_progress(cursor, index, skipped_indices(session.events)) or changed
+	changed = _apply_trainer_limit(session, index) or changed
 	set_skip_log(session.events)
 	if index >= 0:
 		_time_shift_sec = maxi(roundi(cursor) - ex.elapsed_sec(), 0)
 	return changed
+
+
+## Столбик текущего шага — по цели, фактически заданной станку (REQ-DEV-10 п.6, У-26; распространение
+## на профиль плана — толкование реестра, подтвердить: при отказе владельца убирается вызов этой
+## функции в `sync`). Остальные столбики — цель плана. Возвращает true, если столбик изменился.
+func _apply_trainer_limit(session: WorkoutSession, index: int) -> bool:
+	var override: Dictionary = {}
+	for seg: Dictionary in _base:
+		if int(seg["index"]) != index or bool(seg["free"]):
+			continue
+		var p0: int = int(seg["plan_start_watts"])
+		var p1: int = int(seg["plan_end_watts"])
+		var a0: int = session.applied_target(p0)
+		var a1: int = session.applied_target(p1)
+		if a0 != p0 or a1 != p1:
+			override = {"index": index, "start_watts": a0, "end_watts": a1}
+		break
+	if override == _limit_override:
+		return false
+	_limit_override = override
+	_rebuild()
+	return true
 
 
 ## Множитель интенсивности WRK-07: пересчитывает цели, зоны и `y_max`.
@@ -334,7 +359,15 @@ func _rebuild() -> void:
 		var duration: int = int(seg["duration_sec"])
 		var w0: int = int(seg["start_watts"])
 		var w1: int = int(seg["end_watts"])
+		seg["plan_start_watts"] = w0
+		seg["plan_end_watts"] = w1
 		var zone: int = 0 if free else int(seg["zone"])
+		if not _limit_override.is_empty() and int(_limit_override["index"]) == index and not free:
+			w0 = int(_limit_override["start_watts"])
+			w1 = int(_limit_override["end_watts"])
+			seg["start_watts"] = w0
+			seg["end_watts"] = w1
+			zone = _zone_of(z, (w0 + w1) * 0.5)
 		seg["end_sec"] = start + duration
 		seg["zone"] = zone
 		seg["zone_token"] = ZonePalette.power_token(zone)
