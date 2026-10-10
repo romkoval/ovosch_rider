@@ -868,7 +868,9 @@ func test_req_wrk_09_c6b_only_cps_dropout_no_data_not_zero_avatar_stops_plan_con
 	assert_gt(st.speed_kmh[st.size() - 1], 5.0, "и движение со следующих сэмплов")
 
 
-func test_req_wrk_09_c6b_d3d_02_c7_free_ride_downhill_no_sources_stops_no_coasting() -> void:
+## WRK-09 п.6 (б) в редакции У-34: на спуске без источника аватар катится накатом по модели при 0 Вт,
+## принудительной остановки по сроку нет; дистанция растёт, пока скорость > 0.
+func test_req_wrk_09_c6b_d3d_02_c7_free_ride_downhill_no_sources_coasts_by_model() -> void:
 	var b := _bridge()
 	var dev := _pm_device(b, 300, 90)
 	var fr := FreeRideSession.new(dev, RouteCatalog.MOUNTAINS, 50, 75.0, FTP)
@@ -880,19 +882,28 @@ func test_req_wrk_09_c6b_d3d_02_c7_free_ride_downhill_no_sources_stops_no_coasti
 		guard += 1
 	assert_lt(guard, 7200, "предусловие: доехали до спуска")
 	_pm_of(dev).inject_dropout(200.0)
-	var speeds: Array[float] = []
-	var dists: Array[float] = []
+	var first := fr.samples.size()
+	var grades: Array[float] = []
 	for i in 70:
+		grades.append(fr.position.grade_pct())
 		fr.tick(1.0)
-		speeds.append(fr.samples.speed_kmh[fr.samples.size() - 1])
-		dists.append(fr.samples.distance_m[fr.samples.size() - 1])
-		assert_false(fr.samples.has_power[fr.samples.size() - 1], "«нет данных», а не 0")
-	var zero_at := speeds.find(0.0)
-	assert_between(zero_at, 0, 29, "скорость сводится к 0 не позже 30 с (в т.ч. на спуске)")
-	for i in range(1, speeds.size()):
-		assert_true(speeds[i] <= speeds[i - 1] + 1e-4, "скорость не растёт (наката нет)")
-	if zero_at >= 0 and zero_at + 30 < dists.size():
-		assert_almost_eq(dists[zero_at + 30], dists[zero_at], 0.01, "30 сэмплов после остановки дистанция не меняется")
+	var st := fr.samples
+	var ref := SpeedModel.new()
+	var bad: Array[String] = []
+	for n in 70:
+		var i := first + n
+		assert_false(st.has_power[i], "«нет данных», а не 0")
+		ref.reset(st.speed_kmh[i - 1])
+		var want := ref.step(0.0, 75.0, 1.0, grades[n])
+		if absf(st.speed_kmh[i] - want) > 0.1:
+			bad.append("%d: %.2f≠%.2f" % [n + 1, st.speed_kmh[i], want])
+		if grades[n] <= -1.0:
+			assert_gt(st.speed_kmh[i], 0.0, "сэмпл %d на спуске %.1f %%: накат, не остановка" % [n + 1, grades[n]])
+		if st.speed_kmh[i] > 0.0:
+			assert_gt(st.distance_m[i], st.distance_m[i - 1], "едет — дистанция растёт")
+		else:
+			assert_almost_eq(st.distance_m[i], st.distance_m[i - 1], 0.01, "стоит — дистанция не растёт")
+	assert_eq(bad, [] as Array[String], "каждый сэмпл — шаг модели при 0 Вт (±0.1)")
 
 
 # ---------------------------------------------------------------------------
@@ -1311,12 +1322,12 @@ func test_req_wrk_09_c6b_d3d_02_c7_avatar_slows_down_at_most_5_kmh_per_sample() 
 	var fst := fr.samples
 	assert_false(fst.has_power[cut2], "свободная езда: «нет данных»")
 	assert_gt(fst.speed_kmh[cut2], 0.0, "свободная езда: не мгновенный ноль (было %.1f → %.1f)" % [fst.speed_kmh[cut2 - 1], fst.speed_kmh[cut2]])
+	# Трасса `flat` не строго ровная (уклон −0.7…+1 %): по У-34 каждый сэмпл — шаг модели при 0 Вт с
+	# уклоном перед шагом (уклон предыдущего сэмпла).
+	var ref2 := SpeedModel.new()
 	var max_drop_fr := 0.0
-	var zero_fr := -1
 	for i in range(cut2, fst.size()):
 		max_drop_fr = maxf(max_drop_fr, fst.speed_kmh[i - 1] - fst.speed_kmh[i])
-		if zero_fr < 0 and fst.speed_kmh[i] == 0.0:
-			zero_fr = i - cut2 + 1
+		ref2.reset(fst.speed_kmh[i - 1])
+		assert_almost_eq(fst.speed_kmh[i], ref2.step(0.0, 75.0, 1.0, fst.grade_pct[i - 1]), 0.1, "свободная езда, сэмпл %d: шаг модели при 0 Вт" % (i - cut2 + 1))
 	assert_lte(max_drop_fr, 5.0 + 1e-3, "свободная езда: падение скорости за сэмпл ≤ 5 км/ч (было %.2f)" % max_drop_fr)
-	assert_true(zero_fr > 0 and zero_fr <= 30, "свободная езда: 0 не позже 30-го сэмпла (%d)" % zero_fr)
-	assert_almost_eq(fst.distance_m[fst.size() - 1], fst.distance_m[cut2 + zero_fr - 1], 0.01, "свободная езда: стоит — дистанция не растёт")
