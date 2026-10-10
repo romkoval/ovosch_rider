@@ -460,6 +460,10 @@ func _on_step_changed(_index: int, step: WorkoutStep) -> void:
 	if want_suspended == _freeride_suspended:
 		return
 	_freeride_suspended = want_suspended
+	if not _erg_available:
+		# ERG unavailable (U-36, WRK-02 p.7): the trainer stays on fixed resistance, a FreeRide
+		# step neither suspends nor resumes ERG on it.
+		return
 	match _state:
 		State.RUNNING:
 			if want_suspended:

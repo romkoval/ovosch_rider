@@ -64,6 +64,11 @@ func _connect(caps: int = 0x07) -> BleTrainer:
 	return _t
 
 
+func _caps(bits: int) -> void:
+	_bridge.emit_notification(DEV, BleUuids.FEC_NOTIFY, _page_msg([0x36, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, bits]))
+	_bridge.pump()
+
+
 func _status(last_command: int, status: int) -> void:
 	_bridge.emit_notification(DEV, BleUuids.FEC_NOTIFY, _page_msg([0x47, last_command, 0xFF, status, 0xFF, 0xFF, 0xFF, 0xFF]))
 
@@ -175,7 +180,8 @@ func test_req_dev_11_c7_b_request_47_after_each_31_and_statuses() -> void:
 	assert_eq(_errors, [] as Array[int], "байт 1 ≠ 31 — не ошибка")
 	_t.set_target_power(180)
 	_status(0x31, FecCodec.COMMAND_NOT_SUPPORTED)
-	assert_eq(_errors, [TrainerDevice.ErrorCode.CONTROL_POINT_REJECTED] as Array[int], "Not supported — сообщение")
+	assert_eq(_errors, [] as Array[int], "Not supported — capability change, not a command error (U-36)")
+	assert_false(_t.is_erg_available(), "ERG unavailable until the end of the connection")
 	var n := _pages(0x31).size()
 	_t.set_target_power(190)
 	_t.set_erg_enabled(false)
@@ -267,16 +273,18 @@ func test_req_dev_11_c9_c_reconnect_resubscribes_and_resends_within_1s() -> void
 	_bridge.emit_disconnected(DEV)
 	_bridge.pump()  # connect_peripheral → connected → discover → services
 	_bridge.pump()
-	assert_eq(_t.get_connection_state(), CONNECTED, "возможности известны — без повторного ожидания 0x36")
+	assert_eq(_pages(0x46).filter(func(b: PackedByteArray) -> bool: return b[10] == 0x36).size(), 2,
+		"capabilities requested again after `connected` (DEV-10 p.5 (e))")
+	_caps(0x07)
+	assert_eq(_t.get_connection_state(), CONNECTED)
 	assert_eq(_bridge.calls_of("subscribe").size(), subs + 1, "повторная подписка на FEC2")
 	assert_eq(_pages(0x31).size(), targets + 1, "цель — сразу после CONNECTED")
-	assert_eq(_pages(0x46).filter(func(b: PackedByteArray) -> bool: return b[10] == 0x36).size(), 1,
-		"0x36 больше не запрашивается")
 	# Пауза: после connected — только подписка, команда — после resume.
 	s.pause()
 	_bridge.emit_disconnected(DEV)
 	_bridge.pump()
 	_bridge.pump()
+	_caps(0x07)  # the 0x36 request is part of the connection handshake, not a mode command
 	var paused_writes := _writes().size()
 	for i in 3:
 		s.tick(1.0)
@@ -422,3 +430,37 @@ func _scan(dir_path: String, out: Array[String]) -> void:
 					out.append("%s:%d %s" % [f, n, line.strip_edges()])
 	for sub in d.get_directories():
 		_scan(dir_path.path_join(sub), out)
+
+
+# ---------------------------------------------------------------------------
+# Follow-up U-36 (T-161): FE-C without ERG → fixed resistance 0x30
+# ---------------------------------------------------------------------------
+
+func test_req_dev_11_c8_no_target_power_bit_session_uses_basic_resistance() -> void:
+	_connect(0x05)  # 36 FF FF FF FF 00 00 05 — no bit 1
+	assert_false(_t.is_erg_available())
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(60, 150.0), WorkoutStep.free_ride(30), WorkoutStep.watts(60, 250.0)] as Array[WorkoutStep]), _t, 200)
+	s.resistance_level = 35
+	s.start()
+	assert_gt(_pages(0x30).size(), 0, "0x30 right after the start")
+	assert_eq(_pages(0x30).back()[11], 0x46, "35 %")
+	s.set_resistance_level(40)
+	assert_eq(_pages(0x30).back()[11], 0x50, "+ → 40 % at once")
+	for i in 150:
+		s.tick(1.0)
+	assert_eq(_pages(0x31).size(), 0, "no 0x31 during the ride")
+
+
+func test_req_dev_11_c7_b_not_supported_mid_ride_switches_to_basic_resistance() -> void:
+	_connect()
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(60, 150.0), WorkoutStep.watts(60, 250.0)] as Array[WorkoutStep]), _t, 200)
+	s.start()
+	assert_eq(_pages(0x31).size(), 1)
+	_status(0x31, FecCodec.COMMAND_NOT_SUPPORTED)
+	assert_false(s.erg_available())
+	assert_gt(_pages(0x30).size(), 0, "0x30 instead of 0x31")
+	assert_eq(_errors, [] as Array[int], "no command error")
+	for i in 70:
+		s.tick(1.0)
+	assert_eq(_pages(0x31).size(), 1, "no 0x31 after the refusal")
+	assert_eq(s.samples.target_w[65], 250, "sample target — the plan target")

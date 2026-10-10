@@ -234,3 +234,107 @@ func _scan(dir_path: String, out: Array[String]) -> void:
 						out.append("%s:%d %s" % [f, n, line.strip_edges()])
 	for sub in d.get_directories():
 		_scan(dir_path.path_join(sub), out)
+
+
+# ---------------------------------------------------------------------------
+# Follow-up U-35/U-36: ERG unavailable → fixed resistance; re-detection after reconnect
+# ---------------------------------------------------------------------------
+
+func _feature_hex(power_bit: bool) -> String:
+	var tsf: int = FtmsCodec.TSF_RESISTANCE | (FtmsCodec.TSF_POWER if power_bit else 0)
+	return BleBytes.to_hex(FtmsCodec.encode_fitness_machine_feature(0, tsf)).replace(" ", "")
+
+
+func _session_ticks(s: WorkoutSession, seconds: int) -> void:
+	for i in seconds:
+		s.tick(1.0)
+		_bridge.pump()
+
+
+func _targets_after(from: int) -> Array[PackedByteArray]:
+	var out: Array[PackedByteArray] = []
+	for b in _cp_writes().slice(from):
+		if b[0] == FtmsCodec.OP_SET_TARGET_POWER:
+			out.append(b)
+	return out
+
+
+func test_req_dev_10_c5_a_bit3_zero_resistance_from_start_no_target_power() -> void:
+	_connect(FULL + ["2ACC", "2AD6"] as Array[String], {"2ACC": _feature_hex(false), "2AD6": "0000E8030100"})
+	var plan := Workout.make("p", [WorkoutStep.watts(60, 150.0), WorkoutStep.free_ride(60), WorkoutStep.watts(60, 250.0)] as Array[WorkoutStep])
+	var s := WorkoutSession.new(plan, _t, 200)
+	s.start()
+	_bridge.pump()
+	assert_eq(_cp_writes().back(), BleBytes.from_hex("0480"), "50 % resistance right after the start")
+	s.set_intensity(1.1)
+	s.pause()
+	_session_ticks(s, 2)
+	s.resume()
+	_session_ticks(s, 181)
+	assert_eq(_targets_after(0).size(), 0, "no 0x05 during the whole ride (WRK-02 p.7)")
+	assert_eq(s.samples.target_w[10], 165, "step target as before (plan × intensity, not sent)")
+	assert_eq(s.samples.target_w[90], 0, "FreeRide — no target")
+	assert_eq(s.samples.target_w[150], 275)
+
+
+func test_req_dev_10_c5_a_not_supported_mid_ride_switches_to_resistance() -> void:
+	_connect(FULL + ["2ACC", "2AD6"] as Array[String], {"2ACC": _feature_hex(true), "2AD6": "0000E8030100"})
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(60, 150.0), WorkoutStep.watts(60, 250.0)] as Array[WorkoutStep]), _t, 200)
+	s.start()
+	_bridge.pump()
+	assert_eq(_targets_after(0).back(), BleBytes.from_hex("059600"), "150 W accepted")
+	_session_ticks(s, 59)
+	_bridge.fail_next_control_point(FtmsCodec.RESULT_NOT_SUPPORTED)
+	s.tick(1.0)  # step 2: 05 FA 00 → 80 05 02
+	var before := _cp_writes().size()
+	_bridge.pump()
+	_bridge.pump()
+	assert_false(s.erg_available())
+	var levels := _cp_writes().slice(before).filter(func(b: PackedByteArray) -> bool: return b[0] == FtmsCodec.OP_SET_TARGET_RESISTANCE)
+	assert_gt(levels.size(), 0, "resistance within 1 s after the answer")
+	assert_has(levels, BleBytes.from_hex("0480"), "the user level 50 %")
+	var n := _cp_writes().size()
+	_session_ticks(s, 30)
+	assert_eq(_targets_after(n).size(), 0, "no 0x05 afterwards")
+	assert_eq(s.samples.target_w[70], 250, "sample target — the plan target")
+
+
+func test_req_wrk_04_c5_resistance_level_sent_immediately_when_erg_unavailable() -> void:
+	_connect(FULL + ["2ACC", "2AD6"] as Array[String], {"2ACC": _feature_hex(false), "2AD6": "0000E8030100"})
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(60, 150.0)] as Array[WorkoutStep]), _t, 200)
+	s.resistance_level = 35
+	s.start()
+	_bridge.pump()
+	assert_eq(_cp_writes().back(), BleBytes.from_hex("0459"), "35 % → 04 59")
+	s.set_resistance_level(40)
+	_bridge.pump()
+	assert_eq(_cp_writes().back(), BleBytes.from_hex("0466"), "+ → 40 % → 04 66 at once")
+
+
+func test_req_dev_10_c5_e_capabilities_re_read_after_reconnect() -> void:
+	_connect(FULL + ["2ACC"] as Array[String], {"2ACC": _feature_hex(true)})
+	var s := WorkoutSession.new(Workout.make("p", [WorkoutStep.watts(300, 150.0)] as Array[WorkoutStep]), _t, 200)
+	_bridge.fail_next_control_point(FtmsCodec.RESULT_NOT_SUPPORTED)
+	s.start()
+	_bridge.pump()
+	_bridge.pump()
+	assert_false(s.erg_available(), "80 05 02 — ERG unavailable")
+	_session_ticks(s, 5)
+	# Reconnect with bit 3 = 1: ERG is back, the step target goes out after `connected`.
+	var n := _cp_writes().size()
+	_bridge.emit_disconnected(DEV)
+	for i in 4:
+		_bridge.pump()
+	assert_eq(_t.get_connection_state(), TrainerDevice.ConnectionState.CONNECTED)
+	assert_true(s.erg_available(), "capabilities re-read")
+	assert_eq(_targets_after(n).back(), BleBytes.from_hex("059600"), "Set Target Power of the current step")
+	# Reconnect with bit 3 = 0: no 0x05, resistance.
+	_bridge.set_read_value("2ACC", BleBytes.from_hex(_feature_hex(false)))
+	n = _cp_writes().size()
+	_bridge.emit_disconnected(DEV)
+	for i in 4:
+		_bridge.pump()
+	assert_false(s.erg_available())
+	assert_eq(_targets_after(n).size(), 0, "no 0x05")
+	assert_gt(_cp_writes().slice(n).filter(func(b: PackedByteArray) -> bool: return b[0] == FtmsCodec.OP_SET_TARGET_RESISTANCE).size(), 0,
+		"0x04 with the user level")

@@ -29,6 +29,9 @@ const CAPABILITIES_TIMEOUT_SEC: float = 2.0
 
 ## Ошибка команды или записи (`TrainerDevice.ErrorCode`) — владелец передаёт её дальше.
 signal command_error(code: int, message: String)
+## The trainer answered "not supported" to 0x31: ERG is unavailable until the end of the
+## connection (DEV-11 p.7 (b), U-36) — a capability change, not a command error.
+signal erg_unsupported_detected()
 ## Возможности станка определены (ответ 0x36 или тайм-аут).
 signal capabilities_resolved()
 
@@ -58,11 +61,17 @@ func _init(ble_bridge: BleBridge) -> void:
 ## Новое устройство: возможности и признаки прежнего не действуют.
 func set_device(id: String) -> void:
 	if id != device_id:
-		capabilities = {}
-		capabilities_known = false
-		erg_unsupported = false
+		reset_capabilities()
 	device_id = id
 	reset_link()
+
+
+## Forget the trainer's capabilities: they are determined again on every connection
+## (DEV-10 p.5 (e), N-77 (a)).
+func reset_capabilities() -> void:
+	capabilities = {}
+	capabilities_known = false
+	erg_unsupported = false
 
 
 ## Связь (пере)установлена или разорвана: записи в полёте и ожидания сбрасываются, следующий вход
@@ -173,8 +182,7 @@ func on_page(page_number: int, page: PackedByteArray) -> void:
 						"Станок отверг цель ERG (0x47: %s)" % ("fail" if int(st["status"]) == FecCodec.COMMAND_FAIL else "rejected"))
 				FecCodec.COMMAND_NOT_SUPPORTED:
 					erg_unsupported = true
-					command_error.emit(TrainerDevice.ErrorCode.CONTROL_POINT_REJECTED,
-						"Станок не поддерживает ERG (0x47: not supported)")
+					erg_unsupported_detected.emit()
 				_:
 					push_warning("FecControl: статус 0x47 = 0x%02X — цель считается отправленной" % int(st["status"]))
 

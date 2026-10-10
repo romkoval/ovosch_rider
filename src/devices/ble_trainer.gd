@@ -100,6 +100,8 @@ const RECONNECT_INTERVAL_SEC: float = 5.0
 const CONNECT_TIMEOUT_SEC: float = 15.0
 ## Ожидание индикации Control Point по команде в полёте, с; потом уходит следующая.
 const CP_RESPONSE_TIMEOUT_SEC: float = 1.0
+## How long CONNECTED waits for the Fitness Machine Feature answer after Request Control, s.
+const FEATURES_TIMEOUT_SEC: float = 2.0
 const FTMS: String = BleUuids.FTMS_SERVICE
 const FEC: String = BleUuids.FEC_SERVICE
 ## Протокол подключения — по сервисам после `services_discovered`.
@@ -168,6 +170,10 @@ var _fec: FecControl = null
 var power_range: Dictionary = {}
 ## Станок ответил `80 05 02` на Set Target Power: ERG недоступен до конца подключения.
 var _erg_rejected: bool = false
+## 0x2ACC read requested on this connection and not answered yet; CONNECTED waits for it
+## (no longer than `FEATURES_TIMEOUT_SEC` after Request Control).
+var _features_pending: bool = false
+var _await_features_since: float = -1.0
 ## Ограничение цели диапазоном уже записано в лог в этом подключении.
 var _clamp_logged: bool = false
 ## Цель, запрошенная последним `set_target_power` (до ограничения диапазоном).
@@ -186,6 +192,7 @@ func _init(ble_bridge: BleBridge) -> void:
 	_fec = FecControl.new(bridge)
 	_fec.command_error.connect(_on_fec_command_error)
 	_fec.capabilities_resolved.connect(_on_fec_capabilities)
+	_fec.erg_unsupported_detected.connect(_on_fec_erg_unsupported)
 
 
 func get_time_sec() -> float:
@@ -269,6 +276,8 @@ func dispose() -> void:
 			_fec.command_error.disconnect(_on_fec_command_error)
 		if _fec.capabilities_resolved.is_connected(_on_fec_capabilities):
 			_fec.capabilities_resolved.disconnect(_on_fec_capabilities)
+		if _fec.erg_unsupported_detected.is_connected(_on_fec_erg_unsupported):
+			_fec.erg_unsupported_detected.disconnect(_on_fec_erg_unsupported)
 		_fec.bridge = null
 	_reconnect.stop()
 	_reset_control_point()
@@ -407,6 +416,9 @@ func tick(delta_sec: float) -> void:
 	if bridge == null:
 		return
 	_fec.tick(_time_sec)
+	if _await_features_since >= 0.0 and _time_sec - _await_features_since >= FEATURES_TIMEOUT_SEC - BleReconnectPolicy.TIME_EPSILON:
+		push_warning("BleTrainer: Fitness Machine Feature 2ACC не пришла за %.0f с — возможности по Control Point" % FEATURES_TIMEOUT_SEC)
+		_features_answered()
 	if _state == ConnectionState.RECONNECTING and _reconnect.due(_time_sec):
 		bridge.connect_peripheral(device_id)
 	if _state == ConnectionState.CONNECTING \
@@ -465,6 +477,7 @@ func _on_services_discovered(id: String, svc: Dictionary) -> void:
 		# Indoor Bike Data обязательна (DEV-10 п.3): ни подписок, ни записей в Control Point.
 		_fail_connecting("У FTMS нет Indoor Bike Data 2AD2", true, SensorDevice.FailureReason.NO_SERVICE)
 		return
+	_reset_ftms_capabilities()
 	bridge.subscribe(id, FTMS, BleUuids.INDOOR_BIKE_DATA)
 	var with_control: bool = control_allowed and _has_characteristic(FTMS, BleUuids.FTMS_CONTROL_POINT)
 	if with_control or _has_characteristic(FTMS, BleUuids.FTMS_STATUS):
@@ -500,7 +513,9 @@ func _connect_fec(id: String) -> void:
 		return
 	data_only = false
 	_fec.reset_link()
-	# CONNECTED — после ответа 0x36 или 2 с без него (п.8); известные возможности — сразу.
+	# Capabilities are determined again on every connection (DEV-10 p.5 (e), N-77 (a)):
+	# CONNECTED after the 0x36 answer or 2 s without it (DEV-11 p.8).
+	_fec.reset_capabilities()
 	_fec.request_capabilities()
 
 
@@ -516,8 +531,36 @@ func _on_fec_capabilities() -> void:
 
 func _on_fec_command_error(code: int, message: String) -> void:
 	error.emit(code, message)
-	if _fec.erg_unsupported:
+
+
+## FE-C "not supported" on 0x31: ERG unavailable until the end of the connection; the session
+## switches the trainer to fixed resistance (U-36).
+func _on_fec_erg_unsupported() -> void:
+	capabilities_changed.emit()
+
+
+## Capabilities are determined again on every connection (DEV-10 p.5 (e), N-77 (a)): a previous
+## `80 05 02` and Fitness Machine Feature no longer apply. With 0x2ACC declared the new answer
+## (read after Request Control) reports the change; without it ERG availability follows the
+## Control Point right away.
+func _reset_ftms_capabilities() -> void:
+	var was: bool = is_erg_available()
+	_features_pending = false
+	_await_features_since = -1.0
+	_erg_rejected = false
+	machine_features = {}
+	if not _declares_characteristic(FTMS, BleUuids.FITNESS_MACHINE_FEATURE) and is_erg_available() != was:
 		capabilities_changed.emit()
+
+
+## Fitness Machine Feature answered (or failed): finish a connection that waited for it.
+func _features_answered() -> void:
+	_features_pending = false
+	if _await_features_since >= 0.0:
+		_await_features_since = -1.0
+		if _state == ConnectionState.CONNECTING or _state == ConnectionState.RECONNECTING:
+			_reconnect.stop()
+			_set_state(ConnectionState.CONNECTED)
 
 
 ## Подключение без канала управления: CONNECTED с `data_only == true`.
@@ -539,6 +582,7 @@ func _acquire_control(id: String) -> void:
 	# Признаки SIM — только если заявлены (REQ-FRD-04 крит. 3, 6): CoreBluetooth отдаёт
 	# полный список характеристик, без него поддержка SIM остаётся UNKNOWN.
 	if _declares_characteristic(FTMS, BleUuids.FITNESS_MACHINE_FEATURE):
+		_features_pending = true
 		bridge.read_characteristic(id, FTMS, BleUuids.FITNESS_MACHINE_FEATURE)
 	if _declares_characteristic(FTMS, BleUuids.SUPPORTED_INCLINATION_RANGE):
 		bridge.read_characteristic(id, FTMS, BleUuids.SUPPORTED_INCLINATION_RANGE)
@@ -578,8 +622,13 @@ func _on_control_point_response(bytes: PackedByteArray) -> void:
 			var regained: bool = _state == ConnectionState.CONNECTED and not control_granted
 			control_granted = true
 			if _state == ConnectionState.CONNECTING or _state == ConnectionState.RECONNECTING:
-				_reconnect.stop()
-				_set_state(ConnectionState.CONNECTED)
+				if _features_pending:
+					# CONNECTED once Fitness Machine Feature is known: the session must not send a
+					# target the trainer cannot accept (DEV-10 p.5 (e), U-36).
+					_await_features_since = _time_sec
+				else:
+					_reconnect.stop()
+					_set_state(ConnectionState.CONNECTED)
 			elif regained and _mode_sent:
 				# После Control Permission Lost станок мог сбросить режим — повторяем его.
 				_write_current_mode()
@@ -705,6 +754,7 @@ func _on_characteristic_read(id: String, char_uuid: String, bytes: PackedByteArr
 				capabilities_changed.emit()
 			else:
 				push_warning("BleTrainer: Fitness Machine Feature 2ACC короче 8 байт, поддержка SIM не определена")
+			_features_answered()
 		BleUuids.SUPPORTED_INCLINATION_RANGE:
 			var inc := FtmsCodec.decode_supported_inclination_range(bytes)
 			if inc["ok"]:
@@ -792,6 +842,8 @@ func _on_bridge_error(id: String, code: int, message: String) -> void:
 			# В RECONNECTING — следующая попытка по таймеру.
 		BleBridge.ErrorCode.READ_FAILED, BleBridge.ErrorCode.CHARACTERISTIC_NOT_FOUND:
 			push_warning("BleTrainer: необязательное чтение не удалось: %s" % message)
+			if _features_pending and message.to_upper().contains(BleUuids.FITNESS_MACHINE_FEATURE):
+				_features_answered()  # no answer — capabilities by the Control Point (DEV-10 p.5)
 		BleBridge.ErrorCode.WRITE_FAILED:
 			if _write_failure_seen:
 				# Дубль только что обработанного write_done(false): повтор уже в полёте

@@ -79,6 +79,9 @@ var rider_cadence_rpm: int = 85
 var emit_speed: bool = true
 ## Есть ли у эмулируемого станка канал управления (false — только данные, REQ-WRK-09).
 var controllable: bool = true
+## Whether the emulated trainer accepts a power target (false — "ERG unavailable", for tests and
+## screenshots). Change it with `set_erg_supported` to notify listeners.
+var erg_supported: bool = true
 ## Эмулируемый диапазон цели ERG `{min_w, max_w, increment_w}` (как FTMS `0x2AD8`, REQ-DEV-10 п.6);
 ## по умолчанию — запасной 0..2000 Вт, шаг 1.
 var power_range: Dictionary = TrainerDevice.fallback_power_range()
@@ -225,6 +228,19 @@ func inclination_range() -> Vector2:
 
 func has_control() -> bool:
 	return controllable and _control_allowed
+
+
+## Emulated "ERG unavailable" (DEV-10 p.5, U-36): a controllable trainer that does not accept a power
+## target. `set_erg_supported(false)` mid-connection behaves like a `80 05 02` answer.
+func is_erg_available() -> bool:
+	return has_control() and erg_supported
+
+
+func set_erg_supported(supported: bool) -> void:
+	if supported == erg_supported:
+		return
+	erg_supported = supported
+	capabilities_changed.emit()
 
 
 func set_control_allowed(allowed: bool) -> void:
