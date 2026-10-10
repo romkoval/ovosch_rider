@@ -512,7 +512,7 @@ FPS на базовом M1 (T-116a).
 - Hand-painted хвойные со «рваным» краем на альфа-текстуре: зубчатый край яруса делаем
   геометрией, а не текстурой, потому что новый материал в бюджет не входит.
 
-## Гонщик (арт-спека T-104, ред. 4.7; REQ-D3D-09, REQ-AVT-01, REQ-AVT-02)
+## Гонщик (арт-спека T-104, ред. 4.8; REQ-D3D-09, REQ-AVT-01, REQ-AVT-02)
 
 Числа этого раздела — источник для критериев REQ-D3D-09 и таблица слотов для REQ-AVT-01/02
 (правило У-21, подтверждено владельцем 2026-10-04). Исполнители (ред. 4): модель — сервис
@@ -649,6 +649,16 @@ FPS на базовом M1 (T-116a).
 - Н-48: предложение владельцу (рама, кожа, перчатки, фляга); таблица пресетов до ответа не
   меняется. Стартовый номер не переносится, варианты — в подразделе.
 - Бриф `rider-artist-brief.md` — ред. 2.5 (§2, §6, §8, §9, §18).
+
+**Rev. 4.7–4.8 (2026-10-10, game-designer verdicts on T-106a3 and T-106a4).** Skeleton, seat
+geometry, `[авто]` tolerances p.1–5, slot and preset tables do **not** change.
+- 4.7: spokes move to `rim_carbon` (28); the helmet accent stripe seen from behind keeps a
+  constant width and a clean end («Экипировка», «Слоты внешности»).
+- 4.8: frame accent (region 24) only as small marks, seat stays and chain stays are
+  `frame_main` («Frame accent placement» under «Слоты внешности»); the glasses frame shows its
+  palette colour, rim weight 0 on regions 18 and 20 («Экипировка», «Очки»); pattern regions 3–5
+  on the mannequin follow the brief before T-109 («На манекене» after checklist Г); output of
+  `rider_check` for feedback to the artist («Эталонные ракурсы»).
 
 Общее, что остаётся как было: шоссейный велосипед (база 0.99 м, колёса 700c). Корпус
 покачивается в такт педалированию: параметры — «Движение по видео-референсу», общий предел
@@ -1332,6 +1342,20 @@ D3D-05 п.4):
 - Дужки уходят назад к ушам под ремешками шлема.
 - Линза (`glasses.lens`) — в два тона: верхняя треть светлее (полоса «блика», тон V, ниже).
 - Не больше 400 треугольников.
+- **The frame shows its palette colour (rev. 4.8, 2026-10-10, T-106a4 review).** The thin
+  upper frame of `shield` and the half frame of `half_frame` (region 20) read in the
+  `glasses.frame` colour: with `black` (`classic`, `volga_union`) the frame is a dark line, with
+  `white` (`sunrise`, `alpine`, `stealth`) a light one. The additive rim (0.35) lights the whole
+  of a part thinner than ≈ 3 px on screen, so a black strip (0.09) turns light grey-beige: on the
+  synthetic `rider_check` frame `head_34` φ 90 (`classic`) the new frame is a ≈ 4 px light bar
+  above the lens, i.e. a white frame instead of a black one. Rule: rim weight per region, like
+  the outline weight — 0 on 18 (`helmet_inner`: vent bottoms, straps, eyes) and 20
+  (`glasses_frame`), 1 elsewhere; the lens (19) keeps its rim (a light lens edge reads as gloss).
+  The frame sits on the top edge of the lens with no gap (now 1–2 px of helmet show between the
+  bar and the lens) and does not stick out past the lens tip (now a ≈ 3 px hook).
+  `[визуальная проверка]`: `classic`, `head_34` and `front34_r` φ 90 — frame pixels HSV
+  V ≤ 0.30 over ≥ 80 % of the frame length, no helmet or background pixels between frame and
+  lens; `sunrise` (`white` frame) — the frame stays light (V ≥ 0.70 on the lit side).
 
 **Туфли** — шоссейные, длина 0.28 м, низкий профиль. Общие для обеих фигур.
 - Подошва плоская и жёсткая, 1.0–1.2 см, тёмная (регион `shoe_sole`), носок приподнят на
@@ -1514,6 +1538,23 @@ second light shape right under the socks (Ф7). Deep carbon wheels of the photo 
 have black spokes. Rotation stays readable through the rim decal (25) and the dark spokes
 against the asphalt on `rear34_l` and `side_r`. Hubs, cassette, chain and brake levers stay
 `metal`: they are small light points, not a surface.
+
+**Frame accent placement (rev. 4.8, 2026-10-10, T-106a3 review).** Region 24 (`frame_accent`)
+is for small marks only: a band 3–4 cm high on the seat tube right under the seat clamp, one
+stripe on the down tube (as now), the fork tips. Seat stays and chain stays are `frame_main`
+(23). Reason: from the working camera the only frame parts in view are the seat stays and the
+seat tube between the legs. With accent stays the `volga_union` rear triangle reads as three red
+bars between the black legs: 1 140–1 280 red pixels under the saddle at φ 0/90/180/270 against
+≈ 600 red pixels of the helmet on the same frames (T-106a3 fix frames, `flat` 0 m). The bike
+then competes with the helmet as the red accent (Ф8, Ф11), and the photo reference has grey
+stays and a light seat tube with a red mark (`bike.frame` / `bike.accent` rows of «Фото-референс
+2026-10-04»). On `classic` the stays become red (frame colour) and yellow stays a mark — the
+preset still reads red-yellow on `rear34_l` and `side_r`. `[визуальная проверка]` with a
+measurement: `volga_union`, `work` φ 0/90/180/270, `flat` 0 m — pixels of red hue (HSV
+H ≤ 0.05 or ≥ 0.95, S > 0.6, V > 0.35) below the saddle and between the shoes are not more than
+1/2 of the red pixels of the helmet on the same frame; a light seat-tube strip reads between the
+legs (`grey` frame); on `rear34_l` φ 90 the red is a seat-tube mark and a down-tube stripe,
+not two long lines.
 
 **Палитра формы** (ключ → sRGB). Ред. 2: **тёмная основная расцветка джерси разрешена**
 (решение владельца 2026-10-04) — любой ключ годится для `jersey.main`. Правило ред. 1
@@ -1711,6 +1752,25 @@ against the asphalt on `rear34_l` and `side_r`. Hubs, cassette, chain and brake 
 Движение хвоста — пара кадров `rear34_l` при каденсе 90 с разницей 0.25 с (положение хвоста
 разное, рывков нет — по видео `[ручная проверка]`).
 
+**`rider_check` output for feedback to the artist (rev. 4.8, 2026-10-10, T-106a4 verdict).**
+Format accepted: one directory per figure and hairstyle (`m_short`, `f_tail`, `m_tail`,
+`f_short`), files `rider_<view>_<deg>.png` 1280×720 as in the table above, palette `classic`
+(every jersey region in its own colour, so region borders are visible), `report.txt` with
+T1–T8 and the verdict. The frames match the views of `rider-artist-brief.md`, so a remark names
+a file and a checklist item (e.g. «`f_tail/rider_side_r_180.png`, Г4») and the artist opens
+the same view in Blender. Synthetic model check: the imported mannequin is pixel-identical
+to the code-built one (≤ 3 differing pixels per frame), `m` and `f` frames differ.
+- Required before the tool is used for T-106b′ / T-106c′: for `m_tail` and `f_short` also
+  `rear34_l` φ 90 (the set above: «`work` и `rear34_l`»; now only `work`). The tail is judged on
+  `work` and `rear34_l` (Г15, А9).
+- Recommended: `report.txt` header with the model file name, size and SHA-1, palette, renderer
+  and date; the budget line as `value / limit` per mesh (now values only); on failure — check
+  number, object, what is wrong (T-106a4 criterion). A captioned contact sheet per directory
+  (`sheet.png`, 4 columns, half size) — the file that goes into a message to the artist instead
+  of 15 separate frames.
+- Optional for T-106b′: `rear_low` φ 0, 45 … 315 with `volga_union` (checklist Ф; not for the
+  artist).
+
 ### Чек-лист кадра гонщика (приёмка T-106, REQ-D3D-09 п.10–11)
 
 Порог — **не меньше 85 % видимых пунктов без блокирующих** (Г1, Г2, Г3, Г7, Г10) на каждом
@@ -1744,6 +1804,18 @@ against the asphalt on `rear34_l` and `side_r`. Hubs, cassette, chain and brake 
 - Г16: у манекена талии нет, поэтому оцениваются только плечи (у `f` уже) и таз (у `f`
   относительно шире); «талия выражена» — «н/п», пункт в целом засчитывается по плечам и
   тазу. Талия — на итоговой модели.
+- Pattern regions (rev. 4.8, 2026-10-10, T-106a3 review). The mannequin is what the game shows
+  until T-106c′, and T-109 makes presets selectable, so jersey regions 3–5 follow the brief
+  table (`rider-artist-brief.md`, region columns) on the mannequin too: 3 — side panels from
+  armpit to hem (done, unbroken since the T-106a3 fix); 4 — one horizontal band 8–10 cm high
+  round chest and back; 5 — the tops of both shoulders and the upper back down to the shoulder
+  blades. Now region 5 shows only as a thin line on the back: with `alpine` (`shoulder_yoke`,
+  white yoke on a teal jersey) that is a stray white line, not a yoke. Not a T-106a3 failure
+  (`classic` and `volga_union` do not show regions 4–5 in another colour); due by T-109 at the
+  latest. `[визуальная проверка]`: `alpine`, `work` φ 90 and `rear34_l` φ 90 — the light yoke
+  covers both shoulder tops and the upper ≥ 1/4 of the back height (collar to shorts), no
+  isolated line ≤ 2 px wide; `sunrise` (`chest_band`), `work` φ 90 — the back band is one
+  unbroken horizontal band.
 
 **Тёмные пресеты** (ред. 4.6; `stealth`, `volga_union` — `jersey.main` и `shorts.main` с HSV
 V ≤ 0.25). Чёрное на чёрном не разделяется ни цветом, ни контуром: обводка рисуется только по
