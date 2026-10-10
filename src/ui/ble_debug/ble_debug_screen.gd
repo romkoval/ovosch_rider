@@ -167,7 +167,7 @@ func connect_selected() -> void:
 	if _selected_device.is_empty():
 		return
 	if _connections != null and _connections.is_device_connected(_selected_device):
-		model.note("device %s is also connected by the app; its link is shared" % _selected_device)
+		model.note("device %s is also connected by the app; its link is shared" % BleDebugModel.device_tag(_selected_device))
 	_selected_service = ""
 	_selected_char = ""
 	model.connect_device(_selected_device)
