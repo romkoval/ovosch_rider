@@ -642,6 +642,15 @@ func _render_hint(s: Dictionary, segments: Array[Dictionary]) -> void:
 	# Секунды на фишке — 5…1; на 0 шаг уже сменяется (фишка уходит).
 	var upcoming: bool = bool(s["about_to_change"]) and int(s["step_remaining_sec"]) >= 1 \
 			and next_index > 0 and next_index < steps.size()
+	if bool(s.get("erg_notice", false)):
+		# ERG-unavailable notice (WRK-03 p.6 (c), hud.md p. 17.2) takes the hint slot for 8 s; the
+		# NEXT chip and the plan cue wait.
+		_next_chip.hide_chip()
+		var phone: bool = _frame.layout() != null and _frame.layout().phone
+		_cue_label.text = tr("ui.workout.notice.erg_unavailable_short" if phone else "ui.workout.notice.erg_unavailable")
+		_cue_label.visible = true
+		_cue_plate.visible = true
+		return
 	if upcoming:
 		var step: WorkoutStep = steps[next_index]
 		var seg: Dictionary = segments[next_index] if next_index < segments.size() else {}
@@ -692,6 +701,11 @@ func mode_chip_text() -> String:
 	return _mode_label.text
 
 
+## Dot color of the mode chip (`hud.md` p. 10.3; for checks).
+func mode_chip_dot() -> Color:
+	return _frame.dot(_mode_chip)
+
+
 ## Заезд идёт на эмуляторе станка (T-150 п.3): признак интерфейса `TrainerDevice`, без
 ## проверки класса реализации.
 func is_emulator_ride() -> bool:
@@ -719,7 +733,9 @@ func _render_status(s: Dictionary) -> void:
 		_mode_chip.tooltip_text = tr("ui.hud.status.no_trainer_hint")
 		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
 	elif not bool(s["erg_available"]):
-		# ERG недоступен — отдельное состояние, не ошибка команды (DEV-10 п.5, T-162).
+		# ERG unavailable (WRK-03 p.6 (a), hud.md p. 17.1): the chip names the mode the trainer is in —
+		# fixed resistance, "RES."; no "ERG" on the HUD.
+		_mode_label.text = tr("ui.free_ride.status.fixed")
 		_mode_chip.tooltip_text = tr("ui.workout.erg_unavailable")
 		_frame.set_dot(_mode_chip, UiTokens.HUD_TEXT2)
 	elif not erg_on:

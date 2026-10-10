@@ -59,6 +59,9 @@ var _skipped: Array[int] = []
 var _step_offset_sec: float = 0.0
 var _rows: Array[Dictionary] = []
 var _revision: int = 0
+## Target rule (`WorkoutSession.target_rule_key`) and the clamp it implies; invalid — plan targets.
+var _target_rule_key: String = ""
+var _target_limit: Callable = Callable()
 
 
 func _init(plan: Workout, ftp: int, intensity_factor: float = 1.0, power_zones: PowerZones = null) -> void:
@@ -87,11 +90,24 @@ static func for_session(session: WorkoutSession, power_zones: PowerZones = null)
 func sync(session: WorkoutSession) -> bool:
 	var ex := session.executor
 	var changed: bool = set_intensity(ex.intensity)
+	changed = _sync_target_rule(session) or changed
 	var index: int = ex.current_step_index()
 	var offset: float = float(ex.step_offset_sec()) if index >= 0 else 0.0
 	changed = set_progress(index, PlanChartModel.skipped_indices(session.events), offset,
 			ex.is_finished(), ex.stopped_early) or changed
 	return changed
+
+
+## Row targets follow the trainer while ERG acts on it (DEV-10 p.6, U-37, HUD-13 p.2): ramps
+## clamp both ends. Returns true when the rule changed (rows rebuilt).
+func _sync_target_rule(session: WorkoutSession) -> bool:
+	var key: String = session.target_rule_key()
+	if key == _target_rule_key:
+		return false
+	_target_rule_key = key
+	_target_limit = Callable() if key.is_empty() else session.applied_target
+	_rebuild()
+	return true
 
 
 ## Множитель интенсивности WRK-07: пересчитывает ватты и зоны строк.
@@ -364,6 +380,13 @@ func _rebuild() -> void:
 			var w0: int = 0 if free else int(seg["start_watts"])
 			var w1: int = 0 if free else int(seg["end_watts"])
 			var zone: int = 0 if free else int(seg["zone"])
+			if not free and _target_limit.is_valid():
+				var l0: int = _target_limit.call(w0)
+				var l1: int = _target_limit.call(w1)
+				if l0 != w0 or l1 != w1:
+					w0 = l0
+					w1 = l1
+					zone = PlanChartModel._zone_of(z, (w0 + w1) * 0.5)
 			_base.append({
 				"index": index,
 				"duration_sec": int(seg["duration_sec"]),

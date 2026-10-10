@@ -77,6 +77,10 @@ const KIND_WORKOUT_SUMMARY: String = "workout_summary"
 ## `pause_sec` секунд сессии в начале, затем до финиша.
 const KIND_WORKOUT_SUMMARY_PAUSED: String = "workout_summary_paused"
 const KIND_RIDE_DETAIL: String = "ride_detail"
+## Trainer without ERG (REQ-WRK-03 p.6 (d), hud.md p.17.5): `fresh` starts the main plan anew on an
+## emulator that reports ERG unavailable from the start; then advance to `at_sec`, optionally
+## open the toolbar (`toolbar`), shoot.
+const KIND_ERG_UNAVAILABLE: String = "erg_unavailable"
 const KIND_FREE_RIDE_AT: String = "free_ride_at"
 const KIND_FREE_RIDE_PAUSED: String = "free_ride_paused"
 const KIND_FREE_RIDE_FINISH: String = "free_ride_finish"
@@ -127,6 +131,8 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": "history_20", "kind": KIND_HISTORY_ROWS, "rides": 20},
 	# Последним: новая тренировка добавляет заезд в историю — кадры истории выше её не видят.
 	{"id": "hud_summary_paused", "kind": KIND_WORKOUT_SUMMARY_PAUSED, "pause_sec": 75},
+	{"id": "hud_erg_unavailable_notice", "kind": KIND_ERG_UNAVAILABLE, "fresh": true, "at_sec": 3},
+	{"id": "hud_erg_unavailable", "kind": KIND_ERG_UNAVAILABLE, "at_sec": 60, "toolbar": true},
 ]
 
 var _out_dir: String = "screenshots/ui"
@@ -259,6 +265,9 @@ func _run_scenario(scenario: Dictionary) -> void:
 	var kind: String = str(scenario["kind"])
 	if kind.begins_with("free_ride_"):
 		await _run_free_ride_scenario(id, kind, scenario)
+		return
+	if kind == KIND_ERG_UNAVAILABLE:
+		await _run_erg_unavailable_scenario(id, scenario)
 		return
 	if kind.begins_with("workout_"):
 		if not _ensure_workout():
@@ -483,6 +492,32 @@ func _advance_to(target_sec: int) -> void:
 		_clock_usec += step_usec
 		frames += 1
 		await process_frame
+
+
+## ERG unavailable: the plan on a fresh emulator with `erg_supported = false` (the notice is shown
+## from the start, the mode chip reads "RES.", the toolbar has no ERG button).
+func _run_erg_unavailable_scenario(id: String, scenario: Dictionary) -> void:
+	if bool(scenario.get("fresh", false)):
+		var screen: WorkoutScreen = _main.workout_screen()
+		screen.clock_usec = _virtual_clock
+		screen.keep_awake_setter = _ignore_keep_awake
+		if not _main.start_workout_on_emulator(_workout) or _session() == null:
+			_fail("%s: workout on the emulator did not start" % id)
+			return
+		var trainer := _main.emulator_trainer() as FakeTrainer
+		if trainer == null:
+			_fail("%s: no emulator" % id)
+			return
+		trainer.set_erg_supported(false)
+	if _session() == null or _session().erg_available():
+		_fail("%s: ERG is not unavailable" % id)
+		return
+	await _advance_to(int(scenario.get("at_sec", 0)))
+	if bool(scenario.get("toolbar", false)):
+		_main.workout_screen().toolbar().poke()
+		# The toolbar fades in over 200 ms — shoot after it is shown.
+		await create_timer(HudToolbar.FADE_SEC + 0.1).timeout
+	await _shoot(id)
 
 
 func _virtual_clock() -> int:

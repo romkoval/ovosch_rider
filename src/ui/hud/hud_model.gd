@@ -39,6 +39,8 @@ const SEGMENT_SKIPPED: String = "skipped"
 const SEGMENT_UPCOMING: String = "upcoming"
 
 const CUE_SHOW_SEC: int = 10
+## "Trainer does not support ERG" notice in the hint slot, s (WRK-03 p.6 (c), hud.md p. 17.2).
+const ERG_NOTICE_SEC: int = 8
 const CUE_MAX_LENGTH: int = 120
 const CUE_ELLIPSIS: String = "…"
 const ABOUT_TO_CHANGE_SEC: int = 5
@@ -53,6 +55,11 @@ var profile: Profile = null
 var _smoother := PowerSmoother.new(SMOOTHING_WINDOW_SEC)
 var _cue_text: String = ""
 var _cue_until_sec: int = -1
+## ERG-unavailable notice: shown until this session second (-1 — not shown); once per connection.
+var _erg_notice_until_sec: int = -1
+var _erg_notice_shown: bool = false
+## A plan cue that came while the notice was on screen — shown right after it (hud.md p. 17.2).
+var _pending_cue: String = ""
 var _state: Dictionary = {}
 
 
@@ -71,6 +78,9 @@ func _init(workout_session: WorkoutSession, rider_profile: Profile = null) -> vo
 	session.erg_changed.connect(_refresh_bool)
 	session.intensity_changed.connect(_refresh_float)
 	session.trainer.connection_state_changed.connect(_refresh_int)
+	session.trainer.connection_state_changed.connect(_on_trainer_state)
+	session.state_changed.connect(_on_session_state)
+	session.erg_availability_changed.connect(_on_erg_availability)
 	refresh()
 
 
@@ -137,6 +147,7 @@ func _compute() -> Dictionary:
 		"erg_enabled": session.erg_enabled,
 		"erg_active_on_trainer": session.is_erg_active_on_trainer(),
 		"erg_available": session.erg_available(),
+		"erg_notice": is_erg_notice_shown(),
 		"intensity": ex.intensity,
 		"intensity_pct": roundi(ex.intensity * 100.0),
 		"cue_text": _cue_text,
@@ -159,6 +170,10 @@ func progress_segments() -> Array[Dictionary]:
 	var finished: bool = ex.is_finished()
 	for seg in segments:
 		var i: int = int(seg["index"])
+		# Targets as the trainer gets them while ERG acts (DEV-10 p.6, U-37): "NEXT" chip, progress.
+		if int(seg["start_watts"]) > 0:
+			seg["start_watts"] = session.applied_target(int(seg["start_watts"]))
+			seg["end_watts"] = session.applied_target(int(seg["end_watts"]))
 		var zone: int = _power_zone(int(seg["start_watts"])) if int(seg["start_watts"]) > 0 else 0
 		seg["zone"] = zone
 		seg["zone_token"] = ZonePalette.power_token(zone)
@@ -275,6 +290,12 @@ func _on_second_elapsed(elapsed_sec: int, _offset: int, _remaining: int) -> void
 		_smoother.push_missing()
 	if _cue_until_sec >= 0 and elapsed_sec >= _cue_until_sec:
 		_clear_cue()
+	if _erg_notice_until_sec >= 0 and elapsed_sec >= _erg_notice_until_sec:
+		_erg_notice_until_sec = -1
+		if not _pending_cue.is_empty():
+			_cue_text = _pending_cue
+			_cue_until_sec = elapsed_sec + CUE_SHOW_SEC
+			_pending_cue = ""
 	refresh()
 
 
@@ -286,9 +307,44 @@ func _on_step_changed(_index: int, _step: WorkoutStep) -> void:
 
 
 func _on_cue(text: String) -> void:
+	if is_erg_notice_shown():
+		_pending_cue = truncate_cue(text)  # after the notice (hud.md p. 17.2)
+		return
 	_cue_text = truncate_cue(text)
 	_cue_until_sec = session.executor.elapsed_sec() + CUE_SHOW_SEC
 	refresh()
+
+
+## The ERG-unavailable notice is on screen (WRK-03 p.6 (c)).
+func is_erg_notice_shown() -> bool:
+	return _erg_notice_until_sec >= 0
+
+
+## Show the notice once per connection: at the start of the ride when ERG is unavailable from the
+## connection, or in the second the trainer refused the target.
+func _start_erg_notice() -> void:
+	if _erg_notice_shown or not session.controls_trainer():
+		return
+	_erg_notice_shown = true
+	_erg_notice_until_sec = session.executor.elapsed_sec() + ERG_NOTICE_SEC
+	refresh()
+
+
+func _on_session_state(state: int) -> void:
+	if state == WorkoutSession.State.RUNNING and not session.erg_available():
+		_start_erg_notice()
+
+
+func _on_erg_availability(available: bool) -> void:
+	if not available and session.get_state() == WorkoutSession.State.RUNNING:
+		_start_erg_notice()
+	refresh()
+
+
+## A new connection may refuse ERG again — the notice is shown again then (N-77 (a)).
+func _on_trainer_state(state: int) -> void:
+	if state == TrainerDevice.ConnectionState.RECONNECTING or state == TrainerDevice.ConnectionState.DISCONNECTED:
+		_erg_notice_shown = false
 
 
 func _clear_cue() -> void:

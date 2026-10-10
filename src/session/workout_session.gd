@@ -73,6 +73,9 @@ const EVENT_INTENSITY: String = "intensity"
 const EVENT_DISCONNECT: String = "disconnect"
 const EVENT_RECONNECT: String = "reconnect"
 const EVENT_RETRY: String = "retry"
+## The trainer does not accept a power target (DEV-10 p.5 (b), LOC-01 p.4): logged once per
+## connection with the session second — not an ERG toggle event.
+const EVENT_ERG_UNAVAILABLE: String = "erg_unavailable"
 
 ## Шаг уровня сопротивления, % (REQ-WRK-04 крит. 1).
 const RESISTANCE_STEP_PCT: int = 5
@@ -136,6 +139,8 @@ var _cadence_age: int = -1
 var _hr_age: int = -1
 ## ERG доступен на станке (по последнему `capabilities_changed`).
 var _erg_available: bool = true
+## The "ERG unavailable" event was logged in the current connection.
+var _erg_unavailable_logged: bool = false
 
 
 ## `route_id` — трасса сцены (`RouteCatalog`), по её профилю берётся уклон модели скорости;
@@ -179,6 +184,8 @@ func start() -> void:
 	started_at_unix = int(Time.get_unix_time_from_system())
 	_set_state(State.RUNNING)
 	_log(EVENT_START, 0)
+	if controls_trainer() and not _erg_available:
+		_log_erg_unavailable()
 	if not erg_enabled and controls_trainer():
 		trainer.set_erg_enabled(false)
 		trainer.set_resistance_level(resistance_level)
@@ -532,6 +539,7 @@ func _on_connection_state_changed(state: int) -> void:
 	match state:
 		TrainerDevice.ConnectionState.RECONNECTING, TrainerDevice.ConnectionState.DISCONNECTED:
 			_log(EVENT_DISCONNECT, TrainerDevice.state_name(state))
+			_erg_unavailable_logged = false  # a new connection starts
 		TrainerDevice.ConnectionState.CONNECTED:
 			_log(EVENT_RECONNECT, TrainerDevice.state_name(state))
 			# На паузе — ничего: цель уйдёт при resume() (уточнение DEV-08.3, приоритет В-4).
@@ -547,10 +555,29 @@ func _on_trainer_capabilities() -> void:
 		return
 	_erg_available = available
 	erg_availability_changed.emit(available)
+	if not available and (_state == State.RUNNING or _state == State.PAUSED):
+		_log_erg_unavailable()
 	if _state == State.RUNNING and controls_trainer():
 		_resend(true)
 	elif _state == State.PAUSED:
 		_erg_pending = true
+
+
+## "ERG unavailable" ride event: once per connection (a new refusal after a reconnect logs again).
+func _log_erg_unavailable() -> void:
+	if _erg_unavailable_logged:
+		return
+	_erg_unavailable_logged = true
+	_log(EVENT_ERG_UNAVAILABLE, executor.elapsed_sec())
+
+
+## Key of the rule that turns plan targets into what HUD shows (DEV-10 p.6, U-37): empty while ERG
+## does not act on the trainer (plan targets everywhere), otherwise the trainer's target range.
+## Models rebuild their targets when it changes.
+func target_rule_key() -> String:
+	if not controls_trainer() or not _effective_erg():
+		return ""
+	return var_to_str(trainer.target_power_range())
 
 
 ## Ошибка записи на станок: один повтор текущей цели/уровня, не чаще раза в секунду (REQ-NFR-01 крит. 2).

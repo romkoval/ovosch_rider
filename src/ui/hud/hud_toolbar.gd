@@ -199,11 +199,17 @@ func is_erg_enabled() -> bool:
 	return _erg_enabled
 
 
-## ERG доступен на станке (REQ-DEV-10 п.5): нет — кнопка ERG неактивна, клавиша E без действия.
+## ERG available on the trainer (DEV-10 p.5, WRK-03 p.6 (b), hud.md p. 17.1): no — the ERG button
+## is hidden (not disabled) until the end of the connection, E does nothing; the column keeps
+## intensity, resistance, «Skip step», «Finish» (phone: row 1 — skip · finish, row 2 — resistance).
 func set_erg_available(available: bool) -> void:
+	if _erg_available == available:
+		return
 	_erg_available = available
 	if _erg_button != null:
-		_erg_button.disabled = not available
+		_erg_button.visible = available
+		_erg_button.disabled = not available  # also inert if someone reaches it by focus
+	_relayout()
 
 
 func is_erg_available() -> bool:
@@ -394,7 +400,10 @@ func trigger(action: StringName) -> bool:
 			var sign := 1 if action == ACTION_PLUS else -1
 			if _mode != Mode.PLAN and not _controls_trainer:
 				return false
-			if _mode == Mode.PLAN:
+			if _mode == Mode.PLAN and _controls_trainer and not _erg_available:
+				# Trainer without ERG (WRK-03 p.6 (b)): `+`/`−` change the resistance level.
+				resistance_step_requested.emit(sign * RESISTANCE_STEP_PCT)
+			elif _mode == Mode.PLAN:
 				intensity_step_requested.emit(sign * INTENSITY_STEP_PCT)
 			elif _sim_enabled:
 				steepness_step_requested.emit(sign * STEEPNESS_STEP_PCT)
@@ -530,6 +539,15 @@ func _relayout() -> void:
 				_add_row([_skip_button])
 				_add_row([_finish_button])
 		else:
+			_add_row([_finish_button])
+	elif _mode == Mode.PLAN and not _erg_available:
+		if _compact:
+			_add_row([_skip_button, _finish_button])
+			_add_stepper(&"resistance")
+		else:
+			_add_stepper(&"intensity")
+			_add_stepper(&"resistance")
+			_add_row([_skip_button])
 			_add_row([_finish_button])
 	elif _mode == Mode.PLAN:
 		if _compact:

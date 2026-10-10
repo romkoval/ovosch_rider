@@ -100,6 +100,8 @@ ui.workout.resume,Продолжить,Resume
 ui.workout.erg_on,ERG вкл,ERG on
 ui.workout.erg_off,ERG выкл,ERG off
 ui.workout.erg_unavailable,ERG недоступен: станок не принимает цель мощности,ERG unavailable: the trainer does not accept a power target
+ui.workout.notice.erg_unavailable,"Станок не поддерживает ERG — фиксированное сопротивление, цель держите сами","Trainer does not support ERG — fixed resistance, hold the target yourself"
+ui.workout.notice.erg_unavailable_short,Нет ERG: держите цель сами,No ERG: hold the target yourself
 ui.workout.finished,Тренировка завершена,Workout finished
 ui.workout.summary,{name} · {time} · {distance} км · сэмплов {samples} {early},{name} · {time} · {distance} km · samples {samples} {early}
 ui.workout.stopped_early,(завершена досрочно),(ended early)
