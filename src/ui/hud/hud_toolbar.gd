@@ -400,8 +400,9 @@ func trigger(action: StringName) -> bool:
 			var sign := 1 if action == ACTION_PLUS else -1
 			if _mode != Mode.PLAN and not _controls_trainer:
 				return false
-			if _mode == Mode.PLAN and _controls_trainer and not _erg_available:
-				# Trainer without ERG (WRK-03 p.6 (b)): `+`/`−` change the resistance level.
+			if _mode == Mode.PLAN and _controls_trainer and not (_erg_available and _erg_enabled):
+				# WRK-03 p.7: `+`/`−` change the resistance level whenever the ERG toggle is off
+				# (by the player) or ERG is unavailable (p.6 (b)); intensity only with the toggle on.
 				resistance_step_requested.emit(sign * RESISTANCE_STEP_PCT)
 			elif _mode == Mode.PLAN:
 				intensity_step_requested.emit(sign * INTENSITY_STEP_PCT)
