@@ -58,6 +58,9 @@ var _cue_until_sec: int = -1
 ## ERG-unavailable notice: shown until this session second (-1 — not shown); once per connection.
 var _erg_notice_until_sec: int = -1
 var _erg_notice_shown: bool = false
+## The notice is due but not on screen yet: a refusal waits for the next sample, and the NEXT chip
+## holds it back (WRK-03 p.6 (c) slot priority, hud.md p. 17.2); it then shows for a full 8 s.
+var _erg_notice_due: bool = false
 ## A plan cue that came while the notice was on screen — shown right after it (hud.md p. 17.2).
 var _pending_cue: String = ""
 ## Tolerance scale (T-175, HUD-02 p.6, WRK-09 p.5 (б)–(г)): on while a step with a target goes
@@ -168,6 +171,7 @@ func _compute() -> Dictionary:
 		"erg_active_on_trainer": session.is_erg_active_on_trainer(),
 		"erg_available": session.erg_available(),
 		"erg_notice": is_erg_notice_shown(),
+		"next_chip_due": next_chip_due(),
 		"intensity": ex.intensity,
 		"intensity_pct": roundi(ex.intensity * 100.0),
 		"cue_text": _cue_text,
@@ -312,13 +316,37 @@ func _on_second_elapsed(elapsed_sec: int, offset: int, _remaining: int) -> void:
 	_eval_scale(true)
 	if _cue_until_sec >= 0 and elapsed_sec >= _cue_until_sec:
 		_clear_cue()
-	if _erg_notice_until_sec >= 0 and elapsed_sec >= _erg_notice_until_sec:
+	_update_erg_notice(elapsed_sec)
+	refresh()
+
+
+## Hint slot priority (WRK-03 p.6 (c), hud.md p. 17.2): NEXT chip > ERG notice > step hint.
+## The chip appearing hides the notice, which is shown again from the start for a full 8 s once
+## the chip is gone; a step hint that came meanwhile follows the notice.
+func _update_erg_notice(elapsed_sec: int) -> void:
+	var chip := next_chip_due()
+	if _erg_notice_until_sec >= 0 and chip:
+		_erg_notice_until_sec = -1
+		_erg_notice_due = true
+	elif _erg_notice_until_sec >= 0 and elapsed_sec >= _erg_notice_until_sec:
 		_erg_notice_until_sec = -1
 		if not _pending_cue.is_empty():
 			_cue_text = _pending_cue
 			_cue_until_sec = elapsed_sec + CUE_SHOW_SEC
 			_pending_cue = ""
-	refresh()
+	if _erg_notice_due and not chip:
+		_erg_notice_due = false
+		_erg_notice_until_sec = elapsed_sec + ERG_NOTICE_SEC
+
+
+## The NEXT chip is due in the hint slot now: T − 5 s … T − 1 s before the next step (HUD-06 p.2,
+## HUD-13 p.9; at T the step changes and the chip goes).
+func next_chip_due() -> bool:
+	var ex := session.executor
+	var index: int = ex.current_step_index()
+	var remaining: int = ex.step_remaining_sec()
+	return index >= 0 and not ex.is_finished() and index + 1 < ex.workout.steps.size() \
+		and remaining >= 1 and remaining <= ABOUT_TO_CHANGE_SEC
 
 
 func _on_step_changed(_index: int, _step: WorkoutStep) -> void:
@@ -334,7 +362,7 @@ func _on_step_changed(_index: int, _step: WorkoutStep) -> void:
 
 
 func _on_cue(text: String) -> void:
-	if is_erg_notice_shown():
+	if is_erg_notice_shown() or _erg_notice_due:
 		_pending_cue = truncate_cue(text)  # after the notice (hud.md p. 17.2)
 		return
 	_cue_text = truncate_cue(text)
@@ -348,23 +376,26 @@ func is_erg_notice_shown() -> bool:
 
 
 ## Show the notice once per connection: at the start of the ride when ERG is unavailable from the
-## connection, or in the second the trainer refused the target.
-func _start_erg_notice() -> void:
+## connection (`now`), or with the sample of the second in which the trainer refused the target
+## (the refusal answers a command of that second). The NEXT chip may hold it back (slot priority).
+func _start_erg_notice(now: bool) -> void:
 	if _erg_notice_shown or not session.controls_trainer():
 		return
 	_erg_notice_shown = true
-	_erg_notice_until_sec = session.executor.elapsed_sec() + ERG_NOTICE_SEC
+	_erg_notice_due = true
+	if now:
+		_update_erg_notice(session.executor.elapsed_sec())
 	refresh()
 
 
 func _on_session_state(state: int) -> void:
 	if state == WorkoutSession.State.RUNNING and not session.erg_available():
-		_start_erg_notice()
+		_start_erg_notice(true)
 
 
 func _on_erg_availability(available: bool) -> void:
 	if not available and session.get_state() == WorkoutSession.State.RUNNING:
-		_start_erg_notice()
+		_start_erg_notice(false)
 	refresh()
 
 

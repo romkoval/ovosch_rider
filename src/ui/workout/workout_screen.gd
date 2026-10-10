@@ -661,11 +661,10 @@ func _render_hint(s: Dictionary, segments: Array[Dictionary]) -> void:
 	var next_index: int = int(s["step_index"]) + 1
 	var steps := _session.executor.workout.steps
 	# Секунды на фишке — 5…1; на 0 шаг уже сменяется (фишка уходит).
-	var upcoming: bool = bool(s["about_to_change"]) and int(s["step_remaining_sec"]) >= 1 \
-			and next_index > 0 and next_index < steps.size()
-	if bool(s.get("erg_notice", false)):
-		# ERG-unavailable notice (WRK-03 p.6 (c), hud.md p. 17.2) takes the hint slot for 8 s; the
-		# NEXT chip and the plan cue wait.
+	# Slot priority (WRK-03 p.6 (c), hud.md p. 17.2): NEXT chip > ERG notice > step hint; the
+	# model hides the notice while the chip is due and re-shows it for a full 8 s after it.
+	var upcoming: bool = bool(s.get("next_chip_due", false)) and next_index > 0
+	if bool(s.get("erg_notice", false)) and not upcoming:
 		_next_chip.hide_chip()
 		var phone: bool = _frame.layout() != null and _frame.layout().phone
 		_cue_label.text = tr("ui.workout.notice.erg_unavailable_short" if phone else "ui.workout.notice.erg_unavailable")
