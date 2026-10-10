@@ -427,6 +427,42 @@ class T143(unittest.TestCase):
         for v in ("cm", "axes"):
             self.assertAlmostEqual(hs[v], hs["m"], delta=0.002, msg=v)
 
+    def test_cm_variant_full_run_gives_same_rider_glb(self):
+        """Карточка T-143: «вариант в сантиметрах нормализуется» — не только рост на шаге 3, а весь
+        конвейер до rider.glb: код 0, те же треугольники, вершины и кости, что у метрового входа,
+        позиции вершин в пределах 2 мм, rest костей ±1 мм, масштаб узлов 1."""
+        work = os.path.join(self.tmp, "w_cm_full")
+        code, out, err = refine(self.raw["cm"], "--work", work)
+        self.assertEqual(code, 0, "cm: полный прогон, код %d: %s" % (code, err[-800:]))
+        path = os.path.join(work, "rider.glb")
+        self.assertTrue(os.path.isfile(path), "cm: rider.glb собран")
+        a, ab = glb(self.glb_path)
+        b, bb_ = glb(path)
+        pa, pb = a["meshes"][0]["primitives"], b["meshes"][0]["primitives"]
+        self.assertEqual(len(pa), len(pb), "cm: число примитивов")
+        for x, y in zip(pa, pb):
+            self.assertEqual(a["accessors"][x["indices"]]["count"], b["accessors"][y["indices"]]["count"], "cm: треугольники")
+            # Порядок вершин в glTF (швы UV) от единиц входа может меняться — сравнение без учёта порядка:
+            # ближайшая вершина другого файла по (позиция, UV) не дальше 2 мм (UV — те же регионы атласа).
+            va = np.hstack([acc(a, ab, x["attributes"]["POSITION"]), acc(a, ab, x["attributes"]["TEXCOORD_0"])])
+            vb = np.hstack([acc(b, bb_, y["attributes"]["POSITION"]), acc(b, bb_, y["attributes"]["TEXCOORD_0"])])
+            self.assertEqual(va.shape, vb.shape, "cm: вершины")
+
+            def far(p, q):
+                return max(float(np.sqrt(((q - v) ** 2).sum(axis=1)).min()) for v in p)
+            d = max(far(va, vb), far(vb, va))
+            print("\n  cm vs m: макс. расстояние до ближайшей вершины (позиция + UV) %.5f" % d)
+            self.assertLess(d, 0.002, "cm: вершины/UV расходятся с метровым входом на %.4f" % d)
+        ja = [a["nodes"][i]["name"] for i in a["skins"][0]["joints"]]
+        jb = [b["nodes"][i]["name"] for i in b["skins"][0]["joints"]]
+        self.assertEqual(jb, ja, "cm: кости")
+        wa, _ = world(a)
+        wb, _ = world(b)
+        for i, k in zip(a["skins"][0]["joints"], b["skins"][0]["joints"]):
+            self.assertLess(float(np.abs(wa[i][:3, 3] - wb[k][:3, 3]).max()), 0.001, "cm: rest кости %s" % a["nodes"][i]["name"])
+        for n in b["nodes"]:
+            self.assertLess(np.abs(np.array(n.get("scale", [1, 1, 1])) - 1).max(), 1e-6, "cm: масштаб %s" % n.get("name"))
+
     # ------------------------------------------------------------ запасной путь шага 4
 
     def test_retopo_decimate_reaches_rider_glb(self):
