@@ -30,7 +30,7 @@ const CAPABILITIES_TIMEOUT_SEC: float = 2.0
 ## Ошибка команды или записи (`TrainerDevice.ErrorCode`) — владелец передаёт её дальше.
 signal command_error(code: int, message: String)
 ## The trainer answered "not supported" to 0x31: ERG is unavailable until the end of the
-## connection (DEV-11 p.7 (b), U-36) — a capability change, not a command error.
+## connection (DEV-11 p.7 (b), U-36) — a capability change (followed by `command_error`).
 signal erg_unsupported_detected()
 ## Возможности станка определены (ответ 0x36 или тайм-аут).
 signal capabilities_resolved()
@@ -183,6 +183,9 @@ func on_page(page_number: int, page: PackedByteArray) -> void:
 				FecCodec.COMMAND_NOT_SUPPORTED:
 					erg_unsupported = true
 					erg_unsupported_detected.emit()
+					# Same as the FTMS `80 05 02` path: the refusal is also reported as a command error.
+					command_error.emit(TrainerDevice.ErrorCode.CONTROL_POINT_REJECTED,
+						"Станок не поддерживает ERG (0x47: not supported)")
 				_:
 					push_warning("FecControl: статус 0x47 = 0x%02X — цель считается отправленной" % int(st["status"]))
 

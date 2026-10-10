@@ -180,7 +180,8 @@ func test_req_dev_11_c7_b_request_47_after_each_31_and_statuses() -> void:
 	assert_eq(_errors, [] as Array[int], "байт 1 ≠ 31 — не ошибка")
 	_t.set_target_power(180)
 	_status(0x31, FecCodec.COMMAND_NOT_SUPPORTED)
-	assert_eq(_errors, [] as Array[int], "Not supported — capability change, not a command error (U-36)")
+	assert_eq(_errors, [TrainerDevice.ErrorCode.CONTROL_POINT_REJECTED] as Array[int],
+		"Not supported — capability change plus a command error, as FTMS `80 05 02`")
 	assert_false(_t.is_erg_available(), "ERG unavailable until the end of the connection")
 	var n := _pages(0x31).size()
 	_t.set_target_power(190)
@@ -459,7 +460,7 @@ func test_req_dev_11_c7_b_not_supported_mid_ride_switches_to_basic_resistance() 
 	_status(0x31, FecCodec.COMMAND_NOT_SUPPORTED)
 	assert_false(s.erg_available())
 	assert_gt(_pages(0x30).size(), 0, "0x30 instead of 0x31")
-	assert_eq(_errors, [] as Array[int], "no command error")
+	assert_eq(_errors, [TrainerDevice.ErrorCode.CONTROL_POINT_REJECTED] as Array[int], "reported once, as FTMS `80 05 02`")
 	for i in 70:
 		s.tick(1.0)
 	assert_eq(_pages(0x31).size(), 1, "no 0x31 after the refusal")
